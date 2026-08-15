@@ -1,0 +1,170 @@
+package argusctl
+
+import (
+	"crypto/sha256"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"sigs.k8s.io/yaml"
+)
+
+const (
+	installAPIVersion = "install.argus.io/v1alpha1"
+	installKind       = "ArgusInstallConfig"
+)
+
+var dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+
+type InstallConfig struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Metadata   struct {
+		Name string `json:"name"`
+	} `json:"metadata"`
+	Spec InstallSpec `json:"spec"`
+	path string
+}
+
+type InstallSpec struct {
+	Profile      string     `json:"profile"`
+	KubeContext  string     `json:"kubeContext"`
+	ReleaseID    string     `json:"releaseId"`
+	Namespaces   Namespaces `json:"namespaces"`
+	StorageClass string     `json:"storageClass"`
+	Images       Images     `json:"images"`
+	Exposure     Exposure   `json:"exposure"`
+	OpenSandbox  struct {
+		RuntimeClassName   string `json:"runtimeClassName"`
+		AllowSharedRuntime bool   `json:"allowSharedRuntime"`
+	} `json:"openSandbox"`
+	Persistence Persistence `json:"persistence"`
+	Cleanup     struct {
+		RetainData      bool `json:"retainData"`
+		DeleteOwnedCRDs bool `json:"deleteOwnedCrds"`
+	} `json:"cleanup"`
+}
+
+type Namespaces struct {
+	System        string `json:"system"`
+	Sandbox       string `json:"sandbox"`
+	Observability string `json:"observability"`
+}
+
+type Images struct {
+	Mode          string `json:"mode"`
+	Registry      string `json:"registry"`
+	Tag           string `json:"tag"`
+	PullPolicy    string `json:"pullPolicy"`
+	PullSecretRef string `json:"pullSecretRef"`
+}
+
+type Exposure struct {
+	Mode             string `json:"mode"`
+	IngressClassName string `json:"ingressClassName"`
+	EnterpriseHost   string `json:"enterpriseHost"`
+	PlatformHost     string `json:"platformHost"`
+	SetupHost        string `json:"setupHost"`
+}
+
+type Persistence struct {
+	PostgreSQL string `json:"postgresql"`
+	Redis      string `json:"redis"`
+	MinIO      string `json:"minio"`
+	Kafka      string `json:"kafka"`
+	ClickHouse string `json:"clickhouse"`
+	Keeper     string `json:"keeper"`
+}
+
+func LoadConfig(path string) (*InstallConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config %s: %w", path, err)
+	}
+	var cfg InstallConfig
+	if err := yaml.UnmarshalStrict(data, &cfg); err != nil {
+		return nil, fmt.Errorf("decode config %s: %w", path, err)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve config path: %w", err)
+	}
+	cfg.path = abs
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func (c *InstallConfig) Validate() error {
+	if c.APIVersion != installAPIVersion || c.Kind != installKind {
+		return fmt.Errorf("config must be %s %s", installAPIVersion, installKind)
+	}
+	if c.Spec.Profile != "evaluation" && c.Spec.Profile != "production" {
+		return fmt.Errorf("spec.profile must be evaluation or production")
+	}
+	for name, value := range map[string]string{
+		"metadata.name":                 c.Metadata.Name,
+		"spec.releaseId":                c.Spec.ReleaseID,
+		"spec.namespaces.system":        c.Spec.Namespaces.System,
+		"spec.namespaces.sandbox":       c.Spec.Namespaces.Sandbox,
+		"spec.namespaces.observability": c.Spec.Namespaces.Observability,
+	} {
+		if !dnsLabel.MatchString(value) || len(value) > 63 {
+			return fmt.Errorf("%s must be a Kubernetes DNS label", name)
+		}
+	}
+	if c.Spec.KubeContext == "" || c.Spec.StorageClass == "" {
+		return fmt.Errorf("spec.kubeContext and spec.storageClass are required")
+	}
+	if c.Spec.Images.Registry == "" || c.Spec.Images.Tag == "" {
+		return fmt.Errorf("spec.images.registry and spec.images.tag are required")
+	}
+	if !contains([]string{"local-registry", "oci-registry"}, c.Spec.Images.Mode) {
+		return fmt.Errorf("unsupported image mode %q", c.Spec.Images.Mode)
+	}
+	if !contains([]string{"Never", "IfNotPresent", "Always"}, c.Spec.Images.PullPolicy) {
+		return fmt.Errorf("unsupported image pull policy %q", c.Spec.Images.PullPolicy)
+	}
+	if !contains([]string{"port-forward", "ingress"}, c.Spec.Exposure.Mode) {
+		return fmt.Errorf("unsupported exposure mode %q", c.Spec.Exposure.Mode)
+	}
+	return nil
+}
+
+func (c *InstallConfig) Image(name string) string {
+	registry := strings.TrimSuffix(c.Spec.Images.Registry, "/")
+	if !strings.HasSuffix(registry, "/argus") {
+		registry += "/argus"
+	}
+	return fmt.Sprintf("%s/%s:%s", registry, name, c.Spec.Images.Tag)
+}
+
+func (c *InstallConfig) registryContainerName() string {
+	return "argus-registry-" + c.Spec.ReleaseID
+}
+
+func (c *InstallConfig) upstreamReleaseName(component string) string {
+	digest := sha256.Sum256([]byte(c.Spec.ReleaseID))
+	return fmt.Sprintf("a%x-%s", digest[:3], component)
+}
+
+func findRepoRoot(start string) (string, error) {
+	abs, err := filepath.Abs(start)
+	if err != nil {
+		return "", err
+	}
+	for dir := abs; ; dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "deploy", "versions.lock.yaml")); err == nil {
+				return dir, nil
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("could not find repository root from %s", start)
+		}
+	}
+}

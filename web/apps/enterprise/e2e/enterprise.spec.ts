@@ -92,6 +92,7 @@ test("enterprise identity has no enterprise switcher", async ({ page }) => {
 });
 
 test("component demo is reachable in dev mode", async ({ page }) => {
+  test.skip(Boolean(process.env.ARGUS_E2E_EXTERNAL), "dev-only route is not shipped in the production image");
   await login(page);
   await page.goto("/demo");
   await expect(

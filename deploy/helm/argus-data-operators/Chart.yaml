@@ -1,0 +1,6 @@
+apiVersion: v2
+name: argus-data-operators
+description: Ownership marker for version-locked data operators installed by argusctl.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

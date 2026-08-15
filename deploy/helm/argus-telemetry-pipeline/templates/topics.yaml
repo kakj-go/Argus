@@ -1,0 +1,17 @@
+{{- range $topic := list "otlp-logs" "otlp-metrics" "otlp-spans" "otlp-logs-dlq" "otlp-metrics-dlq" "otlp-spans-dlq" }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ $topic }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    strimzi.io/cluster: argus-kafka
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ $.Values.releaseId | quote }}
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    retention.ms: 3600000
+{{- end }}

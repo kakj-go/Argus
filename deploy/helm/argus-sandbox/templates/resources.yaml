@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argus-opensandbox-api
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+type: Opaque
+stringData:
+  api-key: {{ required "apiKey is required" .Values.apiKey | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argus-opensandbox-installation
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+data:
+  chart-version: {{ .Values.versions.chart | quote }}
+  server-version: {{ .Values.versions.server | quote }}
+  controller-version: {{ .Values.versions.controller | quote }}
+  runtime-class-name: {{ .Values.runtimeClassName | quote }}
+  shared-runtime-degradation: {{ .Values.allowSharedRuntime | quote }}

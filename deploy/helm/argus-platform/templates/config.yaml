@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argus-setup-token
+  namespace: {{ .Values.namespaces.system }}
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+type: Opaque
+stringData:
+  token: {{ required "setupToken is required" .Values.setupToken | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argus-runtime-config
+  namespace: {{ .Values.namespaces.system }}
+data:
+  ARGUS_POSTGRESQL_HOST: argus-postgresql
+  ARGUS_REDIS_HOST: argus-redis
+  ARGUS_MINIO_HOST: argus-minio
+  ARGUS_OPENSANDBOX_HOST: opensandbox-server.{{ .Values.namespaces.sandbox }}.svc
+  ARGUS_KAFKA_BROKERS: argus-kafka-kafka-bootstrap.{{ .Values.namespaces.observability }}.svc:9092
+  ARGUS_CLICKHOUSE_HOST: argus-clickhouse-client.{{ .Values.namespaces.observability }}.svc

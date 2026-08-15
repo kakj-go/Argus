@@ -1,0 +1,33 @@
+apiVersion: install.argus.io/v1alpha1
+kind: ArgusInstallConfig
+metadata:
+  name: argus-evaluation
+spec:
+  profile: evaluation
+  kubeContext: docker-desktop
+  releaseId: argus-e2e-local
+  namespaces:
+    system: argus-e2e-local-system
+    sandbox: argus-e2e-local-sandbox
+    observability: argus-e2e-local-observability
+  storageClass: standard
+  images:
+    mode: local-registry
+    registry: host.docker.internal:5001
+    tag: dev
+    pullPolicy: Never
+  exposure:
+    mode: port-forward
+  openSandbox:
+    runtimeClassName: ""
+    allowSharedRuntime: true
+  persistence:
+    postgresql: 2Gi
+    redis: 1Gi
+    minio: 5Gi
+    kafka: 4Gi
+    clickhouse: 6Gi
+    keeper: 1Gi
+  cleanup:
+    retainData: false
+    deleteOwnedCrds: true

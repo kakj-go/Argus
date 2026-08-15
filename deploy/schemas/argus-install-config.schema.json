@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/argus-install-config-v1alpha1.json",
+  "title": "ArgusInstallConfig",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {"const": "install.argus.io/v1alpha1"},
+    "kind": {"const": "ArgusInstallConfig"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"}
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "kubeContext", "releaseId", "namespaces", "storageClass", "images", "exposure", "persistence", "cleanup"],
+      "properties": {
+        "profile": {"enum": ["evaluation", "production"]},
+        "kubeContext": {"type": "string", "minLength": 1},
+        "releaseId": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"},
+        "namespaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["system", "sandbox", "observability"],
+          "properties": {
+            "system": {"type": "string", "minLength": 1},
+            "sandbox": {"type": "string", "minLength": 1},
+            "observability": {"type": "string", "minLength": 1}
+          }
+        },
+        "storageClass": {"type": "string", "minLength": 1},
+        "images": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "registry", "tag", "pullPolicy"],
+          "properties": {
+            "mode": {"enum": ["local-registry", "oci-registry"]},
+            "registry": {"type": "string", "minLength": 1},
+            "tag": {"type": "string", "minLength": 1},
+            "pullPolicy": {"enum": ["Never", "IfNotPresent", "Always"]},
+            "pullSecretRef": {"type": "string"}
+          }
+        },
+        "exposure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {"enum": ["port-forward", "ingress"]},
+            "ingressClassName": {"type": "string"},
+            "enterpriseHost": {"type": "string"},
+            "platformHost": {"type": "string"},
+            "setupHost": {"type": "string"}
+          }
+        },
+        "openSandbox": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "runtimeClassName": {"type": "string"},
+            "allowSharedRuntime": {"type": "boolean"}
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["postgresql", "redis", "minio", "kafka", "clickhouse", "keeper"],
+          "properties": {
+            "postgresql": {"type": "string"},
+            "redis": {"type": "string"},
+            "minio": {"type": "string"},
+            "kafka": {"type": "string"},
+            "clickhouse": {"type": "string"},
+            "keeper": {"type": "string"}
+          }
+        },
+        "cleanup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["retainData", "deleteOwnedCrds"],
+          "properties": {
+            "retainData": {"type": "boolean"},
+            "deleteOwnedCrds": {"type": "boolean"}
+          }
+        }
+      }
+    }
+  }
+}

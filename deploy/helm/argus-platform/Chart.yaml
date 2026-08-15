@@ -1,0 +1,6 @@
+apiVersion: v2
+name: argus-platform
+description: Argus web and control-plane workloads.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

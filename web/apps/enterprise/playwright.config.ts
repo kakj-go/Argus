@@ -20,18 +20,26 @@ export default defineConfig({
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
-  use: { baseURL: "http://127.0.0.1:4173", trace: "on-first-retry" },
-  webServer: [
-    {
-      command: "pnpm dev",
-      url: "http://127.0.0.1:4173",
-      reuseExistingServer: !process.env.CI,
-    },
-    {
-      command: "pnpm --filter @argus/platform dev",
-      url: "http://127.0.0.1:4174",
-      reuseExistingServer: !process.env.CI,
-    },
-  ],
+  outputDir: process.env.ARGUS_E2E_ARTIFACTS ?? "test-results",
+  use: { baseURL: "http://127.0.0.1:4173", trace: "retain-on-failure" },
+  webServer: process.env.ARGUS_E2E_EXTERNAL
+    ? undefined
+    : [
+        {
+          command: "pnpm dev",
+          url: "http://127.0.0.1:4173",
+          reuseExistingServer: !process.env.CI,
+        },
+        {
+          command: "pnpm --filter @argus/platform dev",
+          url: "http://127.0.0.1:4174",
+          reuseExistingServer: !process.env.CI,
+        },
+        {
+          command: "pnpm --filter @argus/setup dev",
+          url: "http://127.0.0.1:4175",
+          reuseExistingServer: !process.env.CI,
+        },
+      ],
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });

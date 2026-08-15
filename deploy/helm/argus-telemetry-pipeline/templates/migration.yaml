@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: argus-clickhouse-migration
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argus-clickhouse-migration
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: {{ .Values.images.clickhouse }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: argus-clickhouse-credentials
+                  key: password
+          command: ["sh", "-ec"]
+          args:
+            - |
+              until clickhouse-client --host argus-clickhouse-client --user argus --password "$CLICKHOUSE_PASSWORD" --query 'SELECT 1'; do sleep 3; done
+              clickhouse-client --host argus-clickhouse-client --user argus --password "$CLICKHOUSE_PASSWORD" --multiquery <<'SQL'
+              CREATE DATABASE IF NOT EXISTS argus;
+              CREATE TABLE IF NOT EXISTS argus.schema_migrations
+              (
+                version String,
+                applied_at DateTime64(3) DEFAULT now64(3)
+              ) ENGINE = ReplacingMergeTree ORDER BY version;
+              CREATE TABLE IF NOT EXISTS argus.installation_checks
+              (
+                id String,
+                value String,
+                created_at DateTime64(3) DEFAULT now64(3)
+              ) ENGINE = MergeTree ORDER BY (id, created_at);
+              INSERT INTO argus.schema_migrations(version) SELECT '0001_evaluation_baseline'
+              WHERE NOT EXISTS (SELECT 1 FROM argus.schema_migrations WHERE version = '0001_evaluation_baseline');
+              SQL

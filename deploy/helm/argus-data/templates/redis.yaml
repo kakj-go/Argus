@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-redis
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  selector:
+    app.kubernetes.io/name: argus-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: argus-redis
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  serviceName: argus-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argus-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argus-redis
+        app.kubernetes.io/part-of: argus
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: redis
+          image: {{ .Values.images.redis }}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args: ["exec redis-server --appendonly yes --requirepass \"$REDIS_PASSWORD\""]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: argus-data-credentials
+                  key: redis-password
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "redis-cli -a \"$REDIS_PASSWORD\" ping | grep PONG"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.redis }}

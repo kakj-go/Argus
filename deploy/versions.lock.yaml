@@ -1,0 +1,27 @@
+apiVersion: install.argus.io/v1alpha1
+kind: ArgusVersionLock
+metadata:
+  generatedAt: "2026-08-15"
+spec:
+  build:
+    go: "1.25.3"
+    node: "24.19.0"
+    pnpm: "11.21.0"
+    nginxUnprivileged: "1.29.4-alpine"
+  middleware:
+    postgresql: "18.6-alpine"
+    redis: "8.10.0-alpine"
+    minioSource: "RELEASE.2025-10-15T17-29-55Z"
+    strimziOperator: "1.1.0"
+    kafka: "4.2.1"
+    altinityOperator: "0.27.3"
+    clickhouse: "26.3.17.110-alpine"
+    otelCollectorContrib: "0.158.0"
+    openSandboxChart: "0.2.0"
+    openSandboxController: "0.2.0"
+    openSandboxServer: "0.2.2"
+    openSandboxExecd: "1.0.22"
+    openSandboxEgress: "1.1.6"
+  platforms:
+    - linux/amd64
+    - linux/arm64

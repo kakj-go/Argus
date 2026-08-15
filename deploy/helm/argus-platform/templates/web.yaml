@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-web
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  selector:
+    app.kubernetes.io/name: argus-web
+  ports:
+    - {name: enterprise, port: 8080, targetPort: 8080}
+    - {name: platform, port: 8081, targetPort: 8081}
+    - {name: setup, port: 8082, targetPort: 8082}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argus-web
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argus-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argus-web
+        app.kubernetes.io/part-of: argus
+    spec:
+      {{- if eq .Values.profile "production" }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-web
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: web
+          image: {{ .Values.images.web }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          ports:
+            - {name: enterprise, containerPort: 8080}
+            - {name: platform, containerPort: 8081}
+            - {name: setup, containerPort: 8082}
+          readinessProbe:
+            httpGet: {path: /healthz, port: enterprise}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}

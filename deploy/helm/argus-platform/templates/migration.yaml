@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: argus-postgresql-migration
+  namespace: {{ .Values.namespaces.system }}
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argus-postgresql-migration
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: {{ .Values.images.postgresql }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: argus-data-credentials
+                  key: postgresql-password
+          command: ["sh", "-ec"]
+          args:
+            - |
+              until pg_isready -h argus-postgresql -U argus -d argus; do sleep 2; done
+              psql -v ON_ERROR_STOP=1 -h argus-postgresql -U argus -d argus <<'SQL'
+              CREATE TABLE IF NOT EXISTS argus_schema_migrations (
+                version text PRIMARY KEY,
+                applied_at timestamptz NOT NULL DEFAULT now()
+              );
+              CREATE TABLE IF NOT EXISTS argus_installation_checks (
+                id text PRIMARY KEY,
+                value text NOT NULL,
+                created_at timestamptz NOT NULL DEFAULT now()
+              );
+              INSERT INTO argus_schema_migrations(version) VALUES ('0001_evaluation_baseline')
+              ON CONFLICT (version) DO NOTHING;
+              SQL

@@ -1,0 +1,11 @@
+{{- range $key, $namespace := .Values.namespaces }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $namespace }}
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ $.Values.releaseId | quote }}
+    argus.io/plane: {{ $key | quote }}
+{{- end }}

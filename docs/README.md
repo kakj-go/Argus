@@ -19,6 +19,8 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 11. [服务组件与 Kubernetes 一键部署](./10-service-components-and-kubernetes-deployment.md)
 12. [运行时状态、Redis 与横向扩展](./11-runtime-state-and-horizontal-scaling.md)
 13. [第一版技术栈与代码结构](./12-technology-stack-and-code-structure.md)
+14. [当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)
+15. [PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)
 
 ## 关键术语
 

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: argus-telemetry-pipeline
+description: ClickHouse schema baseline and version-locked OTel Kafka writer.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

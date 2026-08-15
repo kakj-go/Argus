@@ -1,0 +1,21 @@
+releaseId: argus
+profile: evaluation
+namespaces:
+  system: argus-system
+  sandbox: argus-sandbox
+  observability: argus-observability
+images:
+  backend: host.docker.internal:5001/argus/argus-backend:dev
+  web: host.docker.internal:5001/argus/argus-web:dev
+  pullPolicy: Never
+  postgresql: postgres:18.6-alpine
+setupToken: ""
+replicas: 1
+production:
+  minReplicas: 3
+  maxReplicas: 10
+  ingressClassName: nginx
+  hosts:
+    enterprise: argus.example.com
+    platform: platform.argus.example.com
+    setup: setup.argus.example.com

@@ -6,6 +6,9 @@ web/**/dist/
 web/**/coverage/
 web/**/playwright-report/
 web/**/test-results/
+artifacts/
+deploy/helm/**/charts/
+deploy/.cache/
 *.test
 *.out
 coverage.*

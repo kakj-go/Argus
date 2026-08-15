@@ -1,0 +1,5 @@
+releaseId: argus
+namespaces:
+  system: argus-system
+  sandbox: argus-sandbox
+  observability: argus-observability

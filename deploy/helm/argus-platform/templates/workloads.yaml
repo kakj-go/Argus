@@ -1,0 +1,118 @@
+{{- $root := . -}}
+{{- $workloads := list
+  (dict "name" "argus-server" "command" "argus-server" "args" (list) "port" 8080 "healthPort" 8080)
+  (dict "name" "argus-worker" "command" "argus-worker" "args" (list "--pool=default") "port" 8081 "healthPort" 8081)
+  (dict "name" "argus-direct-executor" "command" "argus-worker" "args" (list "--pool=direct-executor") "port" 8081 "healthPort" 8081)
+  (dict "name" "argus-connector-gateway" "command" "argus-connector-gateway" "args" (list) "port" 8081 "healthPort" 8081)
+  (dict "name" "argus-telemetry-ingest" "command" "argus-telemetry" "args" (list "--mode=ingest") "port" 8081 "healthPort" 8081)
+  (dict "name" "argus-telemetry-query" "command" "argus-telemetry" "args" (list "--mode=query") "port" 8081 "healthPort" 8081)
+-}}
+{{- range $item := $workloads }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $item.name }}
+  namespace: {{ $root.Values.namespaces.system }}
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ $root.Values.releaseId | quote }}
+spec:
+  replicas: {{ $root.Values.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $item.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $item.name }}
+        app.kubernetes.io/part-of: argus
+    spec:
+      {{- if eq $root.Values.profile "production" }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $item.name }}
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $item.name }}
+      {{- end }}
+      terminationGracePeriodSeconds: 15
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: {{ $item.name }}
+          image: {{ $root.Values.images.backend }}
+          imagePullPolicy: {{ $root.Values.images.pullPolicy }}
+          command: ["/usr/local/bin/{{ $item.command }}"]
+          {{- if $item.args }}
+          args: {{ $item.args | toJson }}
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: argus-runtime-config
+          {{- if ne $item.name "argus-server" }}
+          env:
+            - {name: ARGUS_HEALTH_ADDRESS, value: ":8081"}
+          {{- end }}
+          ports:
+            - {name: health, containerPort: {{ $item.healthPort }}}
+          readinessProbe:
+            httpGet: {path: /readyz, port: health}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: health}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-server
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  selector: {app.kubernetes.io/name: argus-server}
+  ports:
+    - {name: http, port: 8080, targetPort: health}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-connector-gateway
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  selector: {app.kubernetes.io/name: argus-connector-gateway}
+  ports:
+    - {name: health, port: 8081, targetPort: health}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-telemetry-ingest
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  selector: {app.kubernetes.io/name: argus-telemetry-ingest}
+  ports:
+    - {name: health, port: 8081, targetPort: health}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-telemetry-query
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  selector: {app.kubernetes.io/name: argus-telemetry-query}
+  ports:
+    - {name: health, port: 8081, targetPort: health}

@@ -1,0 +1,10 @@
+.git
+.idea
+artifacts
+deploy/.cache
+node_modules
+test-results
+web/**/dist
+web/**/node_modules
+web/apps/enterprise/playwright-report
+web/apps/enterprise/test-results

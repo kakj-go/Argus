@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argus-data-operators
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+data:
+  strimzi: {{ .Values.versions.strimzi | quote }}
+  altinity: {{ .Values.versions.altinity | quote }}

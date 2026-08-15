@@ -1,0 +1,58 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: argus-kafka
+  namespace: {{ .Values.namespaces.observability }}
+  labels:
+    strimzi.io/cluster: argus-kafka
+spec:
+  replicas: 1
+  roles: [controller, broker]
+  storage:
+    type: persistent-claim
+    size: {{ .Values.persistence.kafka }}
+    class: {{ .Values.storageClass }}
+    deleteClaim: true
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {cpu: "2", memory: 2Gi}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: argus-kafka
+  namespace: {{ .Values.namespaces.observability }}
+  annotations:
+    strimzi.io/node-pools: enabled
+    strimzi.io/kraft: enabled
+spec:
+  kafka:
+    version: 4.2.1
+    metadataVersion: "4.2-IV1"
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+    config:
+      default.replication.factor: 1
+      min.insync.replicas: 1
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: argus-installation-check
+  namespace: {{ .Values.namespaces.observability }}
+  labels:
+    strimzi.io/cluster: argus-kafka
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    retention.ms: 3600000

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: argus-foundation
+description: Namespaces and baseline policies for Argus.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

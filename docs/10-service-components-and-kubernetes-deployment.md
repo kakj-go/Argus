@@ -1,5 +1,7 @@
 # 服务组件与 Kubernetes 一键部署
 
+> 本文描述第一版目标部署架构。仓库已经具备可安装、可验证和可清理的 Evaluation 基座；前端仍使用 mock API，后端仍是运行角色骨架。实际完成度见[当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)，PostgreSQL 环境决策见[PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)。
+
 ## 1. 目标
 
 Argus 第一版采用少量、清晰的可部署服务，不把内部领域模块过早拆成微服务。同时提供一个命令完成 Kubernetes 环境预检、Operator/CRD 安装、中间件创建、Argus 服务发布、数据库迁移和初始化信息输出。

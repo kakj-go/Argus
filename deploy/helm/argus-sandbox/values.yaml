@@ -1,0 +1,8 @@
+releaseId: argus
+apiKey: ""
+runtimeClassName: ""
+allowSharedRuntime: true
+versions:
+  chart: "0.2.0"
+  server: "0.2.2"
+  controller: "0.2.0"

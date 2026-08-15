@@ -1,0 +1,38 @@
+apiVersion: install.argus.io/v1alpha1
+kind: ArgusInstallConfig
+metadata:
+  name: argus-production
+spec:
+  profile: production
+  kubeContext: production
+  releaseId: argus
+  namespaces:
+    system: argus-system
+    sandbox: argus-sandbox
+    observability: argus-observability
+  storageClass: fast-ssd
+  images:
+    mode: oci-registry
+    registry: registry.example.com/argus
+    tag: v0.1.0
+    pullPolicy: IfNotPresent
+    pullSecretRef: argus-registry
+  exposure:
+    mode: ingress
+    ingressClassName: nginx
+    enterpriseHost: argus.example.com
+    platformHost: platform.argus.example.com
+    setupHost: setup.argus.example.com
+  openSandbox:
+    runtimeClassName: ""
+    allowSharedRuntime: false
+  persistence:
+    postgresql: 200Gi
+    redis: 20Gi
+    minio: 500Gi
+    kafka: 500Gi
+    clickhouse: 2Ti
+    keeper: 20Gi
+  cleanup:
+    retainData: true
+    deleteOwnedCrds: false
