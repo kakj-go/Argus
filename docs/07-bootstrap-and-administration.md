@@ -162,7 +162,7 @@ Setup Token 应具有：
 
 删除企业属于高危且难恢复操作，不建议第一版提供。先提供停用和数据保留策略。
 
-创建企业时必须在同一事务或可恢复工作流中创建一个可重命名的 `Default Project`。企业后续创建的 Host、KubernetesCluster、Collector、Conversation、Run、Automation、Alert Rule 和 Dashboard 等项目对象必须归属一个 Project，不能长期留在“未分配”状态。
+创建企业时必须在同一事务或可恢复工作流中创建可重命名的默认 Department、内置 Role 模板和空的默认 DataScope 模板。第一版不创建 Default Project；Host 和 KubernetesCluster 通过用户标签归类，Conversation、Run 和 Automation 只归属企业并分别保存实际目标资源和授权快照。
 
 企业状态必须由授权服务在所有入口统一执行，不能只在登录页面判断：
 
@@ -200,7 +200,7 @@ Setup Token 应具有：
 - 一次性激活链接。
 - 临时密码，首次登录必须修改。
 
-初始企业管理员是新的 EnterpriseUser，固定绑定目标 `enterprise_id`，不能复用平台超级管理员身份。`enterprise_admin` 允许其建立企业 IAM、Project、角色和授权，但不自动授予生产远程 Shell、Managed Account、Secret 原值或 AI 生产执行权限；需要操作生产资源时由企业管理员自行建立 Project Role Binding 和 Remote Access Grant，并记录审计。
+初始企业管理员是新的 EnterpriseUser，直接固定绑定目标 `enterprise_id + department_id`，不能复用平台超级管理员身份。`enterprise_admin` 允许其建立企业 IAM、角色、DataScope 和授权，但不自动授予生产远程 Shell、ManagedAccount、Secret 原值或 AI 生产执行权限；需要操作生产资源时由企业管理员建立对应 RoleBinding、DataScope 和 RemoteAccessGrant，并记录审计。
 
 超级管理员可以：
 
@@ -225,7 +225,6 @@ Setup Token 应具有：
 ← 返回智能会话
 
 资源
-├── Project
 ├── 主机
 └── Kubernetes
 
@@ -236,7 +235,7 @@ Setup Token 应具有：
 
 企业设置
 ├── 用户与部门
-├── 角色与 Project 授权
+├── 角色与资源范围
 ├── 远程访问授权
 ├── 访问策略
 ├── AI 设置
@@ -253,24 +252,17 @@ Collector 不单独占用左侧菜单。未安装时在主机或 Kubernetes 详�
 
 企业管理员可以创建自定义企业角色并下放部分管理能力。OpenSandbox 是 SaaS 平台底层资产，企业工作台和管理后台均不展示或查询 OpenSandbox 服务、镜像、Profile、配额、活动会话和用量；相关管理与观测只存在于平台超级管理员门户。
 
-进入 Chatbox 前必须选择或恢复一个已授权 Project；Conversation 和 Run 保存该 `project_id`。Project 切换是显式用户操作，切换后重新获取 Tool 列表、资源范围和监控权限，不能由模型或 Card 修改。
+进入 Chatbox 只恢复固定企业身份、功能权限和 DataScope，不提供 Project 选择器。Conversation 和 Run 保存 `enterprise_id`；具体 ToolCall、Run、PendingAction 和 Execution 保存目标资源引用和授权范围快照。模型或 Card 不能修改身份域或扩大 DataScope。
 
-## 9. 固定企业上下文和 Project 选择
+## 9. 固定企业上下文和资源范围
 
 EnterpriseUser 登录后只有一个固定企业上下文。服务端 Session 和 Access Token 必须包含该用户唯一的企业 Audience；客户端提交的 `enterprise_id`、URL 企业 Code 或资源 ID 只是请求参数，任何查询都必须再次验证资源真实归属。
 
 平台 Session 和企业 Session 必须使用不同 Audience、路由和 Cookie/Token 约束。平台身份不能访问企业 API，企业身份不能访问平台 API；禁止通过 `enterprise_id = null`、指定其他企业 ID 或修改 URL 切换身份域。
 
-企业内允许显式切换 Project。切换时：
+企业内没有 Project 切换。用户可以在资源列表中按标签筛选或保存视图，但筛选条件不能扩大服务端计算的 DataScope。RoleBinding、DataScope、RemoteAccessGrant 或授权敏感标签变化后，客户端必须失效相关缓存和 Binding，SSE/WebSocket/Live Tail 在恢复与周期检查时重新鉴权。
 
-- 校验用户对目标 Project 至少具有 `project.read` 或对应业务权限。
-- 清空当前会话内的 Project 资源和监控缓存。
-- 重新获取 Project 范围的 Role Binding、Remote Access Grant 和 Tool 列表。
-- 断开旧 Project 的 SSE/WebSocket/Live Tail 订阅。
-- 新建会话或明确更新允许切换的空会话上下文；已有生产 Run 不能静默改 Project。
-- 记录 Project 上下文切换审计。
-
-API Key 和 ServiceAccount 固定绑定一个 `enterprise_id` 及允许的 Project/Tool Scope，不支持运行时切换到未授权 Project。任何资源 ID 查询都必须验证真实 `enterprise_id + project_id`，不能只信任 Token 或客户端参数。
+API Key 和 ServiceAccount 固定绑定一个 `enterprise_id`、允许 Tool 和 DataScope，不支持运行时扩大范围。任何资源 ID 查询都必须验证资源真实 `enterprise_id` 并重新计算当前授权，不能只信任 Token、标签或客户端参数。
 
 ### 9.1 认证基线
 
@@ -280,7 +272,7 @@ API Key 和 ServiceAccount 固定绑定一个 `enterprise_id` 及允许的 Proje
 - 平台超级管理员强制 MFA；企业可对管理员和 critical 操作强制 MFA/Step-up Authentication。
 - 浏览器使用 HttpOnly、Secure、SameSite Cookie 或同等安全 Session；变更请求执行 CSRF 防护。
 - Access Session 短期有效，Refresh/长期 Session 可撤销；用户禁用、密码重置、企业停用时立即写入撤销事实并通过 Redis 快速失效缓存。
-- WebSocket/SSE/Live Tail 建立、恢复和周期性检查时重新校验 Session、固定企业、Project 和 AuthorizationVersion。
+- WebSocket/SSE/Live Tail 建立、恢复和周期性检查时重新校验 Session、固定企业、DataScope 和 AuthorizationVersion。
 - Service Account/API Key 只显示一次原值，数据库保存哈希，支持到期、轮换、Scope 和最后使用审计。
 
 ## 10. 账号恢复
@@ -300,6 +292,6 @@ argus admin reset-password
 平台审计和企业审计分离：
 
 - 平台审计：初始化、企业生命周期、企业管理员生命周期、Sandbox Profile、镜像、配额和活动会话终止。
-- 企业审计：Project、用户权限、Role Binding、Remote Access Grant、Managed Account、Connector、资源、OpenTelemetry 安装与配置、监控查询/导出、Chatbox、MCP Tool、Card Action、Break Glass 和 Secret 使用。
+- 企业审计：Department、用户权限、RoleBinding、DataScope、资源标签、RemoteAccessGrant、ManagedAccount、Connector、资源、OpenTelemetry 安装与配置、监控查询/导出、Chatbox、MCP Tool、Card Action、Break Glass 和 Secret 使用。
 
-超级管理员默认只能查看平台审计；企业管理员只能查看本企业审计。Project 范围的审计读取按角色裁剪，企业 `security_auditor` 可以查看企业审计正文但不能因此获得远程操作、监控敏感字段或 Secret 权限。
+超级管理员默认只能查看平台审计；企业管理员只能查看本企业审计。企业审计读取按角色、DataScope 和字段规则裁剪；`security_auditor` 可以查看被授权的企业审计正文，但不能因此获得远程操作、监控敏感字段或 Secret 权限。

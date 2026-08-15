@@ -11,12 +11,13 @@
 | 状态 | 权威存储 | Redis 用途 | 恢复方式 |
 | --- | --- | --- | --- |
 | Run/Step/Task | PostgreSQL | 新任务通知、短期进度缓存 | Worker 扫描未完成 Task |
+| ConversationEvent/RunCheckpoint/ContextSnapshot | PostgreSQL，超大正文进入 Artifact Store | 热上下文和流式通知缓存 | 从事件账本、RunState 和最后有效 Snapshot 重建；压缩不删除原事件 |
 | PendingAction/Approval/Execution | PostgreSQL | 短期幂等窗口、状态通知 | 按数据库状态恢复 |
 | Action Binding/私有 Token | PostgreSQL 加密记录或专用 Secret Store | 可选短 TTL 读取缓存 | 从权威记录恢复或要求重新 Preview |
 | ConnectorCommand | PostgreSQL | 路由和进度通知 | 根据 Command 状态和 Connector 对账 |
 | 在线 Connector Session | PostgreSQL 保存最后事实 | 带 TTL 的实时 Registry | Connector 心跳重建 |
 | BastionScope/成员关系 | PostgreSQL | 可选列表和权限投影缓存 | 从数据库重建，不能随 Connector Session 消失 |
-| Project/RoleBinding/RemoteAccessGrant/AuthorizationVersion | PostgreSQL | 权限投影、版本和失效通知 | 从数据库重建；旧票据、Binding 和查询按版本拒绝 |
+| Department/RoleBinding/DataScope/RemoteAccessGrant/AuthorizationVersion | PostgreSQL | 权限投影、版本和失效通知 | 从数据库重建；旧票据、Binding 和查询按版本拒绝 |
 | RemoteAccessSession/票据消费事实 | PostgreSQL 加密记录或专用 Secret Store | 在线路由、短 TTL 票据/JTI 和状态通知 | 从会话状态恢复；原一次性票据不恢复，必要时重新授权 |
 | Remote Session Recording | Artifact Store + PostgreSQL 索引 | 不缓存正文 | 按 recording_ref 校验和读取；Gateway 本地临时分片必须上传后清理 |
 | 登录 Session/撤销列表 | PostgreSQL 保存身份和撤销事实 | 热 Session、速率限制 | 重新认证或从数据库加载 |
@@ -36,6 +37,7 @@ Redis 可以用于状态转移相关的短期事务，但不能与 PostgreSQL �
 禁止使用：
 
 - 只在 Redis 保存 Pending Action、审批结果或任务完成状态。
+- 只在 Worker 内存或 Redis 保存 Conversation Event、Run Checkpoint、ContextSnapshot 或压缩切点。
 - 把 Pub/Sub 消息当成任务已持久化的证据。
 - 先改 Redis、后改 PostgreSQL，并假设两者一定同时成功。
 - 只靠无 Fence Token 的 Redis Lock 防止旧 Worker 写回。
@@ -142,6 +144,8 @@ Action Binding 和 Pending Action 的唯一状态位于 PostgreSQL；Redis 只�
 - 使用 PostgreSQL Task Lease 和 Fence Token 分工。
 - 按企业、部门、用户额度和任务类型设置公平调度。
 - 模型请求和 Sandbox Session 与 Run ID 绑定，Worker 变化不改变状态归属。
+- Agent Loop 不保存 Pod 本地会话；每次 Model Call、Tool Batch 和 Compaction 都以持久化 Run Version、Task Lease 和幂等键执行。
+- ContextAssembler 给定相同 Run Version、Active ContextSnapshot 和 Event Tail 时必须产生相同来源集合与 Projection Hash。
 - HPA 使用可运行 Task 数、最老 Task 年龄、模型并发和 CPU；不能只看 CPU。
 
 ### 7.3 Direct Executor Worker Pool
@@ -173,7 +177,7 @@ Action Binding 和 Pending Action 的唯一状态位于 PostgreSQL；Redis 只�
 
 - 入口通过支持 gRPC/HTTP2 的 L4/L7 负载均衡分发。
 - 实例不保存唯一摄入状态；成功写入 Kafka 前不向 Collector 确认成功。
-- 企业/Project/资源凭证、配额和撤销状态使用本地短缓存加 Redis 快速失效，权威配置在 PostgreSQL。
+- 企业/资源/Collector 凭证、配额和撤销状态使用本地短缓存加 Redis 快速失效，权威配置在 PostgreSQL。
 - 分布式配额使用 Redis 原子计数或专用限流算法；Redis 故障时采用保守的实例配额，避免无限放行。
 - HPA 使用请求/字节速率、Kafka Producer 延迟、背压和 CPU。
 
@@ -181,9 +185,9 @@ Action Binding 和 Pending Action 的唯一状态位于 PostgreSQL；Redis 只�
 
 可以横向扩展。
 
-- 所有实例使用 ClickHouse 只读账号并强制注入 EnterpriseId、授权 ProjectId/ResourceIds、Signal、字段投影与脱敏。
-- 游标包含 `enterprise_id`、`project_id`、AuthorizationVersion、查询哈希和稳定排序位置，不依赖实例内存。
-- 查询预算和并发按企业/Project 通过 Redis 协调，数据库保存权威策略。
+- 所有实例使用 ClickHouse 只读账号并强制注入 EnterpriseId、授权 ResourceIds 或标签选择器解析结果、Signal、字段投影与脱敏。
+- 游标包含 `enterprise_id`、AuthorizationVersion、DataScope/查询哈希和稳定排序位置，不依赖实例内存。
+- 查询预算和并发按企业通过 Redis 协调，数据库保存权威策略。
 - HPA 使用查询并发、P95 延迟、排队长度和 ClickHouse 拒绝率。
 
 ### 7.7 `otel-clickhouse-writer`
@@ -205,6 +209,7 @@ Action Binding 和 Pending Action 的唯一状态位于 PostgreSQL；Redis 只�
 | Bootstrap 初始化 | PlatformState 行锁和一次性 Setup Token |
 | Operator/CRD 安装编排 | `argusctl` 阶段 Lease 和幂等资源检查 |
 | 定时清理/过期任务 | 可分片，但同一对象只能一个 Lease Owner |
+| 同一 Run 的 Context Compaction | 使用 Run Version/Source Hash 条件更新，同一 Source Range 只能产生一个 Active Snapshot |
 | DLQ 跳过/重放 | 显式审批、Partition/Offset Fence |
 | 企业删除和密钥轮换 | 持久化 Workflow，按步骤幂等执行 |
 
@@ -222,3 +227,5 @@ Action Binding 和 Pending Action 的唯一状态位于 PostgreSQL；Redis 只�
 8. Writer Rebalance 时 Offset 只在 ClickHouse Pipeline 成功后推进。
 9. Query 请求落到不同副本时，企业过滤和 Cursor 结果保持一致。
 10. 双击确认、网络重试和两个 Server 副本并发处理只生成一个 Execution。
+11. Worker 在 Compaction 生成中被删除时，原始 ConversationEvent 不丢失，接管 Worker 按 Source Hash 幂等恢复且只产生一个 Active Snapshot。
+12. Redis 清空或请求落到不同 Worker 后，相同 Run Version 生成的 ModelContextProjection 来源集合和 Projection Hash 保持一致。

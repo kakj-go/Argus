@@ -40,7 +40,7 @@ Bastion Scope 表示一个稳定的堡垒机管辖范围：
 ```text
 BastionScope
 ├── enterprise_id
-├── name / environment / tags
+├── name
 ├── connector_host_id
 ├── active_connector_id
 ├── member_host_ids
@@ -48,9 +48,9 @@ BastionScope
 └── status
 ```
 
-Bastion Scope 与 Connector 实例分开保存。Connector 可能重装、轮换证书或被替换；这些操作不能改变 Scope ID，也不能让成员主机丢失分组和授权关系。第一版一个 Scope 只有一个活动 Connector，Schema 预留备用 Connector/Connector Pool，但界面不能在调度能力未实现时暗示已经具备自动高可用。
+Bastion Scope 与 Connector 实例分开保存。用户归类标签保存在根 Host 和成员 Host，不在 Scope 上再维护一套 `tags`。Connector 可能重装、轮换证书或被替换；这些操作不能改变 Scope ID，也不能让成员主机丢失分组和授权关系。第一版一个 Scope 只有一个活动 Connector，Schema 预留备用 Connector/Connector Pool，但界面不能在调度能力未实现时暗示已经具备自动高可用。
 
-一个通过堡垒机接入的主机第一版只能属于一个 Bastion Scope。Project 不能复用为 Bastion Scope；Project 表达业务授权范围，Bastion Scope 表达网络接入路径。一个 Bastion Scope 可以为同一企业内不同 Project 的目标 Host 提供路由，但不会把堡垒机 Host 的 Project 权限传播给成员 Host。
+一个通过堡垒机接入的主机第一版只能属于一个 Bastion Scope。资源标签或 DataScope 不能复用为 Bastion Scope；前者表达归类和业务授权范围，后者表达网络接入路径。一个 Bastion Scope 可以为同一企业内不同标签的目标 Host 提供路由，但不会把堡垒机 Host 的 DataScope 传播给成员 Host。
 
 ### 2.2 主机连接模式
 
@@ -70,7 +70,7 @@ RemoteAccessSession 表示一次人工远程登录：
 
 ```text
 RemoteAccessSession
-├── enterprise_id / project_id / user_id / host_id
+├── enterprise_id / user_id / host_id
 ├── connection_mode / connector_id / bastion_scope_id
 ├── managed_account_id / credential_ref
 ├── remote_access_grant_id / access_lease_id
@@ -97,7 +97,7 @@ Remote Access Session 是人工作业通道，不是 MCP Tool Commit。AI、交�
 
 ## 3. 堡垒机安装、注册和界面创建
 
-具有目标 Project 资源管理权限的企业用户在“主机”页面点击“添加堡垒机”，先选择 Project，再填写名称、环境、标签和安装策略并生成一次性安装命令。创建注册令牌时即创建一个 `pending` Bastion Scope，界面显示“等待 Connector 注册”的分组框；Connector 注册成功后在同一事务或可恢复工作流中创建/绑定带有该 `project_id` 的堡垒机 Host，并激活 Scope。
+具有 `bastion_scope.create` 和相应资源 DataScope 的企业用户在“主机”页面点击“添加堡垒机”，填写名称、用户标签和安装策略并生成一次性安装命令。创建注册令牌时即创建一个 `pending` Bastion Scope，界面显示“等待 Connector 注册”的分组框；Connector 注册成功后在同一事务或可恢复工作流中创建/绑定同企业的堡垒机 Host，并激活 Scope。
 
 ```mermaid
 sequenceDiagram
@@ -110,7 +110,7 @@ sequenceDiagram
     U->>C: 在目标机器执行安装命令
     C->>C: 生成本地私钥和 CSR
     C->>S: 注册并提交设备信息
-    S->>S: 校验企业、Project、Scope、有效期、次数和安装策略
+    S->>S: 校验企业、DataScope、Bastion Scope、有效期、次数和安装策略
     S->>S: 创建/绑定 connector_local Host
     S-->>C: 签发 Connector 身份与证书
     S->>S: 作废注册令牌并激活 Bastion Scope
@@ -120,7 +120,7 @@ sequenceDiagram
 一次性注册令牌必须绑定：
 
 - `enterprise_id`。
-- 根堡垒机 Host 的 `project_id`。
+- 根堡垒机 Host 的预分配 ID、初始 `labels` 和 DataScope 校验摘要。
 - `bastion_scope_id`。
 - 创建用户和安装策略。
 - 允许的 Connector 名称、平台或标签限制。
@@ -130,7 +130,7 @@ sequenceDiagram
 
 ### 3.1 编辑与更新安装
 
-“编辑堡垒机”编辑的是稳定的 Bastion Scope，字段与新增时的业务字段保持一致：名称、环境和标签。根堡垒机 Host 的地址、端口和 Connector 身份由注册事实产生，不允许在该表单中手工修改。Scope 名称、环境或标签保存后，服务端同步更新根堡垒机 Host 与当前 Connector 的展示元数据，但不得改变 Scope ID、Host ID、成员主机关系或授权范围。
+“编辑堡垒机”编辑的是稳定的 Bastion Scope，字段与新增时的业务字段保持一致：名称和用户标签。根堡垒机 Host 的地址、端口和 Connector 身份由注册事实产生，不允许在该表单中手工修改。Scope 名称或非授权敏感标签保存后，服务端同步更新根堡垒机 Host 与当前 Connector 的展示元数据，但不得改变 Scope ID、Host ID 或成员主机关系；命中生效授权选择器的标签变更必须走 Preview/Commit 并递增 AuthorizationVersion。
 
 编辑抽屉底部提供“堡垒机安装/更新命令”，用于首次安装，或在当前 Connector 已卸载、已被隔离或被服务端判定为离线后迁移到另一台机器。打开编辑抽屉不能自动生成令牌；用户必须显式点击“生成新命令”。在线 Connector 不允许直接生成替换命令，必须先主动卸载，或者等待服务端确认其长期离线，防止两台机器同时获得有效身份。
 
@@ -281,13 +281,12 @@ Direct Executor 只解决公网目标管理，不能宣称 SaaS Worker 可以穿
 
 ```text
 connection_mode = via_bastion
-project_id
 bastion_scope_id / connector_id
 private_address / hostname
 port
 protocol = ssh | winrm
 credential_ref
-environment / tags / owner
+labels
 ```
 
 流程固定为：
@@ -309,11 +308,10 @@ environment / tags / owner
 
 ```text
 connection_mode = direct_ssh | direct_winrm
-project_id
 public_address / hostname
 port
 credential_ref
-environment / tags / owner
+labels
 ```
 
 流程固定为：
@@ -333,13 +331,14 @@ environment / tags / owner
 
 ```text
 Host
-├── enterprise_id / project_id
+├── enterprise_id
 ├── address / hostname / port
 ├── platform
 ├── connection_mode
 ├── bastion_scope_id（via_bastion 时必填）
 ├── connector_id（connector_local/via_bastion 时使用）
-├── environment / tags / owner
+├── labels: Record<string, string>
+├── labels_version / resource_version
 └── connection_status
 ```
 
@@ -347,7 +346,7 @@ Host 不直接保存用户名、密码或私钥。目标登录账号保存为 `M
 
 ```text
 ManagedAccount
-├── enterprise_id / project_id / host_id
+├── enterprise_id / host_id
 ├── username / privilege_level
 ├── credential_ref
 ├── allowed_protocols
@@ -358,13 +357,14 @@ ManagedAccount
 
 ### 6.4 Remote Access Grant
 
-拥有 `remote_access.request` 或 `remote_access.session.create` 只表示具备使用远程访问功能的能力，不自动获得 Project 内全部 Host 和账号。创建会话还必须命中有效的 RemoteAccessGrant：
+拥有 `remote_access.request` 或 `remote_access.session.create` 只表示具备使用远程访问功能的能力，不自动获得企业内全部 Host 和账号。创建会话还必须命中 DataScope 和有效的 RemoteAccessGrant：
 
 ```text
 RemoteAccessGrant
-├── enterprise_id / project_id
-├── subject: user | group
-├── host_scope: explicit_host_ids | all_hosts_in_project
+├── enterprise_id
+├── subject: user | department
+├── explicit_host_ids[]
+├── host_label_selector
 ├── managed_account_ids
 ├── protocols
 ├── actions
@@ -372,6 +372,8 @@ RemoteAccessGrant
 ├── policy_id / status
 └── version
 ```
+
+Grant 至少包含显式 Host ID 或经过校验的 Host 标签选择器；空范围不代表企业内全部主机。标签变化导致 Grant 命中集合改变时必须递增 AuthorizationVersion，并使未使用票据和待连接会话重新鉴权。
 
 第一版只必须支持 `connect`；`clipboard`、`upload`、`download`、`session_share` 和 `port_forward` 是独立动作并默认关闭。需要临时访问时，Access Request 审批后生成短期 AccessLease 或激活受限 Grant；批准访问不能自动批准某个 AI/MCP 生产变更。
 
@@ -381,7 +383,7 @@ RemoteAccessGrant
 
 ```text
 Browser
-→ argus-server 校验企业、Project、Host、ManagedAccount、Grant、MFA/JIT/审批和授权版本
+→ argus-server 校验企业、DataScope、Host、ManagedAccount、Grant、MFA/JIT/审批和授权版本
 → 签发短期票据与 Credential Package
 → argus-connector-gateway Remote Access 入口
 → 当前 Connector 长连接的 Remote Session Stream
@@ -393,7 +395,7 @@ Browser
 
 ```text
 Browser
-→ argus-server 校验企业、Project、Host、ManagedAccount、Grant、MFA/JIT/审批和授权版本
+→ argus-server 校验企业、DataScope、Host、ManagedAccount、Grant、MFA/JIT/审批和授权版本
 → 签发短期票据与 Credential Package
 → Remote Access 入口
 → 受控 Direct Executor
@@ -411,18 +413,18 @@ Browser
 
 第一版提供 SSH Web Terminal 和 WinRM PowerShell 命令行；RDP、SFTP 和通用端口转发延后。会话创建前展示目标、完整路径、登录身份、协议能力、最长时长、录像、剪贴板、文件传输和审批策略。默认规则：
 
-- 票据短期、一次性、绑定浏览器 Session、用户、企业、Project、Host、ManagedAccount、协议、动作、AuthorizationVersion 和 RemoteAccessSession。
+- 票据短期、一次性、绑定浏览器 Session、用户、企业、Host、ManagedAccount、协议、动作、DataScope 摘要、AuthorizationVersion 和 RemoteAccessSession。
 - 平台超级管理员无权进入企业远程会话。
 - AI、Card、Automation、OpenSandbox 不获得票据。
 - 录像和结构化事件写入 Artifact Store/PostgreSQL；Gateway Pod 不保存唯一录像。
 - 生产环境默认要求 MFA/Step-up；是否审批由策略决定。
 - 剪贴板和文件传输默认关闭，开启时分别授权和审计。
 - 管理员可以终止活动会话，但不能静默接管用户身份。
-- 用户禁用、RoleBinding/RemoteAccessGrant/Policy 撤销、Project 移动或企业停用时，未使用票据立即失效，等待连接的会话被拒绝，活动会话立即终止或进入有上限的安全结束窗口并审计。
+- 用户禁用、RoleBinding/DataScope/RemoteAccessGrant/Policy 撤销、授权敏感标签变化或企业停用时，未使用票据立即失效，等待连接的会话被拒绝，活动会话立即终止或进入有上限的安全结束窗口并审计。
 
 交互式 Shell 允许人工执行改变目标状态的命令，因此不能声称每条命令都走 Tool Preview/Commit。Tool/Automation 仍使用两阶段操作；远程会话则使用会话级 JIT 授权、录像和审计。后续 RDP、SFTP、端口转发必须分别形成协议和安全 ADR。
 
-第一版至少记录结构化命令和完整会话录像；后续 CommandPolicy 可以按用户/组、Project/Host、ManagedAccount、命令组和优先级执行允许、拒绝、复核或告警。命令匹配不能作为唯一安全边界，高敏主机仍应使用低权限 Managed Account、MFA/JIT、短会话和最小文件能力。
+第一版至少记录结构化命令和完整会话录像；后续 CommandPolicy 可以按用户/部门、Host/标签、ManagedAccount、命令组和优先级执行允许、拒绝、复核或告警。命令匹配不能作为唯一安全边界，高敏主机仍应使用低权限 Managed Account、MFA/JIT、短会话和最小文件能力。
 
 ### 7.1 人工命令行与自动化命令的边界
 
@@ -509,7 +511,8 @@ connection_mode
 bastion_scope_id / connector_id（私网模式）
 credential_ref
 default_namespace（可选）
-environment / tags
+labels: Record<string, string>
+labels_version / resource_version
 connection_status
 ```
 

@@ -21,12 +21,20 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 13. [第一版技术栈与代码结构](./12-technology-stack-and-code-structure.md)
 14. [当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)
 15. [PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)
+16. [端到端实现计划](./15-end-to-end-implementation-plan.md)
+17. [Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)
+18. [分阶段任务文件](./plans/README.md)
 
 ## 关键术语
 
 | 术语 | 含义 |
 | --- | --- |
 | Model Agent | 理解意图、规划任务并调用工具的 AI Agent |
+| Agent Harness | 运行 Provider-neutral Agent Loop、组装模型上下文、调度 Tool 并把事件持久化到 Run 的小型编排内核 |
+| Conversation Event | 不可变、只追加的会话、模型、Tool 和执行事件；上下文压缩不得删除或覆盖 |
+| Run Checkpoint | 从 Run/Step/Tool/Execution 事实生成的结构化当前状态，不依赖自然语言摘要维持 |
+| Context Snapshot | 对一段历史生成的派生压缩记录，包含来源范围、Typed Checkpoint、Narrative Summary 和 Token 统计 |
+| Tool Result Projection | 从完整 Tool Result 生成的模型安全投影，保留摘要、资源引用和 `result_ref`，不复制完整大结果 |
 | Connector | 安装在主机上的接入代理，主动连接 Argus；在堡垒机主机上承担内网资源代理、命令执行、Artifact Tunnel 和远程会话隧道 |
 | Bastion Scope | 由一个已注册 Connector 的堡垒机主机创建的稳定管辖范围，包含堡垒机、其 Connector 和经该堡垒机接入的内网主机 |
 | Direct Executor | Argus 服务端中受控的公网 SSH/WinRM 执行角色，只连接经过校验的公网目标，不用于穿透客户内网 |
@@ -45,10 +53,11 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 | Host Bridge | 沙箱卡片与 Argus 宿主之间唯一的受控通信通道 |
 | Platform Super Admin | 首次初始化创建的平台超级管理员，只管理企业、企业管理员和平台 OpenSandbox 基座 |
 | Enterprise Admin | 企业管理员，管理本企业用户、模型、Agent、资源、权限和业务设置 |
-| Project | 企业内部资源、监控数据、会话和自动化的主要授权边界；每个项目业务对象必须归属一个 Project |
-| Project Role Binding | 将企业用户或部门的角色绑定到整个企业或一个 Project 的授权关系 |
+| Resource Label | Host 和 KubernetesCluster 的用户自定义 `labels`，用于企业内归类、过滤和资源范围选择；`argus.io/*` 为系统保留命名空间 |
+| DataScope | 由显式资源 ID 和/或经过校验的标签选择器构成的企业内资源授权范围 |
+| Role Binding | 将企业用户、部门或 ServiceAccount 的角色和 DataScope 绑定到当前企业的授权关系 |
 | Managed Account | Host 上可由 Credential Broker 代用的目标账号；账号使用、Secret 查看和账号管理是不同权限 |
-| Remote Access Grant | 用户或部门对指定 Project/Host、Managed Account、协议、动作和有效期的人工远程访问授权 |
+| Remote Access Grant | 用户或部门对显式 Host 或 Host 标签选择结果、Managed Account、协议、动作和有效期的人工远程访问授权 |
 | Authorization Version | 用户、角色或授权变化时递增的版本，用于使票据、Pending Action、查询和缓存及时失效 |
 | Sandbox Profile | 超级管理员批准的语言、镜像、资源、网络和生命周期策略集合 |
 | Leaf Collector | 部署在受管机器上，采集本机数据并向 Direct/Edge Gateway 推送的轻量 Collector |
@@ -71,9 +80,11 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 - AI 可以自由生成具有丰富视觉和交互的 HTML/CSS/JavaScript，但只能运行在受限沙箱中。
 - 所有特权操作都必须经过服务端授权、Action Binding 和审计；静态代码扫描不是唯一安全边界。
 - 涉及生产变更的能力必须以服务端状态机、幂等和短期一次性授权为基础，不能依赖一次模型上下文维持状态。
+- 第一版 Agent Harness 使用单 Agent 小内核；完整 ConversationEvent 永久保留，模型上下文由 Typed Run Checkpoint、ContextSnapshot 和最近完整 Turn 组成。
+- 大 Tool Result 先经过确定性安全投影；Compaction 按 Token 预算触发且不能拆开 ToolCall/ToolResult 或执行事件组，Provider 原生压缩不成为事实来源。
 - 平台超级管理员与企业管理员使用不同管理域；超级管理员默认无权进入企业会话、模型凭证和受管资源。
 - 平台身份与企业身份互斥；一个企业用户只能属于一个企业，第一版不提供多企业 Membership 或企业切换。
-- Project 是企业内部资源和监控数据的主要授权边界；Bastion Scope 与 Telemetry Group 只描述网络或遥测拓扑，不能自动授予 Project 权限。
+- `enterprise_id` 是第一版唯一租户和安全隔离边界；第一版不实现 Project。Host/Kubernetes 标签用于归类和 DataScope 选择，Bastion Scope 与 Telemetry Group 只描述网络或遥测拓扑。
 - 企业管理员负责本企业 IAM，但管理权限不自动等于生产 Shell、目标账号、Secret 原值或 AI 生产执行权限。
 - AI 只能选择超级管理员批准的 Sandbox Profile，不能自行指定任意镜像或扩大资源、网络权限。
 - OpenTelemetry Collector 本身承担采集与 OTLP 推送；Argus 不额外开发一个重复的遥测 Pusher 进程。
@@ -93,4 +104,4 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 - 第一版主前端固定为 React + TypeScript + Vite，交互卡片保持框架无关的 HTML/CSS/JavaScript 沙箱运行时。
 - 第一版后端固定使用 Go；外部 API 使用 REST/OpenAPI，内部服务与 Connector 使用 gRPC/protobuf。
 - ClickHouse 按 Metrics、Logs、Traces 三个共享逻辑数据集组织，企业使用行级 `EnterpriseId` 隔离，不为每个企业创建独立表或分区。
-- Telemetry Query 在 `EnterpriseId` 之外还必须执行 Project/Resource、Signal、字段脱敏、时间范围和预算约束；用户、AI 和 Card 复用同一裁剪结果。
+- Telemetry Query 在 `EnterpriseId` 之外还必须执行授权 Resource ID/标签选择结果、Signal、字段脱敏、时间范围和预算约束；用户、AI 和 Card 复用同一裁剪结果。

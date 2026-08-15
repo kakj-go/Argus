@@ -28,6 +28,7 @@
 - 框架无关的 HTML/CSS/JavaScript 模板和 `data-slot` 标记。
 - Data Slot、Action Slot、Query Slot、权限声明、Demo 场景和验证结果。
 - Slot Binding、创建人、创建时间和更新时间。
+- 版本化 Manifest：入口内容哈希、允许的资源/CSP 能力、Bridge 版本、Data/Query/Action Slot、支持语言和主题。
 
 系统卡片不可更新、删除、停用、修改绑定或 Demo。企业卡片的代码、Slot、绑定和 Demo 变更会增加 Revision，并重新进入未验证、禁用状态。
 
@@ -47,10 +48,10 @@
 
 卡片启用前必须同时满足：
 
-1. CSP、外部资源、动态代码执行、Bridge 能力和资源预算安全检查通过。
+1. Manifest、按卡片生成的 CSP、外部资源、动态代码执行、Bridge 能力和资源预算安全检查通过。
 2. 所有必填、非 `ai_generated` Slot 均有类型兼容且 Schema 版本有效的绑定。
 3. 默认、空数据、错误、大数据、浅色、深色、中文、英文 Demo 场景全部渲染通过。
-4. iframe 完成握手、自动高度回报、事件白名单和销毁检查。
+4. iframe 完成 Origin/nonce 握手，业务消息只通过 `MessageChannel/MessagePort` 传输，并通过自动高度回报、消息序号、事件白名单和销毁检查。
 
 验证失败时返回稳定错误码、Slot 和场景，不允许启用。启用后，内置“渲染交互卡片”Skill 才能发现该企业卡片。停用立即阻止新 Render Plan 选择，但历史消息继续使用已保存版本或渲染快照。
 
@@ -67,8 +68,10 @@
 
 内置“渲染交互卡片”Skill 的候选集仅包含系统卡片和当前企业已启用卡片。服务端依次执行权限裁剪、字段脱敏、Schema 校验、绑定解析和 Render Plan 校验，再把最小数据集交给 Card Host。
 
-浏览器和 iframe 只能获得解析后的数据、`query_binding_id` 或 `action_binding_id`。Secret、任意 Tool 名称、Commit Token、`argus__token`、生产凭证和人工远程会话票据永不进入卡片。
+Card iframe 使用独立 Origin 或严格 `sandbox`，Host 根据 Manifest 生成最小 CSP。全局 `postMessage` 只允许完成一次带明确 `targetOrigin` 的握手，随后把 `MessagePort` 移交给 iframe；所有业务消息使用版本化 Schema、nonce、单调序号和大小限制。
+
+浏览器和 iframe 只能获得解析后的数据、`query_binding_id` 或 `action_binding_id`。Secret、任意 Tool 名称、PendingAction 私有参数、Commit Token、`argus__token`、生产凭证和人工远程会话票据永不进入卡片或公开 DTO。
 
 ## 8. 测试要求
 
-必须覆盖管理员命令创建、默认禁用、系统卡片只读、严格/优先绑定、Schema 类型错误、必填绑定缺失、全部 Demo 门禁、启用后自动选择，以及 iframe 懒加载、自适应高度、完整展开和 Slot 点击定位。
+必须覆盖管理员命令创建、默认禁用、系统卡片只读、严格/优先绑定、Schema 类型错误、必填绑定缺失、全部 Demo 门禁、启用后自动选择，以及 iframe 懒加载、自适应高度、完整展开和 Slot 点击定位。安全测试还必须覆盖 CSP 逃逸、错误 Origin、重复/乱序消息、伪造 Binding ID、销毁后消息、消息大小上限，以及浏览器网络与 DOM 中搜索不到私有 Token/参数。

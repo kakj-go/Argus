@@ -4,19 +4,19 @@
 
 第一版模型域只有 `AIModel`，仅支持 OpenAI Compatible API，不保留旧的多层模型对象、路由或角色配置；Tool 与 Sandbox 能力由用户 RBAC 和系统固定安全策略控制，不由模型配置扩大。
 
-`AIModel` 包含名称、Base URL、模型 ID、只写 API Key 引用、每百万输入 Token 金额、每百万输出 Token 金额、兼容性结果、健康状态、启用状态、Revision 和时间戳。API Key 永不回显。
+`AIModel` 包含名称、Base URL、模型 ID、只写 API Key 引用、Context Window、最大输出 Token、每百万输入 Token 金额、每百万输出 Token 金额、Tool Calling/结构化输出/Provider Compaction 能力、兼容性结果、健康状态、启用状态、Revision 和时间戳。API Key 永不回显。
 
 ## 2. 一步式测试创建
 
 管理员在一个抽屉填写名称、API 地址、API Key、模型 ID、每百万输入 Token 金额和每百万输出 Token 金额，点击“测试并创建”。服务端必须测试 OpenAI Compatible 请求、流式响应、Tool Calling 和结构化输出。
 
-Tool Calling 与结构化输出全部通过才创建并启用模型。失败只返回诊断，不产生可用模型。修改 Base URL、API Key 或模型 ID 时必须重新测试；名称和价格修改不要求重新测试。测试失败、停用或健康不可用的模型不能用于新消息。
+Tool Calling 与结构化输出全部通过才创建并启用模型；Context Window 和最大输出 Token 必须由受信配置或探测结果固化。Provider 原生 Compaction 是可选能力，缺失时使用 Argus 自己的 ContextAssembler/ContextSnapshot。失败只返回诊断，不产生可用模型。修改 Base URL、API Key 或模型 ID 时必须重新测试；名称和价格修改不要求重新测试。测试失败、停用或健康不可用的模型不能用于新消息。
 
 ## 3. 会话模型选择
 
 `Conversation.selected_model_id` 保存当前选择。用户可以在同一会话切换模型，切换只影响后续消息；已经开始的 Run 固定原 `model_id + model_revision`，不得自动 Fallback。
 
-每条 Message 和 Run 保存实际 `model_id`、模型 Revision、输入/输出 Token 与调用时价格快照。价格修改只影响后续调用，历史金额永远按快照计算。
+每条 Message、Run、ModelCall 和 ContextSnapshot 保存实际 `model_id`、模型 Revision、输入/输出 Token 与调用时价格快照。价格修改只影响后续调用，历史金额永远按快照计算。
 
 工作台优先恢复会话选择，其次恢复用户上次可用选择，再选择首个可用模型。不可用、兼容性失败、停用或额度耗尽的模型显示原因并不可选择；没有可用模型时禁用发送。
 
@@ -30,7 +30,7 @@ Tool Calling 与结构化输出全部通过才创建并启用模型。失败只�
 - 个人额度总和可以超过部门额度，但单个个人额度不能高于有限的部门额度。
 - 部门总池始终是最终上限，不自动切换其他模型。
 
-服务端在调用前按估算金额预留预算，调用完成后按实际 Token 与价格快照结算。剩余额度不足时拒绝新调用；已经开始的 Run 允许使用原模型完成并结算。
+服务端在普通推理和 Compaction 调用前都按估算金额预留预算，调用完成后按实际 Token 与价格快照结算。剩余额度不足时拒绝新调用；已经开始的 Run 允许在已预留额度内使用原模型完成，不自动切换其它模型执行压缩或推理。
 
 ## 5. 权限
 
@@ -41,7 +41,7 @@ Tool Calling 与结构化输出全部通过才创建并启用模型。失败只�
 
 ## 6. 治理仪表盘
 
-全局仪表盘聚合全部模型的 Token、金额、请求数、成功率、延迟、错误数、Tool Calling 失败、结构化输出失败和额度消耗。
+全局仪表盘聚合全部模型的 Token、金额、请求数、成功率、延迟、错误数、Tool Calling 失败、结构化输出失败、普通推理/Compaction 用量和额度消耗。
 
 单模型仪表盘增加部门、用户排行和当月额度进度。企业超级管理员查看全企业；部门管理员只查看本部门和成员。所有统计按调用记录的价格快照聚合。
 
@@ -51,4 +51,4 @@ OpenSandbox 完全由平台超级管理员维护，是 SaaS 平台的底层执�
 
 ## 8. 测试要求
 
-Mock/API 测试覆盖创建成功、兼容性失败不落库、密钥不回显、Revision、价格快照、月金额、无限额度、部门池与个人上限组合、跨部门拒绝和预留结算。E2E 覆盖一步创建、额度配置、同会话切换模型、额度耗尽禁用及全局/单模型仪表盘权限。
+Mock/API 测试覆盖创建成功、兼容性失败不落库、密钥不回显、Context Window/能力探测、Revision、价格快照、月金额、无限额度、部门池与个人上限组合、跨部门拒绝、普通推理与 Compaction 预留结算。E2E 覆盖一步创建、额度配置、同会话切换模型、额度耗尽禁用及全局/单模型仪表盘权限。

@@ -17,15 +17,15 @@
 | 文档组 | 内容 | 解决的问题 |
 | --- | --- | --- |
 | `00`、`01` | 决策、不变量、产品定位、总体架构 | 哪些边界不能在实现中自行改变 |
-| `02`、`03` | 企业/Project 权限、Connector、Host、Kubernetes、远程访问 | 谁可以通过哪条连接路径操作哪些资源 |
+| `02`、`03` | 企业身份、RoleBinding/DataScope、Connector、Host、Kubernetes、远程访问 | 谁可以通过哪条连接路径操作哪些资源 |
 | `04`、`05`、`06` | Agent、MCP、Preview/Commit、Card、安全和 MVP | AI、浏览器、Card 与确定性执行如何隔离 |
 | `07`、`08` | 初始化、双层管理门户、模型和 OpenSandbox | 平台域与企业域如何启动和治理 |
 | `09`、`10`、`11`、`12` | 遥测、Kubernetes 部署、运行时状态、技术栈 | 服务如何部署、扩缩容、持久化和测试 |
 
 需要始终一起理解的关键关系：
 
-1. `enterprise_id` 是最高业务隔离边界，`project_id` 是企业内主要授权边界。
-2. Bastion Scope 和 Telemetry Group 只表达网络或遥测拓扑，不能传播 Project 权限。
+1. `enterprise_id` 是第一版唯一业务和安全隔离边界；第一版不实现 Project。
+2. Host/Kubernetes 标签用于归类与 DataScope 选择；Bastion Scope 和 Telemetry Group 只表达网络或遥测拓扑，不能传播权限。
 3. PostgreSQL 保存唯一业务状态；Redis 只做缓存、通知、限流和短期协调。
 4. 所有变更操作使用 Preview/Confirm/Commit；模型和浏览器都不能接触私有提交 Token。
 5. Connector 控制链路、OTLP 摄入链路、Telemetry Query 链路必须使用独立服务、凭证和扩缩容策略。
@@ -42,9 +42,9 @@
 | 企业门户 | 页面、路由、i18n、共享 UI、mock 领域和 Playwright E2E 已存在 | 可进行前端产品流程验证 |
 | 平台门户 | 页面、路由、i18n、Sandbox/企业/管理员管理 mock 已存在 | 可进行前端产品流程验证 |
 | 初始化门户 | 初始化向导、校验、i18n 和 mock 状态机已存在 | 可进行前端产品流程验证 |
-| API Client | 已定义较完整的领域接口和类型，当前只有 localStorage mock 实现 | 尚不能连接真实后端 |
+| API Client | 已有覆盖当前原型的手写领域接口和类型，当前只有 localStorage mock 实现 | 不是冻结契约，尚不能连接真实后端 |
 | `argus-server` | 可启动 HTTP Server，已有 `/healthz`、`/readyz` 和语言协商 | 仅服务骨架 |
-| Worker/Gateway/Telemetry/Connector | 进程入口和生命周期骨架已存在 | 尚无领域行为和协议实现 |
+| Worker/Gateway/Telemetry/Connector | 进程入口和生命周期骨架已存在 | 尚无领域行为、Agent Loop 和协议实现 |
 | `argusctl` | 已实现 preflight、plan、镜像、install、status、verify、tunnel、uninstall | 可安装和验证 Evaluation；Production 安装硬阻断 |
 | OpenAPI/protobuf/migration | OpenAPI/protobuf 仍为目录骨架；已有最小 PostgreSQL/ClickHouse Migration | 只初始化版本和安装检查表，不代表业务 Schema 完成 |
 | Kubernetes 交付物 | 三个 Dockerfile、六个 Chart、Profile、Schema、版本锁和本地 Registry Loader 已存在 | 可部署完整 Evaluation 基座 |
@@ -61,18 +61,22 @@
 
 三个应用当前都通过 `VITE_API_MODE` 选择 API 模式，但除 `mock` 外的值会回退到 mock。生产接入前必须补齐真实 HTTP/SSE/WebSocket 客户端，并让 OpenAPI 生成类型逐步替代手写传输契约。
 
-共享包边界已经符合架构约定：
+共享包目录已经按目标边界建立，但实现仍存在一致性欠账，不能视为边界已经完全收敛：
 
 | 包 | 职责 |
 | --- | --- |
-| `@argus/ui` | 唯一通用组件库、Provider 和共享样式 |
+| `@argus/ui` | 目标中的唯一通用组件库；仍需清理业务应用内平行样式/组件 |
 | `@argus/design-tokens` | 主题语义 Token |
 | `@argus/api-client` | 领域客户端接口、类型和 mock 实现 |
 | `@argus/auth` | 登录 Session 和前端认证状态 |
-| `@argus/card-host` | Card iframe、Host Bridge 和绑定调用 |
+| `@argus/card-host` | 当前 Card iframe、Host Bridge 和绑定调用；尚未完成 CSP、MessagePort 和 Manifest 安全契约 |
 | `@argus/observability` | 前端遥测上下文和事件入口 |
 
-Enterprise 原有 22 条 Playwright E2E 继续验证浏览器内 mock 流程；发布套件新增三套 SPA 深链接、Platform 登录/企业/Sandbox 页面和 Setup 初始化锁定流程。该套件可通过 `ARGUS_E2E_EXTERNAL=1` 对 Kubernetes 中的生产静态镜像执行，但仍不等同于真实业务 API E2E。
+当前 Enterprise Playwright 共 25 条用例并全部通过，主要验证浏览器内 mock 流程；Platform 和 Setup 也有基础发布检查。该套件可以验证静态镜像和前端交互，但仍不等同于真实业务 API、Connector、遥测或 Kubernetes 全链路 E2E。
+
+当前前端还存在必须在真实业务开发前处理的偏差：公开 `PendingAction.params` 暴露了本应仅服务端保存的私有参数；Card Runtime 仍使用全局 `postMessage('*')` 而非 MessagePort/CSP；认证状态持久化在 localStorage；Enterprise 页面级样式文件接近 2000 行并存在 `.argus-*`、Design Token 和组件边界不一致；Setup 登录跳转仍是占位行为，Setup 构建存在约 557 KB Chunk 警告。现有 `typecheck/lint/test/build/e2e` 通过只能说明当前原型自洽，不代表这些架构门禁已经满足。
+
+Agent 相关当前也只有目录骨架和前端 mock 流事件：尚无持久化 ConversationEvent、Run/Step、ModelCall、ToolCall/ToolResult、Agent Loop、ContextAssembler、ToolResultProjection 或 ContextSnapshot。前端 mock 仍直接生成回复和 Tool Trace，不能作为真实 Harness、恢复或上下文压缩实现。目标契约见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
 
 ### 3.3 后端程序与运行角色
 
@@ -308,7 +312,7 @@ argus-e2e-<run-id>-observability
 3. 复用已安装且版本兼容的集群级 Operator；在临时 Namespace 创建独立 CR 和数据卷。
 4. 使用 Evaluation Profile 安装完整依赖和 Argus 工作负载。
 5. 运行 `argusctl verify`、后端契约/集成测试和三个门户的 Playwright 流程。
-6. 验证初始化、平台/企业身份隔离、Project 权限、Preview/Commit、Connector、Sandbox、OTLP 写入/查询和 Pod 故障接管。
+6. 验证初始化、平台/企业身份隔离、RoleBinding/DataScope、标签撤权、Preview/Commit、Connector、Sandbox、OTLP 写入/查询和 Pod 故障接管。
 7. 导出失败日志、事件、Pod 状态和必要的脱敏 Artifact。
 8. 无论成功失败都删除三个临时 Namespace，并等待 PVC/LoadBalancer 等资源收敛。
 9. 按记录恢复常驻工作负载副本数并释放测试 Lease。
@@ -332,13 +336,14 @@ argus-e2e-<run-id>-observability
 
 ### 11.3 M2：控制面闭环
 
-- 落地 PostgreSQL Migration、Session、Setup Token、平台/企业身份和 Project/RBAC。
+- 落地 PostgreSQL Migration、Session、Setup Token、平台/企业身份、Department、RoleBinding/DataScope 和 AuthorizationVersion。
 - 实现真实 `@argus/api-client` HTTP/SSE 客户端。
 - 将 setup、platform、enterprise 核心流程从 mock 切到真实 API。
 
 ### 11.4 M3：执行与连接闭环
 
 - 实现 Worker Lease/Fence/Outbox、Pending Action 和审批。
+- 实现 Provider-neutral 单 Agent Loop、不可变 ConversationEvent、Typed RunCheckpoint、ToolResultProjection 和可恢复 ContextSnapshot。
 - 实现 Connector mTLS、Gateway Registry、Bastion Scope、Host 和 Direct Executor 固定出口。
 - 完成人工 Remote Access 与自动化 Execution 的票据、队列和审计隔离。
 
@@ -356,11 +361,11 @@ argus-e2e-<run-id>-observability
 
 ## 12. 当前优先级结论
 
-当前最合理的第一交付目标不是一次性实现完整 Production，而是先完成“可重复安装的 Evaluation 控制面骨架”：
+当前最合理的第一交付目标是在现有可重复安装的 Evaluation 基座上完成“真实控制面垂直闭环”：
 
-1. 容器化现有 Go 进程和三个前端应用。
-2. 建立 `argusctl` 分阶段安装框架和最小 Helm Release。
-3. 在临时命名空间跑通安装、健康检查、静态前端和卸载清理。
-4. 随后以初始化/身份/RBAC 为第一条真实业务闭环替换 mock。
+1. 冻结身份、标签/DataScope、错误、流式、PendingAction 和 Card 契约。
+2. 以初始化、平台/企业身份、Department、RoleBinding/DataScope、Session 和审计替换第一批 mock。
+3. 用真实 HTTP 客户端跑通三个门户，并在临时命名空间验证跨企业和范围外资源拒绝。
+4. 再进入 Connector、执行、Card、Remote Access 和 Telemetry 的分阶段闭环。
 
-这样可以尽早验证镜像、DNS、证书、StorageClass、Operator、NetworkPolicy 和安装状态机，同时不把尚未实现的后端领域能力伪装成已经可用的平台。
+详细顺序、任务拆分和阶段退出标准见[端到端实现计划](./15-end-to-end-implementation-plan.md)与[分阶段任务文件](./plans/README.md)。

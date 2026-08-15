@@ -52,7 +52,7 @@ cmd/
 | `argus-direct-executor` | 公网连接任务与人工会话分工 | 固定出口、SSRF 防护、Host Key、短期 Credential/Session Ticket、无 Pod 本地唯一状态 |
 | `argus-connector-gateway` | Connector/远程会话连接分布和跨 Gateway 内部转发 | Redis Session Registry、connection_epoch、短期票据、录像外置、Drain |
 | `argus-telemetry-ingest` | 负载均衡分发 OTLP | Kafka ACK、分布式配额、凭证快速失效 |
-| `argus-telemetry-query` | 任意副本查询 | 无状态 Cursor、企业/Project/Resource 条件强制注入、字段脱敏和查询预算 |
+| `argus-telemetry-query` | 任意副本查询 | 无状态 Cursor、Enterprise/授权 Resource 条件强制注入、字段脱敏和查询预算 |
 | `otel-clickhouse-writer` | Kafka Consumer Group | Partition 数、Rebalance 和 Offset 门禁 |
 
 具体状态所有权和扩缩容失败场景见[运行时状态、Redis 与横向扩展](./11-runtime-state-and-horizontal-scaling.md)。Migration、Bootstrap 和 DLQ 重放不是普通横向扩展工作负载，必须使用 Job/Lease 保证单一所有者。
@@ -333,11 +333,11 @@ Altinity ClickHouse Operator 负责：
 Argus 不把建表职责交给 Operator 或 ClickHouse Exporter。独立 `argus-schema-migration` Job 负责：
 
 - `argus_metrics`、`argus_logs`、`argus_traces` 三个逻辑数据集及必要的 Projection、物化视图和共享索引表。
-- 可信 `EnterpriseId`、`ProjectId`、`ResourceId`、`CollectorId` 公共列，以及企业/Project/Resource 授权查询所需的排序键和 Projection。
+- 可信 `EnterpriseId`、`ResourceId`、`CollectorId` 公共列，以及 Enterprise/Resource 授权查询所需的排序键和 Projection。
 - Replicated Local/Distributed Table、时间分区、排序键、Sharding Key、TTL 和 Schema Version。
 - 兼容性检查、前向迁移和必要的数据回填任务。
 
-三个逻辑数据集由所有企业共享，禁止按企业或 Project 创建表或 Partition。即使第一版只有一个 Shard，也必须保留 Local/Distributed 两层，使新增 Shard 时不改变 Query API 和表名。严格三张物理表是否可行取决于统一 Metrics 稀疏列 Benchmark 和 Writer Gate；物理层允许按 Metric Type 拆表，但产品层始终只暴露 Metrics、Logs、Traces 三类查询协议。
+三个逻辑数据集由所有企业共享，禁止按企业或资源标签创建表或 Partition。即使第一版只有一个 Shard，也必须保留 Local/Distributed 两层，使新增 Shard 时不改变 Query API 和表名。严格三张物理表是否可行取决于统一 Metrics 稀疏列 Benchmark 和 Writer Gate；物理层允许按 Metric Type 拆表，但产品层始终只暴露 Metrics、Logs、Traces 三类查询协议。
 
 `otel-clickhouse-writer` 必须设置 `create_schema: false`。升级顺序通常为“兼容 Schema → Writer → Query → 清理旧 Schema”，不能先删除旧列再升级读取方。
 
@@ -465,7 +465,7 @@ Token 过期时间
 4. Connector Gateway TLS 和长连接探测。
 5. Remote Access WSS 短期票据握手、重放拒绝和录像 Artifact 写入探测。
 6. Direct Executor 验证声明固定出口，并确认私网、环回、云元数据和平台内部地址被拒绝。
-7. 向 Ingest 发送带测试 Enterprise/Project/Resource 身份的 Metrics/Logs/Trace，并验证客户端伪造同名字段会被覆盖或拒绝。
+7. 向 Ingest 发送带测试 Enterprise/Resource/Collector 身份的 Metrics/Logs/Trace，并验证客户端伪造同名字段会被覆盖或拒绝。
 8. 验证 Kafka Topic 收到数据、Writer 消费成功。
 9. 通过 Query Service 查询到测试数据并验证企业隔离。
 10. 验证 ClickHouseInstallation、Keeper、Kafka Lag 和所有 PDB/HPA 状态。

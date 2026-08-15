@@ -14,7 +14,7 @@ Chatbox 和 Model Agent 负责：
 MCP Tool 和领域服务负责：
 
 - 业务校验。
-- 企业、Project、资源、Tool、授权版本和数据范围校验。
+- 企业、资源、Tool、DataScope、授权版本和数据范围校验。
 - 幂等与状态持久化。
 - 访问数据库、Connector 和第三方 API。
 - 返回结构化结果和结构化错误。
@@ -22,7 +22,7 @@ MCP Tool 和领域服务负责：
 
 人工 RemoteAccessSession 不属于 Model Agent 或 MCP Tool 能力。创建 SSH Web Terminal 使用管理 UI/OpenAPI 的独立授权接口、MFA/JIT/审批和短期一次性票据；AI、交互卡片、Automation 和 OpenSandbox 不能获得该票据。交互式会话中的人工命令不逐条走 Tool Preview/Commit，必须由会话级权限、时长、录像、剪贴板/文件传输策略和审计约束。
 
-Conversation 和 Run 必须绑定服务端确认的 `enterprise_id + project_id`。模型生成的企业、Project、Host 或 Kubernetes ID 只是候选参数，不能切换当前身份域或扩大 Project 范围。跨 Project 任务必须由用户显式选择目标 Project，并对每个 Project 分别授权。
+Conversation 和 Run 只绑定服务端确认的 `enterprise_id`。模型生成的企业、标签选择器、Host 或 Kubernetes ID 只是候选参数，不能切换当前身份域或扩大 DataScope；每个 ToolCall、Run、PendingAction 和 Execution 保存实际目标资源引用和授权范围快照。
 
 ## 2. Tool 设计
 
@@ -83,7 +83,7 @@ x.y.operation.commit(argus__token) -> execution/result
 
 `preview` 负责：
 
-1. 当前身份、企业、Project、Tool 权限、资源范围和 AuthorizationVersion 校验。
+1. 当前身份、企业、Tool 权限、DataScope、目标资源和 AuthorizationVersion 校验。
 2. 参数 Schema、业务规则、连接和资源状态检查。
 3. 根据真实资源计算最终风险与审批策略。
 4. 生成不可变执行计划、预览摘要、参数哈希和执行前置条件。
@@ -94,7 +94,7 @@ x.y.operation.commit(argus__token) -> execution/result
 
 1. 只接收私有 `argus__token`；调用者不能重新提交业务参数。
 2. 原子校验 Token 哈希、一次性状态、过期、目标 Commit Tool 和调用来源。
-3. 重新检查当前用户、企业状态、Project、权限、AuthorizationVersion、审批、资源版本和前置条件。
+3. 重新检查当前用户、企业状态、功能权限、DataScope、AuthorizationVersion、审批、资源标签/版本和前置条件。
 4. 把 Pending Action 原子推进到 Executing，并创建 Execution/ConnectorCommand。
 5. 使用服务端保存的不可变计划执行，返回可审计结果。
 
@@ -128,7 +128,7 @@ Commit 的 MCP 输入 Schema 固定为：
 而不是把返回值复制成没有来源的字面量。这样 `card.render` 可以校验：
 
 - Tool 来源。
-- 调用所属企业、Project 和会话。
+- 调用所属企业、会话、目标资源引用和 DataScope 快照。
 - 字段路径和类型。
 - Slot 允许的数据来源。
 - 字段是否敏感。
@@ -136,6 +136,8 @@ Commit 的 MCP 输入 Schema 固定为：
 多 Tool 数据组合可以通过受限表达式描述，并保留所有输入的来源链。
 
 ## 4. Agent Harness 与持久化 Run
+
+Agent Loop、上下文账本、ToolResult Projection、ContextSnapshot、Token 预算和压缩恢复的完整契约见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。本节只描述它与持久化 Run 和两阶段操作的关系。
 
 多步骤任务必须落到 Run 状态机：
 
@@ -155,7 +157,7 @@ Run 支持：
 - 等待用户输入或审批。
 - 服务重启后恢复。
 - 超时、取消和重试。
-- 子 Agent 调度。
+- 上下文预算、ToolResult Projection 和可恢复 Compaction。
 - 每一步独立审计。
 
 Run、Step 和 Task 的唯一状态保存于 PostgreSQL。Server 创建 Task 时在同一事务写入 Outbox；Worker 使用 Lease、Fence Token 和条件更新领取任务。Redis Stream/PubSub 只通知“可能有新任务”，不能作为任务是否存在或是否完成的事实来源。
@@ -166,6 +168,10 @@ pending -> leased -> running -> waiting_input / waiting_approval
 ```
 
 Worker 失联后，只有 Lease 过期且数据库中的 Fence Token 未变化时，其他 Worker 才能接管。对具有外部副作用的 Step，接管前必须查询 Execution/ConnectorCommand 结果；不能因为 Lease 过期就直接重复执行。
+
+完整 ConversationEvent 只追加保存；RunState 和 Typed Checkpoint 从数据库事实生成。ContextSnapshot 只保存被压缩历史的来源范围、结构化 Checkpoint、叙述摘要、模型/Prompt Revision 和压缩前后 Token。压缩不得删除原始 Message、ToolCall、ToolResult 或执行事件。
+
+第一版只运行一个 Model Agent。查询 Tool 只有显式标记 `parallel_safe` 时可以并行，默认顺序执行；Preview 默认顺序执行，Commit 不出现在 Model Agent Tool Registry 中。
 
 ## 5. 两阶段操作
 
@@ -192,7 +198,7 @@ sequenceDiagram
     U->>H: 点击确认
     H->>E: 只发送 action_binding_id
     E->>S: 读取服务端私有 argus__token
-    E->>E: 校验用户、企业、Project、授权版本、权限、审批、资源版本、过期和幂等
+    E->>E: 校验用户、企业、DataScope、授权版本、权限、审批、资源标签/版本、过期和幂等
     E->>C: 代码直接使用 argus__token 调用 Commit
     C-->>E: 创建结果
     E-->>H: 更新卡片状态
@@ -279,7 +285,7 @@ Action Binding 至少保存：
   "action": "confirm",
   "target_tool": "host.create.commit",
   "enterprise_id": "ent-1",
-  "project_id": "project-a",
+  "resource_scope_snapshot": "scope-snapshot-37",
   "user_id": "user-1",
   "conversation_id": "chat-1",
   "expires_at": "...",
@@ -291,7 +297,7 @@ Token 或 Pending Action 服务端记录应绑定：
 
 - 唯一 ID 和一次性使用状态。
 - enterprise_id、creator_user_id 和 conversation_id。
-- project_id、authorization_version 和有效的资源归属快照。
+- authorization_version、DataScope 版本和有效的目标资源/标签快照。
 - preview_call_id。
 - commit Tool。
 - 预览参数哈希。
@@ -375,15 +381,15 @@ stateDiagram-v2
 
 创建人确认不能自动满足“非创建人审批”规则。Approval Request 保存审批策略版本、审批人范围、最少人数、职责分离要求和每次决定；权限撤销、企业停用或计划变化会使尚未执行的审批失效。
 
-Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为发起人补齐缺失的 Project、Tool、资源或目标账号权限。企业只有一名可用管理员时，Policy 可以允许受控 Break Glass，但必须绑定当前 Pending Action、要求 Step-up MFA 和理由/工单、使用最短有效期并产生高优先级审计；不能由同一人使用多个账号伪造双人审批。
+Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为发起人补齐缺失的 Role、DataScope、Tool、资源或目标账号权限。企业只有一名可用管理员时，Policy 可以允许受控 Break Glass，但必须绑定当前 Pending Action、要求 Step-up MFA 和理由/工单、使用最短有效期并产生高优先级审计；不能由同一人使用多个账号伪造双人审批。
 
 ### 11.1 Automation 身份
 
-定时和无人值守 Automation 必须绑定固定企业和 Project 的 ServiceAccount：
+定时和无人值守 Automation 必须绑定固定企业、Tool 和 DataScope 的 ServiceAccount：
 
 ```text
 Automation
-├── enterprise_id / project_id
+├── enterprise_id
 ├── service_account_id
 ├── allowed_tool_ids
 ├── resource_scope
@@ -391,7 +397,7 @@ Automation
 └── authorization_version
 ```
 
-每次运行都重新检查 ServiceAccount 状态、Project、Tool、目标资源、AuthorizationVersion 和 Policy，不能长期继承创建人的权限快照。Automation 只能走 Tool/Execution 路径，不得创建或消费 RemoteAccessSession 票据。
+每次运行都重新检查 ServiceAccount 状态、DataScope、Tool、目标资源、AuthorizationVersion 和 Policy，不能长期继承创建人的权限快照。Automation 只能走 Tool/Execution 路径，不得创建或消费 RemoteAccessSession 票据。
 
 ## 12. 并发、幂等和错误处理
 
@@ -412,7 +418,7 @@ Automation
 4. Commit Schema 不包含业务参数，只接受 `argus__token` 和内部执行上下文。
 5. Model Agent 的 Tool 列表中不存在 `.commit`。
 6. Token 只能使用一次，过期、取消、跨企业、跨用户或跨 Tool 使用均失败。
-7. Preview 后修改资源版本、Project 归属、AuthorizationVersion 或撤销权限，Commit 必须失败并要求重新 Preview。
+7. Preview 后修改资源版本/授权敏感标签、DataScope、AuthorizationVersion 或撤销权限，Commit 必须失败并要求重新 Preview。
 8. 双击、超时重试和服务重启不会产生重复副作用。
 9. 审批不能补齐缺失的基础权限；Break Glass 只能用于 Policy 明确允许且绑定单个 Pending Action 的场景。
 10. Model Agent、Card 和 Automation 无法创建或消费人工远程会话票据。

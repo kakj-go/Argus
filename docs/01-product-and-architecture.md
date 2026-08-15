@@ -19,14 +19,14 @@ Argus 同时存在两个隔离的管理域：
 - 企业门户工作台：Chatbox、会话和模型选择。
 - 企业门户管理后台：企业模型、权限、Connector、主机、Kubernetes、OpenTelemetry 监控、交互卡片和审计。
 
-工作台和企业管理后台共享同一个固定企业 Membership，但使用不同布局与路由；平台超级管理员不进入这两个企业界面，也不拥有企业资源读取权限。OpenSandbox 是 SaaS 平台底层资产，企业门户不展示其服务、镜像、Profile、配额、会话或用量。
+工作台和企业管理后台共享同一个固定企业身份，但使用不同布局与路由；平台超级管理员不进入这两个企业界面，也不拥有企业资源读取权限。OpenSandbox 是 SaaS 平台底层资产，企业门户不展示其服务、镜像、Profile、配额、会话或用量。
 
-身份第一版为单企业模型：平台身份与企业身份互斥，一个企业用户只能绑定一个 `enterprise_id`，不提供企业切换。企业内部以 Project 组织资源、监控数据、会话和自动化，并通过企业级或 Project 级 Role Binding 授权。
+身份第一版为单企业模型：平台身份与企业身份互斥，一个 EnterpriseUser 直接绑定唯一 `enterprise_id + department_id`，不提供 Membership 或企业切换。企业内部使用 Host/Kubernetes 标签归类资源，通过企业级 RoleBinding 授予功能能力，并由 DataScope 限定显式资源或标签选择结果。
 
 ## 2. 产品目标
 
 - 为租户提供完整的身份、RBAC 和数据权限体系。
-- 为企业提供 Project 级资源与监控数据隔离，并使生产远程访问和 AI 操作具有独立、可审计的授权范围。
+- 为企业提供资源标签、DataScope 和统一数据裁剪，并使生产远程访问和 AI 操作具有独立、可审计的授权范围。
 - 通过统一 Connector 将一台主机注册为堡垒机，代理访问其管辖范围内的 Windows、Linux、macOS 主机和 Kubernetes API Server。
 - 对经校验的公网主机提供受控 Direct SSH/WinRM 接入，并为人工运维提供带短期票据、录像和审计的远程会话。
 - 同时提供 Chatbox 与传统管理界面，且两者能力一致。
@@ -44,7 +44,7 @@ Argus 同时存在两个隔离的管理域：
 以下能力必须位于确定性服务端边界内：
 
 - 租户隔离和授权判断。
-- Project 归属、目标账号授权、权限撤销与授权版本判断。
+- 资源真实企业归属、标签/DataScope、目标账号授权、权限撤销与授权版本判断。
 - Secret 的读取与使用。
 - Pending Action 的创建、确认、取消和过期。
 - Connector 命令下发。
@@ -140,10 +140,12 @@ Redis 不参与 PostgreSQL 的原子提交，也不保存唯一 Run 状态。跨
 控制入口位于 `argus-server`，异步编排位于 `argus-worker`，Connector 通道位于 `argus-connector-gateway`。
 
 - Model Agent 理解需求、选择 MCP Tool、收集参数并生成执行计划。
-- Presentation Agent 根据用户需求、Tool Result 和 交互卡片 目录生成 Render Plan。
+- 第一版 Card Presentation 作为同一 Run 内的受限步骤，根据用户需求、Tool Result 和交互卡片目录生成 Render Plan，不启动独立子 Agent。
 - Run 保存多步骤任务状态，支持暂停等待用户输入、恢复、失败重试和取消。
+- Agent Harness 使用 Provider-neutral Message/Event 和小型 Tool Loop；模型调用前由 ContextAssembler 组装 Typed Checkpoint、最新 ContextSnapshot 和最近完整 Turn。
+- ConversationEvent Ledger 保存完整历史，ContextSnapshot 只用于模型上下文压缩，不能替代 PostgreSQL 中的 Run/Step/Tool/Execution 事实。
 
-Presentation Agent 可以由独立子 Agent 承担，但其输出必须是可校验的声明式计划，不能直接拥有越权能力。
+通用子 Agent 调度延后。后续即使将 Presentation 拆为子 Agent，其输出也必须是可校验的声明式计划，且不能拥有超过父 Run 的 Tool/DataScope 权限。
 
 ### 5.3 工具与领域模块
 
@@ -196,7 +198,7 @@ flowchart TB
 - 控制链路故障不应阻止 Collector 继续推送数据。
 - 远程会话流量和 Connector 控制命令可以复用同一 Connector 长连接协议族，但必须使用独立逻辑流、短期票据、优先级、限流和审计；会话录像写入 Artifact Store，不能只保存在 Gateway Pod 本地。
 - 遥测写入积压不应占用 Connector 命令通道。
-- Query Service 使用只读 ClickHouse 账号，并强制应用 Enterprise、Project/Resource 范围、Signal 权限、字段脱敏、时间范围和查询预算；Web、Model Agent 和 Card 不得各自实现不同的数据过滤。
+- Query Service 使用只读 ClickHouse 账号，并强制应用 Enterprise、授权 Resource ID/标签选择结果、Signal 权限、字段脱敏、时间范围和查询预算；Web、Model Agent 和 Card 不得各自实现不同的数据过滤。
 - Ingest Service 不向用户提供查询接口，也不持有控制面 Secret。
 
 ### 5.6 安全与治理平面
@@ -227,11 +229,11 @@ Sandbox 生成计划或脚本
 
 ## 7. 关键领域对象
 
-- Enterprise、PlatformUser、EnterpriseUser、Project、Group、Role、Permission、RoleBinding、Policy、AuthorizationVersion。
+- Enterprise、PlatformUser、EnterpriseUser、Department、Role、Permission、RoleBinding、DataScope、Policy、AuthorizationVersion。
 - Connector、Host、BastionScope、KubernetesCluster、ManagedAccount、RemoteAccessGrant、Credential、SecretRef。
 - RemoteAccessSession、RemoteAccessTicket、SessionRecording。
 - TelemetryGroup、CollectorInstance、CollectorConfigRevision、TelemetryCredential、IngestionPolicy。
-- Conversation、Message、Run、ToolCall、ToolResult。
+- Conversation、ConversationEvent、Message、Run、RunCheckpoint、ModelCall、ToolCall、ToolResult、ToolResultProjection、ContextSnapshot。
 - RunStep、TaskLease、OutboxEvent、ConnectorCommand。
 - PendingAction、UserConfirmation、ApprovalRequest、Execution、ActionBinding、AuditEvent。
 - InteractiveCard、CardVersion、CardInstance、RenderPlan。
@@ -240,7 +242,7 @@ Sandbox 生成计划或脚本
 
 第一版中 Enterprise 是唯一业务隔离边界，旧文档或外部协议中的 Tenant 必须在入口适配为 `enterprise_id`，内部领域对象不得同时维护两套隔离 ID。
 
-Project 是企业内部业务授权边界而不是新的租户。一个 Project 不能跨企业；Bastion Scope 可以为多个 Project 中的目标资源提供网络路径，但不能因此传播权限。平台超级管理员、企业管理员、Project 操作者和 Model Agent 的所有入口均复用同一授权服务。
+第一版不实现 Project。`enterprise_id` 是唯一租户和安全隔离边界；Host/Kubernetes 标签只用于归类、筛选和 DataScope 选择，Bastion Scope 与 Telemetry Group 只描述网络或遥测拓扑。平台超级管理员、企业管理员、资源操作者和 Model Agent 的所有入口均复用同一授权服务。
 
 ## 8. Kubernetes 部署边界
 

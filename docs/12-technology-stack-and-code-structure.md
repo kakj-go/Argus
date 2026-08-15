@@ -24,9 +24,11 @@ Argus 主应用统一使用：
 | 图表 | Apache ECharts | 用于 Metrics、Trace、拓扑和时间序列；查询必须经过 Telemetry Query |
 | 远程命令行 | xterm.js（SSH PTY / WinRM PowerShell Runspace） | 只渲染 Remote Access Gateway 转发的人工会话；WinRM 不伪装成完整 PTY，命令行不得暴露 Credential 或允许 AI/Card 获取会话票据 |
 | 国际化 | i18next | 第一版必须完整支持 `zh-CN` 与 `en-US`；文案使用稳定 Key，不得散落在不可检索的组件常量中 |
-| 实时更新 | SSE 为主、WebSocket 为辅 | 模型输出、Run 和 Card 状态使用可恢复游标；断线后重新校验 Session、固定企业、Project 和 AuthorizationVersion |
+| 实时更新 | SSE 为主、WebSocket 为辅 | 模型输出、Run 和 Card 状态使用可恢复游标；断线后重新校验 Session、固定企业、DataScope 和 AuthorizationVersion |
 
 不使用 Next.js 作为第一版主框架。Argus 是登录后的控制平面，不依赖 SEO 或服务端页面渲染；Vite 静态构建可以减少运行时和部署复杂度。
+
+引入顺序固定为“核心栈先锁定，功能到达时再启用对应库”：React/TypeScript/Vite/pnpm、Router、Query、Zustand、Radix/Tailwind/CVA 和 i18next 属于前端基座；TanStack Table/Virtual 在资源大列表阶段启用，React Hook Form/Zod 在真实写表单阶段启用，ECharts 在遥测阶段启用，xterm.js 在远程访问阶段启用，MSW 与 axe-core 在真实 API 和可访问性门禁阶段启用。不得为了“技术栈完整”在尚无业务使用点时提前铺空封装。
 
 ### 2.1 UI 包边界
 
@@ -49,7 +51,7 @@ web/
 - `platform` 只承载平台超级管理员能力。
 - `enterprise` 包含 Chatbox 和企业管理后台。
 - `ui` 是唯一通用组件实现，业务应用不得维护平行组件库。
-- `api-client` 由 OpenAPI 生成基础类型和调用代码，在其上封装固定企业、显式 Project 上下文、AuthorizationVersion、错误和流式协议；客户端上下文不能替代服务端资源归属检查。后端就绪前由包内置的 mock 实现驱动三个门户与全部前端 E2E（`VITE_API_MODE` 选择，默认 `mock`），真实 HTTP 客户端落地后按同一接口替换。
+- `api-client` 由 OpenAPI 生成基础类型和调用代码，在其上封装固定企业、AuthorizationVersion、DataScope 投影、错误和流式协议；客户端上下文不能替代服务端资源归属检查。后端就绪前由包内置 mock 实现驱动三个门户与前端 E2E（`VITE_API_MODE` 默认 `mock`），真实 HTTP/SSE/WebSocket Adapter 落地后按同一接口替换。
 - `card-host` 只实现 iframe 生命周期、绑定数据、Host Bridge 和受控 Action/Query 调用。
 
 ### 2.2 主题与国际化契约
@@ -85,11 +87,11 @@ React 主应用
         └── HTML/CSS/JavaScript 交互卡片
 ```
 
-Card Host 使用 CSP、`MessageChannel/MessagePort`、通道 nonce、消息序号和版本化 Schema。浏览器和 交互卡片 只能获得 `query_binding_id` 或 `action_binding_id`，不能获得 Secret、Commit Tool 或 `argus__token`。
+Card Host 根据版本化 Manifest 生成最小 CSP，并使用 `MessageChannel/MessagePort`、通道 nonce、消息序号、Origin 校验和版本化消息 Schema。全局 `window.postMessage` 只允许完成一次受限握手，不得以 `targetOrigin='*'` 传输业务消息。浏览器和 Card 只能获得 `query_binding_id` 或 `action_binding_id`，不能获得 Secret、Commit Tool、PendingAction 私有参数或 `argus__token`。
 
 Card Host 在独立的 `host.context` 消息中传递 `locale`、解析后的 `theme/color_scheme` 和白名单语义 Token。Card iframe 不能读取宿主 DOM 或任意 CSS；语言或主题变化由 Host Bridge 推送新 Context，卡片应原地更新而不是重建业务 Action Binding。
 
-交互卡片 Manifest 必须声明 `supported_locales`、`default_locale` 和主题能力。系统卡片必须完整支持 `zh-CN/en-US` 与 `light/dark`；租户或个人卡片缺少当前语言时可以回退到声明的默认语言，但宿主必须明确标识回退，不得静默显示错误语义。
+交互卡片 Manifest 必须声明 `schema_version`、入口内容哈希、允许资源、Data/Query/Action Slot、Bridge 能力、`supported_locales`、`default_locale` 和主题能力。系统卡片必须完整支持 `zh-CN/en-US` 与 `light/dark`；企业卡片缺少当前语言时可以回退到声明的默认语言，但宿主必须明确标识回退，不得静默显示错误语义。第一版不存在个人卡片。
 
 ## 3. 后端技术栈
 
@@ -100,6 +102,7 @@ Card Host 在独立的 `host.context` 消息中传递 `locale`、解析后的 `t
 | 外部 API | REST + OpenAPI 3.1 | 使用 `oapi-codegen` 生成服务端接口和前端客户端类型 |
 | 内部 RPC | gRPC + protobuf | 使用 Buf 管理 lint、生成和 breaking change；Connector 使用双向流 |
 | MCP | 官方 Go MCP SDK + Argus Tool Gateway | SDK 只处理协议；权限、私有 Token 分流和 Tool 投影由 Argus 实现 |
+| Agent Harness | Go 小内核，语义参考 Pi agent-core | Provider-neutral Message/Event、可插拔 ContextAssembler、顺序优先的 Tool Loop；不引入第二套 Workflow Runtime |
 | PostgreSQL | `pgx` + `sqlc` | 使用显式 SQL 实现事务、条件更新、Lease、Fence Token 和 Outbox，不使用重 ORM |
 | PostgreSQL Migration | Goose | Migration 以 Job 运行并通过 Lease 保证单一所有者 |
 | Redis | `go-redis` | 只用于缓存、通知、限流和短期协调 |
@@ -110,6 +113,8 @@ Card Host 在独立的 `host.context` 消息中传递 `locale`、解析后的 `t
 | 可观测性 | OpenTelemetry Go + `slog` | Trace、Metric、结构化日志统一携带 enterprise/run/tool/execution 标识 |
 
 第一版不引入 Temporal、Celery 或另一套权威工作流系统。Run、Step、Task、Lease 和 Execution 继续以 PostgreSQL 为事实来源，Redis 只降低调度延迟。
+
+Agent Harness 不直接依赖某个 Provider SDK 的 Session/Memory 对象。`internal/agent` 维护 Agent Loop、Run Reducer 和事件协议；`internal/conversation` 维护不可变 ConversationEvent；`internal/model` 维护 AIModel/ModelCall/ContextSnapshot；`internal/integration/modelprovider` 在调用边界转换消息、流事件和可选 Provider Compaction。完整设计见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
 
 ### 3.1 后端语言协商与消息模型
 
@@ -153,6 +158,25 @@ internal/
 └── runtime/
 ```
 
+建议在领域内进一步拆分：
+
+```text
+internal/agent/
+├── loop/
+├── context/
+├── checkpoint/
+├── events/
+└── run/
+
+internal/mcp/
+├── registry/
+├── gateway/
+├── projection/
+└── schema/
+```
+
+Agent Loop、ContextAssembler、Compactor 和 Provider Adapter 保持独立接口，避免把模型 SDK、数据库事务、Tool 执行和 Prompt 拼接写入同一个大文件。
+
 每个领域内部包含 domain、service、repository/port 和 adapter。HTTP Handler、MCP Tool、Worker Handler 和自动化任务只能调用领域服务，不能各自实现数据库业务规则。
 
 ## 4. 身份、权限和 Secret
@@ -161,8 +185,8 @@ internal/
 - 浏览器使用 HttpOnly、Secure、SameSite Cookie，所有变更请求执行 CSRF 防护。
 - Session 和撤销事实保存在 PostgreSQL，Redis 只保存热缓存和快速失效通知。
 - PlatformUser 与 EnterpriseUser 使用不同身份域和 Audience；EnterpriseUser 固定一个企业，不实现 Membership 或企业切换。
-- 第一版企业/Project 两级 RoleBinding、RemoteAccessGrant、ManagedAccount、AuthorizationVersion 和类型化 Policy 在 Go 领域服务中实现；受限条件表达式使用 CEL-Go，不接受用户 SQL。
-- API Key 和 Service Account 凭证只显示一次，数据库只保存哈希，并固定企业、Project/Tool Scope 和 AuthorizationVersion。
+- 第一版企业级 RoleBinding、DataScope、RemoteAccessGrant、ManagedAccount、AuthorizationVersion 和类型化 Policy 在 Go 领域服务中实现；标签选择器使用独立的版本化白名单语法，受限 Policy 条件可以使用 CEL-Go，二者都不接受用户 SQL。
+- API Key 和 ServiceAccount 凭证只显示一次，数据库只保存哈希，并固定企业、Tool/DataScope 和 AuthorizationVersion。
 - 业务对象只保存 `secret_ref`。Secret Store 使用 Envelope Encryption，并预留外部 Vault/OpenBao/云 KMS Adapter；第一版不因此引入集群外依赖。
 
 ## 5. 测试与质量门禁
@@ -181,13 +205,14 @@ internal/
 E2E 至少覆盖：
 
 - 初始化、双层管理域、平台/企业身份互斥、单企业用户和跨企业拒绝。
-- Project RoleBinding 的列表/详情/批量/Tool/Card 一致过滤，以及 Project 切换后的缓存、Binding 和流式订阅失效。
+- RoleBinding + DataScope 的列表/详情/批量/Tool/Card 一致过滤，以及授权敏感标签变化后的缓存、Binding、游标和流式订阅失效。
 - Connector 注册并创建 Bastion Scope、内网主机经堡垒机接入、公网 Direct SSH 的 SSRF/固定出口边界。
 - Connector 本机/SSH/WinRM 人工命令行票据与录像；RemoteAccessGrant 限定 Host/ManagedAccount/动作；人工会话和自动化 Execution 隔离。
 - Collector 沿两种执行路径安装、Telemetry Route 选择矩阵和 Metrics/Logs/Traces Profile 配置。
 - Kubernetes Node/Host 绑定，以及 Host Collector 与 DaemonSet Collection Claim 的冲突、非冲突共存和到期迁移。
 - 资源查询、Preview/Confirm/Commit、撤权与 AuthorizationVersion、审批不补齐基础权限、Redis 清空恢复和 Pod 重启接管。
-- OTLP 写入可信 Enterprise/Project/Resource 身份，以及跨企业、跨 Project、跨 Signal 和敏感字段查询拒绝。
+- Agent Event 顺序、ToolCall/ToolResult 完整切点、确定性 ToolResult Projection、增量 ContextSnapshot、压缩失败恢复、Projection Hash 和私有字段不可见性。
+- OTLP 写入可信 Enterprise/Resource/Collector 身份，以及跨企业、超出 DataScope、跨 Signal 和敏感字段查询拒绝。
 
 前端与 Card E2E 还必须覆盖 `zh-CN/en-US × light/dark` 基础矩阵、偏好持久化、缺失翻译回退、语言协商和主题切换后 Action Binding 不变。测试完成后删除临时 Namespace。
 

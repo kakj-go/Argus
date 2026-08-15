@@ -90,7 +90,7 @@ DaemonSet 采集节点指标和容器日志，Gateway Deployment 采集集群级
 
 Bastion Scope 已经表达堡垒机与内网成员的可信网络边界，因此这类成员不再创建一个平行的 Telemetry Group。它们的 Telemetry Route 只记录 `direct_argus` 或 `bastion_gateway`，并由服务端确认 Gateway Collector 正是所属 Scope 的堡垒机。
 
-Telemetry Group 只用于堡垒机范围之外的独立主机组网，描述一组经验证互通的独立主机、独立 Edge Gateway 和采集 Profile：
+Telemetry Group 只用于堡垒机范围之外的独立主机组网，描述一组经验证互通的独立主机、独立 Edge Gateway 和采集 Profile。该模型保留为后续能力；第一批遥测闭环只实现 `direct_argus` 和 `bastion_gateway`：
 
 ```json
 {
@@ -124,7 +124,7 @@ Telemetry Group 只用于堡垒机范围之外的独立主机组网，描述一�
 - TelemetryCredential：Leaf/Gateway/Argus 身份凭证。
 - TelemetryRoute：上游端点、主备和连通性状态。
 
-第一版可以只支持单 Edge Gateway，但数据模型预留 `fallback_gateway_resource_ids`。Bastion Scope 与 Telemetry Group 不能交叉包含同一 Host；独立主机一旦注册为堡垒机，必须先 Preview 并解除其独立 Telemetry Group 路由。
+后续启用 Telemetry Group 时可以先支持单 Edge Gateway，但数据模型预留 `fallback_gateway_resource_ids`。Bastion Scope 与 Telemetry Group 不能交叉包含同一 Host；独立主机一旦注册为堡垒机，必须先 Preview 并解除其独立 Telemetry Group 路由。
 
 ### 4.1 Kubernetes Node 与 Host 绑定
 
@@ -634,14 +634,13 @@ service:
 源 Collector：argus.collector.id
 经过的 Edge Gateway：argus.edge_gateway.id
 企业：argus.enterprise.id
-Project：argus.project.id
 ```
 
-Leaf 到 Edge Gateway 使用独立短期 Token 或 mTLS。Edge Gateway 根据认证结果和服务端资源关系覆盖可信 Enterprise、Project 和 Resource ID，不能相信 Leaf 自报的企业、Project 和资源字段。覆盖发生在接收 Pipeline 最前端，客户端提交的 `argus.enterprise.id`、`argus.project.id`、`argus.resource.id`、`argus.collector.id` 和 `argus.edge_gateway.id` 同名字段必须删除后重建，不能只在已有属性旁追加可信值。
+Leaf 到 Edge Gateway 使用独立短期 Token 或 mTLS。Edge Gateway 根据认证结果和服务端资源关系覆盖可信 Enterprise、Resource 和 Collector ID，不能相信 Leaf 自报的企业、资源和 Collector 字段。覆盖发生在接收 Pipeline 最前端，客户端提交的 `argus.enterprise.id`、`argus.resource.id`、`argus.collector.id` 和 `argus.edge_gateway.id` 同名字段必须删除后重建，不能只在已有属性旁追加可信值。
 
 堡垒机 Gateway 只签发给同一 Bastion Scope 成员的 Leaf Credential，认证时同时校验 `bastion_scope_id`、源 Host、源 Collector 和目标 Gateway。独立 Gateway 只接受同一 Telemetry Group 的独立主机凭证。即使网络端口可达，跨 Scope、独立主机 → 堡垒机 Gateway、堡垒机成员 → 独立 Gateway 的凭证都必须被拒绝。
 
-Edge Gateway 到 Argus 使用独立凭证。`argus-telemetry ingest` 根据该凭证确定企业，并从受信资源目录解析源资源当前的 Project，覆盖可信 `argus.enterprise.id`、`argus.project.id` 和 `argus.resource.id`，同时校验源资源属于同一企业。Bastion Scope 或 Telemetry Group 的拓扑关系不能替代 Project 归属。
+Edge Gateway 到 Argus 使用独立凭证。`argus-telemetry ingest` 根据该凭证确定企业，并从受信资源目录解析源 Resource 和 Collector，覆盖可信 `argus.enterprise.id`、`argus.resource.id` 和 `argus.collector.id`，同时校验源资源属于同一企业。Bastion Scope、Telemetry Group 或用户标签都不能替代资源真实企业归属和 DataScope 授权。
 
 真实私钥不进入模型、普通 Tool Result 或 Card DOM。证书支持轮换、吊销和过期告警。
 
@@ -652,7 +651,7 @@ Edge Gateway 到 Argus 使用独立凭证。`argus-telemetry ingest` 根据该�
 - OTLP/gRPC 4317。
 - OTLP/HTTP 4318。
 - TLS/mTLS 和 Token 认证。
-- 企业/Project/资源身份注入。
+- 企业/资源/Collector 身份注入。
 - 请求、解压后大小、Attribute 数量和长度限制。
 - Signal、速率、并发和日用量配额。
 - 数据过滤、脱敏和拒绝原因。
@@ -688,7 +687,7 @@ Ingest 侧在认证和可信身份注入后使用幂等 Kafka Producer，并在�
 - Metrics：ResourceAttributes 哈希。
 - Logs：ResourceAttributes 或 Trace ID，二选一。
 
-第一版使用共享 Signal Topic，通过可信 ResourceAttributes 和 Kafka Header 携带 `enterprise_id`、`project_id` 和 `resource_id`。不要为每个企业或 Project 创建 Topic；超大企业后续再配置专用 Topic。
+第一版使用共享 Signal Topic，通过可信 ResourceAttributes 和 Kafka Header 携带 `enterprise_id`、`resource_id` 和 `collector_id`。不要为每个企业或标签创建 Topic；超大企业后续再配置专用 Topic。
 
 `otel-clickhouse-writer` 优先使用标准 OpenTelemetry Collector 发行物。Kafka Receiver 必须启用 `message_marking.after: true`，并保持 `on_error: false` 与 `on_permanent_error: false`，使消息只在下游 Pipeline 成功后标记；具体版本的 Offset 提交语义需要作为发布门禁集成测试。Kafka 到 ClickHouse 保持至少一次语义，不能使用 Kafka Receiver 的默认提前标记行为假设“写入必达”。标准 Writer 与 Argus 三个逻辑数据集的映射以 16.6 Writer Gate 为准，不满足可靠性或 Schema 门禁时才启用最小自研 Writer。
 
@@ -706,16 +705,16 @@ argus_logs
 argus_traces
 ```
 
-所有企业共享这三个逻辑数据集，通过强制 `EnterpriseId` 和授权 Project/Resource 条件隔离。禁止创建以下按企业展开的表：
+所有企业共享这三个逻辑数据集，通过强制 `EnterpriseId` 和授权 Resource 条件隔离。禁止创建以下按企业或用户归类展开的表：
 
 ```text
 ${enterprise_id}_metrics
 ${enterprise_id}_logs
 ${enterprise_id}_traces
-${enterprise_id}_${project_id}_metrics
+${enterprise_id}_${label_value}_metrics
 ```
 
-也禁止使用 `(EnterpriseId, ProjectId, date)` 作为 Partition Key。企业或 Project 数量增长后，按企业/Project 建表或分区会使表、Partition、Part、DDL、备份和 Keeper 元数据快速增长，并使扩 Shard 时需要迁移和重建大量 Distributed Table。隔离由认证、Query Service 强制条件、排序键和审计共同保证，不依靠表名。
+也禁止使用 `(EnterpriseId, ResourceLabel, date)` 作为 Partition Key。企业或标签值数量增长后，按企业/标签建表或分区会使表、Partition、Part、DDL、备份和 Keeper 元数据快速增长，并使扩 Shard 时需要迁移和重建大量 Distributed Table。隔离由认证、Query Service 强制条件、排序键和审计共同保证，不依靠表名。
 
 “三个逻辑数据集”不等于 ClickHouse 集群永远只有三张物理表。为了复制和分片，每个逻辑数据集从第一版就使用：
 
@@ -736,7 +735,6 @@ argus_traces          Distributed 查询/写入入口
 
 ```text
 EnterpriseId       LowCardinality(String)
-ProjectId          LowCardinality(String)
 ResourceId         String
 CollectorId        String
 ServiceName        LowCardinality(String)
@@ -755,7 +753,7 @@ KafkaPartition     UInt32
 KafkaOffset        UInt64
 ```
 
-`EnterpriseId`、`ProjectId`、`ResourceId` 和 `CollectorId` 来自 Ingest/Edge Gateway 的认证结果和受信资源关系并覆盖客户端同名属性。`ExpiresAt` 在写入时根据企业 Retention Policy 固化，使共享表可以执行每行 TTL，而不用为不同企业或 Project 创建表。
+`EnterpriseId`、`ResourceId` 和 `CollectorId` 来自 Ingest/Edge Gateway 的认证结果和受信资源关系并覆盖客户端同名属性。`ExpiresAt` 在写入时根据企业 Retention Policy 固化，使共享表可以执行每行 TTL，而不用为不同企业或标签创建表。
 
 ### 16.3 Metrics 逻辑表
 
@@ -795,14 +793,13 @@ ZeroCount           Nullable(UInt64)
 PARTITION BY toYYYYMM(Timestamp)
 ORDER BY (
   EnterpriseId,
-  ProjectId,
   MetricName,
   ResourceId,
   AttributesHash,
   toStartOfHour(Timestamp),
   Timestamp
 )
-SHARD BY cityHash64(EnterpriseId, ProjectId, ResourceId, MetricName, AttributesHash)
+SHARD BY cityHash64(EnterpriseId, ResourceId, MetricName, AttributesHash)
 ```
 
 同一 Time Series 使用稳定 Sharding Key，便于 Counter Reset、Rate、乱序和去重在单 Shard 内完成。不能只用 `EnterpriseId` 分片，否则一个大型企业会被固定到单个 Shard 并形成热点。
@@ -830,13 +827,12 @@ BodySize         UInt32
 PARTITION BY toYYYYMM(Timestamp)
 ORDER BY (
   EnterpriseId,
-  ProjectId,
   ServiceName,
   toStartOfHour(Timestamp),
   Timestamp,
   EventId
 )
-SHARD BY cityHash64(EnterpriseId, ProjectId, ResourceId, EventId)
+SHARD BY cityHash64(EnterpriseId, ResourceId, EventId)
 ```
 
 `EventId` 由受信链路生成并在 Kafka 重试时保持稳定。`TraceId`、`SpanId` 和常用高选择性字段建立版本锁定的 Bloom Filter/Token Index；禁止给任意租户 Attribute 自动建索引。
@@ -866,17 +862,16 @@ Links            Array(Tuple(String, String, Map(String, String)))
 PARTITION BY toYYYYMM(Timestamp)
 ORDER BY (
   EnterpriseId,
-  ProjectId,
   ServiceName,
   toStartOfHour(Timestamp),
   Timestamp,
   TraceId,
   SpanId
 )
-SHARD BY cityHash64(EnterpriseId, ProjectId, TraceId)
+SHARD BY cityHash64(EnterpriseId, TraceId)
 ```
 
-同一个 Trace 必须落在同一个 Shard。Trace ID 精确查询优先使用 `(EnterpriseId, ProjectId, TraceId, Timestamp)` Projection；如果锁定 ClickHouse 版本下 Projection 的性能或运维不满足门禁，再增加共享的 Trace Lookup 辅助表，不能为每个企业或 Project 增加索引表。
+同一个 Trace 必须落在同一个 Shard。Trace ID 精确查询优先使用 `(EnterpriseId, TraceId, Timestamp)` Projection；如果锁定 ClickHouse 版本下 Projection 的性能或运维不满足门禁，再增加共享的 Trace Lookup 辅助表，不能为每个企业或标签增加索引表。
 
 ### 16.6 与官方 ClickHouse Exporter 的兼容边界
 
@@ -907,12 +902,12 @@ ClickHouse Exporter 必须设置 `create_schema: false`。Operator 不能代替�
 
 ## 17. 多租户、分片和扩容要求
 
-- 所有查询由 Query Service 强制注入 `EnterpriseId`、授权 `ProjectId/ResourceId`、Signal、字段投影与脱敏，并限制时间范围、行数、扫描字节和超时。
+- 所有查询由 Query Service 强制注入 `EnterpriseId`、授权 `ResourceIds` 或经校验标签选择器解析出的资源范围、Signal、字段投影与脱敏，并限制时间范围、行数、扫描字节和超时。
 - 企业用户和 Model Agent 不直接连接 ClickHouse。
 - 所有 Local Table 使用 ReplicatedMergeTree，所有逻辑入口使用 Distributed Table；单 Shard 环境也保留相同命名和迁移协议。
 - Schema Migration 使用 `ON CLUSTER` 并先创建兼容列/表，再升级 Writer 和 Query，最后清理旧 Schema。
-- Partition 只按时间，不按企业或 Project；排序键以 `EnterpriseId, ProjectId` 开头，通过主键稀疏索引裁剪授权数据。
-- Sharding Key 必须同时包含 `EnterpriseId`、`ProjectId` 和 Signal 的稳定高基数字段，既防止跨企业/Project 键冲突，又避免大型企业集中到单 Shard。
+- Partition 只按时间，不按企业或标签；排序键以 `EnterpriseId` 开头并包含 Signal 常用选择字段，通过主键稀疏索引裁剪授权数据。
+- Sharding Key 必须同时包含 `EnterpriseId` 和 Signal 的稳定高基数字段，既防止跨企业键冲突，又避免大型企业集中到单 Shard。
 - 扩 Shard 时使用新 Distributed Sharding Policy 写入新数据，历史数据通过受控 Backfill/Rebalance 任务迁移；不能依赖修改表名完成扩容。
 - TTL 使用写入时固化的 `ExpiresAt`；冷热层、套餐保留期和删除任务由平台策略管理。
 - `create_schema: false`，所有表、Projection、索引和 Schema Version 由 Argus Migration 管理。
@@ -923,7 +918,7 @@ ClickHouse Exporter 必须设置 `create_schema: false`。Operator 不能代替�
 
 Kafka/Collector 重试会产生至少一次投递，可能重复：
 
-- Trace 可基于 EnterpriseId + ProjectId + TraceId + SpanId 辅助去重。
+- Trace 可基于 EnterpriseId + TraceId + SpanId 辅助去重。
 - Logs 缺少统一天然 ID，可由 Gateway 增加 `argus.event.id` 或记录 Kafka Offset。
 - Metrics 重复会影响 Sum/Rate，需要明确接受误差、写入去重或查询修正策略。
 
@@ -931,9 +926,9 @@ Kafka/Collector 重试会产生至少一次投递，可能重复：
 
 第一版固定最低重复处理策略：
 
-- Trace 写入保留 `EnterpriseId + ProjectId + TraceId + SpanId`，查询默认对同一键取最新摄入记录；Trace Projection 或共享 Lookup 表使用相同企业/Project 键。
+- Trace 写入保留 `EnterpriseId + TraceId + SpanId`，查询默认对同一键取最新摄入记录；Trace Projection 或共享 Lookup 表使用相同企业键。
 - Ingest 为缺少稳定事件 ID 的 Log 生成 `argus.event.id`，由源 Collector ID、接收批次和记录序号组成；重试同一批次时保持稳定。
-- Gauge 查询对同一 Enterprise/Project/Resource/Metric/Attributes/Timestamp 取最新摄入点。
+- Gauge 查询对同一 Enterprise/Resource/Metric/Attributes/Timestamp 取最新摄入点。
 - Sum/Counter 原始点保留至少一次数据，Rate 查询在去重后处理单调性、重置和乱序；第一版不允许客户端直接对原始 Sum 表自行计算生产告警 Rate。
 - Writer 记录 Kafka Topic/Partition/Offset 或等价摄入序列，供对账和受控重放使用。
 - DLQ 跳过或重放必须记录审批人、Offset 范围、Payload 哈希和目标 Schema Version。
@@ -951,7 +946,7 @@ Kafka/Collector 重试会产生至少一次投递，可能重复：
 
 ### 18.1 查询语义和保护
 
-Telemetry Query 不接受任意 SQL，只接受版本化 Metrics/Logs/Traces Query Schema。所有查询强制注入 EnterpriseId、授权 ProjectId/ResourceIds、Signal、时间范围、最大行数、最大扫描字节、超时和字段脱敏；昂贵查询使用 Redis 进行企业/Project 并发和预算协调，权威策略保存在 PostgreSQL。
+Telemetry Query 不接受任意 SQL，只接受版本化 Metrics/Logs/Traces Query Schema。所有查询强制注入 EnterpriseId、授权 ResourceIds 或经校验标签选择器解析出的资源范围、Signal、时间范围、最大行数、最大扫描字节、超时和字段脱敏；昂贵查询使用 Redis 进行企业级并发和预算协调，权威策略保存在 PostgreSQL。
 
 Metrics Query 必须声明：
 
@@ -966,7 +961,7 @@ step and fill policy
 
 Query 响应返回实际应用的过滤、Step、数据新鲜度、部分失败和 Schema Version，避免模型或卡片把缺失数据误认为零值。
 
-`host.read`、`project.read`、Metrics、Logs、Traces、Live Tail、Export 和敏感字段读取是独立权限。Web、Model Agent 和 交互卡片 必须消费同一 Query Service 安全投影；跨 Project 查询逐个 Project 授权，未授权资源从结果中移除并仅返回稳定的 partial 标记，不得泄露名称或属性。
+`host.read`、Metrics、Logs、Traces、Live Tail、Export 和敏感字段读取是独立权限。Web、Model Agent 和 Card 必须消费同一 Query Service 安全投影；查询目标逐个资源授权，未授权资源从结果中移除并仅返回稳定的 `partial` 标记，不得泄露名称或属性。
 
 ## 19. 可靠性与容量
 
@@ -1021,13 +1016,13 @@ CRI-O：使用对应 Registry Mirror 或 Runtime 导入方式
 安装、升级、配置、Gateway 切换和卸载需要对应 RBAC 权限。审计记录：
 
 - 发起人和 origin。
-- 企业、Project、目标资源、Bastion Scope 或独立 Telemetry Group。
+- 企业、目标资源、资源标签快照、Bastion Scope 或独立 Telemetry Group。
 - Host 连接模式、安装执行路径、源路由类型和目标 Gateway Collector。
 - Preview/Commit Tool。
 - Collector Distribution、版本和 Artifact 哈希。
 - 配置前后 Revision 和 Diff 摘要。
 - 权限、防火墙和服务变化。
-- Signal、Project/Resource 授权范围、字段投影与脱敏、时间范围、扫描预算、Live Tail 或 Export 行为。
+- Signal、DataScope/Resource 授权范围、字段投影与脱敏、时间范围、扫描预算、Live Tail 或 Export 行为。
 - Action Binding、Token 和用户确认。
 - 执行步骤、Connector、回滚和最终状态。
 
@@ -1037,13 +1032,13 @@ CRI-O：使用对应 Registry Mirror 或 Runtime 导入方式
 2. 主机详情中的 Linux/Windows Collector 一键安装，覆盖 Bastion Scope 成员与公网 Direct Executor 两条执行路径。
 3. Metrics/Logs/Traces 采集能力目录、草稿、Claim 冲突、配置 Diff、校验、下发和回滚界面。
 4. Connector Artifact Tunnel、Direct Executor Transfer、校验和回滚。
-5. `argus-telemetry ingest` 和企业/Project/资源可信身份注入。
-6. Bastion Scope 成员 → 堡垒机 Gateway 规则、独立 Telemetry Group 和路由测试。
+5. `argus-telemetry ingest` 和企业/资源/Collector 可信身份注入。
+6. Bastion Scope 成员 → 堡垒机 Gateway 规则和路由测试；独立 Telemetry Group 延后。
 7. Kafka 三类 Signal Topic、DLQ 和消费链路。
 8. Altinity ClickHouse Operator、ClickHouseInstallation、多租户表与 Migration。
 9. Kubernetes Node/Host 绑定，以及带 Collection Claim 冲突检测的 DaemonSet + Gateway Deployment。
 10. Collector 自身监控、配额和成本控制。
-11. 带 Project/Resource、Signal、字段脱敏和查询预算授权的 Metrics/Logs 查询 Tool、交互卡片、告警和综合可观测性页面。
+11. 带 DataScope/Resource、Signal、字段脱敏和查询预算授权的 Metrics/Logs 查询 Tool、交互卡片、告警和综合可观测性页面。
 
 OpenTelemetry Profiles 信号、Trace 高级查询、双 Gateway、OpAMP、尾部采样、企业自定义 Distribution 和弱网 K8s 镜像分发在后续阶段实现。
 
