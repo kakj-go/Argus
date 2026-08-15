@@ -1,0 +1,337 @@
+/* 主机模块局部样式：主机列表与主机详情。仅使用 design-tokens 变量。 */
+
+.argus-hosts-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ---- Bastion Scope 分组卡片 ---- */
+.argus-scope-card {
+  padding: 0;
+  overflow: hidden;
+}
+.argus-scope-card--pending {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: var(--bg-muted);
+}
+.argus-scope-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.argus-scope-card--pending .argus-scope-card__head {
+  border-bottom-style: dashed;
+}
+.argus-scope-card__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 650;
+}
+.argus-scope-card__title > a {
+  color: var(--text-primary);
+}
+.argus-scope-card__title > a:hover {
+  color: var(--accent);
+}
+.argus-scope-card__title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.argus-scope-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.argus-scope-card__body {
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.argus-scope-card__token {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.argus-scope-card__token-meta {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.argus-scope-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ---- 成员主机紧凑卡片 ---- */
+.argus-host-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-2);
+}
+.argus-host-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  transition: var(--motion-fast);
+}
+.argus-host-tile:hover {
+  border-color: var(--border-default);
+  background: var(--bg-elevated);
+}
+.argus-host-tile__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.argus-host-tile__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 620;
+}
+.argus-host-tile__name a {
+  color: var(--text-primary);
+}
+.argus-host-tile__name a:hover {
+  color: var(--accent);
+}
+.argus-host-tile__addr {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.argus-host-tile__path {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.argus-host-tile__tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.argus-collector-status-action {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.argus-collector-status-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.argus-host-tile__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.argus-host-tile__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ---- 独立主机区 ---- */
+.argus-standalone__hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.argus-standalone__hint code {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+/* ---- 详情页 ---- */
+.argus-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--space-3);
+}
+.argus-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.argus-detail-section__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+/* ---- 会话确认卡 / 表单行 ---- */
+.argus-session-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.argus-session-confirm__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+.argus-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+.argus-form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.argus-bastion-command {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+.argus-bastion-command__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.argus-bastion-command__head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+.argus-bastion-command__head p {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.argus-bastion-command__code {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.argus-bastion-command__code > span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* ---- 连接方式 / 路由选项（radio 卡片） ---- */
+.argus-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.argus-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--motion-fast);
+  width: 100%;
+  color: var(--text-primary);
+  font: inherit;
+}
+.argus-choice:hover {
+  border-color: var(--border-default);
+}
+.argus-choice.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.argus-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.argus-choice__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.argus-choice__text b {
+  font-weight: 620;
+}
+.argus-choice__text small {
+  color: var(--text-secondary);
+}
+
+/* ---- Collector 采集能力开关 ---- */
+.argus-capability {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.argus-capability:last-child {
+  border-bottom: none;
+}
+.argus-capability__label {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+/* ---- 通用小元素 ---- */
+.argus-inline-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.argus-inline-note code {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+.argus-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.argus-muted {
+  color: var(--text-tertiary);
+}
+.argus-task-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+}

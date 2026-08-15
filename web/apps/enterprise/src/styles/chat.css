@@ -1,0 +1,584 @@
+/* Chatbox 会话页样式（docs/04 §9、docs/05 §6）。统一 .argus-chat-* 前缀 + 设计 token。 */
+
+.argus-chat {
+  height: calc(100vh - 62px);
+  min-height: 480px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  overflow: hidden;
+}
+.argus-chat.is-context-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.argus-chat__main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- 头部 ---------- */
+.argus-chat__header {
+  min-height: 52px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.argus-chat__title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+.argus-chat__title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.argus-chat__title-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.argus-chat__title-edit .argus-input {
+  width: 260px;
+}
+.argus-chat__header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.argus-chat__model-select {
+  width: min(240px, 32vw);
+  height: 32px;
+}
+.argus-chat__header-actions .argus-button.is-active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---------- 欢迎空态 ---------- */
+.argus-chat-welcome {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 24px;
+  text-align: center;
+}
+.argus-chat-welcome__mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #e18161, #bd5939);
+  color: white;
+  font-size: 19px;
+  box-shadow: 0 6px 18px rgb(220 118 84 / 20%);
+}
+.argus-chat-welcome__title {
+  margin: 8px 0 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.argus-chat-welcome__desc {
+  max-width: 520px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.argus-chat-welcome__examples {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: min(640px, 100%);
+}
+.argus-chat-welcome__example {
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast),
+    color var(--motion-fast);
+}
+.argus-chat-welcome__example:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* ---------- 消息流 ---------- */
+.argus-chat__stream {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 0 12px;
+}
+.argus-chat-stream__inner {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.argus-chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.argus-chat-message__who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.argus-chat-message__who b {
+  font-size: 12.5px;
+}
+.argus-chat-message__who time {
+  color: var(--text-disabled);
+  font-size: 11px;
+}
+.argus-chat-message__avatar {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.argus-chat-message__body {
+  margin-left: 32px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.argus-chat-message__card-link {
+  color: var(--accent);
+  font-weight: 600;
+}
+.argus-chat-message--user .argus-chat-message__body {
+  align-self: flex-end;
+  max-width: 78%;
+  margin-left: 0;
+  padding: 9px 13px;
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+}
+.argus-chat-message--user .argus-chat-message__who {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.argus-chat-message__caret::after {
+  content: "▍";
+  color: var(--accent);
+  animation: argus-chat-blink 1s steps(2) infinite;
+}
+@keyframes argus-chat-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.argus-chat-message__extras {
+  margin-left: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------- 工具调用 trace ---------- */
+.argus-chat-trace {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-sidebar) 45%, transparent);
+}
+.argus-chat-trace__toggle {
+  width: 100%;
+  padding: 7px 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.argus-chat-trace__toggle:hover {
+  color: var(--text-secondary);
+}
+.argus-chat-trace__toggle svg:last-child {
+  margin-left: auto;
+  transition: transform var(--motion-fast);
+}
+.argus-chat-trace__toggle[aria-expanded="true"] svg:last-child {
+  transform: rotate(180deg);
+}
+.argus-chat-trace__list {
+  padding: 2px 11px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.argus-chat-trace__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.argus-chat-trace__row code {
+  color: var(--text-primary);
+  font-size: 11.5px;
+}
+.argus-chat-trace__row small {
+  color: var(--text-tertiary);
+}
+.argus-chat-trace__row time {
+  margin-left: auto;
+  color: var(--text-disabled);
+  font: 10.5px var(--font-mono);
+}
+.argus-chat-trace__status {
+  display: inline-flex;
+  align-items: center;
+}
+.argus-chat-trace__status.is-success {
+  color: var(--success);
+}
+.argus-chat-trace__status.is-failed {
+  color: var(--danger);
+}
+.argus-chat-trace__status.is-running {
+  color: var(--info);
+}
+
+/* ---------- 沙箱卡片包装 ---------- */
+.argus-chat-card {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.argus-chat-card__head {
+  min-height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  font-weight: 620;
+}
+.argus-chat-card__head small {
+  color: var(--text-disabled);
+  font: 10px var(--font-mono);
+  font-weight: 400;
+}
+.argus-chat-card__head .argus-badge {
+  margin-left: auto;
+}
+.argus-chat-card__body {
+  padding: 4px 0;
+}
+.argus-chat-card__loading {
+  padding: 18px 12px;
+  display: flex;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* ---------- Pending Action 确认卡片 ---------- */
+.argus-chat-action {
+  max-width: 560px;
+}
+.argus-chat-action__summary {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+.argus-chat-action__task-link {
+  margin-left: 8px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.argus-chat-action__task-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------- card_action_result 回显条 ---------- */
+.argus-chat-result {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+}
+.argus-chat-result__bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-sidebar) 55%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.argus-chat-result__bar.is-success svg {
+  color: var(--success);
+}
+.argus-chat-result__bar.is-failed svg {
+  color: var(--danger);
+}
+.argus-chat-result__bar code {
+  color: var(--text-disabled);
+  font-size: 10.5px;
+}
+
+/* ---------- 输入区 ---------- */
+.argus-chat-composer {
+  flex-shrink: 0;
+  padding: 10px 24px 14px;
+}
+.argus-chat-composer__inner {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.argus-chat-composer__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.argus-chat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 3px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+.argus-chat-chip svg {
+  color: var(--text-tertiary);
+}
+.argus-chat-chip button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 1px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-disabled);
+  cursor: pointer;
+}
+.argus-chat-chip button:hover {
+  color: var(--danger);
+}
+.argus-chat-composer__box {
+  position: relative;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  transition: border-color var(--motion-fast);
+}
+.argus-chat-composer__box:focus-within {
+  border-color: var(--accent);
+}
+.argus-chat-composer__box textarea {
+  width: 100%;
+  max-height: 168px;
+  padding: 12px 14px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+}
+.argus-chat-composer__toolbar {
+  padding: 4px 8px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.argus-chat-composer__toolbar > span {
+  margin-left: 6px;
+  color: var(--text-disabled);
+  font-size: 10.5px;
+}
+.argus-chat-composer__toolbar .argus-button:last-child {
+  margin-left: auto;
+}
+.argus-chat-composer__note {
+  color: var(--text-disabled);
+  font-size: 10.5px;
+  text-align: center;
+}
+
+/* @ / 选择器浮层 */
+.argus-chat-picker {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  max-height: 260px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.argus-chat-picker__title {
+  padding: 9px 12px 5px;
+  color: var(--text-disabled);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.argus-chat-picker__list {
+  overflow-y: auto;
+  padding: 0 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.argus-chat-picker__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.argus-chat-picker__item:hover,
+.argus-chat-picker__item.is-highlighted {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.argus-chat-picker__item small {
+  margin-left: auto;
+  color: var(--text-disabled);
+  font-size: 10.5px;
+}
+.argus-chat-picker__empty {
+  padding: 12px;
+  color: var(--text-disabled);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ---------- 右侧上下文面板 ---------- */
+.argus-chat-context {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-sidebar) 45%, transparent);
+}
+.argus-chat-context__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.argus-chat-context__head .argus-button {
+  margin-left: auto;
+}
+.argus-chat-context__section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.argus-chat-context__label {
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+.argus-chat-context__empty {
+  margin: 0;
+  color: var(--text-disabled);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.argus-chat-context__ref {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  font-size: 12px;
+}
+.argus-chat-context__ref svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.argus-chat-context__ref small {
+  margin-left: auto;
+  color: var(--text-disabled);
+  font: 10px var(--font-mono);
+}
+.argus-chat-context__roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 1080px) {
+  .argus-chat {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .argus-chat-context {
+    display: none;
+  }
+}

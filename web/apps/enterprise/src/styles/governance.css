@@ -1,0 +1,269 @@
+/**
+ * 执行治理模块局部样式（任务记录 + 待审批）。
+ * 仅覆盖 @argus/ui 未提供的布局与收件箱结构，颜色全部走 design tokens。
+ */
+
+/* ---- 共用 ---- */
+
+.argus-gov-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.argus-gov-section-title {
+  margin: 0 0 var(--space-2);
+  font: 600 12px/1.4 var(--font-sans);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---- 任务记录 ---- */
+
+.argus-task-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font: 600 13px/1.35 var(--font-sans);
+}
+.argus-task-name:hover {
+  color: var(--accent);
+}
+.argus-task-name__type {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--text-tertiary);
+}
+
+.argus-task-resources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.argus-task-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.argus-task-detail__error {
+  padding: var(--space-3);
+  border: 1px solid rgb(220 117 107 / 30%);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font: 500 12.5px/1.5 var(--font-sans);
+  white-space: pre-wrap;
+}
+.argus-task-step-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+.argus-task-step-detail {
+  color: var(--text-tertiary);
+}
+
+/* ---- 待审批（收件箱） ---- */
+
+.argus-approvals-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 1080px) {
+  .argus-approvals-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.argus-approval-inbox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.argus-approval-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.argus-approval-group__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+  font: 600 12px/1.4 var(--font-sans);
+  letter-spacing: 0.03em;
+}
+.argus-approval-group__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.argus-approval-group__count {
+  margin-left: auto;
+  font: 600 11px/1 var(--font-sans);
+  color: var(--text-tertiary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+.argus-approval-group.is-critical .argus-approval-group__header {
+  color: var(--danger);
+}
+.argus-approval-group.is-critical .argus-approval-group__dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+.argus-approval-group.is-dangerous .argus-approval-group__header {
+  color: var(--danger);
+}
+.argus-approval-group.is-dangerous .argus-approval-group__dot {
+  background: var(--danger);
+}
+.argus-approval-group.is-write .argus-approval-group__header {
+  color: var(--warning);
+}
+.argus-approval-group.is-write .argus-approval-group__dot {
+  background: var(--warning);
+}
+.argus-approval-group.is-read .argus-approval-group__header {
+  color: var(--info);
+}
+.argus-approval-group.is-read .argus-approval-group__dot {
+  background: var(--info);
+}
+
+.argus-approval-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  transition: var(--motion-fast);
+}
+.argus-approval-item:hover {
+  border-color: var(--border-default);
+  background: var(--bg-elevated);
+}
+.argus-approval-item.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.argus-approval-item.is-expired,
+.argus-approval-item.is-closed {
+  opacity: 0.55;
+}
+.argus-approval-item__top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.argus-approval-item__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 13px/1.4 var(--font-sans);
+}
+.argus-approval-item__summary {
+  margin: 0;
+  color: var(--text-secondary);
+  font: 400 12px/1.5 var(--font-sans);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.argus-approval-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-tertiary);
+  font: 500 11.5px/1.4 var(--font-sans);
+}
+.argus-approval-item__countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-mono);
+  color: var(--warning);
+}
+.argus-approval-item__countdown.is-expired {
+  color: var(--text-disabled);
+}
+
+.argus-approval-detail {
+  position: sticky;
+  top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* 非确认态的卡片底部由页面自绘操作区替代，隐藏卡片自带 footer。 */
+.argus-approval-card--static .argus-preview-card__footer {
+  display: none;
+}
+
+.argus-approval-block {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.argus-approval-decisions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.argus-approval-decisions__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font: 500 12.5px/1.5 var(--font-sans);
+}
+.argus-approval-decisions__reason {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.argus-approval-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.argus-approval-actions__buttons {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+.argus-approval-actions__error {
+  margin: 0;
+  color: var(--danger);
+  font: 500 12px/1.4 var(--font-sans);
+}

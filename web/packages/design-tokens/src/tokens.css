@@ -1,0 +1,88 @@
+:root {
+  color-scheme: dark;
+  --font-sans:
+    Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui,
+    sans-serif;
+  --font-mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+  --bg-canvas: #100f0d;
+  --bg-sidebar: #151310;
+  --bg-surface: #191713;
+  --bg-elevated: #211e19;
+  --bg-muted: #29251f;
+  --bg-hover: #2d2922;
+  --border-subtle: #29261f;
+  --border-default: #39342c;
+  --border-strong: #4a4338;
+  --text-primary: #f2ede4;
+  --text-secondary: #b7afa2;
+  --text-tertiary: #81796d;
+  --text-disabled: #5c554b;
+  --accent: #dc7654;
+  --accent-hover: #e58665;
+  --accent-soft: rgb(220 118 84 / 12%);
+  --success: #8cad6f;
+  --success-soft: rgb(140 173 111 / 11%);
+  --warning: #d5a15b;
+  --warning-soft: rgb(213 161 91 / 11%);
+  --danger: #dc756b;
+  --danger-soft: rgb(220 117 107 / 11%);
+  --info: #7c9fc8;
+  --info-soft: rgb(124 159 200 / 11%);
+  --radius-xs: 5px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 25%);
+  --shadow-lg: 0 24px 70px rgb(0 0 0 / 42%);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --motion-fast: 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-normal: 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-canvas: #f6f3ed;
+  --bg-sidebar: #eee9e1;
+  --bg-surface: #fdfbf7;
+  --bg-elevated: #f1ece4;
+  --bg-muted: #e6dfd5;
+  --bg-hover: #ddd5c9;
+  --border-subtle: #e4ddd3;
+  --border-default: #d3c9bc;
+  --border-strong: #b9ab9b;
+  --text-primary: #241f1b;
+  --text-secondary: #50483f;
+  --text-tertiary: #786e62;
+  --text-disabled: #a1978b;
+  --accent: #c75f3e;
+  --accent-hover: #b85133;
+  --accent-soft: rgb(199 95 62 / 11%);
+  --success: #5f813f;
+  --success-soft: rgb(95 129 63 / 10%);
+  --warning: #9a681f;
+  --warning-soft: rgb(154 104 31 / 10%);
+  --danger: #bd5148;
+  --danger-soft: rgb(189 81 72 / 10%);
+  --info: #4f739d;
+  --info-soft: rgb(79 115 157 / 10%);
+  --shadow-sm: 0 1px 2px rgb(58 43 30 / 8%);
+  --shadow-lg: 0 24px 70px rgb(58 43 30 / 18%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,38 @@
+/** 通用/跨模块文案。 */
+export const commonZh = {
+  "common.actions": "操作",
+  "common.create": "创建",
+  "common.edit": "编辑",
+  "common.save": "保存",
+  "common.cancel": "取消",
+  "common.confirm": "确认",
+  "common.close": "关闭",
+  "common.detail": "详情",
+  "common.none": "—",
+  "common.enabled": "已启用",
+  "common.disabled": "已停用",
+  "common.status": "状态",
+  "common.name": "名称",
+  "common.createdAt": "创建时间",
+  "common.yes": "是",
+  "common.no": "否",
+};
+
+export const commonEn = {
+  "common.actions": "Actions",
+  "common.create": "Create",
+  "common.edit": "Edit",
+  "common.save": "Save",
+  "common.cancel": "Cancel",
+  "common.confirm": "Confirm",
+  "common.close": "Close",
+  "common.detail": "Detail",
+  "common.none": "—",
+  "common.enabled": "Enabled",
+  "common.disabled": "Disabled",
+  "common.status": "Status",
+  "common.name": "Name",
+  "common.createdAt": "Created at",
+  "common.yes": "Yes",
+  "common.no": "No",
+};

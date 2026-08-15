@@ -1,0 +1,23 @@
+{
+  "name": "@argus/setup",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 4175",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@argus/api-client": "workspace:*",
+    "@argus/ui": "workspace:*",
+    "@tanstack/react-query": "^5.83.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "i18next": "^25.3.2",
+    "lucide-react": "^0.536.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-i18next": "^15.6.1",
+    "vite": "^7.0.6"
+  }
+}

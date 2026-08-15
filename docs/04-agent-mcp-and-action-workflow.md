@@ -9,16 +9,20 @@ Chatbox 和 Model Agent 负责：
 - 选择和调用 MCP Tool。
 - 生成执行计划。
 - 请求用户确认。
-- 组织回答和选择 Card Skill。
+- 组织回答，并通过内置“渲染交互卡片”Skill 从系统卡片和已启用企业卡片中生成 Render Plan。
 
 MCP Tool 和领域服务负责：
 
 - 业务校验。
-- 权限和数据范围校验。
+- 企业、Project、资源、Tool、授权版本和数据范围校验。
 - 幂等与状态持久化。
 - 访问数据库、Connector 和第三方 API。
 - 返回结构化结果和结构化错误。
 - 写入审计。
+
+人工 RemoteAccessSession 不属于 Model Agent 或 MCP Tool 能力。创建 SSH Web Terminal 使用管理 UI/OpenAPI 的独立授权接口、MFA/JIT/审批和短期一次性票据；AI、交互卡片、Automation 和 OpenSandbox 不能获得该票据。交互式会话中的人工命令不逐条走 Tool Preview/Commit，必须由会话级权限、时长、录像、剪贴板/文件传输策略和审计约束。
+
+Conversation 和 Run 必须绑定服务端确认的 `enterprise_id + project_id`。模型生成的企业、Project、Host 或 Kubernetes ID 只是候选参数，不能切换当前身份域或扩大 Project 范围。跨 Project 任务必须由用户显式选择目标 Project，并对每个 Project 分别授权。
 
 ## 2. Tool 设计
 
@@ -79,7 +83,7 @@ x.y.operation.commit(argus__token) -> execution/result
 
 `preview` 负责：
 
-1. 当前身份、企业、Tool 权限和数据范围校验。
+1. 当前身份、企业、Project、Tool 权限、资源范围和 AuthorizationVersion 校验。
 2. 参数 Schema、业务规则、连接和资源状态检查。
 3. 根据真实资源计算最终风险与审批策略。
 4. 生成不可变执行计划、预览摘要、参数哈希和执行前置条件。
@@ -90,7 +94,7 @@ x.y.operation.commit(argus__token) -> execution/result
 
 1. 只接收私有 `argus__token`；调用者不能重新提交业务参数。
 2. 原子校验 Token 哈希、一次性状态、过期、目标 Commit Tool 和调用来源。
-3. 重新检查当前用户、企业状态、权限、审批、资源版本和前置条件。
+3. 重新检查当前用户、企业状态、Project、权限、AuthorizationVersion、审批、资源版本和前置条件。
 4. 把 Pending Action 原子推进到 Executing，并创建 Execution/ConnectorCommand。
 5. 使用服务端保存的不可变计划执行，返回可审计结果。
 
@@ -124,7 +128,7 @@ Commit 的 MCP 输入 Schema 固定为：
 而不是把返回值复制成没有来源的字面量。这样 `card.render` 可以校验：
 
 - Tool 来源。
-- 调用所属租户和会话。
+- 调用所属企业、Project 和会话。
 - 字段路径和类型。
 - Slot 允许的数据来源。
 - 字段是否敏感。
@@ -188,7 +192,7 @@ sequenceDiagram
     U->>H: 点击确认
     H->>E: 只发送 action_binding_id
     E->>S: 读取服务端私有 argus__token
-    E->>E: 校验用户、企业、权限、审批、资源版本、过期和幂等
+    E->>E: 校验用户、企业、Project、授权版本、权限、审批、资源版本、过期和幂等
     E->>C: 代码直接使用 argus__token 调用 Commit
     C-->>E: 创建结果
     E-->>H: 更新卡片状态
@@ -251,7 +255,7 @@ MCP 核心协议提供 `structuredContent` 和可选 `outputSchema`，但不定�
 
 `argus__token` 推荐使用至少 256 bit 随机不透明值。Pending Action Store 保存用于查重/校验的 Token 哈希，以及使用专用密钥加密的 Token 密文或 Secret Store Handle；只有 Action Executor 可解密/读取一次并调用 Commit。日志和审计只记录 Token ID/哈希摘要，禁止记录原值、密文或可逆编码。
 
-业务 Tool 不需要绑定某张卡片。Presentation Agent 根据 `kind`、预览数据和 Card Skill 目录自行选择或生成确认界面。
+业务 Tool 不需要绑定某张卡片。内置“渲染交互卡片”Skill 根据 `kind`、Tool Output Schema、预览数据和已启用交互卡片目录生成可校验 Render Plan；运行时绑定始终引用真实 `tool_call_id + path`。
 
 ## 7. Token 与 Action Binding
 
@@ -259,7 +263,7 @@ MCP 核心协议提供 `structuredContent` 和可选 `outputSchema`，但不定�
 
 ```text
 模型可见：公开 preview、action_ref
-浏览器和 Card Skill 可见：action_binding_id
+浏览器和 交互卡片 可见：action_binding_id
 argus-server 私有：argus__token、目标 Commit Tool、计划和参数
 ```
 
@@ -275,6 +279,7 @@ Action Binding 至少保存：
   "action": "confirm",
   "target_tool": "host.create.commit",
   "enterprise_id": "ent-1",
+  "project_id": "project-a",
   "user_id": "user-1",
   "conversation_id": "chat-1",
   "expires_at": "...",
@@ -286,6 +291,7 @@ Token 或 Pending Action 服务端记录应绑定：
 
 - 唯一 ID 和一次性使用状态。
 - enterprise_id、creator_user_id 和 conversation_id。
+- project_id、authorization_version 和有效的资源归属快照。
 - preview_call_id。
 - commit Tool。
 - 预览参数哈希。
@@ -339,7 +345,7 @@ Commit Tool 不得出现在 Model Agent 的 Tool Registry 投影中。Tool Gatew
 
 - [MCP Tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) 支持结构化输出、输出 Schema 和多轮输入要求，但不规定具体 UI。
 - [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) 是官方可选扩展，允许沙箱 HTML 通过 Host Bridge 发起 `tools/call`。
-- Argus 可以只让通用 `card.render` 声明 MCP App UI，业务 Tool 不声明 UI，从而保持 Tool 与 Card Skill 解耦。
+- Argus 可以只让通用 `card.render` 声明 MCP App UI，业务 Tool 不声明 UI，从而保持 Tool 与 交互卡片 解耦。
 - 不支持 MCP Apps 的客户端可以降级成文字预览和普通确认对话。
 
 降级成文字确认时仍然不能把 `argus__token` 交给客户端。客户端提交公开 `action_ref` 和明确确认手势，`argus-server` 创建一次性 Action Binding 后仍由 Action Executor 执行 Commit。
@@ -369,6 +375,24 @@ stateDiagram-v2
 
 创建人确认不能自动满足“非创建人审批”规则。Approval Request 保存审批策略版本、审批人范围、最少人数、职责分离要求和每次决定；权限撤销、企业停用或计划变化会使尚未执行的审批失效。
 
+Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为发起人补齐缺失的 Project、Tool、资源或目标账号权限。企业只有一名可用管理员时，Policy 可以允许受控 Break Glass，但必须绑定当前 Pending Action、要求 Step-up MFA 和理由/工单、使用最短有效期并产生高优先级审计；不能由同一人使用多个账号伪造双人审批。
+
+### 11.1 Automation 身份
+
+定时和无人值守 Automation 必须绑定固定企业和 Project 的 ServiceAccount：
+
+```text
+Automation
+├── enterprise_id / project_id
+├── service_account_id
+├── allowed_tool_ids
+├── resource_scope
+├── approval_policy_id
+└── authorization_version
+```
+
+每次运行都重新检查 ServiceAccount 状态、Project、Tool、目标资源、AuthorizationVersion 和 Policy，不能长期继承创建人的权限快照。Automation 只能走 Tool/Execution 路径，不得创建或消费 RemoteAccessSession 票据。
+
 ## 12. 并发、幂等和错误处理
 
 - 确认、取消、过期和审批使用数据库条件更新，只能有一个合法状态迁移成功。
@@ -388,5 +412,7 @@ stateDiagram-v2
 4. Commit Schema 不包含业务参数，只接受 `argus__token` 和内部执行上下文。
 5. Model Agent 的 Tool 列表中不存在 `.commit`。
 6. Token 只能使用一次，过期、取消、跨企业、跨用户或跨 Tool 使用均失败。
-7. Preview 后修改资源版本或撤销权限，Commit 必须失败并要求重新 Preview。
+7. Preview 后修改资源版本、Project 归属、AuthorizationVersion 或撤销权限，Commit 必须失败并要求重新 Preview。
 8. 双击、超时重试和服务重启不会产生重复副作用。
+9. 审批不能补齐缺失的基础权限；Break Glass 只能用于 Policy 明确允许且绑定单个 Pending Action 的场景。
+10. Model Agent、Card 和 Automation 无法创建或消费人工远程会话票据。

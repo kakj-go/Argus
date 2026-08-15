@@ -1,0 +1,28 @@
+{
+  "name": "@argus/enterprise",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run src",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@argus/api-client": "workspace:*",
+    "@argus/auth": "workspace:*",
+    "@argus/card-host": "workspace:*",
+    "@argus/observability": "workspace:*",
+    "@argus/ui": "workspace:*",
+    "@tanstack/react-query": "^5.83.0",
+    "@tanstack/react-router": "^1.130.9",
+    "i18next": "^25.3.2",
+    "lucide-react": "^0.536.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-i18next": "^15.6.1",
+    "zustand": "^5.0.7"
+  }
+}

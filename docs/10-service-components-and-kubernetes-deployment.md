@@ -9,7 +9,7 @@ Argus 第一版采用少量、清晰的可部署服务，不把内部领域模�
 - 默认完整安装包含 Argus、OpenSandbox、Kafka、ClickHouse、PostgreSQL、Redis 和 Artifact Store。
 - ClickHouse 必须由 Altinity ClickHouse Operator 管理。
 - 控制链路、遥测推送链路和遥测查询链路物理分离。
-- 支持内置依赖和外部托管依赖两种模式。
+- 第一版所有中间件由安装器部署到同一 Kubernetes 集群，并通过 Namespace、ServiceAccount、NetworkPolicy 和资源配额隔离。
 - 安装过程可重复执行、可观察、可分阶段恢复，不依赖一次 Helm 事务完成全部工作。
 - Secret 不直接写入普通 Values 文件或命令行历史。
 
@@ -27,46 +27,46 @@ cmd/
 └── argus-telemetry
 ```
 
-部署为六类工作负载：
+部署为七类工作负载；Direct Executor 复用 `argus-worker` 程序，但使用独立 Deployment、队列、ServiceAccount、网络策略和固定公网出口：
 
 | 工作负载 | 类型 | 扩缩容依据 |
 | --- | --- | --- |
 | `argus-server` | Deployment | HTTP 并发、延迟、CPU |
 | `argus-worker` | Deployment | Run/Task 队列长度、模型并发 |
-| `argus-connector-gateway` | Deployment | 在线 Connector 数、连接数、带宽 |
+| `argus-direct-executor` | Deployment (`argus-worker --pool=direct-executor`) | 公网 SSH/WinRM 任务、远程会话并发、出口连接数 |
+| `argus-connector-gateway` | Deployment | 在线 Connector 数、远程会话数、连接数、带宽 |
 | `argus-telemetry-ingest` | Deployment | OTLP 请求速率、Kafka Producer 延迟、CPU |
 | `argus-telemetry-query` | Deployment | 查询并发、延迟、ClickHouse 压力 |
 | `otel-clickhouse-writer` | Deployment | Kafka Lag、ClickHouse 插入延迟 |
 
 `argus-telemetry-ingest` 与 `argus-telemetry-query` 使用相同镜像、不同启动参数。它们必须拥有不同的 Service、ServiceAccount、NetworkPolicy、PodDisruptionBudget、HPA 和数据库凭证。
 
-六类工作负载都支持横向扩展，但扩展条件不同：
+七类工作负载都支持横向扩展，但扩展条件不同：
 
 | 工作负载 | 横向扩展方式 | 必要条件 |
 | --- | --- | --- |
 | `argus-server` | 任意副本处理 HTTP/Card Action | Session、Run、Pending Action、Token 和 Card Instance 不保存在 Pod 本地 |
 | `argus-worker` | PostgreSQL Task Lease 分工 | Fence Token、幂等、外部副作用对账 |
-| `argus-connector-gateway` | 连接分布和跨 Gateway 内部转发 | Redis Session Registry、connection_epoch、Drain |
+| `argus-direct-executor` | 公网连接任务与人工会话分工 | 固定出口、SSRF 防护、Host Key、短期 Credential/Session Ticket、无 Pod 本地唯一状态 |
+| `argus-connector-gateway` | Connector/远程会话连接分布和跨 Gateway 内部转发 | Redis Session Registry、connection_epoch、短期票据、录像外置、Drain |
 | `argus-telemetry-ingest` | 负载均衡分发 OTLP | Kafka ACK、分布式配额、凭证快速失效 |
-| `argus-telemetry-query` | 任意副本查询 | 无状态 Cursor、企业条件强制注入、查询预算 |
+| `argus-telemetry-query` | 任意副本查询 | 无状态 Cursor、企业/Project/Resource 条件强制注入、字段脱敏和查询预算 |
 | `otel-clickhouse-writer` | Kafka Consumer Group | Partition 数、Rebalance 和 Offset 门禁 |
 
 具体状态所有权和扩缩容失败场景见[运行时状态、Redis 与横向扩展](./11-runtime-state-and-horizontal-scaling.md)。Migration、Bootstrap 和 DLQ 重放不是普通横向扩展工作负载，必须使用 Job/Lease 保证单一所有者。
 
-### 2.2 平台依赖
+### 2.2 Kubernetes 内置平台依赖
 
-| 组件 | 用途 | 默认完整安装 | 可使用外部服务 |
-| --- | --- | --- | --- |
-| PostgreSQL | 控制面元数据、RBAC、会话、Run、Pending Action、审计索引 | 是 | 是 |
-| Redis | 短期缓存、分布式锁、限流和轻量任务协调；不可保存唯一业务状态 | 是 | 是 |
-| S3 兼容 Artifact Store | Connector 安装包、Sandbox Artifact、附件和导出物 | 是 | 是 |
-| OpenSandbox | 不可信代码、附件解析、临时分析和 Card Skill 构建 | 是 | 是 |
-| Kafka | 遥测持久缓冲和写入解耦 | 是 | 是 |
-| Strimzi Kafka Operator | Bundled Kafka 的 KRaft、Broker、Topic、用户和滚动维护 | Production 是 | 外部 Kafka 时否 |
-| ClickHouse | Metrics、Logs、Traces 存储 | 是 | 是 |
-| Altinity ClickHouse Operator | ClickHouseInstallation、Keeper、扩缩容和滚动维护 | 是 | 外部 ClickHouse 时否 |
+| 组件 | 用途 | 第一版安装方式 |
+| --- | --- | --- |
+| PostgreSQL | 控制面元数据、RBAC、会话、Run、Pending Action、审计索引 | Kubernetes 内置；Evaluation 低副本，Production 使用持久卷和高可用拓扑，具体 Operator 选型形成 ADR |
+| Redis | 短期缓存、分布式锁、限流和轻量任务协调；不可保存唯一业务状态 | Kubernetes 内置，按 Profile 配置持久化和高可用 |
+| MinIO | Connector/Collector 安装包、远程会话录像、Sandbox Artifact、附件、导出物和集群内备份目标 | Kubernetes 内置的 S3 兼容 Artifact Store |
+| OpenSandbox | 不可信代码、附件解析、临时分析和 交互卡片 构建 | Kubernetes 内置，使用独立 Namespace 和隔离 Runtime |
+| Kafka | 遥测持久缓冲和写入解耦 | Strimzi Kafka Operator + KRaft |
+| ClickHouse | Metrics、Logs、Traces 存储 | Altinity ClickHouse Operator + ClickHouseInstallation + Keeper |
 
-生产环境推荐接入外部 PostgreSQL 和对象存储。`bundled` 模式主要用于单集群私有化交付和评估环境，但 Kafka 与 ClickHouse 仍应使用持久卷和高可用配置。
+第一版不提供外部 PostgreSQL、Redis、Artifact Store、OpenSandbox、Kafka 或 ClickHouse 模式。Evaluation 与 Production 使用相同的组件和协议边界，差异只体现在副本、容量、持久化、拓扑分布和隔离等级。外部托管中间件接入作为后续能力，不能进入第一版配置 Schema、发布矩阵或 E2E 分支。
 
 安装器不应擅自安装或替换集群级 CNI、CSI/StorageClass、Ingress/Gateway Controller、LoadBalancer 实现、DNS 或证书 Issuer。这些能力与云厂商和集群发行版强相关；一键安装负责预检、选择已有实现并给出明确错误。Evaluation Profile 可以另提供针对 kind、k3s 等已知环境的配套脚本，但不能把它当作通用生产路径。
 
@@ -79,6 +79,11 @@ flowchart TB
         Server --> Worker["argus-worker"]
         Worker --> CG["argus-connector-gateway"]
         CG --> Connector["argus-connector"]
+        Web --> RA["Remote Access WSS"]
+        RA --> CG
+        CG --> DE
+        Server --> DE["argus-direct-executor"]
+        DE --> PublicHost["Public Host SSH/WinRM"]
         Worker --> OS["OpenSandbox"]
         Server --> PG["PostgreSQL"]
     end
@@ -101,7 +106,9 @@ flowchart TB
 
 隔离要求：
 
-- Connector 仅连接 `argus-connector-gateway`，不发送遥测数据。
+- Connector 仅连接 `argus-connector-gateway`，承载控制、Artifact 和独立的 Remote Session Stream，不发送遥测数据。
+- Direct Executor 只从固定出口访问经 DNS/IP 双重校验的公网 SSH/WinRM 目标，NetworkPolicy/出口防火墙拒绝集群、私网、云元数据和平台内部地址。
+- Remote Access 入口只接受 `argus-server` 签发的短期一次性会话票据；录像写 Artifact Store，不能依赖 Gateway Pod 本地磁盘。
 - Collector 仅连接 `argus-telemetry-ingest`，不接收远程控制命令。
 - `argus-telemetry-query` 只持有 ClickHouse 只读账号。
 - `otel-clickhouse-writer` 只持有 Kafka Consumer 和 ClickHouse Insert 权限。
@@ -181,9 +188,21 @@ spec:
     registry: registry.example.com/argus
     pullSecretRef: argus-registry
 
+  directExecutor:
+    enabled: true
+    egressMode: fixed-nat
+    advertisedEgressAddresses:
+      - 203.0.113.10
+    allowedProtocols:
+      - ssh
+    denyPrivateAndPlatformNetworks: true
+
   postgresql:
-    mode: external
-    secretRef: argus-postgresql
+    mode: bundled
+    persistence:
+      size: 200Gi
+    highAvailability:
+      enabled: true
 
   redis:
     mode: bundled
@@ -191,8 +210,9 @@ spec:
       size: 20Gi
 
   artifactStore:
-    mode: external-s3
-    secretRef: argus-artifact-store
+    mode: bundled-minio
+    persistence:
+      size: 500Gi
 
   openSandbox:
     mode: bundled
@@ -204,7 +224,7 @@ spec:
     networkPolicy: deny-by-default
 
   kafka:
-    mode: bundled
+    mode: bundled-strimzi
     replicas: 3
     persistence:
       sizePerBroker: 500Gi
@@ -228,7 +248,7 @@ spec:
       traces: 14d
 ```
 
-所有密码、Token、私钥和对象存储凭证都通过 `SecretRef` 引用。安装器可以生成缺省 Secret，但只把恢复说明和 Secret 名称写入终端，不在安装状态或普通日志输出明文。
+所有密码、Token、私钥和 MinIO 凭证都由安装器生成 Kubernetes Secret 或通过 `SecretRef` 引用。安装器只把恢复说明和 Secret 名称写入终端，不在安装状态或普通日志输出明文。
 
 安装包必须携带版本锁定清单，固定 Argus 镜像、OpenSandbox、Strimzi、Kafka、Altinity Operator、ClickHouse、OpenTelemetry Collector 及所有 Helm Chart/CRD 版本和镜像 Digest。安装器只接受经过兼容性测试的组合，不在安装时解析 `latest` 或任意浮动版本。
 
@@ -245,7 +265,8 @@ spec:
 - 节点 CPU、内存、可调度 Pod 数和磁盘容量。
 - Pod Security、NetworkPolicy 和 LoadBalancer 能力。
 - 集群中是否已有 Altinity/Strimzi Operator 及其兼容版本。
-- 镜像仓库、对象存储和外部依赖连通性。
+- 镜像仓库以及显式配置的集群外备份目标连通性。
+- Direct Executor 固定 NAT/Egress Gateway、声明出口地址与实际出口一致性，以及对私网、云元数据和平台内部地址的拒绝策略。
 - CRD 冲突、命名空间配额和所需 ClusterRole 权限。
 
 预检输出估算资源和不可逆影响；生产 Profile 在容量不足时应失败，而不是静默降级为单副本。
@@ -258,7 +279,7 @@ spec:
 
 先安装并等待 Altinity ClickHouse Operator 就绪，再创建 ClickHouseInstallation。Helm 不保证 CRD、Operator Webhook 和 Custom Resource 在复杂依赖下同时可用，因此不能将它们视作一个原子 Release。
 
-Kafka 的 Production `bundled` 模式默认使用 Strimzi Kafka Operator 和 KRaft；Evaluation Profile 可以使用同一 Operator 的低副本拓扑。外部 Kafka 模式不安装 Strimzi，但仍需验证 Topic、ACL、认证、Broker 能力和可靠性参数。这样一键安装有明确的默认实现，同时 Kafka 对 Argus 暴露的协议边界不依赖 Operator。
+Kafka 第一版统一使用 Strimzi Kafka Operator 和 KRaft；Evaluation Profile 使用同一 Operator 的低副本拓扑，Production Profile 使用三副本及跨节点拓扑。安装器必须验证 Topic、ACL、认证、Broker 能力和可靠性参数，不能提供绕过 Strimzi 的外部 Kafka 分支。
 
 ### 7.4 有状态依赖
 
@@ -281,9 +302,9 @@ Kafka 的 Production `bundled` 模式默认使用 Strimzi Kafka Operator 和 KRa
 - Artifact 通过受控 S3 Bucket 交换，不共享 Argus Pod 文件系统。
 - Sandbox 到 `argus-connector-gateway`、ClickHouse、PostgreSQL 和 Kubernetes API 的访问默认拒绝。
 
-Production Profile 必须选择强化隔离：例如 gVisor/Kata RuntimeClass、OpenSandbox 后端原生微虚拟机，或独立隔离集群。普通共享容器 Runtime 只能用于明确标记的 Evaluation 环境，安装器不能在生产配置中静默接受空 `runtimeClassName`。
+Production Profile 必须在同一 Kubernetes 集群内选择强化隔离，例如 gVisor/Kata RuntimeClass 或 OpenSandbox 后端原生微虚拟机。普通共享容器 Runtime 只能用于明确标记的 Evaluation 环境，安装器不能在生产配置中静默接受空 `runtimeClassName`。
 
-若集群不允许运行 OpenSandbox 所需的隔离工作负载，可将 `openSandbox.mode` 设为 `external`，一键安装仍负责注册 Backend、测试连通性和创建默认 Profile。
+若集群不允许运行 OpenSandbox 所需的隔离工作负载，Production Profile 预检必须失败并说明缺少的 RuntimeClass 或集群能力。Evaluation Profile 可以显式选择普通容器 Runtime，但必须显示安全降级，不得用于生产。
 
 ### 7.6 Schema Migration 与 Argus 服务
 
@@ -309,14 +330,16 @@ Altinity ClickHouse Operator 负责：
 
 Argus 不把建表职责交给 Operator 或 ClickHouse Exporter。独立 `argus-schema-migration` Job 负责：
 
-- `otel_logs`、`otel_metrics_*`、`otel_traces` 和索引表。
-- 可信 `EnterpriseId`、`ResourceId`、`CollectorId` 物化列。
-- Local/Distributed Table、分区、排序键、TTL 和 Schema Version。
+- `argus_metrics`、`argus_logs`、`argus_traces` 三个逻辑数据集及必要的 Projection、物化视图和共享索引表。
+- 可信 `EnterpriseId`、`ProjectId`、`ResourceId`、`CollectorId` 公共列，以及企业/Project/Resource 授权查询所需的排序键和 Projection。
+- Replicated Local/Distributed Table、时间分区、排序键、Sharding Key、TTL 和 Schema Version。
 - 兼容性检查、前向迁移和必要的数据回填任务。
+
+三个逻辑数据集由所有企业共享，禁止按企业或 Project 创建表或 Partition。即使第一版只有一个 Shard，也必须保留 Local/Distributed 两层，使新增 Shard 时不改变 Query API 和表名。严格三张物理表是否可行取决于统一 Metrics 稀疏列 Benchmark 和 Writer Gate；物理层允许按 Metric Type 拆表，但产品层始终只暴露 Metrics、Logs、Traces 三类查询协议。
 
 `otel-clickhouse-writer` 必须设置 `create_schema: false`。升级顺序通常为“兼容 Schema → Writer → Query → 清理旧 Schema”，不能先删除旧列再升级读取方。
 
-外部 ClickHouse 模式仍需验证集群拓扑、账号权限、Schema 版本和备份能力，但不安装 Altinity Operator。
+第一版不提供绕过 Altinity Operator 的外部 ClickHouse 模式。所有 ClickHouse Schema Migration 必须面向安装器创建的 ClickHouseInstallation，并使用 `ON CLUSTER`、Replicated Local Table 和 Distributed Table 兼容未来扩分片。
 
 ## 9. Kafka 可靠性基线
 
@@ -353,10 +376,11 @@ Writer 的 Kafka Receiver 配置 `message_marking.after: true`、`on_error: fals
 | --- | --- | --- | --- |
 | `argus.example.com` | `argus-server`/Web | HTTPS/WSS | 用户、API、Card Host |
 | `connector.argus.example.com` | `argus-connector-gateway` | TLS 长连接 | Connector 控制链路 |
+| `remote.argus.example.com` | `argus-connector-gateway` | HTTPS/WSS | 经短期票据授权的人工 SSH Web Terminal；与 Connector 入口分端口和限流 |
 | `otlp.argus.example.com:4317` | `argus-telemetry-ingest` | OTLP/gRPC TLS | 遥测推送 |
 | `otlp-http.argus.example.com:4318` | `argus-telemetry-ingest` | OTLP/HTTP TLS | 遥测推送 |
 
-`argus-telemetry-query`、PostgreSQL、Redis、Kafka、ClickHouse、OpenSandbox Backend 和 Writer 都只暴露集群内 Service。即使部署在同一集群，也不能用一个 Ingress 路由混合 Connector 与 OTLP 流量。
+`argus-direct-executor`、`argus-telemetry-query`、PostgreSQL、Redis、Kafka、ClickHouse、OpenSandbox Backend 和 Writer 都只暴露集群内 Service。即使部署在同一集群，也不能用一个 Ingress 路由混合 Connector、Remote Access 与 OTLP 流量；`remote.argus.example.com` 可以与 Connector Gateway 使用相同程序，但必须使用独立 Listener、证书策略、限流和 HPA 指标。
 
 ## 11. 初始化与超级管理员
 
@@ -391,9 +415,9 @@ Token 过期时间
 
 ### 12.2 Production
 
-- `argus-server`、Worker、Connector Gateway、Telemetry Ingest/Query 至少 2 副本。
+- `argus-server`、普通 Worker、Direct Executor、Connector Gateway、Telemetry Ingest/Query 至少 2 副本；Direct Executor 使用固定 NAT/Egress Gateway，扩容不能改变用户防火墙白名单地址。
 - Pod Anti-Affinity/Topology Spread 和 PodDisruptionBudget。
-- PostgreSQL 高可用或外部托管实例。
+- PostgreSQL 在集群内使用高可用拓扑和反亲和；具体 Operator 与备份实现按 ADR 固化。
 - Kafka 至少 3 Broker，跨节点分布。
 - ClickHouse 至少 2 Replica，Keeper 至少 3 节点；Shard 数由数据量决定。
 - Sandbox、Kafka 和 ClickHouse 推荐使用独立 Node Pool、Taint/Toleration 与拓扑分布，避免不可信计算或磁盘压力拖垮控制面。
@@ -437,10 +461,12 @@ Token 过期时间
 2. PostgreSQL/Redis/Artifact Store 读写探测。
 3. 创建并销毁一个受限 OpenSandbox Session。
 4. Connector Gateway TLS 和长连接探测。
-5. 向 Ingest 发送带测试企业身份的 Metrics/Logs/Trace。
-6. 验证 Kafka Topic 收到数据、Writer 消费成功。
-7. 通过 Query Service 查询到测试数据并验证企业隔离。
-8. 验证 ClickHouseInstallation、Keeper、Kafka Lag 和所有 PDB/HPA 状态。
+5. Remote Access WSS 短期票据握手、重放拒绝和录像 Artifact 写入探测。
+6. Direct Executor 验证声明固定出口，并确认私网、环回、云元数据和平台内部地址被拒绝。
+7. 向 Ingest 发送带测试 Enterprise/Project/Resource 身份的 Metrics/Logs/Trace，并验证客户端伪造同名字段会被覆盖或拒绝。
+8. 验证 Kafka Topic 收到数据、Writer 消费成功。
+9. 通过 Query Service 查询到测试数据并验证企业隔离。
+10. 验证 ClickHouseInstallation、Keeper、Kafka Lag 和所有 PDB/HPA 状态。
 
 测试数据必须带专用 Installation Check 标识并按短 TTL 清理，不能混入真实企业资源。
 
@@ -464,11 +490,12 @@ deploy/
 │   └── production.yaml
 └── examples/
     ├── all-in-one.yaml
-    ├── external-databases.yaml
+    ├── evaluation.yaml
+    ├── production.yaml
     └── air-gapped.example.yaml
 ```
 
-第一版先完成联网 Kubernetes 的 `evaluation` 和 `production` Profile。`air-gapped.example.yaml` 只表达外部 Registry、Artifact 和依赖配置边界，不代表第一版已经支持完整离线安装。离线镜像 Bundle、跨集群灾备、多地域 Kafka/ClickHouse 和自动 StorageClass 安装作为后续能力。
+第一版先完成联网 Kubernetes 的 `evaluation` 和 `production` Profile，两者都安装完整中间件。`air-gapped.example.yaml` 只表达私有 Registry、镜像和 Artifact 配置边界，不代表第一版已经支持完整离线安装。外部托管中间件、离线镜像 Bundle、跨集群灾备、多地域 Kafka/ClickHouse 和自动 StorageClass 安装作为后续能力。
 
 ### 15.1 卸载和数据保留
 

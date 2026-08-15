@@ -1,0 +1,166 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* 居中卡片式布局：品牌头部 + 单张向导卡片 */
+.setup-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 48px 24px;
+}
+.setup-appearance {
+  position: fixed;
+  right: 20px;
+  top: 18px;
+}
+.setup-header {
+  max-width: 620px;
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+.setup-brand {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--bg-canvas);
+}
+.setup-header h1 {
+  font-size: 30px;
+  margin: 0;
+}
+.setup-header p {
+  margin: 0;
+  color: var(--text-tertiary);
+  line-height: 1.7;
+}
+.setup-card {
+  width: min(720px, 100%);
+  box-shadow: var(--shadow-lg);
+}
+.setup-card .argus-card__content {
+  padding: 28px;
+}
+.setup-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 0;
+  color: var(--text-tertiary);
+}
+
+/* 步骤内容 */
+.setup-fields {
+  display: grid;
+  gap: 18px;
+}
+.setup-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.setup-section {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: 8px;
+}
+.setup-step-intro {
+  margin: 0;
+  color: var(--text-tertiary);
+  line-height: 1.7;
+  font-size: 13px;
+}
+.setup-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+.setup-test-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* 密码强度指示 */
+.setup-strength {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.setup-strength__bars {
+  display: inline-flex;
+  gap: 4px;
+}
+.setup-strength__bars i {
+  width: 28px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-default);
+}
+.setup-strength.is-weak .setup-strength__bars i.is-on {
+  background: var(--danger);
+}
+.setup-strength.is-medium .setup-strength__bars i.is-on {
+  background: var(--warning);
+}
+.setup-strength.is-strong .setup-strength__bars i.is-on {
+  background: var(--success);
+}
+
+/* 终态页（已初始化 / 初始化成功） */
+.setup-terminal {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+  padding: 16px 0;
+}
+.setup-terminal__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.setup-terminal__icon.is-success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.setup-terminal h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.setup-terminal p {
+  margin: 0;
+  color: var(--text-tertiary);
+  line-height: 1.7;
+  max-width: 460px;
+}
+
+@media (max-width: 640px) {
+  .setup-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

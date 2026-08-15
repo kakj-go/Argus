@@ -6,6 +6,16 @@ Argus 第一次启动时没有任何用户和企业。系统通过一次性初�
 
 平台超级管理员不是企业的“万能管理员”，其权限应保持最小化。
 
+平台身份和企业身份第一版互斥：平台超级管理员不属于任何企业；企业用户必须且只能绑定一个企业。系统不提供同一用户跨企业 Membership、企业切换或平台身份切换为企业身份的能力。
+
+前端固定分为三个界面：
+
+1. 企业工作台：企业用户的 Chatbox、会话和模型选择。
+2. 企业管理后台：企业管理员和被授权成员管理本企业模型、组织、资源、交互卡片与审计。
+3. 平台超级管理员门户：平台管理员管理企业生命周期、企业管理员和 SaaS OpenSandbox 基座。
+
+企业工作台和企业管理后台共享企业 Session；平台门户使用独立平台 Session/Audience。任一入口发现身份域不匹配时必须拒绝进入并引导到正确门户，不能先渲染错误界面再依赖接口报错。
+
 ## 2. 系统状态
 
 建议维护独立的 PlatformState：
@@ -119,10 +129,11 @@ Setup Token 应具有：
 超级管理员界面不出现：
 
 - Chatbox 和企业会话。
-- 企业模型供应商和模型凭证。
+- 企业 `AIModel` 配置和模型凭证。
 - Connector、主机和 Kubernetes。
+- Bastion Scope、Remote Access Session、远程终端和会话录像。
 - 企业 Secret。
-- 企业 Card Skill。
+- 企业 交互卡片。
 - 企业 Tool Result 和业务审计正文。
 - 企业原始 Metrics、Logs、Traces 和 Collector 配置正文。
 
@@ -151,6 +162,8 @@ Setup Token 应具有：
 
 删除企业属于高危且难恢复操作，不建议第一版提供。先提供停用和数据保留策略。
 
+创建企业时必须在同一事务或可恢复工作流中创建一个可重命名的 `Default Project`。企业后续创建的 Host、KubernetesCluster、Collector、Conversation、Run、Automation、Alert Rule 和 Dashboard 等项目对象必须归属一个 Project，不能长期留在“未分配”状态。
+
 企业状态必须由授权服务在所有入口统一执行，不能只在登录页面判断：
 
 | 能力 | active | suspended | disabled |
@@ -161,6 +174,7 @@ Setup Token 应具有：
 | 未执行 Pending Action/Approval | 允许 | 失效 | 失效 |
 | 正在执行的危险操作 | 正常 | 请求安全停止并审计；不可中断步骤继续到安全点 | 同 suspended |
 | Connector 控制连接 | 允许 | 保持心跳但拒绝新命令 | 吊销设备凭证并断开 |
+| 人工远程会话 | 允许 | 拒绝新会话并请求活动会话安全终止 | 立即吊销票据、终止会话并审计 |
 | Telemetry 摄入 | 允许 | 默认继续短期摄入，按平台策略限额 | 拒绝新数据 |
 | 历史数据查询 | 按权限 | 默认拒绝企业用户；平台不获得正文权限 | 拒绝 |
 | 数据保留 | 套餐策略 | 保留 | 按停用保留策略 |
@@ -186,6 +200,8 @@ Setup Token 应具有：
 - 一次性激活链接。
 - 临时密码，首次登录必须修改。
 
+初始企业管理员是新的 EnterpriseUser，固定绑定目标 `enterprise_id`，不能复用平台超级管理员身份。`enterprise_admin` 允许其建立企业 IAM、Project、角色和授权，但不自动授予生产远程 Shell、Managed Account、Secret 原值或 AI 生产执行权限；需要操作生产资源时由企业管理员自行建立 Project Role Binding 和 Remote Access Grant，并记录审计。
+
 超级管理员可以：
 
 - 创建多名企业管理员。
@@ -198,55 +214,63 @@ Setup Token 应具有：
 
 ## 8. 企业管理员门户
 
-企业管理员登录企业门户，例如 `/app/:enterprise`。建议菜单：
+企业用户登录固定企业门户，例如 `/app`。如果路由为了可读性包含企业 Code，服务端仍必须从已认证的 EnterpriseUser 获取唯一 `enterprise_id`，不能把 URL 参数作为企业切换能力。企业门户使用两种布局而不是在 Chatbox 外再叠一层完整管理侧栏：
+
+- Chatbox 布局左侧只显示新建会话、搜索和会话历史，底部提供“进入管理后台”。
+- 管理后台布局左侧显示确定性管理菜单，顶部提供“返回智能会话”。
+
+第一阶段不提供“接入中心”和独立“可观测性”菜单。Connector、Remote Access 和 OpenTelemetry Collector 都在主机/Kubernetes 资源上下文中安装与管理。建议菜单：
 
 ```text
-Chatbox
+← 返回智能会话
 
-管理
-├── 组织与权限
-│   ├── 用户
-│   ├── 用户组
-│   ├── 角色
-│   ├── 数据权限
-│   └── Service Account
+资源
+├── Project
+├── 主机
+└── Kubernetes
+
+执行治理
+├── 任务记录
+├── 访问申请
+└── 待审批
+
+企业设置
+├── 用户与部门
+├── 角色与 Project 授权
+├── 远程访问授权
+├── 访问策略
 ├── AI 设置
-│   ├── 模型供应商
-│   ├── 模型部署
-│   ├── Model Alias
-│   ├── Agent Profile
-│   ├── 路由与降级
-│   └── 用量与预算
-├── 连接与资源
-│   ├── Connector
-│   ├── 主机
-│   └── Kubernetes
-├── 可观测性
-│   ├── 遥测网络组
-│   ├── Collector 实例
-│   ├── 采集 Profile
-│   ├── 数据接入状态
-│   └── 监控数据用量
-├── Card Skill
+├── 交互卡片（自定义 / 内置）
 ├── Secret
-├── Sandbox 用量
 └── 企业审计
 ```
 
-企业管理员可以创建自定义企业角色并下放部分管理能力，但不能修改平台 OpenSandbox 镜像、安全基线和全局资源上限。
+主机页面提供“添加堡垒机”和“添加普通主机”。Connector 注册后自动创建/激活一个 Bastion Scope 分组框；经该堡垒机添加的内网主机显示在框内，未选择堡垒机的公网 Direct Host 显示在“独立主机”。堡垒机、成员和独立主机卡片均在详情中展示连接路径、远程登录和 Collector 状态。
 
-## 9. 企业上下文选择
+Collector 不单独占用左侧菜单。未安装时在主机或 Kubernetes 详情显示安装按钮；安装后通过“概览、采集能力、数据推送、配置版本、运行状态”进入配置。Metrics/Logs/Traces 查询、告警和用量大屏后续再加入“可观测性”菜单。
 
-如果一个用户属于多个企业，登录后应明确选择企业。所有企业 API 请求必须携带由服务端会话确认的 enterprise_id，不能只相信浏览器提交的企业 ID。
+任务记录和待审批必须使用不同路由和页面，不能像早期原型一样共同指向一个“自动化与审批”页面。组件展厅属于开发路由，不出现在生产企业菜单。
 
-切换企业时：
+企业管理员可以创建自定义企业角色并下放部分管理能力。OpenSandbox 是 SaaS 平台底层资产，企业工作台和管理后台均不展示或查询 OpenSandbox 服务、镜像、Profile、配额、活动会话和用量；相关管理与观测只存在于平台超级管理员门户。
 
-- 清空当前会话内的企业资源缓存。
-- 重新获取权限和 Tool 列表。
-- 断开企业范围的流式订阅。
-- 记录企业上下文切换审计。
+进入 Chatbox 前必须选择或恢复一个已授权 Project；Conversation 和 Run 保存该 `project_id`。Project 切换是显式用户操作，切换后重新获取 Tool 列表、资源范围和监控权限，不能由模型或 Card 修改。
 
-浏览器提交的 enterprise_id 只是选择意图。服务端 Session 保存当前 Membership 上下文，访问 Token 包含短期企业 Audience，API Key/Service Account 固定绑定 enterprise_id 和 Scope。任何资源 ID 查询都必须再次验证其真实 enterprise_id，不能只信任 Token 内的客户端参数。
+## 9. 固定企业上下文和 Project 选择
+
+EnterpriseUser 登录后只有一个固定企业上下文。服务端 Session 和 Access Token 必须包含该用户唯一的企业 Audience；客户端提交的 `enterprise_id`、URL 企业 Code 或资源 ID 只是请求参数，任何查询都必须再次验证资源真实归属。
+
+平台 Session 和企业 Session 必须使用不同 Audience、路由和 Cookie/Token 约束。平台身份不能访问企业 API，企业身份不能访问平台 API；禁止通过 `enterprise_id = null`、指定其他企业 ID 或修改 URL 切换身份域。
+
+企业内允许显式切换 Project。切换时：
+
+- 校验用户对目标 Project 至少具有 `project.read` 或对应业务权限。
+- 清空当前会话内的 Project 资源和监控缓存。
+- 重新获取 Project 范围的 Role Binding、Remote Access Grant 和 Tool 列表。
+- 断开旧 Project 的 SSE/WebSocket/Live Tail 订阅。
+- 新建会话或明确更新允许切换的空会话上下文；已有生产 Run 不能静默改 Project。
+- 记录 Project 上下文切换审计。
+
+API Key 和 ServiceAccount 固定绑定一个 `enterprise_id` 及允许的 Project/Tool Scope，不支持运行时切换到未授权 Project。任何资源 ID 查询都必须验证真实 `enterprise_id + project_id`，不能只信任 Token 或客户端参数。
 
 ### 9.1 认证基线
 
@@ -256,7 +280,7 @@ Chatbox
 - 平台超级管理员强制 MFA；企业可对管理员和 critical 操作强制 MFA/Step-up Authentication。
 - 浏览器使用 HttpOnly、Secure、SameSite Cookie 或同等安全 Session；变更请求执行 CSRF 防护。
 - Access Session 短期有效，Refresh/长期 Session 可撤销；用户禁用、密码重置、企业停用时立即写入撤销事实并通过 Redis 快速失效缓存。
-- WebSocket/SSE 建立和恢复时重新校验 Session 与企业上下文。
+- WebSocket/SSE/Live Tail 建立、恢复和周期性检查时重新校验 Session、固定企业、Project 和 AuthorizationVersion。
 - Service Account/API Key 只显示一次原值，数据库保存哈希，支持到期、轮换、Scope 和最后使用审计。
 
 ## 10. 账号恢复
@@ -276,6 +300,6 @@ argus admin reset-password
 平台审计和企业审计分离：
 
 - 平台审计：初始化、企业生命周期、企业管理员生命周期、Sandbox Profile、镜像、配额和活动会话终止。
-- 企业审计：模型、用户权限、Connector、资源、OpenTelemetry 安装与配置、Chatbox、MCP Tool、Card Action 和 Secret 使用。
+- 企业审计：Project、用户权限、Role Binding、Remote Access Grant、Managed Account、Connector、资源、OpenTelemetry 安装与配置、监控查询/导出、Chatbox、MCP Tool、Card Action、Break Glass 和 Secret 使用。
 
-超级管理员默认只能查看平台审计；企业管理员只能查看本企业审计。
+超级管理员默认只能查看平台审计；企业管理员只能查看本企业审计。Project 范围的审计读取按角色裁剪，企业 `security_auditor` 可以查看企业审计正文但不能因此获得远程操作、监控敏感字段或 Secret 权限。

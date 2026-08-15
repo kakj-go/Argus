@@ -1,0 +1,30 @@
+.argus-account-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.chat-shell .topbar__actions {
+  margin-left: auto;
+}
+
+.admin-shell .page-content {
+  padding: var(--space-6);
+  padding-bottom: var(--space-8);
+}
+
+.chat-shell .page-content {
+  padding: 0;
+}
+
+@media (max-width: 760px) {
+  .admin-shell .page-content {
+    padding: var(--space-4);
+    padding-bottom: var(--space-6);
+  }
+
+  .user-menu > span:nth-child(2),
+  .user-menu > svg:last-child {
+    display: none;
+  }
+}

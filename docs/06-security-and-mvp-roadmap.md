@@ -12,6 +12,7 @@ Argus 同时连接模型、不可信用户输入、生成代码、基础设施�
 - 模型不能持有能够绕过确认的完整提交能力。
 - AI 生成代码必须同时经过静态检查和运行时隔离。
 - 所有操作具有来源、身份、租户和调用链。
+- 平台身份与企业身份互斥；企业用户只能属于一个企业，Project 是企业内部资源和监控数据的主要授权边界。
 - 变更操作默认幂等、可追踪、可超时。
 
 ## 2. 主要威胁与控制
@@ -19,20 +20,30 @@ Argus 同时连接模型、不可信用户输入、生成代码、基础设施�
 | 威胁 | 控制 |
 | --- | --- |
 | 跨企业数据访问 | enterprise_id 强制过滤、统一授权中心、服务端检查 |
+| 跨 Project 资源或监控访问 | Project Role Binding、资源真实归属检查、Query Service 强制 Project/Resource Filter、统一 Tool/Card 数据裁剪 |
+| 平台管理员借空企业上下文读取企业数据 | 平台/企业身份类型互斥、不同 Audience 和 API 域、平台账号不能加入企业 |
 | Prompt injection 诱导越权 Tool | Tool allowlist、策略中心、风险分级、模型与 Action Executor 权限隔离 |
 | AI 绕过确认直接提交 | 模型只看到 action_ref；`_meta.argus__token` 仅进入服务端 Pending Action Store；Commit Tool 不暴露给模型 |
 | 确认后修改参数 | Token 绑定预览参数哈希；commit 从服务端恢复参数 |
 | Token 重放 | 短期、一次性、jti、幂等和消费状态 |
 | 凭证泄漏给模型 | Secret 表单、SecretRef、上下文投影和日志脱敏 |
-| 恶意 Card Skill | 静态扫描、独立来源 iframe、CSP、Bridge 白名单、资源限制 |
+| 恶意 交互卡片 | 静态扫描、独立来源 iframe、CSP、Bridge 白名单、资源限制 |
 | 卡片伪造 Tool 数据来源 | 使用 tool_call_id + path，服务端解析，禁止受限 Slot 使用 literal |
 | Connector 被冒用 | 一次性注册、mTLS、证书轮换、设备吊销和本地策略 |
+| Direct Executor 被用于 SSRF/内网扫描 | 固定出口、协议/端口白名单、DNS 前后校验、私网/元数据/内部地址拒绝和独立 Worker Pool |
+| 远程会话票据泄漏或被 AI 使用 | 一次性短期票据绑定用户/浏览器/企业/Project/Host/ManagedAccount/动作/授权版本；AI、Card、Automation、Sandbox 不可获取；MFA/JIT/审批、录像与强制终止 |
+| 项目操作权限被误当作 root/任意账号访问 | Project Role Binding 只授予功能能力；RemoteAccessGrant 独立限定 Host、ManagedAccount、协议、动作和有效期 |
+| 交互式 Shell 绕过 Tool 两阶段确认 | 明确划分人工堡垒会话与 AI Tool；人工会话使用独立权限、理由、审批、时长、剪贴板/文件策略、录像和命令审计 |
+| 平台自动化借人工终端执行未审计命令 | RemoteAccessSession 与 Execution/ConnectorCommand 使用不同票据、API、队列和审计；安装配置只执行不可变计划和版本化模板，禁止向人工终端注入命令 |
 | Sandbox 横向访问生产环境 | 默认断网或受限出网，生产访问必须通过受控 Tool 和 Connector |
 | 用户双击或网络重试 | 幂等键、Action Binding 状态机、按钮即时禁用 |
 | Leaf Collector 伪造其他主机身份 | Leaf 独立凭证或 mTLS，Edge Gateway 根据认证结果写入可信资源 ID |
 | Edge Gateway 单点或磁盘打满 | Leaf/Gateway 持久队列、容量限制、积压告警和后续双 Gateway |
 | 遥测高基数和摄入成本失控 | Attribute 限制、Series 配额、日志大小限制、企业速率与日用量限制 |
 | Kafka 重试造成遥测重复 | 明确至少一次语义、事件 ID/Offset 策略和查询去重方案 |
+| Host Collector 与 DaemonSet 重复采集 | 可信 KubernetesNodeHostBinding、Profile 展开为 CollectionClaim、同一 Claim 单主所有者、迁移重叠过期和配置提交前冲突检测 |
+| 权限撤销后旧票据或 Pending Action 继续生效 | AuthorizationVersion、Commit/连接时重新鉴权、活动会话终止、Outbox 驱动缓存和订阅失效 |
+| 单管理员企业伪造双人审批 | 禁止同一主体自批；只有 Policy 明确允许时使用 Step-up MFA、理由、短时票据和高优先级审计的 Break Glass |
 
 ## 3. Pending Action 状态机
 
@@ -59,7 +70,7 @@ stateDiagram-v2
 
 PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。创建人确认不能自动满足职责分离审批，权限撤销、企业停用、资源版本或执行计划变化都会使未执行确认失效。
 
-## 4. Card Skill 发布安全
+## 4. 交互卡片 发布安全
 
 发布前至少执行：
 
@@ -69,75 +80,85 @@ PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。
 4. CSP 与权限计算。
 5. Demo 数据渲染。
 6. 运行时超时和资源测试。
-7. 对 tenant/system 等级执行人工审核。
+7. 对 enterprise/system 等级执行人工审核。
 8. 生成不可变版本和内容哈希。
 
-Card Skill 更新必须创建新版本，历史消息继续引用原版本或保存渲染快照，避免旧会话展示内容在不知情时变化。
+交互卡片 更新必须创建新版本，历史消息继续引用原版本或保存渲染快照，避免旧会话展示内容在不知情时变化。
 
 ## 5. 第一阶段：SaaS 和连接基座
 
 - Kubernetes 一键安装器、Helm Chart 和环境预检。
-- PostgreSQL、Redis、Artifact Store、OpenSandbox 的集成部署或外部连接模式。
+- PostgreSQL、Redis、MinIO Artifact Store、OpenSandbox、Kafka 和 ClickHouse 的 Kubernetes 集成部署；第一版不提供外部中间件模式。
 - 首次初始化状态机和一次性 Setup Token。
 - 初始化平台超级管理员账号密码。
 - 平台超级管理员门户。
 - 企业和企业管理员创建流程。
-- Enterprise、User、Membership、Group、Role、Permission。
-- 基础数据范围和统一授权入口。
+- Enterprise、PlatformUser、EnterpriseUser、Project、Group、Role、Permission、RoleBinding 和 AuthorizationVersion。
+- 企业创建时生成 Default Project；一个企业用户只能绑定一个企业，不提供 Membership 或企业切换。
+- 企业/Project 两级权限范围和统一授权入口。
 - Secret Vault 和审计日志。
 - 平台级 OpenSandbox 镜像、Profile、配额和活动会话管理。
-- Connector 一次性注册、mTLS、心跳和在线状态。
+- Connector 一次性注册、mTLS、心跳和在线状态；注册同时创建/激活堡垒机 Host 和稳定 Bastion Scope。
 - 管理后台基础框架。
 
-完成标准：首次启动能够安全创建唯一的平台超级管理员；超级管理员能够创建企业和企业管理员但不能访问企业业务数据；企业管理员能够安全安装 Connector，并且不同企业之间资源、密钥和审计完全隔离。
+完成标准：首次启动能够安全创建唯一的平台超级管理员；超级管理员能够创建企业、Default Project 和初始企业管理员但不能访问企业业务数据；平台身份不能成为企业身份，企业用户不能切换到其他企业；企业管理员能够建立 Project 和权限，不同企业之间资源、密钥和审计完全隔离。
 
 ## 6. 第二阶段：资源管理
 
-- 主机 CRUD、SSH/WinRM、Connector 转发和连接测试。
+- 主机 CRUD，以及 `connector_local`、`via_bastion`、公网 `direct_ssh/direct_winrm` 三种连接模式。
+- 受控 Direct Executor：固定出口、SSRF 防护、Host Key 校验和独立执行池。
+- 所有受管 Host 的统一命令行入口：SSH/Connector 本机 PTY 与 WinRM PowerShell Runspace；RemoteAccessSession、短期票据、MFA/JIT/审批、录像和审计；RDP/SFTP 延后。
+- ManagedAccount、RemoteAccessGrant 和 AccessLease；远程访问明确限定 Project、Host、目标账号、协议、动作和有效期，文件传输等能力默认关闭。
+- 人工命令行与 Collector 自动化任务共享底层连接适配器但分离票据、状态机、队列和审计，自动化任务使用结构化 Preview/Execution/回滚流程。
+- 主机卡片按 Bastion Scope 分组，公网 Direct Host 独立显示。
 - Kubernetes 集群 CRUD、kubeconfig Secret 化和连接测试。
 - Pod、Deployment、Service、Node 和日志读取。
+- 主机详情安装/升级/修复/卸载 Collector，采集能力草稿和配置 Revision。
+- Bastion Scope 成员 Direct/Bastion Gateway 推送规则，以及独立主机 Direct/Standalone Gateway 推送规则。
 - 管理后台和领域服务打通。
 
-完成标准：不使用 AI 也能通过管理后台完成资源接入与只读查询。
+完成标准：不使用 AI 也能通过管理后台完成按 Project 的堡垒机安装、内网/公网主机接入、SSH 远程登录、Collector 安装与推送配置及 Kubernetes 接入；Project Operator 不能因拥有功能角色而使用未授权 ManagedAccount，所有 Secret 不回显，所有连接路径和远程会话可审计。
 
 ## 7. 第三阶段：Chatbox 与 MCP
 
-- 企业级模型供应商、Deployment、Alias、Agent Profile 和基础 fallback。
-- 模型连通性测试、用量和预算统计。
+- 单一 `AIModel` 的 OpenAI Compatible 一步式测试创建、启停与健康状态。
+- 模型连通性测试、调用价格快照、部门/用户月金额额度和治理仪表盘。
 - 会话历史和消息模型。
+- 会话显式选择模型，切换只影响后续消息，额度耗尽时不自动切换。
+- Conversation/Run 固定企业并绑定 Project；Project 切换必须由用户显式发起。
 - MCP Gateway、Tool Registry 和 Tool Result Store。
 - Model Agent 基础编排。
 - 查询类 Tool。
 - 新增主机和 Kubernetes 的 preview/commit/cancel 两阶段 Tool。
 - Pending Action、Action Binding 和审计。
 
-完成标准：用户能够通过自然语言添加、查询资源；所有写操作可预览、确认、审计且不能由模型绕过确认。
+完成标准：用户能够通过自然语言添加、查询其 Project 范围内资源；模型可发现的 Tool 和可见数据不超过当前用户权限；所有写操作可预览、确认、审计且不能由模型绕过确认或通过审批补齐基础权限。
 
-## 8. 第四阶段：Card Skill
+## 8. 第四阶段：交互卡片
 
-- Card Skill 包格式和目录。
-- `/` 命令引用。
-- Data Slot、Action Slot 和 Render Plan。
-- `card.render` 校验与 AI 自修复。
-- 沙箱 iframe、CSP 和 Host Bridge。
-- 临时卡片生成、预览和个人保存。
+- 交互卡片包格式，以及自定义卡片/内置卡片目录。
+- 企业超级管理员通过 `/` 命令创建企业自定义卡片，创建后默认禁用。
+- Slot Binding、Tool Output Schema Catalog、Action Slot 和 Render Plan。
+- 安全与场景验证、AI 自修复、启用门禁。
+- 沙箱 iframe、CSP、Host Bridge、自适应高度和真实 Demo 预览。
+- 内置卡片只读，普通用户只查看已启用企业卡片和内置卡片。
 
-完成标准：同一 Tool Result 可以被不同 Card Skill 展示，一张 Card Skill 可以组合多个 Tool Result；用户点击 Action Slot 可在不经过模型的情况下安全调用第二阶段 Tool。
+完成标准：同一 Tool Result 可以被不同 交互卡片 展示，一张 交互卡片 可以组合多个 Tool Result；用户点击 Action Slot 可在不经过模型的情况下安全调用第二阶段 Tool。
 
 ## 9. 第五阶段：OpenTelemetry 监控链路
 
-- 主机 Direct/Leaf/Edge Gateway Collector 模式。
-- Collector 版本清单、安装、升级、配置校验和回滚。
-- Connector Artifact Tunnel。
-- Telemetry Group 和网络连通性预览。
+- 在第二阶段 Collector 安装与路由基座上完成完整遥测存储和查询链路。
+- 独立主机 Telemetry Group、Standalone Edge Gateway 和网络连通性预览。
 - Kubernetes DaemonSet + Gateway Deployment。
-- 企业级 OTLP 凭证和可信资源身份注入。
+- KubernetesNodeHostBinding、CollectionClaim 和 Host Collector/DaemonSet 冲突检测；默认允许进程共存但禁止同一物理资源同一 Claim 长期重复采集。
+- 第一版 Metrics、Logs、Traces Collection Profile 目录，以及 OTLP 优先、Jaeger/Zipkin 兼容、主动日志读取和受控数据库/中间件 Receiver。
+- 企业级 OTLP 凭证和可信 Enterprise/Project/Resource 身份注入。
 - `argus-telemetry ingest`、Kafka、`otel-clickhouse-writer` 和 ClickHouse。
 - Altinity ClickHouse Operator、ClickHouseInstallation、Keeper、Schema Migration 和备份恢复演练。
-- Metrics/Logs 查询 Tool 和基础监控页面。
+- Metrics/Logs 查询 Tool、基础监控页面、告警和用量界面；Project/Resource、Signal、字段脱敏、Live Tail、Export 和查询预算分别授权。
 - Collector、Gateway、Kafka Consumer 自身健康监控。
 
-完成标准：同一互通网络可以只由 Edge Gateway 访问 Argus；Leaf 数据仍能被可靠归属到具体企业和资源；安装和配置均经过两阶段确认并支持失败回滚。
+完成标准：Bastion Scope 成员只能直推或使用所属堡垒机 Gateway，独立主机只能直推或使用独立 Telemetry Group Gateway；Leaf 数据可靠归属到具体企业、Project 和资源，跨企业、跨 Project 未授权查询及跨 Scope 路由被拒绝；同一 Kubernetes Node 的 Host/DaemonSet Claim 冲突在提交前被阻止或形成有期限迁移计划；安装和配置均经过两阶段确认并支持失败回滚。
 
 ## 10. 第六阶段：Agentic AIOps
 
@@ -146,8 +167,9 @@ Card Skill 更新必须创建新版本，历史消息继续引用原版本或保
 - OpenSandbox 集成。
 - 日志分析和故障诊断。
 - 长任务、重试、暂停和恢复。
-- 租户级 Card Skill 发布和治理。
+- 企业级 交互卡片 发布和治理。
 - 高危生产操作的增强审批。
+- ServiceAccount 绑定 Project 的定时自动化、AuthorizationVersion 撤权和单管理员受控 Break Glass。
 
 完成标准：AI 能够在受控范围内完成“发现问题—获取证据—生成计划—用户批准—执行—验证”的完整闭环。
 
@@ -159,15 +181,30 @@ Card Skill 更新必须创建新版本，历史消息继续引用原版本或保
 
 优先验证五个基础协议：
 
-1. 统一授权决策。
-2. Connector 注册与命令通道。
+1. 单企业用户、企业/Project 两级 Role Binding、RemoteAccessGrant、Telemetry Scope、AuthorizationVersion 和统一授权决策。
+2. Connector 注册、Bastion Scope、Direct Executor、RemoteAccessSession 与命令/远程会话通道。
 3. Tool Result/Pending Action/Action Binding。
    - 所有变更 Tool 的 `.preview/.commit` 强制配对。
    - `_meta.argus__token` 安全分流、单次消费和不可见性测试。
    - PendingAction、Approval、Execution 和 ConnectorCommand 状态机。
-4. Card Skill/Render Plan/Host Bridge。
-5. Telemetry Group/Collector Identity/多租户遥测 Schema。
+4. 交互卡片/Render Plan/Host Bridge。
+5. Bastion Scope/Telemetry Route/独立 Telemetry Group/Collector Identity/多租户遥测 Schema。
 
-模型供应商、子 Agent 实现和前端视觉技术可以演进替换；上述五个协议一旦被业务大量依赖，修改成本会显著更高，应优先形成版本化规范和测试用例。
+`AIModel` 的兼容实现、子 Agent 实现和前端视觉技术可以演进替换；上述五个协议一旦被业务大量依赖，修改成本会显著更高，应优先形成版本化规范和测试用例。
 
-初始化、平台/企业权限边界、Model Alias 和 Sandbox Profile 同样应在第一版固化，因为它们决定部署、运营和企业隔离方式。
+初始化、平台/企业权限边界、`AIModel` 调用快照、额度结算和 Sandbox Profile 同样应在第一版固化，因为它们决定部署、运营和企业隔离方式。
+
+## 12. 权限 E2E 发布门禁
+
+权限能力必须通过 Kubernetes 临时 Namespace 的端到端测试，测试结束后删除 Namespace。至少覆盖：
+
+1. 平台超级管理员能够创建企业、Default Project 和初始企业管理员，但不能读取该企业 Host、Conversation、Telemetry、Secret 或审计正文。
+2. EnterpriseUser 不能登录或构造 Token 访问其他企业，也不存在企业切换入口。
+3. Project A 用户不能通过列表、详情、批量 API、Tool、Card、游标或直接资源 ID 获取 Project B 资源。
+4. 仅有 Metrics 权限的用户不能查询 Logs、Traces、Live Tail、Export 或敏感字段；Model Agent 得到相同裁剪结果。
+5. `project_operator` 没有 RemoteAccessGrant 时不能建立终端；Grant 只允许指定 Host 和 ManagedAccount，不能改为 root 或启用未授权文件能力。
+6. 生产 Tool 完成 Preview 后撤销 RoleBinding、移动 Project 或递增 AuthorizationVersion，Commit 必须失败并要求重新 Preview。
+7. 远程会话票据签发后撤销 Grant，未使用票据立即失败，活动会话按策略终止并产生审计。
+8. Approval 不能补齐缺失的 Project/Tool/资源权限；创建人不能满足非本人审批，Break Glass 必须绑定单个操作并完整审计。
+9. Automation 以 ServiceAccount 当前 Project/Tool 权限执行，创建人后续权限不影响其身份边界，也不能消费人工会话票据。
+10. Collector 自报伪造 EnterpriseId、ProjectId 或 ResourceId 时被覆盖或拒绝，跨 Project 遥测查询不返回未授权记录。
