@@ -19,3 +19,4 @@ production:
     enterprise: argus.example.com
     platform: platform.argus.example.com
     setup: setup.argus.example.com
+    cards: cards.argus.example.com

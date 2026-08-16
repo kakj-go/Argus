@@ -15,14 +15,14 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: var(--space-px-2);
   color: var(--text-tertiary);
-  font-size: 11.5px;
+  font-size: 11.var(--font-size-5);
 }
 .argus-breadcrumb__item {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-px-4);
 }
 .argus-breadcrumb__item > svg {
   color: var(--text-disabled);
@@ -30,7 +30,7 @@
 .argus-breadcrumb__item a,
 .argus-breadcrumb__item button {
   border: 0;
-  padding: 2px 3px;
+  padding: var(--space-px-2) var(--space-px-3);
   border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-tertiary);
@@ -44,7 +44,7 @@
   background: var(--bg-elevated);
 }
 .argus-breadcrumb__item .is-current {
-  padding: 2px 3px;
+  padding: var(--space-px-2) var(--space-px-3);
   color: var(--text-secondary);
   font-weight: 600;
 }
@@ -59,14 +59,14 @@
 .argus-page__title {
   margin: 0;
   color: var(--text-primary);
-  font-size: 19px;
+  font-size: var(--font-size-19);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 .argus-page__description {
-  margin: 5px 0 0;
+  margin: var(--space-px-5) 0 0;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.55;
   max-width: 640px;
 }
@@ -138,7 +138,7 @@
 .argus-select__item {
   position: relative;
   min-height: 34px;
-  padding: 7px var(--space-3) 7px 30px;
+  padding: var(--space-px-7) var(--space-3) var(--space-px-7) var(--space-px-30);
   display: flex;
   align-items: center;
   border-radius: var(--radius-xs);
@@ -171,9 +171,9 @@
 .argus-search-input {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-px-7);
   height: 36px;
-  padding: 0 10px;
+  padding: 0 var(--space-px-10);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-canvas);
@@ -194,7 +194,7 @@
   padding: 0;
   background: transparent;
   color: var(--text-primary);
-  font: 400 13px/1.5 var(--font-sans);
+  font: 400 var(--font-size-13)/1.5 var(--font-sans);
   outline: none;
 }
 .argus-search-input > input::placeholder {
@@ -250,13 +250,13 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-4);
-  padding: 19px 20px 16px;
+  padding: var(--space-px-19) var(--space-px-20) var(--space-px-16);
   border-bottom: 1px solid var(--border-subtle);
 }
 .argus-drawer__body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: var(--space-px-20);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -264,10 +264,10 @@
 .argus-drawer__footer {
   display: flex;
   justify-content: flex-end;
-  gap: 9px;
-  padding: 13px 20px;
+  gap: var(--space-px-9);
+  padding: var(--space-px-13) var(--space-px-20);
   border-top: 1px solid var(--border-subtle);
-  background: rgb(0 0 0 / 8%);
+  background: color-mix(in srgb, var(--overlay-black) 8%, transparent);
 }
 @keyframes argus-drawer-in {
   from {
@@ -281,25 +281,25 @@
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  gap: 7px;
+  gap: var(--space-px-7);
   border: 1px solid;
-  border-radius: 999px;
-  padding: 3px 10px;
-  font: 600 10.5px/1.25 var(--font-sans);
+  border-radius: var(--radius-pill);
+  padding: var(--space-px-3) var(--space-px-10);
+  font: 600 10.var(--font-size-5)/1.25 var(--font-sans);
   white-space: nowrap;
 }
 .argus-status-badge__dot {
   position: relative;
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: currentColor;
 }
 .argus-status-badge--pulse .argus-status-badge__dot::after {
   content: "";
   position: absolute;
   inset: -3px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   border: 1px solid currentColor;
   animation: argus-pulse 1.6s ease-out infinite;
 }
@@ -310,27 +310,27 @@
 }
 .argus-status-badge--accent {
   color: var(--accent);
-  border-color: rgb(220 118 84 / 28%);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   background: var(--accent-soft);
 }
 .argus-status-badge--success {
   color: var(--success);
-  border-color: rgb(140 173 111 / 27%);
+  border-color: color-mix(in srgb, var(--success) 27%, transparent);
   background: var(--success-soft);
 }
 .argus-status-badge--warning {
   color: var(--warning);
-  border-color: rgb(213 161 91 / 27%);
+  border-color: color-mix(in srgb, var(--warning) 27%, transparent);
   background: var(--warning-soft);
 }
 .argus-status-badge--danger {
   color: var(--danger);
-  border-color: rgb(220 117 107 / 27%);
+  border-color: color-mix(in srgb, var(--danger) 27%, transparent);
   background: var(--danger-soft);
 }
 .argus-status-badge--info {
   color: var(--info);
-  border-color: rgb(124 159 200 / 27%);
+  border-color: color-mix(in srgb, var(--info) 27%, transparent);
   background: var(--info-soft);
 }
 @keyframes argus-pulse {
@@ -361,7 +361,7 @@
   filter: saturate(0.5);
 }
 .argus-preview-card.is-success {
-  border-color: rgb(140 173 111 / 32%);
+  border-color: color-mix(in srgb, var(--success) 32%, transparent);
 }
 .argus-preview-card__header {
   display: flex;
@@ -374,24 +374,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   font-weight: 650;
 }
 .argus-preview-card__countdown {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-px-4);
   color: var(--text-tertiary);
-  font: 500 11px var(--font-mono);
+  font: 500 var(--font-size-11) var(--font-mono);
   flex-shrink: 0;
 }
 .argus-risk-badge {
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
-  padding: 3px 9px;
-  font: 700 10px/1.3 var(--font-mono);
+  border-radius: var(--radius-pill);
+  padding: var(--space-px-3) var(--space-px-9);
+  font: 700 var(--font-size-10)/1.3 var(--font-mono);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -400,26 +400,26 @@
 .argus-risk-badge.is-read {
   color: var(--info);
   background: var(--info-soft);
-  border: 1px solid rgb(124 159 200 / 27%);
+  border: 1px solid color-mix(in srgb, var(--info) 27%, transparent);
 }
 .argus-risk-badge.is-write {
   color: var(--warning);
   background: var(--warning-soft);
-  border: 1px solid rgb(213 161 91 / 27%);
+  border: 1px solid color-mix(in srgb, var(--warning) 27%, transparent);
 }
 .argus-risk-badge.is-dangerous {
   color: var(--danger);
   background: var(--danger-soft);
-  border: 1px solid rgb(220 117 107 / 30%);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 .argus-risk-badge.is-critical {
-  color: white;
+  color: var(--text-inverse);
   background: var(--danger);
   border: 1px solid var(--danger);
 }
 .argus-preview-card__body {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.6;
 }
 .argus-preview-card__diff .argus-diff {
@@ -432,33 +432,33 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--space-px-5);
 }
 .argus-preview-card__affected > li {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  padding: 6px 10px;
+  padding: var(--space-px-6) var(--space-px-10);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: var(--bg-canvas);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-preview-card__affected > li > span {
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 11.var(--font-size-5);
 }
 .argus-preview-card__affected > li > small {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-preview-card__hash {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: 10.var(--font-size-5);
 }
 .argus-preview-card__hash > code {
   color: var(--text-secondary);
@@ -469,14 +469,14 @@
 .argus-preview-card__footer {
   display: flex;
   justify-content: flex-end;
-  gap: 9px;
+  gap: var(--space-px-9);
   padding-top: var(--space-1);
 }
 .argus-preview-card__result {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
+  gap: var(--space-px-7);
+  font-size: var(--font-size-12);
   font-weight: 600;
 }
 .argus-preview-card__result.is-success {
@@ -503,7 +503,7 @@
 }
 .argus-chart__tick {
   fill: var(--text-disabled);
-  font: 10px var(--font-mono);
+  font: var(--font-size-10) var(--font-mono);
 }
 .argus-chart__line {
   stroke-width: 1.8;
@@ -532,14 +532,14 @@
   top: 0;
   transform: translateX(-50%);
   display: grid;
-  gap: 4px;
+  gap: var(--space-px-4);
   min-width: 110px;
-  padding: 8px 10px;
+  padding: var(--space-px-8) var(--space-px-10);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   pointer-events: none;
   z-index: 2;
 }
@@ -550,38 +550,38 @@
 .argus-chart__tooltip > span {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-px-6);
   color: var(--text-tertiary);
 }
 .argus-chart__tooltip > span > i {
   width: 7px;
   height: 7px;
-  border-radius: 2px;
+  border-radius: var(--radius-2);
 }
 .argus-chart__tooltip > span > em {
   margin-left: auto;
-  padding-left: 10px;
+  padding-left: var(--space-px-10);
   color: var(--text-secondary);
-  font: 600 11px var(--font-mono);
+  font: 600 var(--font-size-11) var(--font-mono);
   font-style: normal;
 }
 .argus-chart__legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 16px;
-  margin-top: 6px;
+  gap: var(--space-px-6) var(--space-px-16);
+  margin-top: var(--space-px-6);
 }
 .argus-chart__legend > span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-px-6);
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-chart__legend > span > i {
   width: 8px;
   height: 8px;
-  border-radius: 2px;
+  border-radius: var(--radius-2);
 }
 .argus-chart__empty {
   border: 1px dashed var(--border-default);
@@ -593,27 +593,27 @@
   overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: #0c0b0a;
+  background: var(--surface-code);
 }
 .argus-terminal__bar {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   min-height: 38px;
-  padding: 0 6px 0 12px;
+  padding: 0 var(--space-px-6) 0 var(--space-px-12);
   border-bottom: 1px solid var(--border-subtle);
-  background: rgb(255 255 255 / 2%);
+  background: color-mix(in srgb, var(--overlay-white) 2%, transparent);
 }
 .argus-terminal__state {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-px-7);
   min-width: 0;
 }
 .argus-terminal__state > i {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: var(--text-disabled);
   flex-shrink: 0;
 }
@@ -629,37 +629,37 @@
 }
 .argus-terminal__state > b {
   color: var(--text-secondary);
-  font: 600 11.5px var(--font-mono);
+  font: 600 11.var(--font-size-5) var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .argus-terminal__state > em {
   color: var(--text-disabled);
-  font: 500 10px var(--font-mono);
+  font: 500 var(--font-size-10) var(--font-mono);
   font-style: normal;
   text-transform: uppercase;
 }
 .argus-terminal__meta {
   margin-left: auto;
   color: var(--text-tertiary);
-  font: 500 10.5px var(--font-mono);
+  font: 500 10.var(--font-size-5) var(--font-mono);
   white-space: nowrap;
 }
 .argus-terminal__bar .argus-button {
   width: 27px;
   height: 27px;
-  margin-left: 6px;
+  margin-left: var(--space-px-6);
   flex-shrink: 0;
 }
 .argus-terminal__output {
   overflow-y: auto;
-  padding: 12px 14px;
-  font: 11.5px/1.7 var(--font-mono);
+  padding: var(--space-px-12) var(--space-px-14);
+  font: 11.var(--font-size-5)/1.7 var(--font-mono);
 }
 .argus-terminal__line {
   display: flex;
-  gap: 8px;
+  gap: var(--space-px-8);
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--text-secondary);
@@ -684,8 +684,8 @@
 .argus-terminal__input {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  gap: var(--space-px-8);
+  padding: var(--space-px-8) var(--space-px-14);
   border-top: 1px solid var(--border-subtle);
 }
 .argus-terminal__input > input {
@@ -695,14 +695,14 @@
   padding: 0;
   background: transparent;
   color: var(--text-primary);
-  font: 11.5px/1.7 var(--font-mono);
+  font: 11.var(--font-size-5)/1.7 var(--font-mono);
   outline: none;
 }
 .argus-terminal__input > input::placeholder {
   color: var(--text-disabled);
 }
 :root[data-theme="light"] .argus-terminal {
-  background: #17150f;
+  background: var(--surface-console);
 }
 
 /* Wizard */
@@ -723,7 +723,7 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-px-9);
   min-width: 0;
   padding-right: var(--space-2);
 }
@@ -747,21 +747,21 @@
   width: 27px;
   height: 27px;
   border: 1px solid var(--border-default);
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: var(--bg-surface);
   color: var(--text-tertiary);
-  font: 650 11px var(--font-sans);
+  font: 650 var(--font-size-11) var(--font-sans);
   flex-shrink: 0;
 }
 .argus-wizard__step.is-done .argus-wizard__marker {
   background: var(--success);
   border-color: var(--success);
-  color: white;
+  color: var(--text-inverse);
 }
 .argus-wizard__step.is-current .argus-wizard__marker {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--text-inverse);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 .argus-wizard__step-text {
@@ -770,14 +770,14 @@
   display: grid;
   min-width: 0;
   background: var(--bg-canvas);
-  padding-right: 6px;
+  padding-right: var(--space-px-6);
 }
 .argus-wizard__step-text > b {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 600;
 }
 .argus-wizard__step.is-current .argus-wizard__step-text > b {
@@ -791,7 +791,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-disabled);
-  font-size: 10.5px;
+  font-size: 10.var(--font-size-5);
 }
 .argus-wizard__content {
   min-width: 0;
@@ -805,13 +805,13 @@
 .argus-wizard__footer-right {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-px-9);
 }
 
 /* KeyValueGrid */
 .argus-kv-grid {
   display: grid;
-  gap: 14px var(--space-6);
+  gap: var(--space-px-14) var(--space-6);
   margin: 0;
 }
 .argus-kv-grid--1 {
@@ -825,17 +825,17 @@
 }
 .argus-kv-grid__item {
   display: grid;
-  gap: 4px;
+  gap: var(--space-px-4);
   min-width: 0;
 }
 .argus-kv-grid__item > dt {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-kv-grid__item > dd {
   margin: 0;
   color: var(--text-primary);
-  font-size: 12.5px;
+  font-size: 12.var(--font-size-5);
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -852,21 +852,21 @@
   align-items: center;
   gap: var(--space-3);
   min-height: 38px;
-  padding: 0 6px 0 12px;
+  padding: 0 var(--space-px-6) 0 var(--space-px-12);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-surface);
 }
 .argus-log-viewer__follow {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-px-7);
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-log-viewer__actions {
   margin-left: auto;
   display: flex;
-  gap: 2px;
+  gap: var(--space-px-2);
 }
 .argus-log-viewer__actions .argus-button {
   width: 27px;
@@ -874,19 +874,19 @@
 }
 .argus-log-viewer__output {
   overflow-y: auto;
-  padding: 10px 0;
-  font: 11px/1.7 var(--font-mono);
+  padding: var(--space-px-10) 0;
+  font: var(--font-size-11)/1.7 var(--font-mono);
 }
 .argus-log-viewer__line {
   display: flex;
-  gap: 10px;
-  padding: 0 14px;
+  gap: var(--space-px-10);
+  padding: 0 var(--space-px-14);
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-all;
 }
 .argus-log-viewer__line:hover {
-  background: rgb(255 255 255 / 2%);
+  background: color-mix(in srgb, var(--overlay-white) 2%, transparent);
 }
 .argus-log-viewer__ln {
   width: 34px;
@@ -903,7 +903,7 @@
   width: 46px;
   flex-shrink: 0;
   font-weight: 700;
-  font-size: 10px;
+  font-size: var(--font-size-10);
 }
 .argus-log-viewer__line.is-info .argus-log-viewer__level {
   color: var(--info);
@@ -924,9 +924,9 @@
 .argus-stat-card {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-px-3);
   min-width: 0;
-  padding: 14px 16px;
+  padding: var(--space-px-14) var(--space-px-16);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
@@ -939,7 +939,7 @@
 }
 .argus-stat-card__label {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-stat-card__icon {
   margin-left: auto;
@@ -953,12 +953,12 @@
 }
 .argus-stat-card__value {
   color: var(--text-primary);
-  font: 680 23px/1.15 var(--font-mono);
+  font: 680 var(--font-size-23)/1.15 var(--font-mono);
   letter-spacing: -0.03em;
 }
 .argus-stat-card__detail {
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: 10.var(--font-size-5);
 }
 .argus-stat-card--accent .argus-stat-card__icon {
   color: var(--accent);

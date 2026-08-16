@@ -8,7 +8,7 @@ import {
   type ConnectionTestResult,
   type CreateHostInput,
   type Environment,
-  type PendingAction,
+  type PendingActionPublic,
 } from "@argus/api-client";
 import {
   Alert,
@@ -22,11 +22,7 @@ import {
   Textarea,
   Wizard,
 } from "@argus/ui";
-import {
-  ARGUS_EGRESS_IP,
-  isPublicAddress,
-  parseTags,
-} from "./host-utils";
+import { ARGUS_EGRESS_IP, isPublicAddress, parseTags } from "./host-utils";
 import { PendingActionConfirm } from "./pending-action-confirm";
 
 type Mode = "via_bastion" | "direct";
@@ -88,8 +84,11 @@ export function AddHostWizard({
   const [environment, setEnvironment] = useState<Environment>("production");
   const [tagsText, setTagsText] = useState("");
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(
+    null,
+  );
+  const [pendingAction, setPendingAction] =
+    useState<PendingActionPublic | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const secretsQuery = useQuery({
@@ -139,7 +138,11 @@ export function AddHostWizard({
     setTesting(true);
     setTestResult(null);
     const scopeName = scopes.find((scope) => scope.id === scopeId)?.name;
-    const result = await simulateTest({ mode, address: address.trim(), scopeName });
+    const result = await simulateTest({
+      mode,
+      address: address.trim(),
+      scopeName,
+    });
     setTestResult(result);
     setTesting(false);
   };
@@ -162,7 +165,7 @@ export function AddHostWizard({
         bastionScopeId: mode === "via_bastion" ? scopeId : undefined,
         credentialRef: secretId || undefined,
         environment,
-        tags: parseTags(tagsText),
+        labels: parseTags(tagsText),
       };
       setPendingAction(await api.hosts.previewCreate(input));
     } finally {
@@ -327,17 +330,27 @@ export function AddHostWizard({
               <div className="argus-form-row">
                 <Field label={t("hosts.wizard.platform")}>
                   <Select
-                    onValueChange={(value) => setPlatform(value as "linux" | "windows")}
+                    onValueChange={(value) =>
+                      setPlatform(value as "linux" | "windows")
+                    }
                     options={[
-                      { value: "linux", label: t("hosts.wizard.platformLinux") },
-                      { value: "windows", label: t("hosts.wizard.platformWindows") },
+                      {
+                        value: "linux",
+                        label: t("hosts.wizard.platformLinux"),
+                      },
+                      {
+                        value: "windows",
+                        label: t("hosts.wizard.platformWindows"),
+                      },
                     ]}
                     value={platform}
                   />
                 </Field>
                 <Field label={t("hosts.wizard.environment")}>
                   <Select
-                    onValueChange={(value) => setEnvironment(value as Environment)}
+                    onValueChange={(value) =>
+                      setEnvironment(value as Environment)
+                    }
                     options={ENVIRONMENTS.map((env) => ({
                       value: env,
                       label: t(`hosts.env.${env}`),
@@ -374,7 +387,10 @@ export function AddHostWizard({
                   </span>
                 )}
               </Field>
-              <Field hint={t("hosts.wizard.tagsHint")} label={t("hosts.wizard.tags")}>
+              <Field
+                hint={t("hosts.wizard.tagsHint")}
+                label={t("hosts.wizard.labels")}
+              >
                 <Textarea
                   onChange={(event) => setTagsText(event.target.value)}
                   rows={3}
@@ -429,7 +445,10 @@ export function AddHostWizard({
                     tone={testResult.success ? "success" : "danger"}
                   />
                   {testResult.checks.map((check) => (
-                    <CheckItem checked={check.status === "passed"} key={check.name}>
+                    <CheckItem
+                      checked={check.status === "passed"}
+                      key={check.name}
+                    >
                       <span className="argus-mono">{check.name}</span>
                       {check.detail && (
                         <span className="argus-muted"> · {check.detail}</span>
@@ -444,10 +463,14 @@ export function AddHostWizard({
                   onClick={() => void runTest()}
                   variant="secondary"
                 >
-                  {testing ? t("hosts.wizard.testing") : t("hosts.wizard.runTest")}
+                  {testing
+                    ? t("hosts.wizard.testing")
+                    : t("hosts.wizard.runTest")}
                 </Button>
                 {!testResult?.success && (
-                  <span className="argus-muted">{t("hosts.wizard.needTest")}</span>
+                  <span className="argus-muted">
+                    {t("hosts.wizard.needTest")}
+                  </span>
                 )}
               </div>
             </>

@@ -6,7 +6,8 @@ export const dashboardZh = {
   "dashboard.stats.activeEnterprises": "活跃企业",
   "dashboard.stats.activeSessions": "Sandbox 活动会话",
   "dashboard.stats.pending": "待处理事项",
-  "dashboard.pendingDetail": "{{invites}} 个待激活邀请 · {{images}} 个待复核镜像",
+  "dashboard.pendingDetail":
+    "{{invites}} 个待激活邀请 · {{images}} 个待复核镜像",
   "dashboard.usage.title": "平台用量趋势（近 14 天）",
   "dashboard.usage.sessions": "会话数",
   "dashboard.usage.minutes": "会话时长（分钟）",
@@ -21,12 +22,14 @@ export const dashboardZh = {
 
 export const dashboardEn = {
   "dashboard.title": "Platform dashboard",
-  "dashboard.description": "Overall health of enterprises and the OpenSandbox foundation",
+  "dashboard.description":
+    "Overall health of enterprises and the OpenSandbox foundation",
   "dashboard.stats.enterprises": "Total enterprises",
   "dashboard.stats.activeEnterprises": "Active enterprises",
   "dashboard.stats.activeSessions": "Active sandbox sessions",
   "dashboard.stats.pending": "Pending items",
-  "dashboard.pendingDetail": "{{invites}} pending invites · {{images}} images to review",
+  "dashboard.pendingDetail":
+    "{{invites}} pending invites · {{images}} images to review",
   "dashboard.usage.title": "Platform usage trend (last 14 days)",
   "dashboard.usage.sessions": "Sessions",
   "dashboard.usage.minutes": "Session minutes",

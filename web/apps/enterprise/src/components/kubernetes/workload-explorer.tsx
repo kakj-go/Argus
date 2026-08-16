@@ -1,11 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  useApi,
-  type K8sCluster,
-  type K8sWorkload,
-} from "@argus/api-client";
+import { useApi, type K8sCluster, type K8sWorkload } from "@argus/api-client";
 import {
   Button,
   DataTable,
@@ -126,7 +122,10 @@ function derivePods(workloads: K8sWorkload[]): PodRow[] {
 
 const LOG_TEMPLATES: Array<Pick<LogLine, "level" | "content">> = [
   { level: "info", content: "GET /healthz 200 1ms" },
-  { level: "info", content: "request handled path=/api/v1/orders duration=14ms" },
+  {
+    level: "info",
+    content: "request handled path=/api/v1/orders duration=14ms",
+  },
   { level: "debug", content: "cache hit ratio 0.87" },
   { level: "info", content: "otel export batch sent spans=64" },
   { level: "warn", content: "slow query detected duration=820ms" },
@@ -262,7 +261,10 @@ function ResourceDetailDrawer({
     ];
   }
 
-  const events: Array<{ key: string; tone: "info" | "success" | "warning" | "danger" }> = [];
+  const events: Array<{
+    key: string;
+    tone: "info" | "success" | "warning" | "danger";
+  }> = [];
   if (selection.type === "workload" || selection.type === "pod") {
     events.push(
       { key: "scheduled", tone: "info" },
@@ -506,7 +508,9 @@ export function WorkloadExplorer({ cluster }: { cluster: K8sCluster }) {
       header: t("kubernetes.table.status"),
       render: (row) => (
         <StatusBadge
-          tone={bindingStatusTone(row.status as "proposed" | "verified" | "rejected")}
+          tone={bindingStatusTone(
+            row.status as "proposed" | "verified" | "rejected",
+          )}
         >
           {t(`kubernetes.bindingStatus.${row.status}`)}
         </StatusBadge>

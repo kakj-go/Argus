@@ -1,4 +1,4 @@
-.PHONY: fmt test vet run-server contract-lint contract-generate contract-check contract-breaking contract-update-legacy-baseline
+.PHONY: fmt test vet run-server contract-lint contract-generate contract-check contract-breaking
 
 fmt:
 	rg --files cmd internal -g '*.go' | xargs gofmt -w
@@ -42,6 +42,3 @@ contract-breaking:
 	else \
 		echo 'origin/main has no protobuf baseline; this merge establishes it'; \
 	fi
-
-contract-update-legacy-baseline:
-	node scripts/update-legacy-web-allowlist.mjs

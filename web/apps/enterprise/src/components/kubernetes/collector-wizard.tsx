@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi, type K8sCluster, type PendingAction } from "@argus/api-client";
+import {
+  useApi,
+  type K8sCluster,
+  type PendingActionPublic,
+} from "@argus/api-client";
 import {
   Alert,
   Button,
@@ -62,9 +66,8 @@ export function CollectorWizard({
   const api = useApi();
   const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(
-    null,
-  );
+  const [pendingAction, setPendingAction] =
+    useState<PendingActionPublic | null>(null);
 
   const bindingsQuery = useQuery({
     queryKey: ["kubernetes", "nodeBindings", cluster.id],

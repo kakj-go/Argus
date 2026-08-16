@@ -44,7 +44,7 @@ export function createKubernetesDomain(
       return ctx.createPendingAction({
         tool: "kubernetes.cluster.create",
         title: `接入集群 ${input.name}`,
-        params: { ...input },
+        input_data: { ...input },
       });
     },
     async updateCluster(id, patch) {
@@ -169,7 +169,7 @@ export function createKubernetesDomain(
       return ctx.createPendingAction({
         tool: "telemetry.kubernetes.install",
         title: `安装 DaemonSet Collector · ${cluster.name}`,
-        params: { clusterId, profile: input.profile },
+        input_data: { clusterId, profile: input.profile },
       });
     },
   };

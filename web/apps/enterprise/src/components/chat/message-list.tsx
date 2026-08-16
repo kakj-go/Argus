@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import type { ChatMessage } from "@argus/api-client";
 import { ChatMessageItem } from "./message-item";
+import type { ChatMessage } from "./chat-view-model";
 
 /**
  * 消息流：历史消息 + 乐观用户消息 + 流式中的 AI 消息；

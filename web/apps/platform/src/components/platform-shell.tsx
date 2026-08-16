@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Boxes,
   Building2,
-  ChevronDown,
   CircleUserRound,
   Gauge,
   ScrollText,
@@ -13,13 +12,8 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@argus/api-client";
-import { useAuthStore } from "@argus/auth";
-import {
-  AppearanceControls,
-  Avatar,
-  Badge,
-  Dropdown,
-} from "@argus/ui";
+import { usePlatformAuthStore } from "@argus/auth";
+import { AppShell, AppearanceControls, Badge, PortalUserMenu } from "@argus/ui";
 
 type NavItem = {
   key: string;
@@ -40,11 +34,11 @@ const NAV_ITEMS: NavItem[] = [
 function Brand() {
   const { t } = useTranslation();
   return (
-    <Link className="brand" to="/">
-      <span className="brand__mark brand__mark--platform">
+    <Link className="argus-brand" to="/">
+      <span className="argus-brand__mark argus-brand__mark--platform">
         <ShieldCheck size={15} />
       </span>
-      <span className="brand__name">
+      <span className="argus-brand__name">
         Argus<small>{t("shell.brand.domain")}</small>
       </span>
     </Link>
@@ -57,8 +51,8 @@ function UserMenu() {
   const api = useApi();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const session = useAuthStore((state) => state.session);
-  const logout = useAuthStore((state) => state.logout);
+  const session = usePlatformAuthStore((state) => state.session);
+  const logout = usePlatformAuthStore((state) => state.logout);
   if (!session) return null;
   const { user } = session;
 
@@ -69,7 +63,8 @@ function UserMenu() {
   };
 
   return (
-    <Dropdown
+    <PortalUserMenu
+      displayName={user.display_name}
       items={[
         {
           label: t("shell.myAccount"),
@@ -82,16 +77,7 @@ function UserMenu() {
           onSelect: () => void handleLogout(),
         },
       ]}
-      trigger={
-        <button className="user-menu" type="button">
-          <Avatar fallback={user.displayName.slice(0, 1)} />
-          <span>
-            <b>{user.displayName}</b>
-            <small>{user.username}</small>
-          </span>
-          <ChevronDown size={13} />
-        </button>
-      }
+      username={user.username}
     />
   );
 }
@@ -104,47 +90,54 @@ function UserMenu() {
 export function PlatformShell() {
   const { t } = useTranslation();
   return (
-    <div className="app-shell platform-shell">
-      <aside className="sidebar">
-        <div className="sidebar__head">
-          <Brand />
-        </div>
-        <nav aria-label={t("shell.group.platform")} className="sidebar__nav">
-          <div className="nav-section">
-            <div className="nav-section__label">{t("shell.group.platform")}</div>
-            {NAV_ITEMS.map((item) => (
-              <Link
-                activeOptions={{ exact: item.exact ?? false }}
-                activeProps={{ className: "active" }}
-                className="nav-item"
-                key={item.key}
-                to={item.to}
-              >
-                <item.icon aria-hidden size={17} />
-                <span>{t(item.key)}</span>
-              </Link>
-            ))}
-          </div>
-        </nav>
-        <div className="sidebar__footer">
-          <p className="platform-isolation">{t("shell.isolation")}</p>
-        </div>
-      </aside>
-      <div className="app-main">
-        <header className="topbar">
+    <AppShell
+      className="argus-platform-shell"
+      header={
+        <header className="argus-topbar">
           <Badge tone="info">{t("shell.domainBadge")}</Badge>
           <Badge dot tone="accent">
             {t("shell.roleBadge")}
           </Badge>
-          <div className="topbar__actions">
+          <div className="argus-topbar__actions">
             <AppearanceControls />
             <UserMenu />
           </div>
         </header>
-        <main className="page-content">
-          <Outlet />
-        </main>
-      </div>
-    </div>
+      }
+      sidebar={
+        <aside className="argus-sidebar">
+          <div className="argus-sidebar__head">
+            <Brand />
+          </div>
+          <nav
+            aria-label={t("shell.group.platform")}
+            className="argus-sidebar__nav"
+          >
+            <div className="argus-nav-section">
+              <div className="argus-nav-section__label">
+                {t("shell.group.platform")}
+              </div>
+              {NAV_ITEMS.map((item) => (
+                <Link
+                  activeOptions={{ exact: item.exact ?? false }}
+                  activeProps={{ className: "active" }}
+                  className="argus-nav-item"
+                  key={item.key}
+                  to={item.to}
+                >
+                  <item.icon aria-hidden size={17} />
+                  <span>{t(item.key)}</span>
+                </Link>
+              ))}
+            </div>
+          </nav>
+          <div className="argus-sidebar__footer">
+            <p className="argus-platform-isolation">{t("shell.isolation")}</p>
+          </div>
+        </aside>
+      }
+    >
+      <Outlet />
+    </AppShell>
   );
 }

@@ -17,13 +17,17 @@ export const adminsZh = {
   "admins.action.resetAuth": "重置认证",
   "admins.action.disable": "禁用",
   "admins.confirm.resend.title": "重发激活邀请",
-  "admins.confirm.resend.description": "将向该管理员重新发送激活邀请，状态重置为待激活。",
+  "admins.confirm.resend.description":
+    "将向该管理员重新发送激活邀请，状态重置为待激活。",
   "admins.confirm.resetAuth.title": "重置登录认证",
-  "admins.confirm.resetAuth.description": "重置后该管理员的所有凭证与 MFA 失效，需重新激活。",
+  "admins.confirm.resetAuth.description":
+    "重置后该管理员的所有凭证与 MFA 失效，需重新激活。",
   "admins.confirm.disable.title": "禁用企业管理员",
-  "admins.confirm.disable.description": "禁用后该管理员无法登录企业门户，请确认。",
+  "admins.confirm.disable.description":
+    "禁用后该管理员无法登录企业门户，请确认。",
   "admins.form.title": "邀请企业管理员",
-  "admins.form.description": "创建后系统生成激活链接，由平台超管线下发送给管理员",
+  "admins.form.description":
+    "创建后系统生成激活链接，由平台超管线下发送给管理员",
   "admins.form.enterprise": "所属企业",
   "admins.form.username": "用户名",
   "admins.form.displayName": "姓名",
@@ -32,14 +36,17 @@ export const adminsZh = {
   "admins.activation.invite_link": "激活链接",
   "admins.activation.temporary_password": "临时密码",
   "admins.created.title": "管理员已创建",
-  "admins.created.description": "请将以下激活链接通过安全渠道发送给管理员（mock 环境，仅作展示）：",
+  "admins.created.description":
+    "请将以下激活链接通过安全渠道发送给管理员（mock 环境，仅作展示）：",
   "admins.noImpersonation.title": "不提供代登录",
-  "admins.noImpersonation.description": "平台超级管理员不能以企业管理员身份登录，所有认证变更均产生平台审计事件。",
+  "admins.noImpersonation.description":
+    "平台超级管理员不能以企业管理员身份登录，所有认证变更均产生平台审计事件。",
 };
 
 export const adminsEn = {
   "admins.title": "Enterprise admins",
-  "admins.description": "Invite and manage initial enterprise admins; impersonation is not offered",
+  "admins.description":
+    "Invite and manage initial enterprise admins; impersonation is not offered",
   "admins.invite": "Invite admin",
   "admins.empty": "No enterprise admins yet",
   "admins.table.displayName": "Name",
@@ -55,13 +62,17 @@ export const adminsEn = {
   "admins.action.resetAuth": "Reset auth",
   "admins.action.disable": "Disable",
   "admins.confirm.resend.title": "Resend activation invite",
-  "admins.confirm.resend.description": "A fresh activation invite is sent and the status returns to pending.",
+  "admins.confirm.resend.description":
+    "A fresh activation invite is sent and the status returns to pending.",
   "admins.confirm.resetAuth.title": "Reset authentication",
-  "admins.confirm.resetAuth.description": "All credentials and MFA of this admin are revoked; re-activation is required.",
+  "admins.confirm.resetAuth.description":
+    "All credentials and MFA of this admin are revoked; re-activation is required.",
   "admins.confirm.disable.title": "Disable enterprise admin",
-  "admins.confirm.disable.description": "The admin can no longer sign in to the enterprise portal. Please confirm.",
+  "admins.confirm.disable.description":
+    "The admin can no longer sign in to the enterprise portal. Please confirm.",
   "admins.form.title": "Invite enterprise admin",
-  "admins.form.description": "An activation link is generated and delivered to the admin offline",
+  "admins.form.description":
+    "An activation link is generated and delivered to the admin offline",
   "admins.form.enterprise": "Enterprise",
   "admins.form.username": "Username",
   "admins.form.displayName": "Display name",
@@ -70,7 +81,9 @@ export const adminsEn = {
   "admins.activation.invite_link": "Activation link",
   "admins.activation.temporary_password": "Temporary password",
   "admins.created.title": "Admin created",
-  "admins.created.description": "Deliver this activation link over a secure channel (mock environment, display only):",
+  "admins.created.description":
+    "Deliver this activation link over a secure channel (mock environment, display only):",
   "admins.noImpersonation.title": "No impersonation",
-  "admins.noImpersonation.description": "Super admins cannot sign in as enterprise admins; every auth change is audited in the platform domain.",
+  "admins.noImpersonation.description":
+    "Super admins cannot sign in as enterprise admins; every auth change is audited in the platform domain.",
 };

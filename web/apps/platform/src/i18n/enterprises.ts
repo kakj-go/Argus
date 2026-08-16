@@ -17,11 +17,13 @@ export const enterprisesZh = {
   "enterprises.action.activate": "激活",
   "enterprises.action.disable": "停用",
   "enterprises.confirm.suspend.title": "暂停企业",
-  "enterprises.confirm.suspend.description": "暂停后该企业所有成员将无法登录，Sandbox 会话会被终止。",
+  "enterprises.confirm.suspend.description":
+    "暂停后该企业所有成员将无法登录，Sandbox 会话会被终止。",
   "enterprises.confirm.activate.title": "激活企业",
   "enterprises.confirm.activate.description": "激活后该企业恢复正常访问。",
   "enterprises.confirm.disable.title": "停用企业",
-  "enterprises.confirm.disable.description": "停用为终态操作：数据保留但不可再激活回运行状态，请确认。",
+  "enterprises.confirm.disable.description":
+    "停用为终态操作：数据保留但不可再激活回运行状态，请确认。",
   "enterprises.form.create.title": "创建企业",
   "enterprises.form.create.description": "创建后可在详情中配置 Sandbox 配额",
   "enterprises.form.name": "企业名称",
@@ -45,7 +47,8 @@ export const enterprisesZh = {
 
 export const enterprisesEn = {
   "enterprises.title": "Enterprises",
-  "enterprises.description": "Enterprise lifecycle; no deletion — disabled enterprises keep their data",
+  "enterprises.description":
+    "Enterprise lifecycle; no deletion — disabled enterprises keep their data",
   "enterprises.create": "Create enterprise",
   "enterprises.empty": "No enterprises yet",
   "enterprises.table.name": "Name",
@@ -61,16 +64,21 @@ export const enterprisesEn = {
   "enterprises.action.activate": "Activate",
   "enterprises.action.disable": "Disable",
   "enterprises.confirm.suspend.title": "Suspend enterprise",
-  "enterprises.confirm.suspend.description": "All members lose access and sandbox sessions are terminated while suspended.",
+  "enterprises.confirm.suspend.description":
+    "All members lose access and sandbox sessions are terminated while suspended.",
   "enterprises.confirm.activate.title": "Activate enterprise",
-  "enterprises.confirm.activate.description": "The enterprise regains normal access after activation.",
+  "enterprises.confirm.activate.description":
+    "The enterprise regains normal access after activation.",
   "enterprises.confirm.disable.title": "Disable enterprise",
-  "enterprises.confirm.disable.description": "Disabling is terminal: data is retained but the enterprise cannot be reactivated. Please confirm.",
+  "enterprises.confirm.disable.description":
+    "Disabling is terminal: data is retained but the enterprise cannot be reactivated. Please confirm.",
   "enterprises.form.create.title": "Create enterprise",
-  "enterprises.form.create.description": "Configure its sandbox quota afterwards from the detail view",
+  "enterprises.form.create.description":
+    "Configure its sandbox quota afterwards from the detail view",
   "enterprises.form.name": "Enterprise name",
   "enterprises.form.code": "Enterprise code",
-  "enterprises.form.codeHint": "Unique identifier: lowercase letters, digits, dashes",
+  "enterprises.form.codeHint":
+    "Unique identifier: lowercase letters, digits, dashes",
   "enterprises.form.timezone": "Default timezone",
   "enterprises.form.quotaProfile": "Sandbox quota profile",
   "enterprises.form.remark": "Remark",

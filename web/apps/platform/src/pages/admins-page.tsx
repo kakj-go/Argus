@@ -138,7 +138,7 @@ export function AdminsPage() {
       description={t("admins.description")}
       title={t("admins.title")}
     >
-      <div className="platform-stack">
+      <div className="argus-platform-stack">
         <Alert
           description={t("admins.noImpersonation.description")}
           title={t("admins.noImpersonation.title")}
@@ -156,7 +156,9 @@ export function AdminsPage() {
               {
                 key: "username",
                 header: t("admins.table.username"),
-                render: (row) => <code className="mono">{row.username}</code>,
+                render: (row) => (
+                  <code className="argus-mono">{row.username}</code>
+                ),
               },
               {
                 key: "email",
@@ -182,7 +184,7 @@ export function AdminsPage() {
                 key: "id",
                 header: t("common.actions"),
                 render: (row) => (
-                  <div className="row-actions">
+                  <div className="argus-row-actions">
                     <Button
                       onClick={() =>
                         setPendingAction({ type: "resend", admin: row })
@@ -269,8 +271,14 @@ export function AdminsPage() {
               setActivation(value as "invite_link" | "temporary_password")
             }
             options={[
-              { value: "invite_link", label: t("admins.activation.invite_link") },
-              { value: "temporary_password", label: t("admins.activation.temporary_password") },
+              {
+                value: "invite_link",
+                label: t("admins.activation.invite_link"),
+              },
+              {
+                value: "temporary_password",
+                label: t("admins.activation.temporary_password"),
+              },
             ]}
             value={activation}
           />
@@ -291,7 +299,7 @@ export function AdminsPage() {
         title={t("admins.created.title")}
       >
         {created && (
-          <div className="drawer-stack">
+          <div className="argus-drawer-stack">
             <Alert
               description={t("admins.created.description")}
               title={t("admins.created.title")}

@@ -1,8 +1,11 @@
 import {
+  cloneElement,
   forwardRef,
+  isValidElement,
   type InputHTMLAttributes,
   type ReactNode,
   type TextareaHTMLAttributes,
+  useId,
 } from "react";
 import { cx } from "./lib";
 
@@ -35,16 +38,33 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
+  const generatedId = useId();
+  const controlId =
+    isValidElement<Record<string, unknown>>(children) &&
+    typeof children.props.id === "string"
+      ? children.props.id
+      : `${generatedId}-control`;
+  const messageId = `${generatedId}-message`;
+  const control = isValidElement<Record<string, unknown>>(children)
+    ? cloneElement(children, {
+        "aria-describedby": hint || error ? messageId : undefined,
+        "aria-invalid": error ? true : undefined,
+        id: controlId,
+      })
+    : children;
   return (
-    <label className={cx("argus-field", className)}>
-      <span className="argus-field__label">{label}</span>
-      {children}
+    <div className={cx("argus-field", className)}>
+      <label className="argus-field__label" htmlFor={controlId}>{label}</label>
+      {control}
       {(hint || error) && (
-        <span className={cx("argus-field__hint", error && "is-error")}>
+        <span
+          className={cx("argus-field__hint", error && "is-error")}
+          id={messageId}
+        >
           {error || hint}
         </span>
       )}
-    </label>
+    </div>
   );
 }
 

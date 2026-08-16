@@ -2,13 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@argus/api-client";
-import {
-  Button,
-  DataTable,
-  EmptyState,
-  FormDrawer,
-  Spinner,
-} from "@argus/ui";
+import { Button, DataTable, EmptyState, FormDrawer, Spinner } from "@argus/ui";
 import { QuotaEditor } from "../quota-editor";
 
 type QuotaRow = {
@@ -66,7 +60,7 @@ export function QuotasTab() {
   });
 
   return (
-    <div className="platform-stack">
+    <div className="argus-platform-stack">
       {isPending ? (
         <Spinner />
       ) : rows.length === 0 ? (
@@ -81,7 +75,9 @@ export function QuotasTab() {
             {
               key: "allowedProfiles",
               header: t("sandbox.quotas.table.allowedProfiles"),
-              render: (row) => <code className="mono">{row.allowedProfiles}</code>,
+              render: (row) => (
+                <code className="argus-mono">{row.allowedProfiles}</code>
+              ),
             },
             {
               key: "maxConcurrentSessions",
@@ -114,7 +110,10 @@ export function QuotasTab() {
               render: (row) => (
                 <Button
                   onClick={() =>
-                    setEditing({ id: row.enterpriseId, name: row.enterpriseName })
+                    setEditing({
+                      id: row.enterpriseId,
+                      name: row.enterpriseName,
+                    })
                   }
                   size="sm"
                   variant="ghost"

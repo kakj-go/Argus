@@ -40,9 +40,9 @@ export function StepSandbox({
   };
 
   return (
-    <div className="setup-fields">
-      <p className="setup-step-intro">{t("setup.sandbox.intro")}</p>
-      <div className="setup-switch-row">
+    <div className="argus-setup-fields">
+      <p className="argus-setup-step-intro">{t("setup.sandbox.intro")}</p>
+      <div className="argus-setup-switch-row">
         <Switch
           checked={sandbox.enabled}
           label={t("setup.sandbox.enable")}
@@ -95,7 +95,7 @@ export function StepSandbox({
               value={sandbox.storage}
             />
           </Field>
-          <div className="setup-test-row">
+          <div className="argus-setup-test-row">
             <Button
               disabled={!endpointValid}
               loading={testing}

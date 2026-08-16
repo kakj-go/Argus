@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -19,6 +20,309 @@ async function login(page: Page, username = "root") {
   await expect(page).not.toHaveURL(/\/login/);
 }
 
+async function expectNoSeriousAccessibilityViolations(page: Page) {
+  const result = await new AxeBuilder({ page }).analyze();
+  expect(
+    result.violations.filter(
+      (violation) =>
+        violation.impact === "serious" || violation.impact === "critical",
+    ),
+  ).toEqual([]);
+}
+
+for (const locale of ["zh-CN", "en-US"] as const) {
+  for (const theme of ["light", "dark"] as const) {
+    test(`a11y matrix: ${locale} ${theme}`, async ({ page }) => {
+      await page.addInitScript(
+        ({ locale: nextLocale, theme: nextTheme }) => {
+          window.localStorage.setItem("argus.locale", nextLocale);
+          window.localStorage.setItem("argus.theme", nextTheme);
+        },
+        { locale, theme },
+      );
+      const expectAppearance = async () => {
+        await expect(page.locator("html")).toHaveAttribute("lang", locale);
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await expectNoSeriousAccessibilityViolations(page);
+      };
+
+      await page.goto("/login");
+      await expectAppearance();
+      await page.locator('input[autocomplete="username"]').fill("root");
+      await page.locator('input[autocomplete="current-password"]').fill("123456");
+      await page.locator('form button[type="submit"]').click();
+      await expect(page).not.toHaveURL(/\/login/);
+      await expectAppearance();
+      await page.goto("/hosts");
+      await expectAppearance();
+      await page.goto("/settings/org");
+      await expectAppearance();
+
+      await page.goto("http://127.0.0.1:4174/login");
+      await expectAppearance();
+      await page.locator('input[autocomplete="username"]').fill("admin");
+      await page.locator('input[autocomplete="current-password"]').fill("123456");
+      await page.locator('form button[type="submit"]').click();
+      await expect(page).toHaveURL("http://127.0.0.1:4174/");
+      await expectAppearance();
+
+      await page.goto("http://127.0.0.1:4175");
+      await expectAppearance();
+    });
+  }
+}
+
+test("setup initialized terminal opens the configured platform URL", async ({
+  page,
+}) => {
+  await page.goto("http://127.0.0.1:4175/?initialized=true");
+  await page.getByRole("button", { name: /前往登录|Go to sign in/ }).click();
+  await expect(page).toHaveURL("http://127.0.0.1:4174/login");
+});
+
+test("card runtime executes a cross-origin bridge and enforces CSP", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await page.evaluate(async () => {
+    const html = `
+      <button id="query" type="button">Query</button>
+      <button id="action" type="button">Action</button>
+      <output id="result"></output>
+      <span id="network">pending</span>
+      <script>
+        document.getElementById("query").onclick = async () => {
+          const result = await window.argusCard.query("query-1");
+          document.getElementById("result").textContent = result.answer;
+        };
+        document.getElementById("action").onclick = async () => {
+          const result = await window.argusCard.action("action-1");
+          document.getElementById("result").textContent = result.status;
+        };
+        fetch("http://127.0.0.1:4173/csp-probe")
+          .then(() => document.getElementById("network").textContent = "escaped")
+          .catch(() => document.getElementById("network").textContent = "blocked");
+      </script>`;
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(html),
+    );
+    const hash = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    const iframe = document.createElement("iframe");
+    iframe.id = "bridge-card";
+    iframe.sandbox.add("allow-scripts");
+    iframe.sandbox.add("allow-same-origin");
+    iframe.src =
+      "http://127.0.0.1:4176/?parent_origin=" +
+      encodeURIComponent(window.location.origin);
+    document.body.append(iframe);
+    await new Promise<void>((resolve) => iframe.addEventListener("load", () => resolve(), { once: true }));
+    const channel = new MessageChannel();
+    const nonce = "nonce-1234567890";
+    let hostSequence = 1;
+    const messages: unknown[] = [];
+    await new Promise<void>((resolve) => {
+      channel.port1.onmessage = (event) => {
+        const message = event.data as {
+          type: string;
+          payload: Record<string, unknown>;
+        };
+        messages.push(message);
+        if (message.type === "query.invoke" || message.type === "action.invoke") {
+          hostSequence += 1;
+          channel.port1.postMessage({
+            bridge_version: "argus.card_bridge/v1",
+            message_id: `host-${hostSequence}`,
+            nonce,
+            sequence: hostSequence,
+            type: "binding.result",
+            payload: {
+              request_id: message.payload.request_id,
+              ok: true,
+              data:
+                message.type === "query.invoke"
+                  ? { answer: "query-ok" }
+                  : { status: "action-ok" },
+            },
+          });
+        }
+        if (message.type === "card.ready" || message.type === "bridge.error") {
+          resolve();
+        }
+      };
+      channel.port1.start();
+      iframe.contentWindow!.postMessage(
+        {
+          bridge_version: "argus.card_bridge/v1",
+          message_id: "hello-1",
+          nonce,
+          sequence: 1,
+          type: "host.hello",
+          payload: {
+            html,
+            entrypoint_hash: `sha256:${hash}`,
+            allowed_resources: ["inline_script"],
+            max_message_bytes: 1024 * 1024,
+            locale: "zh-CN",
+            color_scheme: "dark",
+            render_plan: {
+              schema_version: "argus.render_plan/v1",
+              card_id: "card-e2e",
+              card_revision: 1,
+              card_instance_id: "instance-e2e",
+              data_bindings: [],
+              query_binding_ids: { list: "query-1" },
+              action_binding_ids: { commit: "action-1" },
+              locale: "zh-CN",
+              color_scheme: "dark",
+            },
+            initial_data: {},
+          },
+        },
+        "http://127.0.0.1:4176",
+        [channel.port2],
+      );
+    });
+    const state = window as typeof window & {
+      __cardMessages?: unknown[];
+      __sendCardContext?: () => void;
+    };
+    state.__cardMessages = messages;
+    state.__sendCardContext = () => {
+      hostSequence += 1;
+      channel.port1.postMessage({
+        bridge_version: "argus.card_bridge/v1",
+        message_id: `host-${hostSequence}`,
+        nonce,
+        sequence: hostSequence,
+        type: "host.context",
+        payload: { locale: "en-US", color_scheme: "light", design_tokens: {} },
+      });
+    };
+  });
+
+  const card = page.frameLocator("#bridge-card");
+  const handshakeMessages = await page.evaluate(
+    () =>
+      (window as typeof window & { __cardMessages?: Array<{ type?: string; payload?: unknown }> })
+        .__cardMessages ?? [],
+  );
+  expect(handshakeMessages.find((message) => message.type === "bridge.error"))
+    .toBeUndefined();
+  await card.getByRole("button", { name: "Query" }).click();
+  await expect(card.locator("#result")).toHaveText("query-ok");
+  await card.getByRole("button", { name: "Action" }).click();
+  await expect(card.locator("#result")).toHaveText("action-ok");
+  await expect(card.locator("#network")).toHaveText("blocked");
+  await page.evaluate(() => {
+    (window as typeof window & { __sendCardContext?: () => void })
+      .__sendCardContext?.();
+  });
+  await expect(card.locator("html")).toHaveAttribute("lang", "en-US");
+  await expect(card.locator("html")).toHaveAttribute(
+    "data-color-scheme",
+    "light",
+  );
+  const messages = await page.evaluate(
+    () =>
+      (window as typeof window & { __cardMessages?: Array<{ payload?: unknown }> })
+        .__cardMessages ?? [],
+  );
+  expect(messages.some((message) =>
+    JSON.stringify(message.payload).includes("params"),
+  )).toBe(false);
+});
+
+test("card runtime rejects a wrong parent origin and entrypoint hash", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  const result = await page.evaluate(async () => {
+    const makeFrame = async (id: string, parentOrigin: string) => {
+      const iframe = document.createElement("iframe");
+      iframe.id = id;
+      iframe.sandbox.add("allow-scripts");
+      iframe.sandbox.add("allow-same-origin");
+      iframe.src =
+        "http://127.0.0.1:4176/?parent_origin=" +
+        encodeURIComponent(parentOrigin);
+      document.body.append(iframe);
+      await new Promise<void>((resolve) =>
+        iframe.addEventListener("load", () => resolve(), { once: true }),
+      );
+      return iframe;
+    };
+    const hello = (entrypointHash: string) => ({
+      bridge_version: "argus.card_bridge/v1",
+      message_id: "hello-security",
+      nonce: "nonce-1234567890",
+      sequence: 1,
+      type: "host.hello",
+      payload: {
+        html: '<p id="trusted">trusted</p>',
+        entrypoint_hash: entrypointHash,
+        allowed_resources: [],
+        max_message_bytes: 1024 * 1024,
+        locale: "zh-CN",
+        color_scheme: "dark",
+        render_plan: {
+          schema_version: "argus.render_plan/v1",
+          card_id: "card-security",
+          card_revision: 1,
+          card_instance_id: "instance-security",
+          data_bindings: [],
+          query_binding_ids: {},
+          action_binding_ids: {},
+          locale: "zh-CN",
+          color_scheme: "dark",
+        },
+        initial_data: {},
+      },
+    });
+
+    const wrongOrigin = await makeFrame("wrong-origin-card", "https://evil.example.test");
+    const ignoredChannel = new MessageChannel();
+    let originMessage = false;
+    ignoredChannel.port1.onmessage = () => { originMessage = true; };
+    ignoredChannel.port1.start();
+    wrongOrigin.contentWindow!.postMessage(
+      hello(`sha256:${"0".repeat(64)}`),
+      "http://127.0.0.1:4176",
+      [ignoredChannel.port2],
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const wrongHash = await makeFrame("wrong-hash-card", window.location.origin);
+    const hashChannel = new MessageChannel();
+    const hashError = await new Promise<string | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), 1000);
+      hashChannel.port1.onmessage = (event) => {
+        const message = event.data as {
+          type?: string;
+          payload?: { code?: string };
+        };
+        if (message.type === "bridge.error") {
+          clearTimeout(timer);
+          resolve(message.payload?.code ?? null);
+        }
+      };
+      hashChannel.port1.start();
+      wrongHash.contentWindow!.postMessage(
+        hello(`sha256:${"0".repeat(64)}`),
+        "http://127.0.0.1:4176",
+        [hashChannel.port2],
+      );
+    });
+    return { originMessage, hashError };
+  });
+  expect(result).toEqual({
+    originMessage: false,
+    hashError: "ENTRYPOINT_HASH_MISMATCH",
+  });
+});
+
 test("protected routes redirect to login and login redirects back", async ({
   page,
 }) => {
@@ -38,14 +342,16 @@ test("chat shell lists conversations and links to the admin console", async ({
   await login(page);
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("button", { name: "新建会话" })).toBeVisible();
-  const accountRightGap = await page.locator(".topbar").evaluate((topbar) => {
-    const actions = topbar.querySelector(".topbar__actions");
-    if (!actions) return Number.POSITIVE_INFINITY;
-    return Math.round(
-      topbar.getBoundingClientRect().right -
-        actions.getBoundingClientRect().right,
-    );
-  });
+  const accountRightGap = await page
+    .locator(".argus-topbar")
+    .evaluate((topbar) => {
+      const actions = topbar.querySelector(".argus-topbar__actions");
+      if (!actions) return Number.POSITIVE_INFINITY;
+      return Math.round(
+        topbar.getBoundingClientRect().right -
+          actions.getBoundingClientRect().right,
+      );
+    });
   expect(accountRightGap).toBe(20);
   await page.getByRole("link", { name: "进入管理后台" }).click();
   await expect(page).toHaveURL(/\/hosts$/);
@@ -77,7 +383,7 @@ test("platform and enterprise accounts stay in their own portals", async ({
   await expect(page.getByRole("link", { name: "OpenSandbox" })).toBeVisible();
   await expect(page.getByText("platform_super_admin")).toBeVisible();
   const platformPadding = await page
-    .locator(".page-content")
+    .locator(".argus-page-content")
     .evaluate((element) =>
       Number.parseFloat(window.getComputedStyle(element).paddingLeft),
     );
@@ -92,7 +398,10 @@ test("enterprise identity has no enterprise switcher", async ({ page }) => {
 });
 
 test("component demo is reachable in dev mode", async ({ page }) => {
-  test.skip(Boolean(process.env.ARGUS_E2E_EXTERNAL), "dev-only route is not shipped in the production image");
+  test.skip(
+    Boolean(process.env.ARGUS_E2E_EXTERNAL),
+    "dev-only route is not shipped in the production image",
+  );
   await login(page);
   await page.goto("/demo");
   await expect(
@@ -495,39 +804,6 @@ test("tasks: list renders and the detail drawer opens", async ({ page }) => {
   await expect(drawer.getByText("日志")).toBeVisible();
 });
 
-test("org projects tab: create a project and edit its description", async ({
-  page,
-}) => {
-  await login(page);
-  await page.goto("/settings/org");
-  await page.getByRole("tab", { name: "项目" }).click();
-
-  await page.getByRole("button", { name: "新建项目" }).click();
-  const drawer = page.getByRole("dialog", { name: "新建项目" });
-  await expect(drawer).toBeVisible();
-  await drawer.getByLabel("名称").fill("E2E 项目");
-  await drawer.getByLabel("描述").fill("端到端测试项目");
-  await drawer.getByRole("button", { name: "提交" }).click();
-  await expect(drawer).not.toBeVisible();
-
-  const row = page.getByRole("row", { name: /E2E 项目/ });
-  await expect(row).toBeVisible();
-  await expect(row.getByText("端到端测试项目")).toBeVisible();
-
-  await row.getByRole("button", { name: "编辑" }).click();
-  const editDrawer = page.getByRole("dialog", { name: "编辑项目" });
-  await expect(editDrawer).toBeVisible();
-  await expect(editDrawer.getByLabel("名称")).toHaveValue("E2E 项目");
-  await editDrawer.getByLabel("描述").fill("端到端测试项目（已更新）");
-  await editDrawer.getByRole("button", { name: "提交" }).click();
-  await expect(editDrawer).not.toBeVisible();
-  await expect(
-    page
-      .getByRole("row", { name: /E2E 项目/ })
-      .getByText("端到端测试项目（已更新）"),
-  ).toBeVisible();
-});
-
 test("org bindings tab: grant, reflect on users tab, and revoke", async ({
   page,
 }) => {
@@ -542,37 +818,50 @@ test("org bindings tab: grant, reflect on users tab, and revoke", async ({
   // 主体（主体类型默认为用户）：李娜。
   await drawer.getByRole("combobox").nth(1).click();
   await page.getByRole("option", { name: /李娜/ }).click();
-  // 角色：project_operator。
+  // 角色：resource_operator，并绑定非生产资源数据范围。
   await drawer.getByRole("combobox").nth(2).click();
-  await page.getByRole("option", { name: "project_operator" }).click();
-  // 范围类型切到项目后出现项目下拉，选择默认项目。
-  await drawer.getByRole("combobox").nth(3).click();
-  await page.getByRole("option", { name: "项目" }).click();
-  await drawer.getByRole("combobox").nth(4).click();
-  await page.getByRole("option", { name: "默认项目" }).click();
-
+  await page.getByRole("option", { name: "resource_operator" }).click();
   await drawer.getByRole("button", { name: "提交" }).click();
   await expect(drawer).not.toBeVisible();
 
-  const row = page.getByRole("row", { name: /李娜.*project_operator/ });
+  const row = page.getByRole("row", { name: /李娜.*resource_operator/ });
   await expect(row).toBeVisible();
 
   // 用户 tab 的角色 Badge 由 RoleBinding 派生，应同步出现。
   await page.getByRole("tab", { name: "用户" }).click();
   const userRow = page.getByRole("row", { name: /李娜/ });
-  await expect(userRow.getByText("project_operator")).toBeVisible();
+  await expect(userRow.getByText("resource_operator")).toBeVisible();
 
   // 回到授权 tab 删除该绑定。
   await page.getByRole("tab", { name: "授权绑定" }).click();
   await page
-    .getByRole("row", { name: /李娜.*project_operator/ })
+    .getByRole("row", { name: /李娜.*resource_operator/ })
     .getByRole("button", { name: "删除" })
     .click();
   const dialog = page.getByRole("dialog", { name: "删除授权绑定" });
   await dialog.getByRole("button", { name: "确认" }).click();
   await expect(
-    page.getByRole("row", { name: /李娜.*project_operator/ }),
+    page.getByRole("row", { name: /李娜.*resource_operator/ }),
   ).toHaveCount(0);
+});
+
+test("org data scopes persist structured label requirements", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/org");
+  await page.getByRole("tab", { name: "数据权限" }).click();
+  await page.getByRole("button", { name: "新建数据权限" }).click();
+
+  const drawer = page.getByRole("dialog", { name: "新建数据权限范围" });
+  await drawer.getByLabel("名称").fill("生产主机范围 E2E");
+  await drawer.locator(".argus-settings-check-option").first().click();
+  await drawer.locator(".argus-settings-selector-list .argus-button").click();
+  await drawer.getByLabel("标签键").fill("environment");
+  await drawer.getByLabel("标签值，多个值用逗号分隔").fill("production");
+  await drawer.getByRole("button", { name: "提交" }).click();
+
+  const row = page.getByRole("row", { name: /生产主机范围 E2E/ });
+  await expect(row).toContainText("主机");
+  await expect(row).toContainText("environment eq (production)");
 });
 
 test("org role drawer: permission matrix uses credential, not secret", async ({
@@ -591,13 +880,11 @@ test("org role drawer: permission matrix uses credential, not secret", async ({
   await expect(resources.filter({ hasText: /^secret$/ })).toHaveCount(0);
 
   // has 的内部定位器会以行元素为根重新求值，不能从 drawer 起链。
-  const credentialRow = drawer
-    .locator(".argus-perm-matrix__row")
-    .filter({
-      has: page.locator(".argus-perm-matrix__resource", {
-        hasText: /^credential$/,
-      }),
-    });
+  const credentialRow = drawer.locator(".argus-perm-matrix__row").filter({
+    has: page.locator(".argus-perm-matrix__resource", {
+      hasText: /^credential$/,
+    }),
+  });
   await expect(
     credentialRow.getByRole("checkbox", { name: "manage" }),
   ).toBeVisible();

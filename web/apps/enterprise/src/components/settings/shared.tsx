@@ -14,27 +14,41 @@ export const PERMISSION_CATALOG: Array<{
   resource: string;
   actions: string[];
 }> = [
-  { resource: "project", actions: ["read", "create", "update", "member.manage"] },
   { resource: "connector", actions: ["read", "create", "rotate_credential"] },
   { resource: "bastion_scope", actions: ["read", "create", "manage"] },
-  { resource: "host", actions: ["read", "create", "update", "connection.test", "direct_connect"] },
+  {
+    resource: "host",
+    actions: ["read", "create", "update", "connection.test", "direct_connect"],
+  },
   { resource: "automation.command", actions: ["execute"] },
   { resource: "automation.template", actions: ["execute"] },
   { resource: "remote_access", actions: ["request"] },
-  { resource: "remote_access.session", actions: ["create", "approve", "terminate"] },
+  {
+    resource: "remote_access.session",
+    actions: ["create", "approve", "terminate"],
+  },
   { resource: "remote_access.recording", actions: ["read"] },
   { resource: "kubernetes.cluster", actions: ["read", "create"] },
   { resource: "kubernetes.pod", actions: ["read"] },
   { resource: "kubernetes.workload", actions: ["restart"] },
-  { resource: "telemetry", actions: ["read", "live_tail", "export", "sensitive_fields.read"] },
+  {
+    resource: "telemetry",
+    actions: ["read", "live_tail", "export", "sensitive_fields.read"],
+  },
   { resource: "telemetry.query", actions: ["metrics", "logs", "traces"] },
   { resource: "telemetry.alert", actions: ["manage"] },
   { resource: "telemetry.dashboard", actions: ["manage"] },
-  { resource: "telemetry.collector", actions: ["read", "install", "configure", "upgrade", "uninstall"] },
+  {
+    resource: "telemetry.collector",
+    actions: ["read", "install", "configure", "upgrade", "uninstall"],
+  },
   { resource: "telemetry.gateway", actions: ["manage"] },
   { resource: "credential", actions: ["manage", "use", "reveal"] },
   { resource: "audit", actions: ["read"] },
-  { resource: "interactive_card", actions: ["read", "create", "update", "delete", "publish"] },
+  {
+    resource: "interactive_card",
+    actions: ["read", "create", "update", "delete", "publish"],
+  },
   { resource: "ai_model", actions: ["read", "manage"] },
   { resource: "model_quota", actions: ["read", "manage"] },
   { resource: "model_usage", actions: ["read"] },
@@ -91,11 +105,15 @@ export function PermissionMatrix({
       </div>
       <div
         className="argus-perm-matrix"
-        style={fullAccess ? { opacity: 0.45, pointerEvents: "none" } : undefined}
+        style={
+          fullAccess ? { opacity: 0.45, pointerEvents: "none" } : undefined
+        }
       >
         {PERMISSION_CATALOG.map((group) => (
           <div className="argus-perm-matrix__row" key={group.resource}>
-            <span className="argus-perm-matrix__resource">{group.resource}</span>
+            <span className="argus-perm-matrix__resource">
+              {group.resource}
+            </span>
             <div className="argus-perm-matrix__cells">
               {group.actions.map((action) => {
                 const permission = `${group.resource}.${action}`;

@@ -6,7 +6,7 @@ import {
   type BastionScope,
   type CollectorInstallState,
   type Host,
-  type PendingAction,
+  type PendingActionPublic,
 } from "@argus/api-client";
 import {
   Badge,
@@ -105,7 +105,7 @@ function ConnectorCard({
     if (confirming) return;
     setConfirming(true);
     try {
-      // rotateCertificate 为单步写操作（无独立 PendingAction），
+      // rotateCertificate 为单步写操作（无独立 PendingActionPublic），
       // 用 PreviewCommitCard 呈现确认流程后直接执行。
       await api.connectors.rotateCertificate(connector.id);
       setRotateStatus("success");
@@ -222,9 +222,8 @@ export function CollectorInstallWizard({
   const [route, setRoute] = useState("direct_argus");
   const [routeTested, setRouteTested] = useState(false);
   const [routeTesting, setRouteTesting] = useState(false);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(
-    null,
-  );
+  const [pendingAction, setPendingAction] =
+    useState<PendingActionPublic | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const scope = scopeOf(host, scopes);
@@ -419,8 +418,12 @@ function CollectorCard({
   const [draft, setDraft] = useState<Record<CapabilityKey, boolean> | null>(
     null,
   );
-  const [configAction, setConfigAction] = useState<PendingAction | null>(null);
-  const [routeAction, setRouteAction] = useState<PendingAction | null>(null);
+  const [configAction, setConfigAction] = useState<PendingActionPublic | null>(
+    null,
+  );
+  const [routeAction, setRouteAction] = useState<PendingActionPublic | null>(
+    null,
+  );
   const [routeChoice, setRouteChoice] = useState("direct_argus");
   const [routeTested, setRouteTested] = useState(false);
   const [routeTesting, setRouteTesting] = useState(false);
@@ -476,7 +479,7 @@ function CollectorCard({
           title: t("hosts.components.installed.configureTitle", {
             name: host.name,
           }),
-          params: {
+          input_data: {
             hostId: host.id,
             profile: profileFromCapabilities(effective),
           },
@@ -497,7 +500,7 @@ function CollectorCard({
           title: t("hosts.components.installed.routeTitle", {
             name: host.name,
           }),
-          params: {
+          input_data: {
             hostId: host.id,
             route: routeChoice,
           },

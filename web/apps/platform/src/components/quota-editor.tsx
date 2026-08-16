@@ -2,14 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useApi, type EnterpriseSandboxQuota } from "@argus/api-client";
-import {
-  Alert,
-  Button,
-  Field,
-  Input,
-  Spinner,
-  useUiText,
-} from "@argus/ui";
+import { Alert, Button, Field, Input, Spinner, useUiText } from "@argus/ui";
 
 /**
  * 企业 Sandbox 配额编辑器（企业管理详情抽屉与 OpenSandbox 企业配额 Tab 共用）。
@@ -90,11 +83,11 @@ export function QuotaEditor({ enterpriseId }: { enterpriseId: string }) {
   };
 
   return (
-    <div className="quota-editor">
+    <div className="argus-quota-editor">
       <Field label={t("enterprises.quota.allowedProfiles")}>
-        <div className="quota-editor__profiles">
+        <div className="argus-quota-editor__profiles">
           {(profiles.data ?? []).map((profile) => (
-            <label className="quota-editor__profile" key={profile.id}>
+            <label className="argus-quota-editor__profile" key={profile.id}>
               <input
                 checked={draft.allowedProfiles.includes(profile.id)}
                 onChange={(event) =>
@@ -107,7 +100,7 @@ export function QuotaEditor({ enterpriseId }: { enterpriseId: string }) {
           ))}
         </div>
       </Field>
-      <div className="form-grid">
+      <div className="argus-form-grid">
         {numberField(
           t("enterprises.quota.maxConcurrentSessions"),
           "maxConcurrentSessions",

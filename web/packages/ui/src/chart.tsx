@@ -38,6 +38,7 @@ export function MetricChart({
   formatValue = defaultFormat,
   showLegend,
   className,
+  ariaLabel,
 }: {
   type?: MetricChartType;
   series: MetricChartSeries[];
@@ -46,6 +47,7 @@ export function MetricChart({
   formatValue?: (value: number) => string;
   showLegend?: boolean;
   className?: string;
+  ariaLabel?: string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
@@ -121,6 +123,9 @@ export function MetricChart({
             role="img"
             width={width}
           >
+            <title>
+              {ariaLabel ?? series.map((item) => item.name).join(", ")}
+            </title>
             {ticks.map((tick, index) => (
               <g key={index}>
                 <line

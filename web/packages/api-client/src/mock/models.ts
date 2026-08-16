@@ -21,8 +21,8 @@ function compatibility(now: string, ok: boolean): ModelCompatibilityResult {
 
 export function createModelsDomain(ctx: MockContext): ArgusApiClient["models"] {
   const { db } = ctx;
-  const currentMembership = () =>
-    db.memberships.find((entry) => entry.userId === ctx.actor().id);
+  const currentEnterpriseUser = () =>
+    db.enterpriseUsers.find((entry) => entry.userId === ctx.actor().id);
   const permissions = () =>
     resolvePermissions(db, ctx.enterpriseId(), ctx.actor().id, ctx.nowIso());
   const isEnterpriseAdmin = () => permissions().has("*");
@@ -121,20 +121,20 @@ export function createModelsDomain(ctx: MockContext): ArgusApiClient["models"] {
     },
     async listAvailability() {
       await ctx.pause();
-      const membership = currentMembership();
-      if (!membership) return [];
+      const enterpriseUser = currentEnterpriseUser();
+      if (!enterpriseUser) return [];
       return db.models
         .filter((model) => model.enterpriseId === ctx.enterpriseId())
         .map((model) => {
           const points = usageFor(model.id);
           const departmentQuota = db.modelQuotas.find(
-            (q) => q.modelId === model.id && q.subjectType === "department" && q.subjectId === membership.departmentId,
+            (q) => q.modelId === model.id && q.subjectType === "department" && q.subjectId === enterpriseUser.departmentId,
           );
           const userQuota = db.modelQuotas.find(
-            (q) => q.modelId === model.id && q.subjectType === "user" && q.subjectId === membership.userId,
+            (q) => q.modelId === model.id && q.subjectType === "user" && q.subjectId === enterpriseUser.userId,
           );
-          const departmentUsed = sumAmount(points.filter((p) => p.departmentId === membership.departmentId));
-          const userUsed = sumAmount(points.filter((p) => p.userId === membership.userId));
+          const departmentUsed = sumAmount(points.filter((p) => p.departmentId === enterpriseUser.departmentId));
+          const userUsed = sumAmount(points.filter((p) => p.userId === enterpriseUser.userId));
           const departmentRemaining = departmentQuota ? Math.max(0, departmentQuota.monthlyAmount - departmentUsed) : undefined;
           const userRemaining = userQuota ? Math.max(0, userQuota.monthlyAmount - userUsed) : undefined;
           let reason: import("../types").ModelAvailability["reason"];
@@ -148,18 +148,18 @@ export function createModelsDomain(ctx: MockContext): ArgusApiClient["models"] {
     },
     async listQuotas(modelId) {
       await ctx.pause();
-      const membership = currentMembership();
+      const enterpriseUser = currentEnterpriseUser();
       let quotas = db.modelQuotas.filter(
         (quota) => quota.enterpriseId === ctx.enterpriseId() && (!modelId || quota.modelId === modelId),
       );
       if (!isEnterpriseAdmin()) {
-        if (!membership || !isDepartmentAdmin()) return [];
+        if (!enterpriseUser || !isDepartmentAdmin()) return [];
         const memberIds = new Set(
-          db.memberships.filter((entry) => entry.departmentId === membership.departmentId).map((entry) => entry.userId),
+          db.enterpriseUsers.filter((entry) => entry.departmentId === enterpriseUser.departmentId).map((entry) => entry.userId),
         );
         quotas = quotas.filter(
           (quota) =>
-            (quota.subjectType === "department" && quota.subjectId === membership.departmentId) ||
+            (quota.subjectType === "department" && quota.subjectId === enterpriseUser.departmentId) ||
             (quota.subjectType === "user" && memberIds.has(quota.subjectId)),
         );
       }
@@ -167,15 +167,15 @@ export function createModelsDomain(ctx: MockContext): ArgusApiClient["models"] {
     },
     async setQuota(input) {
       await ctx.pause();
-      const membership = currentMembership();
+      const enterpriseUser = currentEnterpriseUser();
       if (input.subjectType === "department" && !isEnterpriseAdmin()) throw new Error("forbidden");
       if (input.subjectType === "user" && !isEnterpriseAdmin()) {
-        if (!membership || !isDepartmentAdmin()) throw new Error("forbidden");
-        const target = db.memberships.find((entry) => entry.userId === input.subjectId);
-        if (!target || target.departmentId !== membership.departmentId) throw new Error("cross-department quota denied");
+        if (!enterpriseUser || !isDepartmentAdmin()) throw new Error("forbidden");
+        const target = db.enterpriseUsers.find((entry) => entry.userId === input.subjectId);
+        if (!target || target.departmentId !== enterpriseUser.departmentId) throw new Error("cross-department quota denied");
       }
       if (input.subjectType === "user" && input.monthlyAmount !== undefined) {
-        const target = db.memberships.find((entry) => entry.userId === input.subjectId);
+        const target = db.enterpriseUsers.find((entry) => entry.userId === input.subjectId);
         const departmentQuota = db.modelQuotas.find(
           (quota) => quota.modelId === input.modelId && quota.subjectType === "department" && quota.subjectId === target?.departmentId,
         );
@@ -214,14 +214,14 @@ export function createModelsDomain(ctx: MockContext): ArgusApiClient["models"] {
       await ctx.pause();
       const from = range?.from ?? "0000-00-00";
       const to = range?.to ?? "9999-99-99";
-      const membership = currentMembership();
+      const enterpriseUser = currentEnterpriseUser();
       let points = db.usagePoints.filter(
         (point) => point.date >= from && point.date <= to && (!range?.modelId || point.modelId === range.modelId),
       );
-      if (!isEnterpriseAdmin() && membership) {
+      if (!isEnterpriseAdmin() && enterpriseUser) {
         points = isDepartmentAdmin()
-          ? points.filter((point) => point.departmentId === membership.departmentId)
-          : points.filter((point) => point.userId === membership.userId);
+          ? points.filter((point) => point.departmentId === enterpriseUser.departmentId)
+          : points.filter((point) => point.userId === enterpriseUser.userId);
       }
       const totalRequests = points.reduce((sum, point) => sum + point.requestCount, 0);
       const successCount = points.reduce((sum, point) => sum + point.successCount, 0);

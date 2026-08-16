@@ -6,7 +6,7 @@
   width: 1px;
   height: 1px;
   padding: 0;
-  margin: -1px;
+  margin: calc(var(--space-px-1) * -1);
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
@@ -16,7 +16,7 @@
 .argus-appearance-controls {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-px-2);
 }
 
 .argus-button {
@@ -25,8 +25,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  font: 600 13px/1 var(--font-sans);
+  gap: var(--space-px-7);
+  font: 600 var(--font-size-13)/1 var(--font-sans);
   cursor: pointer;
   transition: var(--motion-fast);
   white-space: nowrap;
@@ -44,8 +44,8 @@
 }
 .argus-button--primary {
   background: var(--accent);
-  color: white;
-  box-shadow: 0 1px 0 rgb(255 255 255 / 12%) inset;
+  color: var(--text-inverse);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--overlay-white) 12%, transparent) inset;
 }
 .argus-button--primary:hover:not(:disabled) {
   background: var(--accent-hover);
@@ -70,24 +70,24 @@
 }
 .argus-button--danger {
   background: var(--danger-soft);
-  border-color: rgb(220 117 107 / 25%);
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
   color: var(--danger);
 }
 .argus-button--danger:hover:not(:disabled) {
-  background: rgb(220 117 107 / 17%);
+  background: color-mix(in srgb, var(--danger) 17%, transparent);
 }
 .argus-button--sm {
   min-height: 30px;
-  padding: 0 11px;
-  font-size: 12px;
+  padding: 0 var(--space-px-11);
+  font-size: var(--font-size-12);
 }
 .argus-button--md {
   min-height: 36px;
-  padding: 0 15px;
+  padding: 0 var(--space-px-15);
 }
 .argus-button--lg {
   min-height: 42px;
-  padding: 0 18px;
+  padding: 0 var(--space-px-18);
 }
 .argus-button--icon {
   width: 34px;
@@ -99,17 +99,17 @@
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  gap: 6px;
+  gap: var(--space-px-6);
   border: 1px solid;
-  border-radius: 999px;
-  padding: 3px 8px;
-  font: 600 10.5px/1.25 var(--font-sans);
+  border-radius: var(--radius-pill);
+  padding: var(--space-px-3) var(--space-px-8);
+  font: 600 10.var(--font-size-5)/1.25 var(--font-sans);
   white-space: nowrap;
 }
 .argus-badge--dot > i {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: currentColor;
   box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 14%, transparent);
 }
@@ -119,28 +119,28 @@
   background: var(--bg-elevated);
 }
 .argus-badge--accent {
-  color: #e59a7f;
-  border-color: rgb(220 118 84 / 28%);
+  color: var(--brand-highlight);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   background: var(--accent-soft);
 }
 .argus-badge--success {
   color: var(--success);
-  border-color: rgb(140 173 111 / 27%);
+  border-color: color-mix(in srgb, var(--success) 27%, transparent);
   background: var(--success-soft);
 }
 .argus-badge--warning {
   color: var(--warning);
-  border-color: rgb(213 161 91 / 27%);
+  border-color: color-mix(in srgb, var(--warning) 27%, transparent);
   background: var(--warning-soft);
 }
 .argus-badge--danger {
   color: var(--danger);
-  border-color: rgb(220 117 107 / 27%);
+  border-color: color-mix(in srgb, var(--danger) 27%, transparent);
   background: var(--danger-soft);
 }
 .argus-badge--info {
   color: var(--info);
-  border-color: rgb(124 159 200 / 27%);
+  border-color: color-mix(in srgb, var(--info) 27%, transparent);
   background: var(--info-soft);
 }
 
@@ -153,40 +153,40 @@
 }
 .argus-card__header {
   min-height: 60px;
-  padding: 14px 17px;
+  padding: var(--space-px-14) var(--space-px-17);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-px-16);
 }
 .argus-card__heading {
   min-width: 0;
 }
 .argus-card__title {
   color: var(--text-primary);
-  font-size: 13.5px;
+  font-size: 13.var(--font-size-5);
   font-weight: 650;
 }
 .argus-card__description {
   color: var(--text-tertiary);
-  font-size: 11.5px;
-  margin-top: 4px;
+  font-size: 11.var(--font-size-5);
+  margin-top: var(--space-px-4);
 }
 .argus-card__action {
   margin-left: auto;
   flex-shrink: 0;
 }
 .argus-card__content {
-  padding: 17px;
+  padding: var(--space-px-17);
 }
 .argus-card__footer {
   min-height: 52px;
-  padding: 11px 17px;
-  background: rgb(0 0 0 / 8%);
+  padding: var(--space-px-11) var(--space-px-17);
+  background: color-mix(in srgb, var(--overlay-black) 8%, transparent);
   border-top: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-px-9);
 }
 
 .argus-input,
@@ -196,15 +196,15 @@
   border-radius: var(--radius-sm);
   background: var(--bg-canvas);
   color: var(--text-primary);
-  font: 400 13px/1.5 var(--font-sans);
+  font: 400 var(--font-size-13)/1.5 var(--font-sans);
   transition: var(--motion-fast);
 }
 .argus-input {
   height: 38px;
-  padding: 0 11px;
+  padding: 0 var(--space-px-11);
 }
 .argus-textarea {
-  padding: 10px 11px;
+  padding: var(--space-px-10) var(--space-px-11);
   min-height: 88px;
   resize: vertical;
 }
@@ -218,16 +218,16 @@
 }
 .argus-field {
   display: grid;
-  gap: 7px;
+  gap: var(--space-px-7);
 }
 .argus-field__label {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 600;
 }
 .argus-field__hint {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-field__hint.is-error {
   color: var(--danger);
@@ -237,7 +237,7 @@
   height: 20px;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-muted);
   position: relative;
   cursor: pointer;
@@ -247,7 +247,7 @@
   position: absolute;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   left: 3px;
   top: 3px;
   background: var(--text-tertiary);
@@ -258,7 +258,7 @@
 }
 .argus-switch.is-on > span:first-child {
   transform: translateX(16px);
-  background: white;
+  background: var(--text-inverse);
 }
 
 .argus-avatar {
@@ -266,25 +266,25 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: var(--accent-soft);
-  border: 1px solid rgb(220 118 84 / 24%);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
   flex-shrink: 0;
 }
 .argus-avatar--sm {
   width: 26px;
   height: 26px;
-  font-size: 10px;
+  font-size: var(--font-size-10);
 }
 .argus-avatar--md {
   width: 32px;
   height: 32px;
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-avatar--lg {
   width: 42px;
   height: 42px;
-  font-size: 14px;
+  font-size: var(--font-size-14);
 }
 .argus-avatar__image {
   width: 100%;
@@ -292,25 +292,25 @@
   object-fit: cover;
 }
 .argus-avatar__fallback {
-  color: #e59a7f;
+  color: var(--brand-highlight);
   font-weight: 700;
 }
 
 .argus-tabs {
   display: inline-flex;
-  gap: 3px;
-  padding: 3px;
+  gap: var(--space-px-3);
+  padding: var(--space-px-3);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
 }
 .argus-tabs__trigger {
   border: 0;
-  border-radius: 7px;
-  padding: 7px 12px;
+  border-radius: var(--radius-7);
+  padding: var(--space-px-7) var(--space-px-12);
   background: transparent;
   color: var(--text-tertiary);
-  font: 600 12px var(--font-sans);
+  font: 600 var(--font-size-12) var(--font-sans);
   cursor: pointer;
 }
 .argus-tabs__trigger:hover {
@@ -323,19 +323,19 @@
 }
 .argus-tabs__content {
   outline: none;
-  margin-top: 15px;
+  margin-top: var(--space-px-15);
 }
 
 .argus-tooltip {
   z-index: 100;
   max-width: 260px;
-  padding: 7px 9px;
+  padding: var(--space-px-7) var(--space-px-9);
   border: 1px solid var(--border-default);
-  border-radius: 7px;
+  border-radius: var(--radius-7);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-tooltip__arrow {
   fill: var(--bg-elevated);
@@ -345,7 +345,7 @@
   position: fixed;
   z-index: 80;
   inset: 0;
-  background: rgb(0 0 0 / 60%);
+  background: color-mix(in srgb, var(--overlay-black) 60%, transparent);
   backdrop-filter: blur(4px);
   animation: argus-fade-in var(--motion-normal);
 }
@@ -366,26 +366,26 @@
 .argus-dialog__top {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
-  padding: 19px 20px 16px;
+  gap: var(--space-px-16);
+  padding: var(--space-px-19) var(--space-px-20) var(--space-px-16);
   border-bottom: 1px solid var(--border-subtle);
 }
 .argus-dialog__title {
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: var(--font-size-16);
   font-weight: 680;
 }
 .argus-dialog__description {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.55;
-  margin-top: 5px;
+  margin-top: var(--space-px-5);
 }
 .argus-dialog__close {
   margin-left: auto;
   border: 0;
-  border-radius: 7px;
-  padding: 5px;
+  border-radius: var(--radius-7);
+  padding: var(--space-px-5);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -395,43 +395,43 @@
   background: var(--bg-muted);
 }
 .argus-dialog__body {
-  padding: 20px;
+  padding: var(--space-px-20);
 }
 .argus-dialog__footer {
   display: flex;
   justify-content: flex-end;
-  gap: 9px;
-  padding: 13px 20px;
+  gap: var(--space-px-9);
+  padding: var(--space-px-13) var(--space-px-20);
   border-top: 1px solid var(--border-subtle);
-  background: rgb(0 0 0 / 8%);
+  background: color-mix(in srgb, var(--overlay-black) 8%, transparent);
 }
 
 .argus-dropdown {
   z-index: 100;
   min-width: 190px;
-  padding: 5px;
+  padding: var(--space-px-5);
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   box-shadow: var(--shadow-lg);
   animation: argus-fade-in var(--motion-fast);
 }
 .argus-dropdown__item {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-px-20);
   min-height: 32px;
-  padding: 0 9px;
-  border-radius: 6px;
+  padding: 0 var(--space-px-9);
+  border-radius: var(--radius-6);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   cursor: pointer;
   outline: none;
 }
 .argus-dropdown__item > kbd {
   margin-left: auto;
   color: var(--text-disabled);
-  font: 10px var(--font-mono);
+  font: var(--font-size-10) var(--font-mono);
 }
 .argus-dropdown__item[data-highlighted] {
   background: var(--bg-hover);
@@ -442,60 +442,60 @@
 }
 .argus-dropdown__separator {
   height: 1px;
-  margin: 5px;
+  margin: var(--space-px-5);
   background: var(--border-subtle);
 }
 
 .argus-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 8px;
+  gap: var(--space-px-10);
+  padding: var(--space-px-9) var(--space-px-10);
+  border-radius: var(--radius-8);
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: 12.var(--font-size-5);
 }
 .argus-menu-item > span:first-child {
   flex: 1;
 }
 .argus-menu-item.is-active {
   background: var(--accent-soft);
-  color: #e59a7f;
+  color: var(--brand-highlight);
 }
 .argus-check-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-px-9);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-check-item__box {
   width: 17px;
   height: 17px;
   border: 1px solid var(--border-default);
-  border-radius: 5px;
+  border-radius: var(--radius-5);
   display: grid;
   place-items: center;
 }
 .argus-check-item__box.is-checked {
-  color: white;
+  color: var(--text-inverse);
   background: var(--accent);
   border-color: var(--accent);
 }
 
 .argus-progress-wrap {
   display: grid;
-  gap: 7px;
+  gap: var(--space-px-7);
 }
 .argus-progress__label {
   display: flex;
   justify-content: space-between;
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: 10.var(--font-size-5);
 }
 .argus-progress {
   height: 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   overflow: hidden;
   background: var(--bg-muted);
 }
@@ -523,24 +523,24 @@
 }
 .argus-metric__label {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-metric__value {
-  margin-top: 7px;
+  margin-top: var(--space-px-7);
   color: var(--text-primary);
-  font: 680 24px/1.1 var(--font-mono);
+  font: 680 var(--font-size-24)/1.1 var(--font-mono);
   letter-spacing: -0.04em;
 }
 .argus-metric__value > small {
-  margin-left: 4px;
+  margin-left: var(--space-px-4);
   color: var(--text-tertiary);
-  font: 500 11px var(--font-sans);
+  font: 500 var(--font-size-11) var(--font-sans);
   letter-spacing: 0;
 }
 .argus-metric__change {
-  margin-top: 6px;
+  margin-top: var(--space-px-6);
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: 10.var(--font-size-5);
 }
 .argus-metric__change.is-success {
   color: var(--success);
@@ -554,22 +554,22 @@
 
 .argus-description-list {
   display: grid;
-  gap: 11px;
+  gap: var(--space-px-11);
   margin: 0;
 }
 .argus-description-list > div {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--space-px-12);
 }
 .argus-description-list dt {
   color: var(--text-tertiary);
-  font-size: 11.5px;
+  font-size: 11.var(--font-size-5);
 }
 .argus-description-list dd {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   min-width: 0;
 }
 
@@ -582,7 +582,7 @@
   min-height: 44px;
   display: grid;
   grid-template-columns: 17px 1fr;
-  gap: 10px;
+  gap: var(--space-px-10);
   position: relative;
 }
 .argus-timeline__item::before {
@@ -598,11 +598,11 @@
   display: none;
 }
 .argus-timeline__item > i {
-  margin-top: 4px;
+  margin-top: var(--space-px-4);
   width: 13px;
   height: 13px;
   border: 3px solid var(--bg-surface);
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: var(--text-disabled);
   box-shadow: 0 0 0 1px var(--border-default);
   z-index: 1;
@@ -619,19 +619,19 @@
 }
 .argus-timeline__title {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.45;
 }
 .argus-timeline__meta {
-  margin-top: 3px;
+  margin-top: var(--space-px-3);
   color: var(--text-disabled);
-  font: 10.5px var(--font-mono);
+  font: 10.var(--font-size-5) var(--font-mono);
 }
 
 .argus-empty-state {
   display: flex;
   min-height: 210px;
-  padding: 30px;
+  padding: var(--space-px-30);
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -641,22 +641,22 @@
 .argus-empty-state > svg {
   width: 28px;
   height: 28px;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-px-12);
   color: var(--text-disabled);
 }
 .argus-empty-state > strong {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
 }
 .argus-empty-state > p {
   max-width: 360px;
-  margin: 6px 0 15px;
-  font-size: 11.5px;
+  margin: var(--space-px-6) 0 var(--space-px-15);
+  font-size: 11.var(--font-size-5);
   line-height: 1.55;
 }
 .argus-skeleton {
   display: block;
-  border-radius: 5px;
+  border-radius: var(--radius-5);
   background: linear-gradient(
     90deg,
     var(--bg-muted),
@@ -669,9 +669,9 @@
 .argus-spinner {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-px-7);
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-spin {
   animation: argus-spin 0.8s linear infinite;
@@ -679,9 +679,9 @@
 .argus-divider {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-px-10);
   color: var(--text-disabled);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -701,19 +701,19 @@
   width: 100%;
   border-collapse: collapse;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-table th {
-  padding: 9px 13px;
+  padding: var(--space-px-9) var(--space-px-13);
   text-align: left;
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: 10.var(--font-size-5);
   font-weight: 600;
-  background: rgb(0 0 0 / 7%);
+  background: color-mix(in srgb, var(--overlay-black) 7%, transparent);
   border-bottom: 1px solid var(--border-subtle);
 }
 .argus-table td {
-  padding: 12px 13px;
+  padding: var(--space-px-12) var(--space-px-13);
   border-bottom: 1px solid var(--border-subtle);
   white-space: nowrap;
 }
@@ -721,7 +721,7 @@
   border-bottom: 0;
 }
 .argus-table tbody tr:hover {
-  background: rgb(255 255 255 / 1.5%);
+  background: color-mix(in srgb, var(--overlay-white) 1.5%, transparent);
 }
 .argus-table .is-right {
   text-align: right;
@@ -731,27 +731,27 @@
   align-items: center;
   justify-content: space-between;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 .argus-pagination > div {
   display: flex;
-  gap: 3px;
+  gap: var(--space-px-3);
 }
 
 .argus-code {
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   overflow: hidden;
-  background: #11100e;
+  background: var(--surface-terminal);
 }
 .argus-code__head {
   min-height: 34px;
-  padding: 0 8px 0 12px;
+  padding: 0 var(--space-px-8) 0 var(--space-px-12);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   color: var(--text-disabled);
-  font: 10px var(--font-mono);
+  font: var(--font-size-10) var(--font-mono);
 }
 .argus-code__head .argus-button {
   margin-left: auto;
@@ -760,23 +760,23 @@
 }
 .argus-code pre {
   margin: 0;
-  padding: 14px;
+  padding: var(--space-px-14);
   overflow-x: auto;
   color: var(--text-secondary);
-  font: 11.5px/1.7 var(--font-mono);
+  font: 11.var(--font-size-5)/1.7 var(--font-mono);
 }
 .argus-diff {
-  padding: 9px 0;
+  padding: var(--space-px-9) 0;
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   overflow-x: auto;
-  background: #11100e;
-  font: 11.5px/1.65 var(--font-mono);
+  background: var(--surface-terminal);
+  font: 11.var(--font-size-5)/1.65 var(--font-mono);
 }
 .argus-diff > div {
   display: grid;
   grid-template-columns: 28px 1fr;
-  padding: 1px 12px 1px 0;
+  padding: var(--space-px-1) var(--space-px-12) var(--space-px-1) 0;
   white-space: pre;
 }
 .argus-diff > div > span {
@@ -786,11 +786,11 @@
 }
 .argus-diff > .is-add {
   color: var(--success);
-  background: rgb(140 173 111 / 6%);
+  background: color-mix(in srgb, var(--success) 6%, transparent);
 }
 .argus-diff > .is-remove {
   color: var(--danger);
-  background: rgb(220 117 107 / 6%);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
 }
 .argus-diff > .is-context {
   color: var(--text-tertiary);
@@ -798,49 +798,49 @@
 .argus-alert {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px 13px;
+  gap: var(--space-px-10);
+  padding: var(--space-px-12) var(--space-px-13);
   border: 1px solid;
-  border-radius: 10px;
+  border-radius: var(--radius-10);
 }
 .argus-alert__icon {
   display: grid;
   place-items: center;
-  margin-top: 1px;
+  margin-top: var(--space-px-1);
 }
 .argus-alert b {
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-alert p {
-  margin: 3px 0 0;
+  margin: var(--space-px-3) 0 0;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   line-height: 1.5;
 }
 .argus-alert.is-info {
   color: var(--info);
-  border-color: rgb(124 159 200 / 23%);
+  border-color: color-mix(in srgb, var(--info) 23%, transparent);
   background: var(--info-soft);
 }
 .argus-alert.is-success {
   color: var(--success);
-  border-color: rgb(140 173 111 / 23%);
+  border-color: color-mix(in srgb, var(--success) 23%, transparent);
   background: var(--success-soft);
 }
 .argus-alert.is-warning {
   color: var(--warning);
-  border-color: rgb(213 161 91 / 23%);
+  border-color: color-mix(in srgb, var(--warning) 23%, transparent);
   background: var(--warning-soft);
 }
 .argus-alert.is-danger {
   color: var(--danger);
-  border-color: rgb(220 117 107 / 23%);
+  border-color: color-mix(in srgb, var(--danger) 23%, transparent);
   background: var(--danger-soft);
 }
 
 :root[data-theme="light"] .argus-code,
 :root[data-theme="light"] .argus-diff {
-  background: #f4f0e9;
+  background: var(--text-console);
 }
 
 @keyframes argus-spin {
@@ -868,7 +868,7 @@
 @media (max-width: 640px) {
   .argus-description-list > div {
     grid-template-columns: 1fr;
-    gap: 4px;
+    gap: var(--space-px-4);
   }
   .argus-card__header {
     align-items: flex-start;

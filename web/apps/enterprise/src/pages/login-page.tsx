@@ -3,17 +3,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@argus/api-client";
-import { useAuthStore } from "@argus/auth";
+import { useEnterpriseAuthStore } from "@argus/auth";
 import { AppearanceControls, Button, Field, Input } from "@argus/ui";
+import "../styles/auth.css";
 
-/** 企业用户登录页：只接受具有唯一 EnterpriseMembership 的身份。 */
+/** 企业用户登录页：只接受 enterprise audience 的身份。 */
 export function LoginPage() {
   const { t } = useTranslation();
   const api = useApi();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const login = useAuthStore((state) => state.login);
-  const logout = useAuthStore((state) => state.logout);
+  const login = useEnterpriseAuthStore((state) => state.login);
+  const logout = useEnterpriseAuthStore((state) => state.logout);
   const search = useSearch({ strict: false }) as { redirect?: string };
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +31,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       const session = await login(api, { username: username.trim(), password });
-      if (!session.membership || session.user.platformRole) {
+      if (session.session.audience !== "enterprise") {
         await logout(api);
         setError(t("login.wrongPortal"));
         return;
@@ -38,29 +39,37 @@ export function LoginPage() {
       queryClient.clear();
       const target = search.redirect?.startsWith("/") ? search.redirect : "/";
       void navigate({ to: target as "/" });
-    } catch {
-      setError(t("login.failed"));
+    } catch (reason) {
+      setError(
+        reason instanceof Error &&
+          reason.message.includes("Unexpected enterprise")
+          ? t("login.wrongPortal")
+          : t("login.failed"),
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="login-page">
-      <div className="login-page__controls">
+    <div className="argus-login-page">
+      <div className="argus-login-page__controls">
         <AppearanceControls />
       </div>
-      <form className="login-card" onSubmit={(event) => void handleSubmit(event)}>
-        <div className="brand login-card__brand">
-          <span className="brand__mark">◉</span>
-          <span className="brand__name">
+      <form
+        className="argus-login-card"
+        onSubmit={(event) => void handleSubmit(event)}
+      >
+        <div className="argus-brand argus-login-card__brand">
+          <span className="argus-brand__mark">◉</span>
+          <span className="argus-brand__name">
             Argus<small>enterprise</small>
           </span>
         </div>
         <h1>{t("login.title")}</h1>
-        <p className="login-card__subtitle">{t("login.subtitle")}</p>
+        <p className="argus-login-card__subtitle">{t("login.subtitle")}</p>
         {error && (
-          <p className="login-card__error" role="alert">
+          <p className="argus-login-card__error" role="alert">
             {error}
           </p>
         )}
@@ -85,14 +94,14 @@ export function LoginPage() {
           />
         </Field>
         <Button
-          className="login-card__submit"
+          className="argus-login-card__submit"
           disabled={submitting}
           type="submit"
           variant="primary"
         >
           {submitting ? t("login.submitting") : t("login.submit")}
         </Button>
-        <p className="login-card__hint">
+        <p className="argus-login-card__hint">
           {t("login.demoHint")}
           <br />
           <a href={platformPortalUrl}>{t("login.platformPortal")}</a>

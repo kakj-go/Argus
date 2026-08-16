@@ -56,7 +56,9 @@ export function SessionsTab() {
     mutationFn: (id: string) => api.platform.sessions.terminate(id),
     onSuccess: () => {
       setTerminating(null);
-      void queryClient.invalidateQueries({ queryKey: ["platform", "sessions"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["platform", "sessions"],
+      });
     },
   });
 
@@ -80,7 +82,7 @@ export function SessionsTab() {
     ["requested", "starting", "running", "idle"].includes(status);
 
   return (
-    <div className="platform-stack">
+    <div className="argus-platform-stack">
       <Alert
         description={t("sandbox.sessions.metadataOnly.description")}
         title={t("sandbox.sessions.metadataOnly.title")}
@@ -97,7 +99,7 @@ export function SessionsTab() {
             {
               key: "id",
               header: t("sandbox.sessions.table.id"),
-              render: (row) => <code className="mono">{row.id}</code>,
+              render: (row) => <code className="argus-mono">{row.id}</code>,
             },
             {
               key: "enterpriseName",
@@ -110,7 +112,7 @@ export function SessionsTab() {
             {
               key: "userId",
               header: t("sandbox.sessions.table.user"),
-              render: (row) => <code className="mono">{row.userId}</code>,
+              render: (row) => <code className="argus-mono">{row.userId}</code>,
             },
             {
               key: "purpose",

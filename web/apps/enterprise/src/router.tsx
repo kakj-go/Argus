@@ -2,26 +2,70 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
   redirect,
 } from "@tanstack/react-router";
-import { useAuthStore } from "@argus/auth";
+import { useEnterpriseAuthStore } from "@argus/auth";
 import { AdminShell } from "./components/admin-shell";
 import { ChatShell } from "./components/chat-shell";
-import { ApprovalsPage } from "./pages/approvals-page";
-import { ConversationPage } from "./pages/conversation-page";
-import { DemoPage } from "./pages/demo-page";
-import { HostDetailPage } from "./pages/host-detail-page";
-import { HostsPage } from "./pages/hosts-page";
-import { KubernetesClusterPage } from "./pages/kubernetes-cluster-page";
-import { KubernetesPage } from "./pages/kubernetes-page";
-import { LoginPage } from "./pages/login-page";
-import { SettingsAiPage } from "./pages/settings-ai-page";
-import { SettingsAuditPage } from "./pages/settings-audit-page";
-import { SettingsInteractiveCardsPage } from "./pages/settings-interactive-cards-page";
-import { SettingsOrgPage } from "./pages/settings-org-page";
-import { SettingsSecretsPage } from "./pages/settings-secrets-page";
-import { TasksPage } from "./pages/tasks-page";
+
+const LoginPage = lazyRouteComponent(
+  () => import("./pages/login-page"),
+  "LoginPage",
+);
+const ConversationPage = lazyRouteComponent(
+  () => import("./pages/conversation-page"),
+  "ConversationPage",
+);
+const HostsPage = lazyRouteComponent(
+  () => import("./pages/hosts-page"),
+  "HostsPage",
+);
+const HostDetailPage = lazyRouteComponent(
+  () => import("./pages/host-detail-page"),
+  "HostDetailPage",
+);
+const KubernetesPage = lazyRouteComponent(
+  () => import("./pages/kubernetes-page"),
+  "KubernetesPage",
+);
+const KubernetesClusterPage = lazyRouteComponent(
+  () => import("./pages/kubernetes-cluster-page"),
+  "KubernetesClusterPage",
+);
+const TasksPage = lazyRouteComponent(
+  () => import("./pages/tasks-page"),
+  "TasksPage",
+);
+const ApprovalsPage = lazyRouteComponent(
+  () => import("./pages/approvals-page"),
+  "ApprovalsPage",
+);
+const SettingsOrgPage = lazyRouteComponent(
+  () => import("./pages/settings-org-page"),
+  "SettingsOrgPage",
+);
+const SettingsAiPage = lazyRouteComponent(
+  () => import("./pages/settings-ai-page"),
+  "SettingsAiPage",
+);
+const SettingsInteractiveCardsPage = lazyRouteComponent(
+  () => import("./pages/settings-interactive-cards-page"),
+  "SettingsInteractiveCardsPage",
+);
+const SettingsSecretsPage = lazyRouteComponent(
+  () => import("./pages/settings-secrets-page"),
+  "SettingsSecretsPage",
+);
+const SettingsAuditPage = lazyRouteComponent(
+  () => import("./pages/settings-audit-page"),
+  "SettingsAuditPage",
+);
+const DemoPage = lazyRouteComponent(
+  () => import("./pages/demo-page"),
+  "DemoPage",
+);
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -42,8 +86,8 @@ const authedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "authed",
   beforeLoad: ({ location }) => {
-    const session = useAuthStore.getState().session;
-    if (!session?.membership || session.user.platformRole) {
+    const session = useEnterpriseAuthStore.getState().session;
+    if (!session || session.session.audience !== "enterprise") {
       throw redirect({
         to: "/login",
         search: { redirect: location.href },

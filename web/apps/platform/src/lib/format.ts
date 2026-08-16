@@ -3,7 +3,10 @@
 const DAY_MS = 24 * 3600_000;
 
 /** 统一的日期时间展示；locale 来自 i18n 当前语言。 */
-export function formatDateTime(iso: string | undefined, locale: string): string {
+export function formatDateTime(
+  iso: string | undefined,
+  locale: string,
+): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;

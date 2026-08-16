@@ -15,7 +15,7 @@
 ## 前端约定
 
 - 应用与共享包：`web/apps/{enterprise,platform,setup}` + `web/packages/{ui,design-tokens,api-client,auth,card-host,observability}`；通用组件只进 `@argus/ui`，业务应用不维护平行组件库。
-- Mock API：`@argus/api-client` 暴露统一客户端接口，当前由内置 mock 实现驱动（`VITE_API_MODE` 默认 `mock`，其它值回退 mock）；mock 数据持久化在 localStorage，Playwright 每个用例独立 browser context 即得到干净种子数据。
+- API 模式：三个门户必须显式设置 `VITE_API_MODE=mock|real`；未知模式或 real 缺少必要 URL 时 fail closed，不得回退 mock。mock 数据持久化在 localStorage，Playwright 每个用例独立 browser context 即得到干净种子数据。
 - i18n：每个业务模块一个 `src/i18n/<module>.ts`，导出 `<module>Zh` / `<module>En`，在 `src/i18n/index.ts` 的模块清单中注册即生效；通用文案放 `common.ts`。默认 `zh-CN`，偏好持久化在 `argus.locale`。
 - 样式：组件类名统一 `.argus-*` 前缀；颜色、字号、间距、圆角只引用 design token（`var(--*)`），禁止硬编码；页面级样式放 `src/styles/*.css`。
 - E2E：`web/apps/enterprise/e2e/`，`cd web/apps/enterprise && pnpm e2e`（Playwright 自动启动 dev server :4173）；`playwright.config.ts` 已剥离本机代理环境变量，loopback 请求始终直连。

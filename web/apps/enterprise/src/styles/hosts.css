@@ -44,7 +44,7 @@
 .argus-scope-card__title-actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-px-2);
 }
 .argus-scope-card__meta {
   display: flex;
@@ -52,7 +52,7 @@
   flex-wrap: wrap;
   gap: var(--space-3);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-scope-card__body {
   padding: var(--space-3) var(--space-4);
@@ -67,7 +67,7 @@
 }
 .argus-scope-card__token-meta {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-scope-card__actions {
   display: flex;
@@ -85,7 +85,7 @@
 .argus-host-tile {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-px-6);
   padding: var(--space-3);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -118,11 +118,11 @@
 .argus-host-tile__addr {
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-host-tile__path {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -131,7 +131,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-px-4);
 }
 .argus-collector-status-action {
   display: inline-flex;
@@ -155,7 +155,7 @@
 .argus-host-tile__actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-px-2);
 }
 
 /* ---- 独立主机区 ---- */
@@ -164,7 +164,7 @@
   align-items: center;
   gap: var(--space-2);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-standalone__hint code {
   font-family: var(--font-mono);
@@ -184,7 +184,7 @@
 }
 .argus-detail-section__title {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-size-13);
   font-weight: 650;
   color: var(--text-primary);
 }
@@ -227,13 +227,13 @@
 .argus-bastion-command__head h3 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   font-weight: 650;
 }
 .argus-bastion-command__head p {
   margin: var(--space-1) 0 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.55;
 }
 .argus-bastion-command__code {
@@ -243,7 +243,7 @@
 }
 .argus-bastion-command__code > span {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 
 /* ---- 连接方式 / 路由选项（radio 卡片） ---- */
@@ -281,7 +281,7 @@
 .argus-choice__text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-px-2);
 }
 .argus-choice__text b {
   font-weight: 620;
@@ -304,7 +304,7 @@
 }
 .argus-capability__label {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
 }
 
 /* ---- 通用小元素 ---- */
@@ -313,7 +313,7 @@
   align-items: center;
   gap: var(--space-2);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-inline-note code {
   font-family: var(--font-mono);
@@ -321,7 +321,7 @@
 }
 .argus-mono {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 .argus-muted {
   color: var(--text-tertiary);

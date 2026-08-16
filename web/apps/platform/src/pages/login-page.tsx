@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@argus/api-client";
-import { useAuthStore } from "@argus/auth";
+import { usePlatformAuthStore } from "@argus/auth";
 import { AppearanceControls, Button, Field, Input } from "@argus/ui";
 
 /**
@@ -15,8 +15,8 @@ export function LoginPage() {
   const api = useApi();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const login = useAuthStore((state) => state.login);
-  const logout = useAuthStore((state) => state.logout);
+  const login = usePlatformAuthStore((state) => state.login);
+  const logout = usePlatformAuthStore((state) => state.logout);
   const search = useSearch({ strict: false }) as { redirect?: string };
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +30,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       const session = await login(api, { username: username.trim(), password });
-      if (session.user.platformRole !== "platform_super_admin") {
+      if (session.session.audience !== "platform") {
         await logout(api);
         setError(t("login.notSuperAdmin"));
         return;
@@ -46,21 +46,26 @@ export function LoginPage() {
   };
 
   return (
-    <div className="login-page">
-      <div className="login-page__controls">
+    <div className="argus-login-page">
+      <div className="argus-login-page__controls">
         <AppearanceControls />
       </div>
-      <form className="login-card" onSubmit={(event) => void handleSubmit(event)}>
-        <div className="brand login-card__brand">
-          <span className="brand__mark brand__mark--platform">◉</span>
-          <span className="brand__name">
+      <form
+        className="argus-login-card"
+        onSubmit={(event) => void handleSubmit(event)}
+      >
+        <div className="argus-brand argus-login-card__brand">
+          <span className="argus-brand__mark argus-brand__mark--platform">
+            ◉
+          </span>
+          <span className="argus-brand__name">
             Argus<small>{t("shell.brand.domain")}</small>
           </span>
         </div>
         <h1>{t("login.title")}</h1>
-        <p className="login-card__subtitle">{t("login.subtitle")}</p>
+        <p className="argus-login-card__subtitle">{t("login.subtitle")}</p>
         {error && (
-          <p className="login-card__error" role="alert">
+          <p className="argus-login-card__error" role="alert">
             {error}
           </p>
         )}
@@ -85,14 +90,14 @@ export function LoginPage() {
           />
         </Field>
         <Button
-          className="login-card__submit"
+          className="argus-login-card__submit"
           disabled={submitting}
           type="submit"
           variant="primary"
         >
           {submitting ? t("login.submitting") : t("login.submit")}
         </Button>
-        <p className="login-card__hint">{t("login.hint")}</p>
+        <p className="argus-login-card__hint">{t("login.hint")}</p>
       </form>
     </div>
   );

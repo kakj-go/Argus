@@ -37,7 +37,6 @@ export function PreviewCommitCard({
   children,
   diff,
   affected = [],
-  planHash,
   expiresAt,
   status = "pending",
   resultMessage,
@@ -55,7 +54,6 @@ export function PreviewCommitCard({
   children?: ReactNode;
   diff?: Array<{ type: "add" | "remove" | "context"; content: string }>;
   affected?: PreviewAffectedItem[];
-  planHash?: string;
   /** When passed, a live countdown is shown and the card expires on its own. */
   expiresAt?: Date | string | number;
   status?: PreviewCommitStatus;
@@ -133,12 +131,6 @@ export function PreviewCommitCard({
         </ul>
       )}
 
-      {planHash && (
-        <div className="argus-preview-card__hash">
-          <span>{text("计划哈希", "Plan hash")}</span>
-          <code>{planHash}</code>
-        </div>
-      )}
 
       {effectiveStatus === "pending" ? (
         <footer className="argus-preview-card__footer">

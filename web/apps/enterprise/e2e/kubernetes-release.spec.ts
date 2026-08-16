@@ -35,11 +35,15 @@ test("platform login reaches enterprise and sandbox administration", async ({
 
   await page.getByRole("link", { name: "OpenSandbox" }).click();
   await expect(page).toHaveURL(/\/sandbox$/);
-  await expect(page.getByRole("heading", { name: "OpenSandbox 基座" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "OpenSandbox 基座" }),
+  ).toBeVisible();
   await expect(page.getByRole("tab", { name: "服务连接" })).toBeVisible();
 });
 
-test("setup completes once and remains permanently locked", async ({ page }) => {
+test("setup completes once and remains permanently locked", async ({
+  page,
+}) => {
   await page.goto("http://127.0.0.1:4175/");
   await page.getByLabel("Setup Token").fill("stp_e2e_release");
   await page.getByRole("button", { name: "下一步" }).click();
@@ -56,8 +60,12 @@ test("setup completes once and remains permanently locked", async ({ page }) => 
   await page.getByRole("button", { name: "跳过" }).click();
   await page.getByRole("button", { name: "确认初始化" }).click();
 
-  await expect(page.getByRole("heading", { name: "系统初始化成功" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "系统初始化成功" }),
+  ).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "系统已完成初始化" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "系统已完成初始化" }),
+  ).toBeVisible();
   await expect(page.getByLabel("Setup Token")).toHaveCount(0);
 });

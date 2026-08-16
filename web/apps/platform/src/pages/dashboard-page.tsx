@@ -62,8 +62,8 @@ export function DashboardPage() {
   const activeEnterprises = enterpriseItems.filter(
     (item) => item.status === "active",
   ).length;
-  const activeSessions = (sessions.data ?? []).filter(
-    (item) => ["requested", "starting", "running", "idle"].includes(item.status),
+  const activeSessions = (sessions.data ?? []).filter((item) =>
+    ["requested", "starting", "running", "idle"].includes(item.status),
   ).length;
   const pendingInvites = (admins.data ?? []).filter(
     (item) => item.inviteStatus === "pending",
@@ -90,8 +90,8 @@ export function DashboardPage() {
       description={t("dashboard.description")}
       title={t("dashboard.title")}
     >
-      <div className="platform-stack">
-        <div className="stat-row">
+      <div className="argus-platform-stack">
+        <div className="argus-stat-row">
           <StatCard
             label={t("dashboard.stats.enterprises")}
             tone="accent"
@@ -145,10 +145,7 @@ export function DashboardPage() {
             {audit.isPending ? (
               <Spinner />
             ) : recentEvents.length === 0 ? (
-              <EmptyState
-                description=""
-                title={t("dashboard.recent.empty")}
-              />
+              <EmptyState description="" title={t("dashboard.recent.empty")} />
             ) : (
               <DataTable<AuditRow>
                 columns={[
@@ -162,7 +159,9 @@ export function DashboardPage() {
                   {
                     key: "action",
                     header: t("dashboard.recent.action"),
-                    render: (row) => <code className="mono">{row.action}</code>,
+                    render: (row) => (
+                      <code className="argus-mono">{row.action}</code>
+                    ),
                   },
                   { key: "summary", header: t("dashboard.recent.summary") },
                   {

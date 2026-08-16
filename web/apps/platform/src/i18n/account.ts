@@ -20,7 +20,8 @@ export const accountZh = {
   "account.password.success": "密码已更新（mock 环境，仅作演示）",
   "account.mfa.title": "多因素认证（MFA）",
   "account.mfa.required.title": "超管强制 MFA",
-  "account.mfa.required.description": "平台超级管理员必须启用 MFA，无法在此关闭。",
+  "account.mfa.required.description":
+    "平台超级管理员必须启用 MFA，无法在此关闭。",
   "account.mfa.toggle": "启用 MFA",
   "account.sessions.title": "登录会话",
   "account.sessions.current": "当前会话",
@@ -31,7 +32,8 @@ export const accountZh = {
 
 export const accountEn = {
   "account.title": "My account",
-  "account.description": "Security settings for the platform super admin account",
+  "account.description":
+    "Security settings for the platform super admin account",
   "account.profile.title": "Profile",
   "account.profile.username": "Username",
   "account.profile.displayName": "Display name",
@@ -42,15 +44,18 @@ export const accountEn = {
   "account.password.current": "Current password",
   "account.password.next": "New password",
   "account.password.confirm": "Confirm new password",
-  "account.password.rule": "At least 12 characters with both letters and digits",
+  "account.password.rule":
+    "At least 12 characters with both letters and digits",
   "account.password.mismatch": "The two new passwords do not match",
-  "account.password.weak": "New password is too weak: at least 12 characters with letters and digits",
+  "account.password.weak":
+    "New password is too weak: at least 12 characters with letters and digits",
   "account.password.required": "Please fill in all password fields",
   "account.password.submit": "Update password",
   "account.password.success": "Password updated (mock environment, demo only)",
   "account.mfa.title": "Multi-factor authentication (MFA)",
   "account.mfa.required.title": "MFA is mandatory for super admins",
-  "account.mfa.required.description": "Platform super admins must keep MFA enabled; it cannot be turned off here.",
+  "account.mfa.required.description":
+    "Platform super admins must keep MFA enabled; it cannot be turned off here.",
   "account.mfa.toggle": "Enable MFA",
   "account.sessions.title": "Sign-in sessions",
   "account.sessions.current": "Current session",

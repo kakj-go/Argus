@@ -30,8 +30,10 @@ export function StepSystem({
   const strengthKeys = ["weak", "medium", "strong"] as const;
 
   return (
-    <div className="setup-fields">
-      <h3 className="setup-section">{t("setup.system.platformSection")}</h3>
+    <div className="argus-setup-fields">
+      <h3 className="argus-setup-section">
+        {t("setup.system.platformSection")}
+      </h3>
       <Field
         error={errorFor("platformName")}
         label={t("setup.system.platformName.label")}
@@ -43,7 +45,7 @@ export function StepSystem({
           value={draft.platformName}
         />
       </Field>
-      <div className="setup-grid-2">
+      <div className="argus-setup-grid-2">
         <Field label={t("setup.system.defaultLocale.label")}>
           <Select
             onValueChange={(value) =>
@@ -61,7 +63,10 @@ export function StepSystem({
         <Field label={t("setup.system.timezone.label")}>
           <Select
             onValueChange={(value) => onChange({ timezone: value })}
-            options={TIMEZONE_OPTIONS.map((zone) => ({ value: zone, label: zone }))}
+            options={TIMEZONE_OPTIONS.map((zone) => ({
+              value: zone,
+              label: zone,
+            }))}
             value={draft.timezone}
           />
         </Field>
@@ -79,8 +84,8 @@ export function StepSystem({
         />
       </Field>
 
-      <h3 className="setup-section">{t("setup.system.adminSection")}</h3>
-      <div className="setup-grid-2">
+      <h3 className="argus-setup-section">{t("setup.system.adminSection")}</h3>
+      <div className="argus-setup-grid-2">
         <Field
           error={errorFor("username")}
           hint={t("setup.system.username.hint")}
@@ -118,7 +123,7 @@ export function StepSystem({
           value={draft.admin.email}
         />
       </Field>
-      <div className="setup-grid-2">
+      <div className="argus-setup-grid-2">
         <Field
           error={errorFor("password")}
           hint={t("setup.system.password.hint")}
@@ -148,12 +153,12 @@ export function StepSystem({
         </Field>
       </div>
       {draft.admin.password && (
-        <div className={`setup-strength is-${strengthKeys[strength]}`}>
-          <span className="setup-strength__label">
+        <div className={`argus-setup-strength is-${strengthKeys[strength]}`}>
+          <span className="argus-setup-strength__label">
             {t("setup.system.strength.label")}：
             {t(`setup.system.strength.${strengthKeys[strength]}`)}
           </span>
-          <span className="setup-strength__bars">
+          <span className="argus-setup-strength__bars">
             {[0, 1, 2].map((level) => (
               <i
                 aria-hidden

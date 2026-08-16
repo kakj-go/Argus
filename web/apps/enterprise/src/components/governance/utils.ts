@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
-import type {
-  PendingActionStatus,
-  RiskLevel,
-  TaskStatus,
-  TaskStepStatus,
-} from "@argus/api-client";
+import type { PendingActionStatus, RiskLevel } from "@argus/api-client";
+import type { TaskStatus, TaskStepStatus } from "@argus/api-client/provisional";
 
 /** Badge tone per task status. */
 export function taskStatusTone(
@@ -54,7 +50,12 @@ export function pendingStatusTone(
 }
 
 /** Risk levels ordered most-severe first, for grouping. */
-export const RISK_ORDER: RiskLevel[] = ["critical", "dangerous", "write", "read"];
+export const RISK_ORDER: RiskLevel[] = [
+  "critical",
+  "dangerous",
+  "write",
+  "read",
+];
 
 export function riskTone(
   risk: RiskLevel,
@@ -108,7 +109,10 @@ export function stepTimelineStatus(
 }
 
 /** Locale-aware date-time formatting (HH:mm:ss for today, with date otherwise). */
-export function formatDateTime(iso: string | undefined, locale: string): string {
+export function formatDateTime(
+  iso: string | undefined,
+  locale: string,
+): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
@@ -118,9 +122,7 @@ export function formatDateTime(iso: string | undefined, locale: string): string 
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate();
   return new Intl.DateTimeFormat(locale, {
-    ...(sameDay
-      ? {}
-      : { month: "2-digit", day: "2-digit" }),
+    ...(sameDay ? {} : { month: "2-digit", day: "2-digit" }),
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -128,7 +130,10 @@ export function formatDateTime(iso: string | undefined, locale: string): string 
   }).format(date);
 }
 
-export function formatDateTimeFull(iso: string | undefined, locale: string): string {
+export function formatDateTimeFull(
+  iso: string | undefined,
+  locale: string,
+): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";

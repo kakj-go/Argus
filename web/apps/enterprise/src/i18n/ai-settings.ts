@@ -84,7 +84,8 @@ export const aiSettingsZh = {
 
 export const aiSettingsEn = {
   aiSettings: {
-    description: "Connect a model in one step and govern monthly amount budgets by department and user.",
+    description:
+      "Connect a model in one step and govern monthly amount budgets by department and user.",
     tabs: { models: "Models", governance: "Governance dashboard" },
     model: {
       add: "Add model",
@@ -122,7 +123,8 @@ export const aiSettingsEn = {
       amount: "Monthly amount",
       unlimited: "Leave blank for unlimited",
       save: "Save budget",
-      departmentOnly: "Department admins can only configure personal budgets for members of their department.",
+      departmentOnly:
+        "Department admins can only configure personal budgets for members of their department.",
     },
     dashboard: {
       allModels: "All models",
@@ -138,7 +140,8 @@ export const aiSettingsEn = {
       noData: "No usage data",
     },
     cards: {
-      description: "Inspect, bind, validate and enable enterprise interactive cards.",
+      description:
+        "Inspect, bind, validate and enable enterprise interactive cards.",
       custom: "Custom cards",
       system: "Built-in cards",
       enabled: "Enabled",

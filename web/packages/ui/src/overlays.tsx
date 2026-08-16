@@ -1,6 +1,6 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { type ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { Button } from "./button";
 import { useUiText } from "./locale";
 
@@ -28,11 +28,21 @@ export function ConfirmDialog({
   children?: ReactNode;
 }) {
   const text = useUiText();
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   return (
     <DialogPrimitive.Root onOpenChange={onOpenChange} open={open}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="argus-dialog__overlay" />
-        <DialogPrimitive.Content className="argus-dialog argus-dialog--confirm">
+        <DialogPrimitive.Content
+          className="argus-dialog argus-dialog--confirm"
+          onOpenAutoFocus={() => {
+            returnFocusRef.current = document.activeElement as HTMLElement | null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+        >
           <div className="argus-dialog__top">
             <div>
               <DialogPrimitive.Title className="argus-dialog__title">
@@ -101,12 +111,32 @@ export function FormDrawer({
   width?: number;
 }) {
   const text = useUiText();
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   return (
     <DialogPrimitive.Root onOpenChange={onOpenChange} open={open}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="argus-dialog__overlay" />
         <DialogPrimitive.Content
           className="argus-drawer"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          onOpenAutoFocus={() => {
+            returnFocusRef.current = document.activeElement as HTMLElement | null;
+          }}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              onSubmit &&
+              event.target instanceof HTMLElement &&
+              !["BUTTON", "TEXTAREA", "SELECT"].includes(event.target.tagName)
+            ) {
+              event.preventDefault();
+              onSubmit();
+            }
+          }}
           style={{ width: `min(${width}px, 100vw)` }}
         >
           <div className="argus-drawer__top">

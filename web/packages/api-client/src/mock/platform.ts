@@ -42,30 +42,28 @@ export function createPlatformDomain(
         db.enterprises.push(enterprise);
         db.departments.push({
           id: nextId(db, "dept"),
-          enterpriseId: enterprise.id,
+          enterprise_id: enterprise.id,
           name: "默认部门",
           description: "企业创建时自动生成",
-          default: true,
-          createdAt: ctx.nowIso(),
-        });
-        db.projects.push({
-          id: nextId(db, "proj"),
-          enterpriseId: enterprise.id,
-          name: "默认项目",
-          description: "企业创建时自动生成",
-          default: true,
-          createdAt: ctx.nowIso(),
+          is_default: true,
+          status: "active",
+          version: 1,
+          created_at: ctx.nowIso(),
+          updated_at: ctx.nowIso(),
         });
         // 内置角色与 seed 保持一致，保证新企业开箱可用。
         for (const template of BUILTIN_ROLE_TEMPLATES) {
           db.roles.push({
             id: nextId(db, "role"),
-            enterpriseId: enterprise.id,
+            enterprise_id: enterprise.id,
             name: template.name,
             description: template.description,
             builtin: true,
             permissions: [...template.permissions],
-            createdAt: ctx.nowIso(),
+            status: "active",
+            version: 1,
+            created_at: ctx.nowIso(),
+            updated_at: ctx.nowIso(),
           });
         }
         ctx.audit("platform.enterprise.create", {

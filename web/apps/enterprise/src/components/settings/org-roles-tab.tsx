@@ -80,7 +80,7 @@ export function OrgRolesTab() {
     permissionCount: role.permissions.includes("*")
       ? -1
       : role.permissions.length,
-    createdAt: role.createdAt,
+    createdAt: role.created_at,
   }));
 
   return (

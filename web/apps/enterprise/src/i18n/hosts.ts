@@ -112,7 +112,7 @@ export const hostsZh = {
       name: "名称",
       namePlaceholder: "如：上海机房堡垒机-02",
       environment: "环境",
-      tags: "标签",
+      labels: "标签",
       tagsHint: "每行一个，格式 key=value",
       submit: "创建并生成令牌",
       save: "保存",
@@ -189,7 +189,7 @@ export const hostsZh = {
       secretCreate: "前往凭据与密钥中新建",
       secretNone: "不选择",
       environment: "环境",
-      tags: "标签",
+      labels: "标签",
       tagsHint: "每行一个，格式 key=value",
       publicAddressInvalid:
         "直连模式要求公网地址：不支持内网、环回或链路本地地址。",
@@ -234,7 +234,7 @@ export const hostsZh = {
         telemetryRoute: "遥测路由",
         lastSeen: "最近心跳",
         createdAt: "创建时间",
-        tags: "标签",
+        labels: "标签",
       },
     },
     terminal: {
@@ -468,7 +468,7 @@ export const hostsEn = {
       name: "Name",
       namePlaceholder: "e.g. Shanghai DC-02",
       environment: "Environment",
-      tags: "Tags",
+      labels: "Labels",
       tagsHint: "One per line, key=value",
       submit: "Create & generate token",
       save: "Save",
@@ -545,7 +545,7 @@ export const hostsEn = {
       secretCreate: "Create one in Credentials & Secrets",
       secretNone: "None",
       environment: "Environment",
-      tags: "Tags",
+      labels: "Labels",
       tagsHint: "One per line, key=value",
       publicAddressInvalid:
         "Direct mode requires a public address: private, loopback and link-local targets are not allowed.",
@@ -590,7 +590,7 @@ export const hostsEn = {
         telemetryRoute: "Telemetry route",
         lastSeen: "Last seen",
         createdAt: "Created at",
-        tags: "Tags",
+        labels: "Labels",
       },
     },
     terminal: {

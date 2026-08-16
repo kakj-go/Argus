@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-var legacyPattern = regexp.MustCompile(`(?i)(project_id|ProjectId|EnterpriseMembership|memberships|scopeType.*project|projectIds|listProjects|createProject|updateProject|resourceGroupIds|ownerTeamId|\btags\b|PendingAction\.params|params: Record<string, unknown>)`)
+var legacyPattern = regexp.MustCompile(`(?i)(\bproject\b|project_id|ProjectId|\bmembership\b|EnterpriseMembership|memberships|scopeType.*project|projectIds|listProjects|createProject|updateProject|resourceGroupIds|ownerTeamId|\btags\b|PendingAction\.params|params: Record<string, unknown>)`)
 
 func repoRoot(t *testing.T) string {
 	t.Helper()
@@ -1245,37 +1245,6 @@ func validateSnapshotRange(value any) error {
 
 func checkLegacyWebBaseline(t *testing.T, root string) {
 	t.Helper()
-	baselinePath := filepath.Join(root, "api/contracts/legacy-web-allowlist.json")
-	data, err := os.ReadFile(baselinePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var baseline struct {
-		Version string `json:"version"`
-		Entries []struct {
-			Path        string `json:"path"`
-			Fingerprint string `json:"fingerprint"`
-			Count       int    `json:"count"`
-		} `json:"entries"`
-	}
-	if err := json.Unmarshal(data, &baseline); err != nil {
-		t.Fatal(err)
-	}
-	if baseline.Version != "argus.legacy_web_allowlist/v1" {
-		t.Fatalf("invalid legacy web allowlist version %q", baseline.Version)
-	}
-	expected := map[string]int{}
-	for _, entry := range baseline.Entries {
-		if entry.Path == "" || !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(entry.Fingerprint) || entry.Count < 1 {
-			t.Fatalf("invalid legacy allowlist entry: %#v", entry)
-		}
-		key := entry.Path + "\x00" + entry.Fingerprint
-		if _, duplicate := expected[key]; duplicate {
-			t.Fatalf("duplicate legacy allowlist entry for %s", entry.Path)
-		}
-		expected[key] = entry.Count
-	}
-	actual := map[string]int{}
 	_ = filepath.WalkDir(filepath.Join(root, "web"), func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil || entry.IsDir() || strings.Contains(path, "node_modules") || strings.Contains(path, "/dist/") {
 			return walkErr
@@ -1284,22 +1253,14 @@ func checkLegacyWebBaseline(t *testing.T, root string) {
 		if readErr != nil {
 			return readErr
 		}
-		for _, line := range strings.Split(string(data), "\n") {
+		for lineNumber, line := range strings.Split(string(data), "\n") {
 			if legacyPattern.MatchString(line) {
 				relative, _ := filepath.Rel(root, path)
-				digest := sha256.Sum256([]byte(strings.TrimSpace(line)))
-				key := filepath.ToSlash(relative) + "\x00" + fmt.Sprintf("%x", digest)
-				actual[key]++
+				t.Errorf("legacy web contract in %s:%d: %s", filepath.ToSlash(relative), lineNumber+1, strings.TrimSpace(line))
 			}
 		}
 		return nil
 	})
-	for key, count := range actual {
-		if count > expected[key] {
-			parts := strings.Split(key, "\x00")
-			t.Fatalf("legacy web contract added or increased in %s (fingerprint %s): %d > %d", parts[0], parts[1], count, expected[key])
-		}
-	}
 }
 
 func compatible(path string, oldValue, newValue any) error {

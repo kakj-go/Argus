@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatStreamEvent } from "../types";
+import type { AgentEvent, StreamEventEnvelope } from "../generated/contracts";
 import { createMockApiClient, type MockApiClient } from "./index";
 
 function makeClient(): MockApiClient {
@@ -8,6 +8,12 @@ function makeClient(): MockApiClient {
 
 function login(client: MockApiClient, username: string) {
   return client.auth.login({ username, password: "123456" });
+}
+
+function agentEvent(envelope: StreamEventEnvelope): AgentEvent | null {
+  return envelope.event_type === "agent_event"
+    ? (envelope.data as AgentEvent)
+    : null;
 }
 
 async function waitFor(
@@ -27,7 +33,7 @@ describe("auth", () => {
     const client = makeClient();
     const session = await login(client, "root");
     expect(session.user.username).toBe("root");
-    expect(session.membership?.enterpriseId).toBe("ent-acme");
+    expect(session.session.enterprise_id).toBe("ent-acme");
     const me = await client.auth.me();
     expect(me.user.id).toBe("u-root");
     await expect(
@@ -38,9 +44,9 @@ describe("auth", () => {
   it("keeps platform and enterprise API domains mutually exclusive", async () => {
     const client = makeClient();
     const platformSession = await login(client, "admin");
-    expect(platformSession.membership).toBeNull();
+    expect(platformSession.session.audience).toBe("platform");
     await expect(client.hosts.list()).rejects.toThrow(
-      "enterprise membership required",
+      "enterprise enterpriseUser required",
     );
 
     await login(client, "root");
@@ -53,7 +59,7 @@ describe("auth", () => {
     const client = makeClient();
     await login(client, "wanglei");
     expect((await client.hosts.list()).items.length).toBe(9);
-    expect((await client.auth.me()).membership?.departmentId).toBe("dept-sre");
+    expect((await client.auth.me()).session.department_id).toBe("dept-sre");
 
     await client.auth.logout();
     await expect(client.auth.me()).rejects.toThrow("unauthenticated");
@@ -79,15 +85,14 @@ describe("hosts CRUD", () => {
       environment: "production",
     });
     expect(action.status).toBe("awaiting_confirmation");
-    expect(action.riskLevel).toBe("write");
-    expect(action.planHash).toMatch(/^sha256:/);
+    expect(action.risk).toBe("write");
 
-    const { task } = await client.approvals.confirm(action.actionRef);
-    expect(task).toBeDefined();
-    expect(task?.status).toBe("running");
+    const { execution } = await client.approvals.confirm(action.action_ref);
+    expect(execution).toBeDefined();
+    expect(execution?.status).toBe("running");
 
     await waitFor(async () => {
-      const current = await client.tasks.get(task?.id ?? "");
+      const current = await client.tasks.get(execution?.execution_id ?? "");
       return current.status === "succeeded";
     });
 
@@ -100,9 +105,9 @@ describe("hosts CRUD", () => {
     expect(scope.memberHostIds).toContain(created?.id);
 
     const updated = await client.hosts.update(created?.id ?? "", {
-      tags: { role: "batch" },
+      labels: { role: "batch" },
     });
-    expect(updated.tags["role"]).toBe("batch");
+    expect(updated.labels["role"]).toBe("batch");
 
     await client.hosts.delete(created?.id ?? "");
     expect(
@@ -127,9 +132,9 @@ describe("hosts CRUD", () => {
       "host-cache-bj-01",
       { profile: "host-basic", telemetryRoute: "edge-gw-bj" },
     );
-    const { task } = await client.approvals.confirm(install.actionRef);
+    const { execution } = await client.approvals.confirm(install.action_ref);
     await waitFor(async () => {
-      const current = await client.tasks.get(task?.id ?? "");
+      const current = await client.tasks.get(execution?.execution_id ?? "");
       return current.status === "succeeded";
     });
     const collector = await client.hosts.getCollector("host-cache-bj-01");
@@ -140,11 +145,13 @@ describe("hosts CRUD", () => {
 
     const route = await client.approvals.preview({
       tool: "telemetry.collector.route",
-      params: { hostId: "host-cache-bj-01", route: "direct_argus" },
+      input_data: { hostId: "host-cache-bj-01", route: "direct_argus" },
     });
-    const routeTask = await client.approvals.confirm(route.actionRef);
+    const routeExecution = await client.approvals.confirm(route.action_ref);
     await waitFor(async () => {
-      const current = await client.tasks.get(routeTask.task?.id ?? "");
+      const current = await client.tasks.get(
+        routeExecution.execution?.execution_id ?? "",
+      );
       return current.status === "succeeded";
     });
     expect((await client.hosts.get("host-cache-bj-01")).telemetryRoute).toBe(
@@ -160,33 +167,34 @@ describe("pending actions and approvals", () => {
 
     const action = await client.approvals.preview({
       tool: "telemetry.collector.upgrade",
-      params: { toVersion: "v24.2.0", batch: 3 },
+      input_data: { toVersion: "v24.2.0", batch: 3 },
     });
     expect(action.status).toBe("awaiting_confirmation");
 
     const events: string[] = [];
-    const { task } = await client.approvals.confirm(action.actionRef);
-    expect(task).toBeDefined();
-    const unsubscribe = client.tasks.subscribeTask(task?.id ?? "", (event) => {
+    const { execution } = await client.approvals.confirm(action.action_ref);
+    expect(execution).toBeDefined();
+    const taskId = execution?.execution_id ?? "";
+    const unsubscribe = client.tasks.subscribeTask(taskId, (event) => {
       if (event.type === "task_updated") events.push(event.task.status);
     });
 
     await waitFor(async () => {
-      const current = await client.tasks.get(task?.id ?? "");
+      const current = await client.tasks.get(taskId);
       return current.status === "succeeded";
     });
     unsubscribe();
 
-    const done = await client.tasks.get(task?.id ?? "");
+    const done = await client.tasks.get(taskId);
     expect(done.progress).toBe(100);
     expect(done.steps.every((step) => step.status === "done")).toBe(true);
     expect(done.logs.length).toBeGreaterThan(0);
     expect(events).toContain("running");
     expect(events).toContain("succeeded");
 
-    const finished = await client.approvals.get(action.actionRef);
+    const finished = await client.approvals.get(action.action_ref);
     expect(finished.status).toBe("succeeded");
-    expect(finished.taskId).toBe(task?.id);
+    expect(finished.execution_ref).toBe(taskId);
   });
 
   it("routes dangerous actions through approval and executes on approve", async () => {
@@ -195,31 +203,31 @@ describe("pending actions and approvals", () => {
 
     const action = await client.approvals.preview({
       tool: "kubernetes.workload.restart",
-      params: {
+      input_data: {
         clusterId: "k8s-staging",
         namespace: "staging",
         workload: "payment-worker",
       },
     });
-    expect(action.riskLevel).toBe("dangerous");
+    expect(action.risk).toBe("dangerous");
     expect(action.approval?.required).toBe(true);
 
-    const confirmed = await client.approvals.confirm(action.actionRef);
-    expect(confirmed.pendingAction.status).toBe("awaiting_approval");
-    expect(confirmed.task).toBeUndefined();
+    const confirmed = await client.approvals.confirm(action.action_ref);
+    expect(confirmed.pending_action.status).toBe("awaiting_approval");
+    expect(confirmed.execution).toBeUndefined();
 
     // Separation of duty: the creator cannot approve their own action.
-    await expect(client.approvals.approve(action.actionRef)).rejects.toThrow(
+    await expect(client.approvals.approve(action.action_ref)).rejects.toThrow(
       "separation of duty",
     );
 
     await login(client, "wanglei");
-    const approved = await client.approvals.approve(action.actionRef, "ok");
+    const approved = await client.approvals.approve(action.action_ref, "ok");
     expect(approved.status).toBe("executing");
-    expect(approved.taskId).toBeDefined();
+    expect(approved.execution_ref).toBeDefined();
 
     await waitFor(async () => {
-      const current = await client.approvals.get(action.actionRef);
+      const current = await client.approvals.get(action.action_ref);
       return current.status === "succeeded";
     });
   });
@@ -229,17 +237,17 @@ describe("pending actions and approvals", () => {
     await login(client, "lina");
     const action = await client.approvals.preview({
       tool: "kubernetes.workload.restart",
-      params: { clusterId: "k8s-staging", workload: "payment-worker" },
+      input_data: { clusterId: "k8s-staging", workload: "payment-worker" },
     });
-    await client.approvals.confirm(action.actionRef);
+    await client.approvals.confirm(action.action_ref);
 
     await login(client, "wanglei");
     const rejected = await client.approvals.reject(
-      action.actionRef,
+      action.action_ref,
       "变更窗口外",
     );
     expect(rejected.status).toBe("rejected");
-    expect(rejected.approval?.decisions[0]?.reason).toBe("变更窗口外");
+    expect(rejected.result_summary).toBe("变更窗口外");
   });
 
   it("cancels an awaiting action", async () => {
@@ -247,9 +255,9 @@ describe("pending actions and approvals", () => {
     await login(client, "chenxi");
     const action = await client.approvals.preview({
       tool: "connector.cert.rotate",
-      params: { connectorId: "conn-sh-01" },
+      input_data: { connectorId: "conn-sh-01" },
     });
-    const cancelled = await client.approvals.cancel(action.actionRef);
+    const cancelled = await client.approvals.cancel(action.action_ref);
     expect(cancelled.status).toBe("cancelled");
   });
 });
@@ -262,7 +270,7 @@ describe("conversations", () => {
       title: "新增主机会话",
     });
 
-    const events: ChatStreamEvent[] = [];
+    const events: StreamEventEnvelope[] = [];
     for await (const event of client.conversations.sendMessage(
       conversation.id,
       { text: "帮我新增一台主机 10.1.2.3 并接入监控" },
@@ -270,34 +278,46 @@ describe("conversations", () => {
       events.push(event);
     }
 
-    const types = events.map((event) => event.type);
-    expect(types[0]).toBe("message_start");
-    expect(types).toContain("tool_call");
-    expect(types).toContain("tool_call_update");
-    expect(types).toContain("token");
-    expect(types).toContain("card");
-    expect(types[types.length - 1]).toBe("message_done");
+    const agentEvents = events.flatMap((event) => {
+      const nested = agentEvent(event);
+      return nested ? [nested] : [];
+    });
+    const types = agentEvents.map((event) => event.event_type);
+    expect(types[0]).toBe("message_started");
+    expect(types).toContain("tool_call_started");
+    expect(types).toContain("tool_call_completed");
+    expect(types).toContain("message_delta");
+    expect(types).toContain("pending_action_created");
+    expect(types[types.length - 1]).toBe("run_completed");
 
-    const card = events.find((event) => event.type === "card");
-    expect(card?.type === "card" && card.card.pendingActionRef).toBeTruthy();
+    const card = agentEvents.find(
+      (event) => event.event_type === "pending_action_created",
+    );
+    const cardPayload = card?.payload as Record<string, unknown> | undefined;
+    expect(cardPayload?.action_ref).toBeTruthy();
 
-    const done = events[events.length - 1];
-    expect(done?.type).toBe("message_done");
-    if (done?.type === "message_done") {
-      expect(done.message.role).toBe("assistant");
-      expect(done.message.toolCalls?.length).toBe(3);
-      expect(done.message.cards?.length).toBe(1);
-    }
-
-    const messages = await client.conversations.listMessages(conversation.id);
-    expect(messages.length).toBe(2);
-    expect(messages[0]?.role).toBe("user");
+    const storedEvents = await client.conversations.listEvents(conversation.id);
+    expect(storedEvents.length).toBe(2);
+    const firstMessage = storedEvents[0]?.payload as {
+      message?: { role?: string };
+    };
+    expect(firstMessage.message?.role).toBe("user");
+    const completed = agentEvents.find(
+      (event) => event.event_type === "message_completed",
+    );
+    const completedMessage = (completed?.payload as {
+      message?: { role?: string; tool_calls?: unknown[]; cards?: unknown[] };
+    }).message;
+    expect(completedMessage?.role).toBe("assistant");
+    expect(completedMessage?.tool_calls).toHaveLength(3);
+    expect(completedMessage?.cards).toHaveLength(1);
 
     // The streamed card carries a real pending action that can be confirmed.
-    if (card?.type === "card" && card.card.pendingActionRef) {
-      const action = await client.approvals.get(card.card.pendingActionRef);
-      expect(action.tool).toBe("host.create");
-      expect(action.conversationId).toBe(conversation.id);
+    if (typeof cardPayload?.action_ref === "string") {
+      const action = await client.approvals.get(cardPayload.action_ref);
+      expect(action.schema_version).toBe("argus.pending_action/v1");
+      expect(action).not.toHaveProperty("tool");
+      expect(action).not.toHaveProperty("conversation_id");
     }
   });
 });
@@ -384,14 +404,16 @@ describe("AI model governance", () => {
         text: "检查主机状态",
       },
     )) {
-      expect(event.type).toBeTruthy();
+      expect(event.event_type).toBe("agent_event");
     }
-    const messages = await client.conversations.listMessages(conversation.id);
-    const assistant = messages.find((message) => message.role === "assistant");
-    expect(assistant?.modelId).toBe("model-qwen32b");
-    expect(assistant?.modelRevision).toBe(6);
-    expect(assistant?.inputPricePerMillionSnapshot).toBe(2);
-    expect(assistant?.outputPricePerMillionSnapshot).toBe(4.375);
+    const storedEvents = await client.conversations.listEvents(conversation.id);
+    const assistant = storedEvents
+      .map((event) => (event.payload as { message?: Record<string, unknown> }).message)
+      .find((message) => message?.role === "assistant");
+    expect(assistant?.model_id).toBe("model-qwen32b");
+    expect(assistant?.model_revision).toBe(6);
+    expect(assistant?.input_price_per_million_snapshot).toBe(2);
+    expect(assistant?.output_price_per_million_snapshot).toBe(4.375);
   });
 });
 
@@ -400,7 +422,7 @@ describe("interactive cards", () => {
     const client = makeClient();
     await login(client, "chenxi");
     const conversation = await client.conversations.create();
-    const events: ChatStreamEvent[] = [];
+    const events: StreamEventEnvelope[] = [];
     for await (const event of client.conversations.sendMessage(
       conversation.id,
       {
@@ -410,10 +432,15 @@ describe("interactive cards", () => {
     )) {
       events.push(event);
     }
-    const created = events.find(
-      (event) => event.type === "interactive_card_created",
-    );
-    expect(created?.type).toBe("interactive_card_created");
+    const created = events
+      .map(agentEvent)
+      .find((event) =>
+        Boolean(
+          (event?.payload as Record<string, unknown> | undefined)
+            ?.created_interactive_card_id,
+        ),
+      );
+    expect(created).toBeTruthy();
     const cards = await client.interactiveCards.list({ source: "enterprise" });
     const card = cards.find((entry) => entry.name.includes("主机容量表"));
     expect(card?.enabled).toBe(false);
@@ -557,7 +584,7 @@ describe("connector registration simulation", () => {
     const updated = await client.connectors.updateBastionScope("scope-sh", {
       name: "上海核心堡垒机",
       environment: "staging",
-      tags: { region: "cn-east", tier: "core" },
+      labels: { region: "cn-east", tier: "core" },
     });
 
     expect(updated.name).toBe("上海核心堡垒机");
@@ -565,7 +592,7 @@ describe("connector registration simulation", () => {
     const host = await client.hosts.get(updated.connectorHostId ?? "");
     expect(host.name).toBe("上海核心堡垒机");
     expect(host.environment).toBe("staging");
-    expect(host.tags).toEqual({
+    expect(host.labels).toEqual({
       region: "cn-east",
       tier: "core",
       role: "bastion",

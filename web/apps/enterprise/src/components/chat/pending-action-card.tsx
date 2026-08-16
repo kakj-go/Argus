@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
-import type { CardInstance, PendingAction } from "@argus/api-client";
+import type { PendingActionPublic } from "@argus/api-client";
+import type { CardInstance } from "./chat-view-model";
 import { useApi } from "@argus/api-client";
 import {
   PreviewCommitCard,
@@ -10,7 +11,7 @@ import {
   type PreviewCommitStatus,
 } from "@argus/ui";
 
-function toPreviewStatus(action: PendingAction): PreviewCommitStatus {
+function toPreviewStatus(action: PendingActionPublic): PreviewCommitStatus {
   switch (action.status) {
     case "succeeded":
       return "success";
@@ -74,6 +75,10 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
     awaitingApproval ||
     action.status === "executing" ||
     action.status === "ready";
+  const preview =
+    typeof action.preview === "object" && action.preview !== null
+      ? (action.preview as Record<string, unknown>)
+      : {};
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ["approvals", actionRef] });
@@ -107,21 +112,16 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
     }
   };
 
-  const affectedName = String(
-    action.preview["name"] ?? action.params["name"] ?? action.title,
-  );
-  const affectedDetail = [
-    action.preview["address"],
-    action.preview["environment"],
-  ]
+  const affectedName = String(preview["name"] ?? action.title);
+  const affectedDetail = [preview["address"], preview["environment"]]
     .filter(Boolean)
     .join(" · ");
 
   const resultMessage =
     status === "success" ? (
       <span>
-        {action.resultSummary ?? t("chat.result.success")}
-        {action.taskId && (
+        {action.result_summary ?? t("chat.result.success")}
+        {action.execution_ref && (
           <a className="argus-chat-action__task-link" href="/tasks">
             {t("chat.action.viewTask")}
             <ExternalLink aria-hidden size={11} />
@@ -129,7 +129,7 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
         )}
       </span>
     ) : status === "failed" ? (
-      (failedMessage ?? action.resultSummary ?? t("chat.result.failed"))
+      (failedMessage ?? action.result_summary ?? t("chat.result.failed"))
     ) : undefined;
 
   return (
@@ -142,7 +142,7 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
         affected={[
           {
             name: affectedName,
-            detail: affectedDetail || action.tool,
+            detail: affectedDetail || action.summary,
           },
         ]}
         confirming={busy}
@@ -158,13 +158,12 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
                 : "context",
           content: line.text,
         }))}
-        expiresAt={action.expiresAt}
+        expiresAt={action.expires_at}
         onCancel={awaitingApproval ? undefined : cancel}
         onConfirm={awaitingApproval ? undefined : confirm}
-        planHash={action.planHash}
         resultMessage={resultMessage}
-        risk={action.riskLevel}
-        riskLabel={t(`chat.action.risk.${action.riskLevel}`)}
+        risk={action.risk}
+        riskLabel={t(`chat.action.risk.${action.risk}`)}
         status={status}
         title={action.title}
       >

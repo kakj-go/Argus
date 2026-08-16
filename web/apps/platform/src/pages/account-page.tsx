@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useAuthStore } from "@argus/auth";
+import { usePlatformAuthStore } from "@argus/auth";
 import {
   Alert,
   Badge,
@@ -27,15 +27,13 @@ type LoginSessionRow = {
 
 /** 新密码强度：≥12 位且同时包含字母与数字。 */
 function passwordStrong(value: string): boolean {
-  return (
-    value.length >= 12 && /[a-zA-Z]/.test(value) && /\d/.test(value)
-  );
+  return value.length >= 12 && /[a-zA-Z]/.test(value) && /\d/.test(value);
 }
 
 /** 我的账号：账号信息、修改密码（前端强度校验）、MFA、登录会话。 */
 export function AccountPage() {
   const { t, i18n } = useTranslation();
-  const session = useAuthStore((state) => state.session);
+  const session = usePlatformAuthStore((state) => state.session);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
@@ -43,7 +41,7 @@ export function AccountPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordDone, setPasswordDone] = useState(false);
   const [mfaEnabled, setMfaEnabled] = useState(
-    session?.user.mfaEnabled ?? true,
+    session?.user.mfa_enabled ?? true,
   );
   const [mfaBlocked, setMfaBlocked] = useState(false);
 
@@ -89,14 +87,17 @@ export function AccountPage() {
       id: "sess-current",
       device: "macOS · Chrome",
       ip: "10.0.0.2",
-      lastActiveAt: user.lastLoginAt,
+      lastActiveAt: session.session.issued_at,
       current: true,
     },
   ];
 
   return (
-    <PageShell description={t("account.description")} title={t("account.title")}>
-      <div className="platform-stack">
+    <PageShell
+      description={t("account.description")}
+      title={t("account.title")}
+    >
+      <div className="argus-platform-stack">
         <Card>
           <CardHeader title={t("account.profile.title")} />
           <CardContent>
@@ -105,11 +106,11 @@ export function AccountPage() {
               items={[
                 {
                   label: t("account.profile.username"),
-                  value: <code className="mono">{user.username}</code>,
+                  value: <code className="argus-mono">{user.username}</code>,
                 },
                 {
                   label: t("account.profile.displayName"),
-                  value: user.displayName,
+                  value: user.display_name,
                 },
                 {
                   label: t("account.profile.email"),
@@ -117,11 +118,18 @@ export function AccountPage() {
                 },
                 {
                   label: t("account.profile.role"),
-                  value: <Badge tone="accent">{user.platformRole}</Badge>,
+                  value: (
+                    <Badge tone="accent">
+                      {"role" in user ? user.role : "platform_super_admin"}
+                    </Badge>
+                  ),
                 },
                 {
                   label: t("account.profile.lastLogin"),
-                  value: formatDateTime(user.lastLoginAt, i18n.language),
+                  value: formatDateTime(
+                    session.session.issued_at,
+                    i18n.language,
+                  ),
                 },
               ]}
             />
@@ -132,7 +140,7 @@ export function AccountPage() {
           <CardHeader title={t("account.password.title")} />
           <CardContent>
             <form
-              className="account-password-form"
+              className="argus-account-password-form"
               onSubmit={handlePasswordSubmit}
             >
               {passwordError && (
@@ -186,7 +194,7 @@ export function AccountPage() {
         <Card>
           <CardHeader title={t("account.mfa.title")} />
           <CardContent>
-            <div className="platform-stack">
+            <div className="argus-platform-stack">
               <Alert
                 description={t("account.mfa.required.description")}
                 title={t("account.mfa.required.title")}
@@ -199,7 +207,7 @@ export function AccountPage() {
                   tone="warning"
                 />
               )}
-              <label className="switch-row">
+              <label className="argus-switch-row">
                 <Switch
                   checked={mfaEnabled}
                   label={t("account.mfa.toggle")}
@@ -224,7 +232,7 @@ export function AccountPage() {
                 {
                   key: "ip",
                   header: t("account.sessions.ip"),
-                  render: (row) => <code className="mono">{row.ip}</code>,
+                  render: (row) => <code className="argus-mono">{row.ip}</code>,
                 },
                 {
                   key: "lastActiveAt",
@@ -237,7 +245,9 @@ export function AccountPage() {
                   header: t("common.status"),
                   render: (row) =>
                     row.current ? (
-                      <Badge tone="success">{t("account.sessions.current")}</Badge>
+                      <Badge tone="success">
+                        {t("account.sessions.current")}
+                      </Badge>
                     ) : (
                       t("common.none")
                     ),

@@ -64,4 +64,11 @@ spec:
             pathType: Prefix
             backend:
               service: {name: argus-web, port: {name: setup}}
+    - host: {{ .Values.production.hosts.cards }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: argus-web, port: {name: cards}}
 {{- end }}

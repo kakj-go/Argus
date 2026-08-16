@@ -3,8 +3,8 @@ import type { MockDb } from "./store";
 
 function isEffective(binding: RoleBinding, nowIso: string): boolean {
   if (binding.status !== "active") return false;
-  if (binding.validFrom && binding.validFrom > nowIso) return false;
-  if (binding.validUntil && binding.validUntil <= nowIso) return false;
+  if (binding.valid_from && binding.valid_from > nowIso) return false;
+  if (binding.valid_until && binding.valid_until <= nowIso) return false;
   return true;
 }
 
@@ -19,21 +19,21 @@ export function resolvePermissions(
   userId: string,
   now: string = new Date().toISOString(),
 ): Set<string> {
-  const departmentId = db.memberships.find(
+  const departmentId = db.enterpriseUsers.find(
     (m) => m.userId === userId && m.enterpriseId === enterpriseId,
   )?.departmentId;
   const permissions = new Set<string>();
   for (const binding of db.roleBindings) {
-    if (binding.enterpriseId !== enterpriseId) continue;
+    if (binding.enterprise_id !== enterpriseId) continue;
     const isUserBinding =
-      binding.subjectType === "user" && binding.subjectId === userId;
+      binding.subject_type === "user" && binding.subject_id === userId;
     const isDepartmentBinding =
-      binding.subjectType === "department" &&
+      binding.subject_type === "department" &&
       departmentId !== undefined &&
-      binding.subjectId === departmentId;
+      binding.subject_id === departmentId;
     if (!isUserBinding && !isDepartmentBinding) continue;
     if (!isEffective(binding, now)) continue;
-    const role = db.roles.find((entry) => entry.id === binding.roleId);
+    const role = db.roles.find((entry) => entry.id === binding.role_id);
     for (const permission of role?.permissions ?? []) {
       permissions.add(permission);
     }

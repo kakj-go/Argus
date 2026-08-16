@@ -5,13 +5,11 @@ import type {
   AuditEvent,
   BastionScope,
   InteractiveCard,
-  ChatMessage,
   CollectionClaim,
   CollectorInstallState,
   Connector,
   ConnectorEnrollmentToken,
   ConnectorUninstallCommand,
-  Conversation,
   DataScope,
   Enterprise,
   EnterpriseAdmin,
@@ -20,11 +18,9 @@ import type {
   Host,
   K8sCluster,
   K8sNodeBinding,
-  EnterpriseMembership,
   ModelQuota,
-  PendingAction,
+  PendingActionPublic,
   PlatformState,
-  Project,
   RemoteSession,
   Role,
   RoleBinding,
@@ -35,24 +31,28 @@ import type {
   SandboxUsagePoint,
   Secret,
   ServiceAccount,
-  Task,
   ModelUsagePoint,
   Unsubscribe,
   User,
 } from "../types";
+import type { Conversation, TaskViewModel } from "../provisional";
+import type { MockChatMessage } from "./chat-types";
+import type {
+  MockActionPlanRecord,
+  MockEnterpriseUserRecord,
+} from "./internal-types";
 
 /** Whole in-memory database backing the mock client. */
 export interface MockDb {
-  schemaVersion: 10;
+  schemaVersion: 11;
   seq: Record<string, number>;
   platformState: { state: PlatformState; name: string };
   enterprises: Enterprise[];
   enterpriseAdmins: EnterpriseAdmin[];
   users: User[];
   credentials: Record<string, string>;
-  memberships: EnterpriseMembership[];
+  enterpriseUsers: MockEnterpriseUserRecord[];
   departments: Department[];
-  projects: Project[];
   roles: Role[];
   roleBindings: RoleBinding[];
   dataScopes: DataScope[];
@@ -70,10 +70,11 @@ export interface MockDb {
   nodeBindings: K8sNodeBinding[];
   collectionClaims: CollectionClaim[];
   collectors: CollectorInstallState[];
-  tasks: Task[];
-  pendingActions: PendingAction[];
+  tasks: TaskViewModel[];
+  pendingActions: PendingActionPublic[];
+  actionPlans: Record<string, MockActionPlanRecord>;
   conversations: Conversation[];
-  messages: ChatMessage[];
+  messages: MockChatMessage[];
   models: AIModel[];
   modelQuotas: ModelQuota[];
   usagePoints: ModelUsagePoint[];
@@ -89,7 +90,7 @@ export interface MockDb {
 }
 
 export const STORAGE_PREFIX = "argus-mock:";
-const DB_KEY = `${STORAGE_PREFIX}db-v10`;
+const DB_KEY = `${STORAGE_PREFIX}db-v11`;
 
 function storage(): Storage | null {
   try {
@@ -106,7 +107,7 @@ export function loadDb(): MockDb | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as MockDb;
-    return parsed.schemaVersion === 10 ? parsed : null;
+    return parsed.schemaVersion === 11 ? parsed : null;
   } catch {
     return null;
   }

@@ -1,9 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@argus/api-client";
-import type { DataScope, Environment } from "@argus/api-client";
 import {
+  useApi,
+  type DataScope,
+  type SaveDataScopeInput,
+} from "@argus/api-client";
+import {
+  Badge,
   Button,
   CheckItem,
   ConfirmDialog,
@@ -14,29 +18,81 @@ import {
   Input,
   Select,
   Spinner,
-  Switch,
+  StatusBadge,
   Textarea,
 } from "@argus/ui";
-import { useOrgDepartments, useOrgRoles, useOrgUsers } from "./org-users-tab";
 
-const ENVIRONMENTS: Environment[] = ["development", "staging", "production"];
+type ResourceType = DataScope["resource_types"][number];
+type LabelRequirement = NonNullable<
+  DataScope["label_selector"]
+>["requirements"][number];
+type RequirementOperator = LabelRequirement["operator"];
 
 type ScopeRow = {
   id: string;
   name: string;
-  subject: string;
-  environments: Environment[];
-  tagExpression: string;
-  resourceIds: string[];
-  onlyOwned: boolean;
-  createdAt: string;
+  description: string;
+  resource_types: ResourceType[];
+  explicit_resource_ids: string[];
+  selector_summary: string;
+  status: DataScope["status"];
 };
 
-function parseIdList(text: string): string[] {
-  return text
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+type RequirementDraft = {
+  id: number;
+  key: string;
+  operator: RequirementOperator;
+  values: string;
+};
+
+const RESOURCE_TYPES: ResourceType[] = ["host", "kubernetes_cluster"];
+const OPERATORS: RequirementOperator[] = ["eq", "in", "exists", "not_exists"];
+let nextRequirementId = 1;
+
+function createRequirementDraft(
+  requirement?: LabelRequirement,
+): RequirementDraft {
+  return {
+    id: nextRequirementId++,
+    key: requirement?.key ?? "",
+    operator: requirement?.operator ?? "eq",
+    values:
+      requirement && "values" in requirement
+        ? requirement.values.join(", ")
+        : "",
+  };
+}
+
+function parseList(text: string): string[] {
+  return [
+    ...new Set(
+      text
+        .split(/[\n,]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function toRequirement(draft: RequirementDraft): LabelRequirement | null {
+  const key = draft.key.trim();
+  if (!key) return null;
+  if (draft.operator === "exists" || draft.operator === "not_exists") {
+    return { key, operator: draft.operator };
+  }
+  return { key, operator: draft.operator, values: parseList(draft.values) };
+}
+
+function selectorSummary(scope: DataScope): string {
+  const requirements = scope.label_selector?.requirements ?? [];
+  return requirements
+    .map((requirement) => {
+      if (!("values" in requirement)) {
+        return `${requirement.key} ${requirement.operator}`;
+      }
+      return `${requirement.key} ${requirement.operator} (${requirement.values.join(", ")})`;
+    })
+    .join(" AND ");
 }
 
 export function OrgScopesTab() {
@@ -47,9 +103,6 @@ export function OrgScopesTab() {
     queryKey: ["org", "dataScopes"],
     queryFn: () => api.org.listDataScopes(),
   });
-  const roles = useOrgRoles();
-  const departments = useOrgDepartments();
-  const users = useOrgUsers();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<DataScope | null>(null);
   const [deleting, setDeleting] = useState<DataScope | null>(null);
@@ -58,11 +111,7 @@ export function OrgScopesTab() {
     queryClient.invalidateQueries({ queryKey: ["org", "dataScopes"] });
 
   const save = useMutation({
-    mutationFn: (
-      input: Omit<DataScope, "id" | "enterpriseId" | "createdAt"> & {
-        id?: string;
-      },
-    ) => api.org.saveDataScope(input),
+    mutationFn: (input: SaveDataScopeInput) => api.org.saveDataScope(input),
     onSuccess: () => {
       setDrawerOpen(false);
       setEditing(null);
@@ -78,26 +127,14 @@ export function OrgScopesTab() {
     },
   });
 
-  const subjectLabel = (scope: DataScope) => {
-    const name =
-      scope.subjectType === "role"
-        ? roles.data?.find((role) => role.id === scope.subjectId)?.name
-        : scope.subjectType === "department"
-          ? departments.data?.find((department) => department.id === scope.subjectId)?.name
-          : users.data?.find((user) => user.id === scope.subjectId)
-              ?.displayName;
-    return `${t(`settings.org.scopesTab.subjectTypes.${scope.subjectType}`)} · ${name ?? scope.subjectId}`;
-  };
-
   const rows: ScopeRow[] = (scopes.data ?? []).map((scope) => ({
     id: scope.id,
     name: scope.name,
-    subject: subjectLabel(scope),
-    environments: scope.environments,
-    tagExpression: scope.tagExpression ?? "",
-    resourceIds: scope.resourceIds ?? [],
-    onlyOwned: scope.onlyOwned,
-    createdAt: scope.createdAt,
+    description: scope.description ?? "",
+    resource_types: scope.resource_types,
+    explicit_resource_ids: scope.explicit_resource_ids,
+    selector_summary: selectorSummary(scope),
+    status: scope.status,
   }));
 
   return (
@@ -125,42 +162,48 @@ export function OrgScopesTab() {
         <DataTable<ScopeRow>
           columns={[
             { key: "name", header: t("settings.common.name") },
-            { key: "subject", header: t("settings.org.scopesTab.subject") },
+            { key: "description", header: t("settings.common.description") },
             {
-              key: "environments",
-              header: t("settings.org.scopesTab.environments"),
-              render: (row) =>
-                row.environments.length === 0
-                  ? t("settings.common.all")
-                  : row.environments
-                      .map((env) => t(`settings.org.env.${env}`))
-                      .join(", "),
+              key: "resource_types",
+              header: t("settings.org.scopesTab.resourceTypes"),
+              render: (row) => (
+                <span className="argus-settings-inline-actions">
+                  {row.resource_types.map((type) => (
+                    <Badge key={type}>
+                      {t(`settings.org.scopesTab.resourceType.${type}`)}
+                    </Badge>
+                  ))}
+                </span>
+              ),
             },
             {
-              key: "tagExpression",
-              header: t("settings.org.scopesTab.tagExpression"),
+              key: "selector_summary",
+              header: t("settings.org.scopesTab.labelSelector"),
               render: (row) =>
-                row.tagExpression ? (
-                  <code className="mono">{row.tagExpression}</code>
+                row.selector_summary ? (
+                  <code>{row.selector_summary}</code>
                 ) : (
                   "—"
                 ),
             },
             {
-              key: "resourceIds",
+              key: "explicit_resource_ids",
               header: t("settings.org.scopesTab.resourceIds"),
               render: (row) =>
-                row.resourceIds.length === 0
+                row.explicit_resource_ids.length === 0
                   ? "—"
-                  : `${row.resourceIds.length}`,
+                  : String(row.explicit_resource_ids.length),
             },
             {
-              key: "onlyOwned",
-              header: t("settings.org.scopesTab.onlyOwned"),
-              render: (row) =>
-                row.onlyOwned
-                  ? t("settings.common.yes")
-                  : t("settings.common.no"),
+              key: "status",
+              header: t("settings.common.status"),
+              render: (row) => (
+                <StatusBadge
+                  tone={row.status === "active" ? "success" : "neutral"}
+                >
+                  {t(`settings.common.${row.status}`)}
+                </StatusBadge>
+              ),
             },
             {
               key: "actions",
@@ -202,10 +245,6 @@ export function OrgScopesTab() {
       )}
 
       <ScopeDrawer
-        departments={(departments.data ?? []).map((department) => ({
-          id: department.id,
-          label: department.name,
-        }))}
         loading={save.isPending}
         onOpenChange={(open) => {
           setDrawerOpen(open);
@@ -213,15 +252,7 @@ export function OrgScopesTab() {
         }}
         onSubmit={(input) => save.mutate({ ...input, id: editing?.id })}
         open={drawerOpen}
-        roles={(roles.data ?? []).map((role) => ({
-          id: role.id,
-          label: role.name,
-        }))}
         scope={editing}
-        users={(users.data ?? []).map((user) => ({
-          id: user.id,
-          label: `${user.displayName} (@${user.username})`,
-        }))}
       />
 
       <ConfirmDialog
@@ -245,62 +276,70 @@ function ScopeDrawer({
   onSubmit,
   loading,
   scope,
-  roles,
-  departments,
-  users,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (
-    input: Omit<DataScope, "id" | "enterpriseId" | "createdAt">,
-  ) => void;
+  onSubmit: (input: Omit<SaveDataScopeInput, "id">) => void;
   loading: boolean;
   scope: DataScope | null;
-  roles: Array<{ id: string; label: string }>;
-  departments: Array<{ id: string; label: string }>;
-  users: Array<{ id: string; label: string }>;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
-  const [subjectType, setSubjectType] =
-    useState<DataScope["subjectType"]>("role");
-  const [subjectId, setSubjectId] = useState("");
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [tagExpression, setTagExpression] = useState("");
+  const [description, setDescription] = useState("");
+  const [resourceTypes, setResourceTypes] = useState<ResourceType[]>([]);
   const [resourceIds, setResourceIds] = useState("");
-  const [onlyOwned, setOnlyOwned] = useState(false);
-  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const [requirements, setRequirements] = useState<RequirementDraft[]>([]);
+  const [status, setStatus] = useState<DataScope["status"]>("active");
 
-  const key = open ? (scope?.id ?? "__new__") : null;
-  if (key && loadedFor !== key) {
-    setLoadedFor(key);
+  useEffect(() => {
+    if (!open) return;
     setName(scope?.name ?? "");
-    setSubjectType(scope?.subjectType ?? "role");
-    setSubjectId(scope?.subjectId ?? "");
-    setEnvironments(scope?.environments ?? []);
-    setTagExpression(scope?.tagExpression ?? "");
-    setResourceIds((scope?.resourceIds ?? []).join("\n"));
-    setOnlyOwned(scope?.onlyOwned ?? false);
-  }
+    setDescription(scope?.description ?? "");
+    setResourceTypes(scope?.resource_types ?? []);
+    setResourceIds((scope?.explicit_resource_ids ?? []).join("\n"));
+    setRequirements(
+      (scope?.label_selector?.requirements ?? []).map(createRequirementDraft),
+    );
+    setStatus(scope?.status ?? "active");
+  }, [open, scope]);
 
-  const subjectOptions =
-    subjectType === "role" ? roles : subjectType === "department" ? departments : users;
+  const updateRequirement = (
+    id: number,
+    patch: Partial<Omit<RequirementDraft, "id">>,
+  ) => {
+    setRequirements((current) =>
+      current.map((requirement) =>
+        requirement.id === id ? { ...requirement, ...patch } : requirement,
+      ),
+    );
+  };
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={() =>
+      onSubmit={() => {
+        const normalizedRequirements = requirements
+          .map(toRequirement)
+          .filter(
+            (requirement): requirement is LabelRequirement =>
+              requirement !== null,
+          );
         onSubmit({
           name: name.trim(),
-          subjectType,
-          subjectId,
-          environments,
-          tagExpression: tagExpression.trim() || undefined,
-          resourceIds: parseIdList(resourceIds),
-          onlyOwned,
-        })
-      }
+          description: description.trim() || undefined,
+          resource_types: resourceTypes,
+          explicit_resource_ids: parseList(resourceIds),
+          label_selector:
+            normalizedRequirements.length > 0
+              ? {
+                  schema_version: "argus.label_selector/v1",
+                  requirements: normalizedRequirements,
+                }
+              : undefined,
+          status,
+        });
+      }}
       open={open}
       title={
         scope
@@ -316,88 +355,34 @@ function ScopeDrawer({
             value={name}
           />
         </Field>
-        <Field label={t("settings.org.scopesTab.subjectType")}>
-          <div className="argus-settings-check-row">
-            {(["role", "department", "user"] as const).map((type) => (
-              <span
-                key={type}
-                onClick={() => {
-                  setSubjectType(type);
-                  setSubjectId("");
-                }}
-                role="radio"
-                aria-checked={subjectType === type}
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setSubjectType(type);
-                    setSubjectId("");
-                  }
-                }}
-              >
-                <CheckItem checked={subjectType === type}>
-                  {t(`settings.org.scopesTab.subjectTypes.${type}`)}
-                </CheckItem>
-              </span>
-            ))}
-          </div>
-        </Field>
-        <Field label={t("settings.org.scopesTab.subject")}>
-          <Select
-            onValueChange={setSubjectId}
-            options={[
-              { value: "", label: "—" },
-              ...subjectOptions.map((option) => ({
-                value: option.id,
-                label: option.label,
-              })),
-            ]}
-            value={subjectId}
+        <Field label={t("settings.common.description")}>
+          <Textarea
+            onChange={(event) => setDescription(event.target.value)}
+            rows={2}
+            value={description}
           />
         </Field>
-        <Field label={t("settings.org.scopesTab.environments")}>
-          <div className="argus-settings-check-row">
-            {ENVIRONMENTS.map((env) => (
-              <span
-                key={env}
+        <Field label={t("settings.org.scopesTab.resourceTypes")}>
+          <div className="argus-settings-check-list">
+            {RESOURCE_TYPES.map((resourceType) => (
+              <button
+                className="argus-settings-check-option"
+                key={resourceType}
                 onClick={() =>
-                  setEnvironments((prev) =>
-                    prev.includes(env)
-                      ? prev.filter((item) => item !== env)
-                      : [...prev, env],
+                  setResourceTypes((current) =>
+                    current.includes(resourceType)
+                      ? current.filter((type) => type !== resourceType)
+                      : [...current, resourceType],
                   )
                 }
-                role="checkbox"
-                aria-checked={environments.includes(env)}
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setEnvironments((prev) =>
-                      prev.includes(env)
-                        ? prev.filter((item) => item !== env)
-                        : [...prev, env],
-                    );
-                  }
-                }}
+                type="button"
               >
-                <CheckItem checked={environments.includes(env)}>
-                  {t(`settings.org.env.${env}`)}
+                <CheckItem checked={resourceTypes.includes(resourceType)}>
+                  {t(`settings.org.scopesTab.resourceType.${resourceType}`)}
                 </CheckItem>
-              </span>
+              </button>
             ))}
           </div>
-        </Field>
-        <Field
-          hint={t("settings.org.scopesTab.tagExpressionHint")}
-          label={t("settings.org.scopesTab.tagExpression")}
-        >
-          <Input
-            onChange={(event) => setTagExpression(event.target.value)}
-            placeholder="criticality!=high"
-            value={tagExpression}
-          />
         </Field>
         <Field
           hint={t("settings.org.scopesTab.resourceIdsHint")}
@@ -409,11 +394,90 @@ function ScopeDrawer({
             value={resourceIds}
           />
         </Field>
-        <Field label={t("settings.org.scopesTab.onlyOwned")}>
-          <Switch
-            checked={onlyOwned}
-            label={t("settings.org.scopesTab.onlyOwned")}
-            onChange={setOnlyOwned}
+        <Field
+          hint={t("settings.org.scopesTab.labelSelectorHint")}
+          label={t("settings.org.scopesTab.labelSelector")}
+        >
+          <div className="argus-settings-selector-list">
+            {requirements.map((requirement) => (
+              <div className="argus-settings-selector-row" key={requirement.id}>
+                <Input
+                  aria-label={t("settings.org.scopesTab.labelKey")}
+                  maxLength={63}
+                  onChange={(event) =>
+                    updateRequirement(requirement.id, {
+                      key: event.target.value,
+                    })
+                  }
+                  pattern="[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*"
+                  placeholder={t("settings.org.scopesTab.labelKey")}
+                  value={requirement.key}
+                />
+                <Select
+                  aria-label={t("settings.org.scopesTab.operator")}
+                  onValueChange={(operator) =>
+                    updateRequirement(requirement.id, {
+                      operator: operator as RequirementOperator,
+                    })
+                  }
+                  options={OPERATORS.map((operator) => ({
+                    value: operator,
+                    label: operator,
+                  }))}
+                  value={requirement.operator}
+                />
+                {requirement.operator === "eq" ||
+                requirement.operator === "in" ? (
+                  <Input
+                    aria-label={t("settings.org.scopesTab.labelValues")}
+                    onChange={(event) =>
+                      updateRequirement(requirement.id, {
+                        values: event.target.value,
+                      })
+                    }
+                    placeholder={t("settings.org.scopesTab.labelValues")}
+                    required
+                    value={requirement.values}
+                  />
+                ) : (
+                  <span aria-hidden="true" />
+                )}
+                <Button
+                  onClick={() =>
+                    setRequirements((current) =>
+                      current.filter((item) => item.id !== requirement.id),
+                    )
+                  }
+                  size="sm"
+                  variant="ghost"
+                >
+                  {t("settings.common.delete")}
+                </Button>
+              </div>
+            ))}
+            <Button
+              disabled={requirements.length >= 16}
+              onClick={() =>
+                setRequirements((current) => [
+                  ...current,
+                  createRequirementDraft(),
+                ])
+              }
+              size="sm"
+              variant="ghost"
+            >
+              {t("settings.org.scopesTab.addRequirement")}
+            </Button>
+          </div>
+        </Field>
+        <Field label={t("settings.common.status")}>
+          <Select
+            onValueChange={(value) => setStatus(value as DataScope["status"])}
+            options={[
+              { value: "active", label: t("settings.common.active") },
+              { value: "disabled", label: t("settings.common.disabled") },
+            ]}
+            value={status}
           />
         </Field>
       </div>

@@ -35,8 +35,8 @@ export function UsageTab() {
   ).length;
 
   return (
-    <div className="platform-stack">
-      <div className="stat-row">
+    <div className="argus-platform-stack">
+      <div className="argus-stat-row">
         <StatCard
           label={t("sandbox.usage.totalSessions")}
           tone="accent"

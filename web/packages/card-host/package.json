@@ -13,7 +13,7 @@
     "test": "vitest run src"
   },
   "dependencies": {
-    "@argus/ui": "workspace:*",
+    "@argus/api-client": "workspace:*",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

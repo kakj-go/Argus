@@ -1,20 +1,23 @@
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import type { CardInstance } from "@argus/api-client";
 import { useApi } from "@argus/api-client";
 import {
   SandboxCard,
   type ActionInvokeHandler,
   type QueryInvokeHandler,
 } from "@argus/card-host";
-import { Badge } from "@argus/ui";
+import { Badge, useTheme } from "@argus/ui";
+import { cardOrigin, provisionalCardContract } from "../../lib/card-contract";
+import type { CardInstance } from "./chat-view-model";
 
 /**
  * 消息中的沙箱卡片引用：统一包装（标题栏 + 来源徽标 + 边框）后
  * 用 SandboxCard 渲染 InteractiveCard.htmlTemplate。
  */
 export function SandboxCardFrame({ card }: { card: CardInstance }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { resolvedTheme } = useTheme();
+  const locale = i18n.language === "en-US" ? "en-US" : "zh-CN";
   const api = useApi();
   const { data: skill } = useQuery({
     queryKey: ["interactiveCards", card.interactiveCardId],
@@ -25,17 +28,30 @@ export function SandboxCardFrame({ card }: { card: CardInstance }) {
   // 这里回传卡片当前数据作为占位，接入真实后端后按 binding 路由到对应查询。
   const handleQueryInvoke: QueryInvokeHandler = () => skill?.demoData ?? {};
 
-  // 卡片内 Action Slot：若绑定的是 PendingAction 的 actionBindingId，
+  // 卡片内 Action Slot：若绑定的是 PendingActionPublic 的 actionBindingId，
   // 触发确认流程（等价于确认卡片的 [确认执行]，不经过模型）。
   const handleActionInvoke: ActionInvokeHandler = async (bindingId) => {
     if (card.pendingActionRef && card.actionBindingId === bindingId) {
       const result = await api.approvals.confirm(card.pendingActionRef);
-      return { status: result.pendingAction.status, taskId: result.task?.id };
+      return {
+        status: result.pending_action.status,
+        execution_ref: result.execution?.execution_id,
+      };
     }
     return { ignored: true };
   };
 
   const title = card.title ?? skill?.name ?? t("chat.card.untitled");
+  const contract = skill
+    ? provisionalCardContract({
+        card_id: skill.id,
+        revision: skill.revision,
+        card_instance_id: card.id,
+        action_binding_ids: card.actionBindingId ? [card.actionBindingId] : [],
+        locale,
+        color_scheme: resolvedTheme,
+      })
+    : null;
 
   return (
     <div className="argus-chat-card" data-testid="sandbox-card-frame">
@@ -49,19 +65,23 @@ export function SandboxCardFrame({ card }: { card: CardInstance }) {
         </Badge>
       </header>
       <div className="argus-chat-card__body">
-        {skill ? (
+        {skill && contract ? (
           <SandboxCard
             bindings={{
-              queryBindingIds: [],
-              actionBindingIds: card.actionBindingId
+              query_binding_ids: [],
+              action_binding_ids: card.actionBindingId
                 ? [card.actionBindingId]
                 : [],
             }}
-            cardInstanceId={card.id}
+            card_origin={cardOrigin}
+            color_scheme={resolvedTheme}
             html={skill.htmlTemplate}
-            initialData={skill.demoData}
+            initial_data={skill.demoData}
+            locale={locale}
+            manifest={contract.manifest}
             onActionInvoke={handleActionInvoke}
             onQueryInvoke={handleQueryInvoke}
+            render_plan={contract.render_plan}
             title={title}
           />
         ) : (

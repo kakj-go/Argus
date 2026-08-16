@@ -15,14 +15,14 @@ export function createApprovalsDomain(
     async list(filter, query) {
       await ctx.pause();
       let items = db.pendingActions.filter(
-        (entry) => entry.enterpriseId === ctx.enterpriseId(),
+        (entry) => db.actionPlans[entry.action_ref]?.enterprise_id === ctx.enterpriseId(),
       );
       if (filter?.status?.length) {
         items = items.filter((entry) => filter.status?.includes(entry.status));
       }
-      if (filter?.riskLevel?.length) {
+      if (filter?.risk?.length) {
         items = items.filter((entry) =>
-          filter.riskLevel?.includes(entry.riskLevel),
+          filter.risk?.includes(entry.risk),
         );
       }
       if (filter?.query) {
@@ -49,18 +49,30 @@ export function createApprovalsDomain(
       ctx.ensureNotExpired(action);
       ctx.audit("pending_action.confirm", {
         resourceType: "pending_action",
-        resourceId: action.id,
+        resourceId: action.action_ref,
         summary: `${action.title} 已确认`,
-        origin: action.conversationId ? "card_action" : "admin_ui",
+        origin: db.actionPlans[action.action_ref]?.conversation_id
+          ? "card_action"
+          : "admin_ui",
       });
       if (action.approval?.required) {
         action.status = "awaiting_approval";
-        action.updatedAt = ctx.nowIso();
+        action.available_actions = ["approve", "reject", "cancel"];
+        action.updated_at = ctx.nowIso();
         ctx.save();
-        return { pendingAction: action };
+        return { pending_action: action };
       }
       const task = ctx.startExecution(action);
-      return { pendingAction: action, task };
+      return {
+        pending_action: action,
+        execution: {
+          execution_id: task.id,
+          action_ref: action.action_ref,
+          status: "running",
+          created_at: task.createdAt,
+          updated_at: task.createdAt,
+        },
+      };
     },
     async cancel(actionRef) {
       await ctx.pause();
@@ -72,10 +84,11 @@ export function createApprovalsDomain(
         throw new Error(`cannot cancel action in status ${action.status}`);
       }
       action.status = "cancelled";
-      action.updatedAt = ctx.nowIso();
+      action.available_actions = [];
+      action.updated_at = ctx.nowIso();
       ctx.audit("pending_action.cancel", {
         resourceType: "pending_action",
-        resourceId: action.id,
+        resourceId: action.action_ref,
         summary: `${action.title} 已取消`,
       });
       ctx.save();
@@ -89,29 +102,31 @@ export function createApprovalsDomain(
       }
       ctx.ensureNotExpired(action);
       const who = ctx.actor();
-      if (action.approval.separationOfDuty && action.createdBy === who.id) {
+      const plan = db.actionPlans[action.action_ref];
+      if (!plan) throw new Error("pending action plan unavailable");
+      if (action.approval.separation_of_duty && plan.created_by === who.id) {
         throw new Error("separation of duty: creator cannot approve");
       }
-      action.approval.decisions.push({
-        userId: who.id,
-        userName: who.displayName,
+      plan.approval_decisions.push({
+        actor_user_id: who.id,
+        actor_name: who.displayName,
         decision: "approved",
         reason: comment,
-        at: ctx.nowIso(),
+        decided_at: ctx.nowIso(),
       });
-      ctx.audit("approval.approve", {
-        resourceType: "pending_action",
-        resourceId: action.id,
-        summary: `审批通过 ${action.title}`,
-      });
-      const approved = action.approval.decisions.filter(
+      action.approval.approved_count = plan.approval_decisions.filter(
         (decision) => decision.decision === "approved",
       ).length;
-      if (approved >= action.approval.minApprovers) {
+      ctx.audit("approval.approve", {
+        resourceType: "pending_action",
+        resourceId: action.action_ref,
+        summary: `审批通过 ${action.title}`,
+      });
+      if (action.approval.approved_count >= action.approval.minimum_approvers) {
         action.status = "ready";
         ctx.startExecution(action);
       } else {
-        action.updatedAt = ctx.nowIso();
+        action.updated_at = ctx.nowIso();
         ctx.save();
       }
       return action;
@@ -123,18 +138,22 @@ export function createApprovalsDomain(
         throw new Error(`cannot reject action in status ${action.status}`);
       }
       const who = ctx.actor();
-      action.approval.decisions.push({
-        userId: who.id,
-        userName: who.displayName,
+      const plan = db.actionPlans[action.action_ref];
+      if (!plan) throw new Error("pending action plan unavailable");
+      plan.approval_decisions.push({
+        actor_user_id: who.id,
+        actor_name: who.displayName,
         decision: "rejected",
         reason,
-        at: ctx.nowIso(),
+        decided_at: ctx.nowIso(),
       });
       action.status = "rejected";
-      action.updatedAt = ctx.nowIso();
+      action.available_actions = [];
+      action.result_summary = reason;
+      action.updated_at = ctx.nowIso();
       ctx.audit("approval.reject", {
         resourceType: "pending_action",
-        resourceId: action.id,
+        resourceId: action.action_ref,
         summary: `审批驳回 ${action.title}`,
       });
       ctx.save();

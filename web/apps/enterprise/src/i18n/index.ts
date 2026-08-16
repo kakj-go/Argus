@@ -16,8 +16,24 @@ import { shellEn, shellZh } from "./shell";
  *   资源对象在这里浅合并后注入 i18next。
  * - 通用/跨模块文案放 `common.ts`，外壳与导航文案放 `shell.ts`。
  */
-const modulesZh = [commonZh, shellZh, loginZh, chatZh, hostsZh, kubernetesZh, aiSettingsZh];
-const modulesEn = [commonEn, shellEn, loginEn, chatEn, hostsEn, kubernetesEn, aiSettingsEn];
+const modulesZh = [
+  commonZh,
+  shellZh,
+  loginZh,
+  chatZh,
+  hostsZh,
+  kubernetesZh,
+  aiSettingsZh,
+];
+const modulesEn = [
+  commonEn,
+  shellEn,
+  loginEn,
+  chatEn,
+  hostsEn,
+  kubernetesEn,
+  aiSettingsEn,
+];
 
 const storedLocale = window.localStorage.getItem("argus.locale");
 

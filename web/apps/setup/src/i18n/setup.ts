@@ -161,10 +161,22 @@ export const setupEn = {
       goLogin: "Go to sign in",
     },
     steps: {
-      token: { title: "Verify Setup Token", description: "One-time deployment credential" },
-      system: { title: "System & admin", description: "Platform info and super admin" },
-      sandbox: { title: "OpenSandbox", description: "Optional, configurable later" },
-      review: { title: "Confirm & submit", description: "Single transaction, one-shot" },
+      token: {
+        title: "Verify Setup Token",
+        description: "One-time deployment credential",
+      },
+      system: {
+        title: "System & admin",
+        description: "Platform info and super admin",
+      },
+      sandbox: {
+        title: "OpenSandbox",
+        description: "Optional, configurable later",
+      },
+      review: {
+        title: "Confirm & submit",
+        description: "Single transaction, one-shot",
+      },
     },
     token: {
       label: "Setup Token",

@@ -66,7 +66,7 @@ function BastionFields({
       </Field>
       <Field
         hint={t("hosts.bastionForm.tagsHint")}
-        label={t("hosts.bastionForm.tags")}
+        label={t("hosts.bastionForm.labels")}
       >
         <Textarea
           onChange={(event) => onTagsTextChange(event.target.value)}
@@ -111,7 +111,7 @@ export function AddBastionDrawer({
       await api.connectors.createBastionScope({
         name: name.trim(),
         environment,
-        tags: parseTags(tagsText),
+        labels: parseTags(tagsText),
       });
       onCreated();
       close(false);
@@ -173,7 +173,7 @@ export function EditBastionDrawer({
     if (!scope) return;
     setName(scope.name);
     setEnvironment(scope.environment);
-    setTagsText(tagsToText(scope.tags));
+    setTagsText(tagsToText(scope.labels));
     setToken(scope.registrationToken ?? null);
     setGenerationError("");
   }, [scope]);
@@ -185,7 +185,7 @@ export function EditBastionDrawer({
       await api.connectors.updateBastionScope(scope.id, {
         name: name.trim(),
         environment,
-        tags: parseTags(tagsText),
+        labels: parseTags(tagsText),
       });
       onSaved();
       onOpenChange(false);
@@ -431,7 +431,7 @@ export function EditHostDrawer({
     setAddress(host.address);
     setPort(String(host.port));
     setEnvironment(host.environment);
-    setTagsText(tagsToText(host.tags));
+    setTagsText(tagsToText(host.labels));
   }
 
   const submit = async () => {
@@ -443,7 +443,7 @@ export function EditHostDrawer({
         address: address.trim(),
         port: Number(port) || host.port,
         environment,
-        tags: parseTags(tagsText),
+        labels: parseTags(tagsText),
       };
       await api.hosts.update(host.id, patch);
       onSaved();
@@ -490,7 +490,7 @@ export function EditHostDrawer({
           />
         </Field>
       </div>
-      <Field hint={t("hosts.wizard.tagsHint")} label={t("hosts.wizard.tags")}>
+      <Field hint={t("hosts.wizard.tagsHint")} label={t("hosts.wizard.labels")}>
         <Textarea
           onChange={(event) => setTagsText(event.target.value)}
           rows={3}

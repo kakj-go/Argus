@@ -37,8 +37,7 @@ export interface Host {
   /** Only a secret reference is stored; values are never exposed. */
   credentialRef?: string;
   environment: Environment;
-  tags: Record<string, string>;
-  ownerTeamId?: string;
+  labels: Record<string, string>;
   connectionStatus: HostConnectionStatus;
   collectorStatus: CollectorStatus;
   /** Telemetry route label, e.g. an Edge Gateway the host pushes through. */
@@ -58,8 +57,7 @@ export interface CreateHostInput {
   bastionScopeId?: string;
   credentialRef?: string;
   environment: Environment;
-  tags?: Record<string, string>;
-  ownerTeamId?: string;
+  labels?: Record<string, string>;
 }
 
 export interface UpdateHostInput {
@@ -68,8 +66,7 @@ export interface UpdateHostInput {
   port?: number;
   credentialRef?: string;
   environment?: Environment;
-  tags?: Record<string, string>;
-  ownerTeamId?: string;
+  labels?: Record<string, string>;
 }
 
 export interface HostFilter {
@@ -79,7 +76,7 @@ export interface HostFilter {
   connectionMode?: HostConnectionMode[];
   bastionScopeId?: string;
   environment?: Environment[];
-  tags?: Record<string, string[]>;
+  labels?: Record<string, string[]>;
 }
 
 export type ConnectorStatus = "online" | "offline" | "uninstalled";
@@ -175,7 +172,7 @@ export interface BastionScope {
   enterpriseId: string;
   name: string;
   environment: Environment;
-  tags: Record<string, string>;
+  labels: Record<string, string>;
   status: BastionScopeStatus;
   connectorHostId?: string;
   activeConnectorId?: string;
@@ -192,7 +189,7 @@ export interface BastionScope {
 export interface CreateBastionScopeInput {
   name: string;
   environment: Environment;
-  tags?: Record<string, string>;
+  labels?: Record<string, string>;
 }
 
 export type UpdateBastionScopeInput = Partial<CreateBastionScopeInput>;

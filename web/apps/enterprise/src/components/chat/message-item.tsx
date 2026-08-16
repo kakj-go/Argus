@@ -1,13 +1,13 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
-import type { ChatMessage } from "@argus/api-client";
 import { Avatar, Badge } from "@argus/ui";
-import { useAuthStore } from "@argus/auth";
+import { useEnterpriseAuthStore } from "@argus/auth";
 import { ActionResultBar } from "./action-result-bar";
 import { PendingActionCard } from "./pending-action-card";
 import { ToolTrace } from "./tool-trace";
 import { SandboxCardFrame } from "./sandbox-card-frame";
+import type { ChatMessage } from "./chat-view-model";
 
 function formatTime(value: string, locale: string): string {
   return new Date(value).toLocaleTimeString(locale, {
@@ -26,7 +26,7 @@ export function ChatMessageItem({
   streaming?: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const user = useAuthStore((state) => state.session?.user);
+  const user = useEnterpriseAuthStore((state) => state.session?.user);
 
   if (message.event) {
     return <ActionResultBar message={message} />;
@@ -40,10 +40,10 @@ export function ChatMessageItem({
       >
         <div className="argus-chat-message__who">
           <Avatar
-            fallback={(user?.displayName ?? t("chat.you")).slice(0, 1)}
+            fallback={(user?.display_name ?? t("chat.you")).slice(0, 1)}
             size="sm"
           />
-          <b>{user?.displayName ?? t("chat.you")}</b>
+          <b>{user?.display_name ?? t("chat.you")}</b>
           <time>{formatTime(message.createdAt, i18n.language)}</time>
         </div>
         <div className="argus-chat-message__body">{message.content}</div>

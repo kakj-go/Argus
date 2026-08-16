@@ -2,11 +2,11 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { LayoutTemplate, PanelRightClose, ShieldCheck } from "lucide-react";
-import type { ChatMessage } from "@argus/api-client";
 import { useApi } from "@argus/api-client";
 import { Badge, Button, Timeline } from "@argus/ui";
 import { useMyPermissions, useMyRoles } from "../../lib/permissions";
 import { useUiStore } from "../../store/ui";
+import type { ChatMessage } from "./chat-view-model";
 
 function formatRelative(value: string, locale: string): string {
   const diff = Date.now() - Date.parse(value);
@@ -32,7 +32,10 @@ export function ChatContextPanel({ messages }: { messages: ChatMessage[] }) {
 
   // 当前会话引用的卡片资源（来自消息中的卡片引用，按卡片实例去重）。
   const references = useMemo(() => {
-    const seen = new Map<string, { id: string; title: string; version: string }>();
+    const seen = new Map<
+      string,
+      { id: string; title: string; version: string }
+    >();
     for (const message of messages) {
       for (const card of message.cards ?? []) {
         if (!seen.has(card.id)) {
@@ -58,10 +61,7 @@ export function ChatContextPanel({ messages }: { messages: ChatMessage[] }) {
   const { data: auditPage } = useQuery({
     queryKey: ["audit", "mine", me?.user.id],
     queryFn: () =>
-      api.audit.list(
-        { actorUserId: me?.user.id },
-        { page: { limit: 5 } },
-      ),
+      api.audit.list({ actorUserId: me?.user.id }, { page: { limit: 5 } }),
     enabled: Boolean(me?.user.id),
   });
 

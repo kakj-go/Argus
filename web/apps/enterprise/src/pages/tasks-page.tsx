@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Task, TaskStatus, TaskType } from "@argus/api-client";
+import type { TaskStatus, TaskType, TaskViewModel } from "@argus/api-client/provisional";
 import { useApi } from "@argus/api-client";
 import {
   Badge,
@@ -97,8 +97,12 @@ export function TasksPage() {
             100,
         )
       : null;
-  const runningCount = allTasks.filter((task) => task.status === "running").length;
-  const failedCount = allTasks.filter((task) => task.status === "failed").length;
+  const runningCount = allTasks.filter(
+    (task) => task.status === "running",
+  ).length;
+  const failedCount = allTasks.filter(
+    (task) => task.status === "failed",
+  ).length;
 
   return (
     <PageShell
@@ -112,7 +116,9 @@ export function TasksPage() {
         />
         <StatCard
           label={t("governance.tasks.stats.successRate")}
-          tone={successRate !== null && successRate < 80 ? "warning" : "success"}
+          tone={
+            successRate !== null && successRate < 80 ? "warning" : "success"
+          }
           value={successRate !== null ? `${successRate}%` : "—"}
         />
         <StatCard
@@ -267,7 +273,7 @@ export function TasksPage() {
                   : formatDuration(row.task.startedAt, row.task.finishedAt),
             },
           ]}
-          data={tasks.map((task: Task) => ({ task }))}
+          data={tasks.map((task: TaskViewModel) => ({ task }))}
           getRowKey={(row) => row.task.id}
         />
       )}

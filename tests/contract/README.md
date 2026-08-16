@@ -13,7 +13,6 @@ Execution 完整事件组切点、原始事件不变性和递归私有字段过�
 M1 删除旧引用时无需更新基线；只有确认重建基线时才运行：
 
 ```text
-make contract-update-legacy-baseline
 ```
 
 常用命令：

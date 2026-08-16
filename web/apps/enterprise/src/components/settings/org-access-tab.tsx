@@ -1,8 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@argus/api-client";
-import type { CreatedApiKey, ServiceAccount } from "@argus/api-client";
+import {
+  useApi,
+  type CreatedApiKey,
+  type CreateServiceAccountInput,
+  type DataScope,
+  type ServiceAccount,
+} from "@argus/api-client";
 import {
   Alert,
   Badge,
@@ -16,42 +21,73 @@ import {
   Input,
   Spinner,
   StatusBadge,
+  Textarea,
 } from "@argus/ui";
 import { formatDateTime } from "./shared";
-import { CheckList, useOrgRoles } from "./org-users-tab";
+import { CheckList } from "./org-users-tab";
 
-type SaRow = {
+type ServiceAccountRow = {
   id: string;
   name: string;
   description: string;
-  roleIds: string[];
+  allowed_tool_ids: string[];
+  data_scope_ids: string[];
   status: ServiceAccount["status"];
-  lastUsedAt?: string;
+  updated_at: string;
 };
+
+function parseList(text: string): string[] {
+  return [
+    ...new Set(
+      text
+        .split(/[\n,]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function toDateTimeLocal(iso?: string): string {
+  return iso ? iso.slice(0, 16) : "";
+}
 
 export function OrgAccessTab() {
   const { t } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
-  const roles = useOrgRoles();
   const serviceAccounts = useQuery({
     queryKey: ["org", "serviceAccounts"],
     queryFn: () => api.org.listServiceAccounts(),
   });
-  const [createOpen, setCreateOpen] = useState(false);
+  const dataScopes = useQuery({
+    queryKey: ["org", "dataScopes"],
+    queryFn: () => api.org.listDataScopes(),
+  });
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editing, setEditing] = useState<ServiceAccount | null>(null);
   const [keysFor, setKeysFor] = useState<ServiceAccount | null>(null);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["org", "serviceAccounts"] });
 
-  const create = useMutation({
-    mutationFn: (input: {
-      name: string;
-      description?: string;
-      roleIds: string[];
-    }) => api.org.createServiceAccount(input),
+  const save = useMutation({
+    mutationFn: ({
+      account,
+      input,
+    }: {
+      account: ServiceAccount | null;
+      input: CreateServiceAccountInput;
+    }) =>
+      account
+        ? api.org.updateServiceAccount(account.id, {
+            description: input.description,
+            allowed_tool_ids: input.allowed_tool_ids,
+            data_scope_ids: input.data_scope_ids,
+          })
+        : api.org.createServiceAccount(input),
     onSuccess: () => {
-      setCreateOpen(false);
+      setDrawerOpen(false);
+      setEditing(null);
       void invalidate();
     },
   });
@@ -64,17 +100,20 @@ export function OrgAccessTab() {
     onSuccess: () => void invalidate(),
   });
 
-  const roleName = (id: string) =>
-    roles.data?.find((role) => role.id === id)?.name ?? id;
+  const scopeName = (id: string) =>
+    dataScopes.data?.find((scope) => scope.id === id)?.name ?? id;
 
-  const rows: SaRow[] = (serviceAccounts.data ?? []).map((account) => ({
-    id: account.id,
-    name: account.name,
-    description: account.description ?? "",
-    roleIds: account.roleIds,
-    status: account.status,
-    lastUsedAt: account.lastUsedAt,
-  }));
+  const rows: ServiceAccountRow[] = (serviceAccounts.data ?? []).map(
+    (account) => ({
+      id: account.id,
+      name: account.name,
+      description: account.description ?? "",
+      allowed_tool_ids: account.allowed_tool_ids ?? [],
+      data_scope_ids: account.data_scope_ids ?? [],
+      status: account.status,
+      updated_at: account.updated_at,
+    }),
+  );
 
   return (
     <div className="argus-settings-section">
@@ -88,7 +127,10 @@ export function OrgAccessTab() {
           </p>
         </div>
         <Button
-          onClick={() => setCreateOpen(true)}
+          onClick={() => {
+            setEditing(null);
+            setDrawerOpen(true);
+          }}
           size="sm"
           variant="primary"
         >
@@ -100,20 +142,34 @@ export function OrgAccessTab() {
       ) : rows.length === 0 ? (
         <EmptyState description="" title={t("settings.org.accessTab.empty")} />
       ) : (
-        <DataTable<SaRow>
+        <DataTable<ServiceAccountRow>
           columns={[
             { key: "name", header: t("settings.common.name") },
             { key: "description", header: t("settings.common.description") },
             {
-              key: "roleIds",
-              header: t("settings.org.users.roles"),
+              key: "allowed_tool_ids",
+              header: t("settings.org.accessTab.allowedTools"),
               render: (row) =>
-                row.roleIds.length === 0 ? (
+                row.allowed_tool_ids.length === 0 ? (
                   "—"
                 ) : (
                   <span className="argus-settings-inline-actions">
-                    {row.roleIds.map((id) => (
-                      <Badge key={id}>{roleName(id)}</Badge>
+                    {row.allowed_tool_ids.map((id) => (
+                      <Badge key={id}>{id}</Badge>
+                    ))}
+                  </span>
+                ),
+            },
+            {
+              key: "data_scope_ids",
+              header: t("settings.org.accessTab.dataScopes"),
+              render: (row) =>
+                row.data_scope_ids.length === 0 ? (
+                  t("settings.common.all")
+                ) : (
+                  <span className="argus-settings-inline-actions">
+                    {row.data_scope_ids.map((id) => (
+                      <Badge key={id}>{scopeName(id)}</Badge>
                     ))}
                   </span>
                 ),
@@ -132,18 +188,29 @@ export function OrgAccessTab() {
               ),
             },
             {
-              key: "lastUsedAt",
-              header: t("settings.org.accessTab.lastUsedAt"),
-              render: (row) =>
-                row.lastUsedAt
-                  ? formatDateTime(row.lastUsedAt)
-                  : t("settings.common.never"),
+              key: "updated_at",
+              header: t("settings.org.accessTab.updatedAt"),
+              render: (row) => formatDateTime(row.updated_at),
             },
             {
               key: "actions",
               header: t("settings.common.actions"),
               render: (row) => (
                 <span className="argus-settings-inline-actions">
+                  <Button
+                    onClick={() => {
+                      setEditing(
+                        serviceAccounts.data?.find(
+                          (account) => account.id === row.id,
+                        ) ?? null,
+                      );
+                      setDrawerOpen(true);
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {t("settings.common.edit")}
+                  </Button>
                   <Button
                     onClick={() =>
                       setKeysFor(
@@ -180,15 +247,16 @@ export function OrgAccessTab() {
         />
       )}
 
-      <CreateSaDrawer
-        loading={create.isPending}
-        onOpenChange={setCreateOpen}
-        onSubmit={(input) => create.mutate(input)}
-        open={createOpen}
-        roles={(roles.data ?? []).map((role) => ({
-          id: role.id,
-          label: role.name,
-        }))}
+      <ServiceAccountDrawer
+        account={editing}
+        dataScopes={dataScopes.data ?? []}
+        loading={save.isPending}
+        onOpenChange={(open) => {
+          setDrawerOpen(open);
+          if (!open) setEditing(null);
+        }}
+        onSubmit={(input) => save.mutate({ account: editing, input })}
+        open={drawerOpen}
       />
 
       {keysFor && (
@@ -203,27 +271,34 @@ export function OrgAccessTab() {
   );
 }
 
-function CreateSaDrawer({
+function ServiceAccountDrawer({
   open,
   onOpenChange,
   onSubmit,
   loading,
-  roles,
+  account,
+  dataScopes,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: {
-    name: string;
-    description?: string;
-    roleIds: string[];
-  }) => void;
+  onSubmit: (input: CreateServiceAccountInput) => void;
   loading: boolean;
-  roles: Array<{ id: string; label: string }>;
+  account: ServiceAccount | null;
+  dataScopes: DataScope[];
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [roleIds, setRoleIds] = useState<string[]>([]);
+  const [allowedTools, setAllowedTools] = useState("");
+  const [dataScopeIds, setDataScopeIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    setName(account?.name ?? "");
+    setDescription(account?.description ?? "");
+    setAllowedTools((account?.allowed_tool_ids ?? []).join("\n"));
+    setDataScopeIds(account?.data_scope_ids ?? []);
+  }, [account, open]);
 
   return (
     <FormDrawer
@@ -233,15 +308,21 @@ function CreateSaDrawer({
         onSubmit({
           name: name.trim(),
           description: description.trim() || undefined,
-          roleIds,
+          allowed_tool_ids: parseList(allowedTools),
+          data_scope_ids: dataScopeIds,
         })
       }
       open={open}
-      title={t("settings.org.accessTab.createSaTitle")}
+      title={
+        account
+          ? t("settings.org.accessTab.editSaTitle")
+          : t("settings.org.accessTab.createSaTitle")
+      }
     >
       <div className="argus-settings-form">
         <Field label={t("settings.common.name")}>
           <Input
+            disabled={Boolean(account)}
             onChange={(event) => setName(event.target.value)}
             required
             value={name}
@@ -253,8 +334,25 @@ function CreateSaDrawer({
             value={description}
           />
         </Field>
-        <Field label={t("settings.org.users.roles")}>
-          <CheckList onChange={setRoleIds} options={roles} value={roleIds} />
+        <Field
+          hint={t("settings.org.accessTab.allowedToolsHint")}
+          label={t("settings.org.accessTab.allowedTools")}
+        >
+          <Textarea
+            onChange={(event) => setAllowedTools(event.target.value)}
+            rows={4}
+            value={allowedTools}
+          />
+        </Field>
+        <Field label={t("settings.org.accessTab.dataScopes")}>
+          <CheckList
+            onChange={setDataScopeIds}
+            options={dataScopes.map((scope) => ({
+              id: scope.id,
+              label: scope.name,
+            }))}
+            value={dataScopeIds}
+          />
         </Field>
       </div>
     </FormDrawer>
@@ -276,7 +374,7 @@ function ApiKeysDrawer({
     queryFn: () => api.org.listApiKeys(account.id),
   });
   const [keyName, setKeyName] = useState("");
-  const [scopes, setScopes] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
   const [created, setCreated] = useState<CreatedApiKey | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
 
@@ -289,15 +387,12 @@ function ApiKeysDrawer({
     mutationFn: () =>
       api.org.createApiKey(account.id, {
         name: keyName.trim(),
-        scopes: scopes
-          .split(/[,\n]+/)
-          .map((scope) => scope.trim())
-          .filter(Boolean),
+        expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
       }),
     onSuccess: (result) => {
       setCreated(result);
       setKeyName("");
-      setScopes("");
+      setExpiresAt("");
       void invalidate();
     },
   });
@@ -310,9 +405,7 @@ function ApiKeysDrawer({
     },
   });
 
-  const activeKeys = (keys.data ?? []).filter(
-    (key) => key.status === "active",
-  );
+  const activeKeys = (keys.data ?? []).filter((key) => key.status === "active");
 
   return (
     <FormDrawer
@@ -326,7 +419,7 @@ function ApiKeysDrawer({
           <div className="argus-settings-section">
             <Alert
               description={t("settings.org.accessTab.keyCreatedWarning")}
-              title={t("settings.org.accessTab.keyCreatedTitle")}
+              title={`${t("settings.org.accessTab.keyCreatedTitle")} · ${created.api_key.prefix}`}
               tone="warning"
             />
             <CodeBlock code={created.secret} language="apikey" />
@@ -344,15 +437,16 @@ function ApiKeysDrawer({
               <div className="argus-settings-key-row" key={key.id}>
                 <div className="argus-settings-key-row__meta">
                   <span>
-                    {key.name}{" "}
-                    <Badge tone="accent">{key.prefix}…</Badge>
+                    {key.name} <Badge tone="accent">{key.prefix}…</Badge>
                   </span>
                   <small>
-                    {key.scopes.join(", ") || "—"} ·{" "}
                     {t("settings.org.accessTab.lastUsedAt")}:{" "}
-                    {key.lastUsedAt
-                      ? formatDateTime(key.lastUsedAt)
+                    {key.last_used_at
+                      ? formatDateTime(key.last_used_at)
                       : t("settings.common.never")}
+                    {key.expires_at
+                      ? ` · ${t("settings.org.accessTab.expiresAt")}: ${formatDateTime(key.expires_at)}`
+                      : ""}
                   </small>
                 </div>
                 <Button
@@ -372,14 +466,12 @@ function ApiKeysDrawer({
             value={keyName}
           />
         </Field>
-        <Field
-          hint={t("settings.org.accessTab.scopesHint")}
-          label={t("settings.org.accessTab.scopes")}
-        >
+        <Field label={t("settings.org.accessTab.expiresAt")}>
           <Input
-            onChange={(event) => setScopes(event.target.value)}
-            placeholder="host.read, telemetry.read"
-            value={scopes}
+            min={toDateTimeLocal(new Date().toISOString())}
+            onChange={(event) => setExpiresAt(event.target.value)}
+            type="datetime-local"
+            value={expiresAt}
           />
         </Field>
         <Button

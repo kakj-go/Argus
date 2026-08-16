@@ -69,7 +69,10 @@ export function ImagesTab() {
           .filter(Boolean)
           .map((entry) => {
             const [lang, version] = entry.split(":");
-            return { name: (lang ?? "").trim(), version: (version ?? "").trim() };
+            return {
+              name: (lang ?? "").trim(),
+              version: (version ?? "").trim(),
+            };
           }),
       }),
     onSuccess: () => {
@@ -102,8 +105,8 @@ export function ImagesTab() {
   }));
 
   return (
-    <div className="platform-stack">
-      <div className="tab-toolbar">
+    <div className="argus-platform-stack">
+      <div className="argus-tab-toolbar">
         <Button onClick={() => setCreateOpen(true)} variant="primary">
           {t("sandbox.images.add")}
         </Button>
@@ -118,12 +121,14 @@ export function ImagesTab() {
             {
               key: "reference",
               header: t("sandbox.images.table.reference"),
-              render: (row) => <code className="mono">{row.reference}</code>,
+              render: (row) => (
+                <code className="argus-mono">{row.reference}</code>
+              ),
             },
             {
               key: "digest",
               header: t("sandbox.images.table.digest"),
-              render: (row) => <code className="mono">{row.digest}</code>,
+              render: (row) => <code className="argus-mono">{row.digest}</code>,
             },
             {
               key: "languages",

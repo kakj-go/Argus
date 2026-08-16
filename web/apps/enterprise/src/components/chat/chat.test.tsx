@@ -10,7 +10,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage, ToolCallTrace } from "@argus/api-client";
+import type { ChatMessage, ToolCallTrace } from "./chat-view-model";
 import {
   ApiProvider,
   createMockApiClient,
@@ -164,8 +164,8 @@ describe("PendingActionCard", () => {
     const action = await client.approvals.preview({
       tool: "host.create",
       title: "新增主机",
-      conversationId: "conv-1",
-      params: { name: "host-test-x", address: "10.0.0.99" },
+      conversation_id: "conv-1",
+      input_data: { name: "host-test-x", address: "10.0.0.99" },
     });
     const confirmSpy = vi.spyOn(client.approvals, "confirm");
 
@@ -176,7 +176,7 @@ describe("PendingActionCard", () => {
           interactiveCardId: "cs-host-create-confirm",
           version: "3.0.1",
           title: "新增主机确认",
-          pendingActionRef: action.actionRef,
+          pendingActionRef: action.action_ref,
           actionBindingId: "cab-t1",
         }}
       />,
@@ -189,7 +189,7 @@ describe("PendingActionCard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "确认执行" }));
     await waitFor(() =>
-      expect(confirmSpy).toHaveBeenCalledWith(action.actionRef),
+      expect(confirmSpy).toHaveBeenCalledWith(action.action_ref),
     );
     // mock 任务步骤按 stepDelay 推进，轮询后进入成功终态
     await screen.findByText(/已创建主机 host-test-x/, undefined, {
@@ -204,8 +204,8 @@ describe("PendingActionCard", () => {
     const action = await client.approvals.preview({
       tool: "host.create",
       title: "新增主机",
-      conversationId: "conv-1",
-      params: { name: "host-test-y", address: "10.0.0.98" },
+      conversation_id: "conv-1",
+      input_data: { name: "host-test-y", address: "10.0.0.98" },
     });
     const cancelSpy = vi.spyOn(client.approvals, "cancel");
 
@@ -215,7 +215,7 @@ describe("PendingActionCard", () => {
           id: "cardi-t2",
           interactiveCardId: "cs-host-create-confirm",
           version: "3.0.1",
-          pendingActionRef: action.actionRef,
+          pendingActionRef: action.action_ref,
         }}
       />,
       { wrapper: createWrapper(client) },
@@ -224,7 +224,7 @@ describe("PendingActionCard", () => {
     await screen.findByText("新增主机");
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     await waitFor(() =>
-      expect(cancelSpy).toHaveBeenCalledWith(action.actionRef),
+      expect(cancelSpy).toHaveBeenCalledWith(action.action_ref),
     );
     await screen.findByText("操作已取消");
   });

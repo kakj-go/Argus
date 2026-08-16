@@ -2,9 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PendingAction } from "@argus/api-client";
+import type { PendingActionPublic } from "@argus/api-client";
 import { useApi } from "@argus/api-client";
-import { useAuthStore } from "@argus/auth";
 import {
   Alert,
   Button,
@@ -17,12 +16,9 @@ import {
   StatusBadge,
   Textarea,
 } from "@argus/ui";
-import {
-  formatDateTimeFull,
-  pendingStatusTone,
-} from "./utils";
+import { formatDateTimeFull, pendingStatusTone } from "./utils";
 
-function diffForCard(action: PendingAction) {
+function diffForCard(action: PendingActionPublic) {
   return action.diff.map((line) => ({
     type:
       line.kind === "add"
@@ -34,7 +30,7 @@ function diffForCard(action: PendingAction) {
   }));
 }
 
-function cardStatus(action: PendingAction): PreviewCommitStatus {
+function cardStatus(action: PendingActionPublic): PreviewCommitStatus {
   switch (action.status) {
     case "succeeded":
       return "success";
@@ -50,15 +46,8 @@ function cardStatus(action: PendingAction): PreviewCommitStatus {
   }
 }
 
-function resultMessage(action: PendingAction): string | undefined {
-  if (action.resultSummary) return action.resultSummary;
-  if (action.status === "rejected") {
-    const rejected = action.approval?.decisions.find(
-      (decision) => decision.decision === "rejected",
-    );
-    return rejected?.reason;
-  }
-  return undefined;
+function resultMessage(action: PendingActionPublic): string | undefined {
+  return action.result_summary;
 }
 
 /**
@@ -70,7 +59,6 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
-  const currentUserId = useAuthStore((state) => state.session?.user.id);
   const locale = i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN";
 
   const [comment, setComment] = useState("");
@@ -122,14 +110,11 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
   }
 
   const approval = action.approval;
-  const approvedCount =
-    approval?.decisions.filter((decision) => decision.decision === "approved")
-      .length ?? 0;
-  const sodBlocked = Boolean(
-    approval?.separationOfDuty &&
-      currentUserId !== undefined &&
-      action.createdBy === currentUserId,
-  );
+  const approvedCount = approval?.approved_count ?? 0;
+  const preview =
+    typeof action.preview === "object" && action.preview !== null
+      ? (action.preview as Record<string, unknown>)
+      : {};
   const busy =
     confirmMutation.isPending ||
     cancelMutation.isPending ||
@@ -155,11 +140,10 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
         className={isConfirmable ? undefined : "argus-approval-card--static"}
         confirming={confirmMutation.isPending || cancelMutation.isPending}
         diff={diffForCard(action)}
-        expiresAt={showCountdown ? action.expiresAt : undefined}
-        planHash={action.planHash}
+        expiresAt={showCountdown ? action.expires_at : undefined}
         resultMessage={resultMessage(action)}
-        risk={action.riskLevel}
-        riskLabel={t(`governance.approvals.risk.${action.riskLevel}`)}
+        risk={action.risk}
+        riskLabel={t(`governance.approvals.risk.${action.risk}`)}
         status={cardStatus(action)}
         title={action.title}
         {...(isConfirmable
@@ -174,27 +158,13 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
         <KeyValueGrid
           columns={2}
           items={[
-            ...Object.entries(action.preview).map(([key, value]) => ({
+            ...Object.entries(preview).map(([key, value]) => ({
               label: key,
               value: String(value),
             })),
             {
-              label: t("governance.approvals.detail.createdBy"),
-              value: action.createdByName ?? action.createdBy,
-            },
-            {
-              label: t("governance.approvals.detail.tool"),
-              value: <code>{action.tool}</code>,
-            },
-            {
               label: t("governance.approvals.detail.createdAt"),
-              value: formatDateTimeFull(action.createdAt, locale),
-            },
-            {
-              label: t("governance.approvals.detail.source"),
-              value: action.conversationId
-                ? t("governance.approvals.source.chatbox")
-                : t("governance.approvals.source.admin"),
+              value: formatDateTimeFull(action.created_at, locale),
             },
           ]}
         />
@@ -202,115 +172,92 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
 
       {approval && (
         <section className="argus-approval-block">
-          <h3 className="argus-gov-section-title">
-            {t("governance.approvals.detail.approvalTitle")}
-          </h3>
+          <div className="argus-approval-block__head">
+            <h3 className="argus-gov-section-title">
+              {t("governance.approvals.detail.approvalTitle")}
+            </h3>
+            {action.status === "rejected" ? (
+              <StatusBadge tone="danger">
+                {t("governance.approvals.decision.rejected")}
+              </StatusBadge>
+            ) : approvedCount >= approval.minimum_approvers ? (
+              <StatusBadge tone="success">
+                {t("governance.approvals.decision.approved")}
+              </StatusBadge>
+            ) : null}
+          </div>
           <KeyValueGrid
             columns={2}
             items={[
-              ...(approval.policyName
+              ...(approval.policy_ref
                 ? [
                     {
                       label: t("governance.approvals.detail.policy"),
-                      value: approval.policyName,
+                      value: approval.policy_ref,
                     },
                   ]
                 : []),
               {
                 label: t("governance.approvals.detail.minApprovers", {
-                  count: approval.minApprovers,
+                  count: approval.minimum_approvers,
                 }),
                 value: t("governance.approvals.detail.progress", {
                   done: approvedCount,
-                  min: approval.minApprovers,
+                  min: approval.minimum_approvers,
                 }),
               },
             ]}
           />
-          {approval.separationOfDuty && (
+          {approval.separation_of_duty && (
             <Alert
               description={t("governance.approvals.detail.progress", {
                 done: approvedCount,
-                min: approval.minApprovers,
+                min: approval.minimum_approvers,
               })}
               title={t("governance.approvals.detail.separation")}
               tone="warning"
             />
           )}
-          <div>
-            <h3 className="argus-gov-section-title">
-              {t("governance.approvals.detail.decisions")}
-            </h3>
-            {approval.decisions.length === 0 ? (
-              <span className="argus-approval-decisions__reason">
-                {t("governance.approvals.detail.noDecisions")}
-              </span>
-            ) : (
-              <ul className="argus-approval-decisions">
-                {approval.decisions.map((decision, index) => (
-                  <li className="argus-approval-decisions__item" key={index}>
-                    <StatusBadge
-                      tone={
-                        decision.decision === "approved" ? "success" : "danger"
-                      }
-                    >
-                      {t(`governance.approvals.decision.${decision.decision}`)}
-                    </StatusBadge>
-                    <span>{decision.userName ?? decision.userId}</span>
-                    <span className="argus-approval-decisions__reason">
-                      {formatDateTimeFull(decision.at, locale)}
-                      {decision.reason ? ` · ${decision.reason}` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          {action.status === "rejected" && action.result_summary && (
+            <p className="argus-approval-decisions__reason">
+              {action.result_summary}
+            </p>
+          )}
         </section>
       )}
 
       {isApprovable && (
         <section className="argus-approval-block">
-          {sodBlocked ? (
-            <Alert
-              description={t(
-                "governance.approvals.detail.sodBlockedDescription",
-              )}
-              title={t("governance.approvals.detail.sodBlockedTitle")}
-              tone="warning"
-            />
-          ) : (
-            <div className="argus-approval-actions">
-              <Field label={t("governance.approvals.detail.approve")}>
-                <Textarea
-                  onChange={(event) => setComment(event.target.value)}
-                  placeholder={t(
-                    "governance.approvals.detail.commentPlaceholder",
-                  )}
-                  rows={2}
-                  value={comment}
-                />
-              </Field>
-              <div className="argus-approval-actions__buttons">
-                <Button
-                  disabled={busy}
-                  onClick={() => setRejectOpen(true)}
-                  variant="secondary"
-                >
-                  {t("governance.approvals.detail.reject")}
-                </Button>
-                <Button
-                  loading={approveMutation.isPending}
-                  onClick={() =>
-                    approveMutation.mutate(comment.trim() || undefined)
-                  }
-                  variant="primary"
-                >
-                  {t("governance.approvals.detail.approve")}
-                </Button>
-              </div>
+          <div className="argus-approval-actions">
+            <Field label={t("governance.approvals.detail.approve")}>
+              <Textarea
+                onChange={(event) => setComment(event.target.value)}
+                placeholder={t(
+                  "governance.approvals.detail.commentPlaceholder",
+                )}
+                rows={2}
+                value={comment}
+              />
+            </Field>
+            <div className="argus-approval-actions__buttons">
+              <Button
+                disabled={busy}
+                onClick={() => setRejectOpen(true)}
+                variant="secondary"
+              >
+                {t("governance.approvals.detail.reject")}
+              </Button>
+              <Button
+                loading={approveMutation.isPending}
+                onClick={() =>
+                  approveMutation.mutate(comment.trim() || undefined)
+                }
+                variant="primary"
+              >
+                {t("governance.approvals.detail.approve")}
+              </Button>
             </div>
-          )}
+          </div>
           {actionError && (
             <p className="argus-approval-actions__error" role="alert">
               {actionError}
@@ -319,11 +266,12 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
         </section>
       )}
 
-      {!isConfirmable && !isApprovable && action.taskId && (
+      {!isConfirmable && !isApprovable && action.execution_ref && (
         <section className="argus-approval-block">
           <Link to="/tasks">
             <Button variant="secondary">
-              {t("governance.approvals.detail.viewTask")} · {action.taskId}
+              {t("governance.approvals.detail.viewTask")} ·{" "}
+              {action.execution_ref}
             </Button>
           </Link>
         </section>

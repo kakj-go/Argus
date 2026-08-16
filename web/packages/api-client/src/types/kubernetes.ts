@@ -19,7 +19,7 @@ export interface K8sCluster {
   credentialRef: string;
   version: string;
   environment: Environment;
-  tags: Record<string, string>;
+  labels: Record<string, string>;
   connectionStatus: ClusterConnectionStatus;
   nodeCount: number;
   readyNodeCount: number;
@@ -35,14 +35,14 @@ export interface CreateK8sClusterInput {
   credentialRef: string;
   defaultNamespace?: string;
   environment: Environment;
-  tags?: Record<string, string>;
+  labels?: Record<string, string>;
 }
 
 export interface UpdateK8sClusterInput {
   name?: string;
   credentialRef?: string;
   environment?: Environment;
-  tags?: Record<string, string>;
+  labels?: Record<string, string>;
 }
 
 /** Trusted physical binding between a Kubernetes Node and an Argus Host. */

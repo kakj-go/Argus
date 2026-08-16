@@ -1,7 +1,8 @@
 /** OpenSandbox 基座（六个 Tab）文案。 */
 export const sandboxZh = {
   "sandbox.title": "OpenSandbox 基座",
-  "sandbox.description": "由平台超管统一审批与管理的共享沙箱运行基座（docs/08）",
+  "sandbox.description":
+    "由平台超管统一审批与管理的共享沙箱运行基座（docs/08）",
   "sandbox.tabs.backends": "服务连接",
   "sandbox.tabs.images": "镜像",
   "sandbox.tabs.profiles": "Sandbox Profile",
@@ -95,7 +96,8 @@ export const sandboxZh = {
   "sandbox.quotas.empty": "暂无企业",
 
   "sandbox.sessions.metadataOnly.title": "仅元数据",
-  "sandbox.sessions.metadataOnly.description": "平台侧只展示会话元数据，永不展示任何业务正文。",
+  "sandbox.sessions.metadataOnly.description":
+    "平台侧只展示会话元数据，永不展示任何业务正文。",
   "sandbox.sessions.table.id": "会话 ID",
   "sandbox.sessions.table.enterprise": "企业",
   "sandbox.sessions.table.profile": "Profile",
@@ -106,7 +108,8 @@ export const sandboxZh = {
   "sandbox.sessions.table.lastActivity": "最近活动",
   "sandbox.sessions.terminate": "终止",
   "sandbox.sessions.confirm.title": "终止 Sandbox 会话",
-  "sandbox.sessions.confirm.description": "终止后容器立即销毁，未下载的产物按保留策略处理。",
+  "sandbox.sessions.confirm.description":
+    "终止后容器立即销毁，未下载的产物按保留策略处理。",
   "sandbox.sessions.empty": "暂无活动会话",
   "sandbox.sessions.status.requested": "已申请",
   "sandbox.sessions.status.starting": "启动中",
@@ -129,7 +132,8 @@ export const sandboxZh = {
 
 export const sandboxEn = {
   "sandbox.title": "OpenSandbox foundation",
-  "sandbox.description": "Shared sandbox runtime approved and managed by platform super admins (docs/08)",
+  "sandbox.description":
+    "Shared sandbox runtime approved and managed by platform super admins (docs/08)",
   "sandbox.tabs.backends": "Connections",
   "sandbox.tabs.images": "Images",
   "sandbox.tabs.profiles": "Sandbox Profiles",
@@ -176,7 +180,8 @@ export const sandboxEn = {
   "sandbox.images.form.reference": "Image reference",
   "sandbox.images.form.digest": "Digest (sha256:…)",
   "sandbox.images.form.languages": "Languages",
-  "sandbox.images.form.languagesHint": "Comma separated, e.g. python:3.13, node:22",
+  "sandbox.images.form.languagesHint":
+    "Comma separated, e.g. python:3.13, node:22",
 
   "sandbox.profiles.add": "New profile",
   "sandbox.profiles.edit": "Edit profile",
@@ -203,7 +208,8 @@ export const sandboxEn = {
   "sandbox.profiles.form.network": "Network policy",
   "sandbox.profiles.form.networkMode": "Mode",
   "sandbox.profiles.form.allowedDomains": "Allowed domains",
-  "sandbox.profiles.form.allowedDomainsHint": "Comma separated; allow-list mode only",
+  "sandbox.profiles.form.allowedDomainsHint":
+    "Comma separated; allow-list mode only",
   "sandbox.profiles.form.capabilities": "Capabilities",
   "sandbox.profiles.network.deny_all": "Deny all",
   "sandbox.profiles.network.allow_list": "Allow list",
@@ -223,7 +229,8 @@ export const sandboxEn = {
   "sandbox.quotas.empty": "No enterprises yet",
 
   "sandbox.sessions.metadataOnly.title": "Metadata only",
-  "sandbox.sessions.metadataOnly.description": "The platform only shows session metadata — never any business content.",
+  "sandbox.sessions.metadataOnly.description":
+    "The platform only shows session metadata — never any business content.",
   "sandbox.sessions.table.id": "Session ID",
   "sandbox.sessions.table.enterprise": "Enterprise",
   "sandbox.sessions.table.profile": "Profile",
@@ -234,7 +241,8 @@ export const sandboxEn = {
   "sandbox.sessions.table.lastActivity": "Last activity",
   "sandbox.sessions.terminate": "Terminate",
   "sandbox.sessions.confirm.title": "Terminate sandbox session",
-  "sandbox.sessions.confirm.description": "The container is destroyed immediately; artifacts follow the retention policy.",
+  "sandbox.sessions.confirm.description":
+    "The container is destroyed immediately; artifacts follow the retention policy.",
   "sandbox.sessions.empty": "No active sessions",
   "sandbox.sessions.status.requested": "Requested",
   "sandbox.sessions.status.starting": "Starting",

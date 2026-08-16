@@ -8,9 +8,7 @@ import type {
 
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 
-export function connectionStatusTone(
-  status: ClusterConnectionStatus,
-): Tone {
+export function connectionStatusTone(status: ClusterConnectionStatus): Tone {
   if (status === "connected") return "success";
   if (status === "degraded") return "warning";
   return "danger";

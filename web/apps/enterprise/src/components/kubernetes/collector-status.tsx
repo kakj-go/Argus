@@ -5,7 +5,7 @@ import {
   useApi,
   type CollectorInstallState,
   type K8sCluster,
-  type PendingAction,
+  type PendingActionPublic,
 } from "@argus/api-client";
 import {
   Button,
@@ -81,9 +81,8 @@ export function CollectorStatusPanel({
   const [profiles, setProfiles] = useState(() =>
     initialProfiles(collector.profile),
   );
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(
-    null,
-  );
+  const [pendingAction, setPendingAction] =
+    useState<PendingActionPublic | null>(null);
 
   const baseline = useMemo(
     () => initialProfiles(collector.profile),

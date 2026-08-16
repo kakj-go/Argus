@@ -214,8 +214,8 @@ export function ProfilesTab() {
     );
 
   return (
-    <div className="platform-stack">
-      <div className="tab-toolbar">
+    <div className="argus-platform-stack">
+      <div className="argus-tab-toolbar">
         <Button
           onClick={() => setForm(emptyForm(images.data?.[0]?.id ?? ""))}
           variant="primary"
@@ -233,9 +233,11 @@ export function ProfilesTab() {
               key: "name",
               header: t("sandbox.profiles.table.name"),
               render: (row) => (
-                <span className="cell-with-badge">
-                  <code className="mono">{row.name}</code>
-                  {row.builtin && <Badge>{t("sandbox.profiles.builtin")}</Badge>}
+                <span className="argus-cell-with-badge">
+                  <code className="argus-mono">{row.name}</code>
+                  {row.builtin && (
+                    <Badge>{t("sandbox.profiles.builtin")}</Badge>
+                  )}
                 </span>
               ),
             },
@@ -243,19 +245,23 @@ export function ProfilesTab() {
             {
               key: "resources",
               header: t("sandbox.profiles.table.resources"),
-              render: (row) => <code className="mono">{row.resources}</code>,
+              render: (row) => (
+                <code className="argus-mono">{row.resources}</code>
+              ),
             },
             {
               key: "timeouts",
               header: t("sandbox.profiles.table.timeouts"),
-              render: (row) => <code className="mono">{row.timeouts}</code>,
+              render: (row) => (
+                <code className="argus-mono">{row.timeouts}</code>
+              ),
             },
             { key: "network", header: t("sandbox.profiles.table.network") },
             {
               key: "capabilities",
               header: t("sandbox.profiles.table.capabilities"),
               render: (row) => (
-                <span className="cell-with-badge">
+                <span className="argus-cell-with-badge">
                   {row.capabilities.map((cap) => (
                     <Badge key={cap}>{cap}</Badge>
                   ))}
@@ -305,13 +311,11 @@ export function ProfilesTab() {
         onSubmit={() => form && save.mutate(form)}
         open={form !== null}
         submitLabel={t("common.save")}
-        title={t(
-          form?.id ? "sandbox.profiles.edit" : "sandbox.profiles.add",
-        )}
+        title={t(form?.id ? "sandbox.profiles.edit" : "sandbox.profiles.add")}
         width={560}
       >
         {form && (
-          <div className="drawer-stack">
+          <div className="argus-drawer-stack">
             <Field label={t("sandbox.profiles.form.name")}>
               <Input
                 onChange={(event) =>
@@ -341,9 +345,9 @@ export function ProfilesTab() {
               />
             </Field>
 
-            <section className="drawer-section">
+            <section className="argus-drawer-section">
               <h3>{t("sandbox.profiles.form.resources")}</h3>
-              <div className="form-grid">
+              <div className="argus-form-grid">
                 {numberField(t("sandbox.profiles.form.cpu"), "cpu")}
                 {numberField(t("sandbox.profiles.form.memoryMb"), "memoryMb")}
                 {numberField(t("sandbox.profiles.form.diskMb"), "diskMb")}
@@ -351,9 +355,9 @@ export function ProfilesTab() {
               </div>
             </section>
 
-            <section className="drawer-section">
+            <section className="argus-drawer-section">
               <h3>{t("sandbox.profiles.form.timeouts")}</h3>
-              <div className="form-grid">
+              <div className="argus-form-grid">
                 {numberField(
                   t("sandbox.profiles.form.commandSeconds"),
                   "commandSeconds",
@@ -369,21 +373,25 @@ export function ProfilesTab() {
               </div>
             </section>
 
-            <section className="drawer-section">
+            <section className="argus-drawer-section">
               <h3>{t("sandbox.profiles.form.network")}</h3>
               <Field label={t("sandbox.profiles.form.networkMode")}>
                 <Select
                   onValueChange={(value) =>
                     setForm({
                       ...form,
-                      networkMode: value as
-                        | "deny_all"
-                        | "allow_list",
+                      networkMode: value as "deny_all" | "allow_list",
                     })
                   }
                   options={[
-                    { value: "deny_all", label: t("sandbox.profiles.network.deny_all") },
-                    { value: "allow_list", label: t("sandbox.profiles.network.allow_list") },
+                    {
+                      value: "deny_all",
+                      label: t("sandbox.profiles.network.deny_all"),
+                    },
+                    {
+                      value: "allow_list",
+                      label: t("sandbox.profiles.network.allow_list"),
+                    },
                   ]}
                   value={form.networkMode}
                 />
@@ -403,12 +411,17 @@ export function ProfilesTab() {
               )}
             </section>
 
-            <section className="drawer-section">
+            <section className="argus-drawer-section">
               <h3>{t("sandbox.profiles.form.capabilities")}</h3>
               {(
-                ["fileUpload", "artifactDownload", "secretInjection", "gpu"] as const
+                [
+                  "fileUpload",
+                  "artifactDownload",
+                  "secretInjection",
+                  "gpu",
+                ] as const
               ).map((cap) => (
-                <label className="switch-row" key={cap}>
+                <label className="argus-switch-row" key={cap}>
                   <Switch
                     checked={form[cap]}
                     label={t(`sandbox.profiles.caps.${cap}`)}

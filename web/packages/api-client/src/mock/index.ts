@@ -4,10 +4,9 @@ import type {
   ConnectorUninstallResult,
   ListQuery,
   Page,
-  Task,
-  TaskEvent,
   User,
 } from "../types";
+import type { TaskEvent, TaskViewModel } from "../provisional";
 import { createApprovalsDomain } from "./approvals";
 import { createAuditDomain } from "./audit";
 import { createAuthDomain } from "./auth";
@@ -99,18 +98,18 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
 
   function enterpriseId(): string {
     const user = db.users.find((entry) => entry.id === db.session.userId);
-    const membership = db.memberships.find(
+    const enterpriseUser = db.enterpriseUsers.find(
       (entry) => entry.userId === user?.id,
     );
     if (
       !user ||
       user.platformRole ||
-      !membership ||
-      membership.enterpriseId !== db.session.enterpriseId
+      !enterpriseUser ||
+      enterpriseUser.enterpriseId !== db.session.enterpriseId
     ) {
-      throw new Error("enterprise membership required");
+      throw new Error("enterprise enterpriseUser required");
     }
-    return membership.enterpriseId;
+    return enterpriseUser.enterpriseId;
   }
 
   function requirePlatform(): void {
@@ -161,7 +160,7 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
     return found;
   }
 
-  function emitTask(task: Task): void {
+  function emitTask(task: TaskViewModel): void {
     const event: TaskEvent = { type: "task_updated", task: { ...task } };
     emitter.emit("tasks", event);
     emitter.emit(`task:${task.id}`, event);
@@ -303,7 +302,7 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
             bastionScopeId: scope.id,
             connectorId,
             environment: scope.environment,
-            tags: { ...scope.tags, role: "bastion" },
+            labels: { ...scope.labels, role: "bastion" },
             connectionStatus: "online",
             collectorStatus: "not_installed",
             createdAt: registeredAt,

@@ -19,7 +19,7 @@ export function StepToken({
   const [touched, setTouched] = useState(false);
 
   return (
-    <div className="setup-fields">
+    <div className="argus-setup-fields">
       <Field
         error={touched ? errors.setupToken : undefined}
         hint={t("setup.token.hint")}

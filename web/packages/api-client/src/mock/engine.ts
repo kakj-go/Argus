@@ -1,14 +1,18 @@
 import type {
-  CardInstance,
-  ChatMessage,
-  ChatStreamEvent,
   Host,
-  PendingAction,
+  PendingActionPublic,
   RiskLevel,
-  Task,
-  TaskStep,
-  ToolCallTrace,
 } from "../types";
+import type {
+  TaskViewModel,
+  TaskStep,
+} from "../provisional";
+import type {
+  MockCardInstance as CardInstance,
+  MockChatMessage as ChatMessage,
+  MockChatStreamEvent as ChatStreamEvent,
+  MockToolCallTrace as ToolCallTrace,
+} from "./chat-types";
 import type { BaseContext, Engine } from "./context";
 import { nextId } from "./store";
 
@@ -58,7 +62,7 @@ const TOOL_STEPS: Record<string, string[]> = {
   "connector.cert.rotate": ["签发新证书", "重叠窗口切换", "吊销旧证书"],
 };
 
-const TOOL_TASK_TYPE: Record<string, Task["type"]> = {
+const TOOL_TASK_TYPE: Record<string, TaskViewModel["type"]> = {
   "host.create": "host_onboard",
   "telemetry.host.install": "collector_install",
   "telemetry.kubernetes.install": "collector_install",
@@ -68,23 +72,23 @@ const TOOL_TASK_TYPE: Record<string, Task["type"]> = {
   "connector.cert.rotate": "certificate_rotation",
 };
 
-function summarize(tool: string, params: Record<string, unknown>): string {
-  const name = params["name"] ?? params["workload"] ?? params["hostId"] ?? "";
+function summarize(tool: string, input_data: Record<string, unknown>): string {
+  const name = input_data["name"] ?? input_data["workload"] ?? input_data["hostId"] ?? "";
   return `${tool} ${String(name)}`.trim();
 }
 
 function buildDiff(
   tool: string,
-  params: Record<string, unknown>,
-): PendingAction["diff"] {
+  input_data: Record<string, unknown>,
+): PendingActionPublic["diff"] {
   if (tool === "host.create") {
     return [
-      { kind: "add", text: `+ resource.host ${String(params["name"] ?? "")}` },
+      { kind: "add", text: `+ resource.host ${String(input_data["name"] ?? "")}` },
       { kind: "add", text: "+ telemetry.collector v24.1.3" },
       { kind: "note", text: "无端口与防火墙变更" },
     ];
   }
-  return [{ kind: "change", text: `~ ${summarize(tool, params)}` }];
+  return [{ kind: "change", text: `~ ${summarize(tool, input_data)}` }];
 }
 
 function chunkText(text: string): string[] {
@@ -103,7 +107,7 @@ export function createEngine(ctx: BaseContext): Engine {
 
   function createPendingAction(
     input: Parameters<Engine["createPendingAction"]>[0],
-  ): PendingAction {
+  ): PendingActionPublic {
     const riskLevel = TOOL_RISK[input.tool] ?? "write";
     const policy = db.approvalPolicies.find(
       (candidate) =>
@@ -112,99 +116,104 @@ export function createEngine(ctx: BaseContext): Engine {
         candidate.matchRiskLevels.includes(riskLevel),
     );
     const who = ctx.actor();
-    const action: PendingAction = {
-      id: nextId(db, "pa"),
-      actionRef: "",
-      enterpriseId: ctx.enterpriseId(),
-      tool: input.tool,
+    const actionRef = `pa_ref_${nextId(db, "pa")}`;
+    const now = ctx.nowIso();
+    const action: PendingActionPublic = {
+      schema_version: "argus.pending_action/v1",
+      action_ref: actionRef,
       title: input.title ?? input.tool,
-      summary: summarize(input.tool, input.params),
-      riskLevel,
-      preview: { ...input.params },
-      params: { ...input.params },
-      diff: buildDiff(input.tool, input.params),
-      planHash: `sha256:${Math.random().toString(16).slice(2, 10)}…${Math.random()
-        .toString(16)
-        .slice(2, 6)}`,
-      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      summary: summarize(input.tool, input.input_data),
+      risk: riskLevel,
+      preview: { ...input.input_data },
+      diff: buildDiff(input.tool, input.input_data),
+      expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
       status: "awaiting_confirmation",
-      createdBy: who.id,
-      createdByName: who.displayName,
-      conversationId: input.conversationId,
+      available_actions: ["confirm", "cancel"],
       approval: policy
         ? {
             required: true,
-            policyId: policy.id,
-            policyName: policy.name,
-            minApprovers: policy.minApprovers,
-            approverRoleIds: [...policy.approverRoleIds],
-            separationOfDuty: policy.separationOfDuty,
-            decisions: [],
+            policy_ref: policy.id,
+            minimum_approvers: policy.minApprovers,
+            approved_count: 0,
+            separation_of_duty: policy.separationOfDuty,
           }
         : undefined,
-      createdAt: ctx.nowIso(),
-      updatedAt: ctx.nowIso(),
+      created_at: now,
+      updated_at: now,
     };
-    action.actionRef = `pa_ref_${action.id}`;
+    db.actionPlans[actionRef] = {
+      tool: input.tool,
+      enterprise_id: ctx.enterpriseId(),
+      created_by: who.id,
+      created_by_name: who.displayName,
+      conversation_id: input.conversation_id,
+      input_data: { ...input.input_data },
+      approval_decisions: [],
+    };
     db.pendingActions.unshift(action);
     ctx.audit(`${input.tool}.preview`, {
       resourceType: "pending_action",
-      resourceId: action.id,
+      resourceId: action.action_ref,
       summary: action.title,
     });
     ctx.save();
     return action;
   }
 
-  function getAction(actionRef: string): PendingAction {
+  function getAction(actionRef: string): PendingActionPublic {
     return ctx.mustFind(
       db.pendingActions,
-      (entry) => entry.actionRef === actionRef || entry.id === actionRef,
+      (entry) => entry.action_ref === actionRef,
       "pending action",
     );
   }
 
-  function ensureNotExpired(action: PendingAction): void {
+  function ensureNotExpired(action: PendingActionPublic): void {
     if (
       (action.status === "awaiting_confirmation" ||
         action.status === "awaiting_approval") &&
-      Date.parse(action.expiresAt) < Date.now()
+      Date.parse(action.expires_at) < Date.now()
     ) {
       action.status = "expired";
-      action.updatedAt = ctx.nowIso();
+      action.updated_at = ctx.nowIso();
+      action.available_actions = [];
       ctx.save();
       throw new Error("pending action expired; preview again");
     }
   }
 
-  function startExecution(action: PendingAction): Task {
+  function startExecution(action: PendingActionPublic): TaskViewModel {
+    const plan = db.actionPlans[action.action_ref];
+    if (!plan) throw new Error("pending action plan unavailable");
     action.status = "executing";
-    action.updatedAt = ctx.nowIso();
+    action.available_actions = [];
+    action.updated_at = ctx.nowIso();
     const who = ctx.actor();
-    const stepNames = TOOL_STEPS[action.tool] ?? ["执行计划", "验证结果"];
+    const stepNames = TOOL_STEPS[plan.tool] ?? ["执行计划", "验证结果"];
     const steps: TaskStep[] = stepNames.map((name, index) => ({
       id: `s${index + 1}`,
       name,
       status: "pending",
     }));
-    const task: Task = {
+    const task: TaskViewModel = {
       id: nextId(db, "task"),
-      enterpriseId: action.enterpriseId,
-      type: TOOL_TASK_TYPE[action.tool] ?? "generic",
+      enterpriseId: plan.enterprise_id,
+      type: TOOL_TASK_TYPE[plan.tool] ?? "generic",
       title: action.title,
       status: "running",
-      origin: action.conversationId ? "admin_chatbox" : "admin_ui",
+      origin: plan.conversation_id ? "admin_chatbox" : "admin_ui",
       createdBy: who.id,
       createdByName: who.displayName,
       relatedResources: [],
       steps,
       logs: [],
-      pendingActionId: action.id,
+      pendingActionId: action.action_ref,
       progress: 0,
       startedAt: ctx.nowIso(),
       createdAt: ctx.nowIso(),
     };
-    action.taskId = task.id;
+    plan.task_id = task.id;
+    action.execution_ref = task.id;
     db.tasks.unshift(task);
     ctx.save();
     ctx.emitTask(task);
@@ -212,7 +221,7 @@ export function createEngine(ctx: BaseContext): Engine {
     return task;
   }
 
-  function scheduleSteps(task: Task, action: PendingAction): void {
+  function scheduleSteps(task: TaskViewModel, action: PendingActionPublic): void {
     let index = 0;
     const runNext = () => {
       const step = task.steps[index];
@@ -241,15 +250,16 @@ export function createEngine(ctx: BaseContext): Engine {
     runNext();
   }
 
-  function finishTask(task: Task, action: PendingAction): void {
+  function finishTask(task: TaskViewModel, action: PendingActionPublic): void {
     task.status = "succeeded";
     task.finishedAt = ctx.nowIso();
     task.progress = 100;
     action.status = "succeeded";
-    action.resultSummary = "执行成功";
-    action.updatedAt = ctx.nowIso();
+    action.result_summary = "执行成功";
+    action.updated_at = ctx.nowIso();
     applySideEffect(action);
-    ctx.audit(`${action.tool}.commit`, {
+    const plan = db.actionPlans[action.action_ref];
+    ctx.audit(`${plan?.tool ?? "pending_action"}.commit`, {
       resourceType: "task",
       resourceId: task.id,
       summary: `${action.title} 执行成功`,
@@ -258,26 +268,27 @@ export function createEngine(ctx: BaseContext): Engine {
     ctx.emitTask(task);
   }
 
-  function applySideEffect(action: PendingAction): void {
-    const params = action.params;
-    if (action.tool === "host.create") {
+  function applySideEffect(action: PendingActionPublic): void {
+    const plan = db.actionPlans[action.action_ref];
+    if (!plan) throw new Error("pending action plan unavailable");
+    const { input_data } = plan;
+    if (plan.tool === "host.create") {
       const host: Host = {
         id: nextId(db, "host"),
-        enterpriseId: action.enterpriseId,
-        name: String(params["name"] ?? "new-host"),
-        hostname: String(params["hostname"] ?? params["name"] ?? "new-host"),
-        address: String(params["address"] ?? ""),
-        port: Number(params["port"] ?? 22),
-        platform: (params["platform"] as Host["platform"]) ?? "linux",
+        enterpriseId: plan.enterprise_id,
+        name: String(input_data["name"] ?? "new-host"),
+        hostname: String(input_data["hostname"] ?? input_data["name"] ?? "new-host"),
+        address: String(input_data["address"] ?? ""),
+        port: Number(input_data["port"] ?? 22),
+        platform: (input_data["platform"] as Host["platform"]) ?? "linux",
         connectionMode:
-          (params["connectionMode"] as Host["connectionMode"]) ?? "direct_ssh",
-        bastionScopeId: params["bastionScopeId"] as string | undefined,
-        connectorId: params["connectorId"] as string | undefined,
-        credentialRef: params["credentialRef"] as string | undefined,
+          (input_data["connectionMode"] as Host["connectionMode"]) ?? "direct_ssh",
+        bastionScopeId: input_data["bastionScopeId"] as string | undefined,
+        connectorId: input_data["connectorId"] as string | undefined,
+        credentialRef: input_data["credentialRef"] as string | undefined,
         environment:
-          (params["environment"] as Host["environment"]) ?? "production",
-        tags: (params["tags"] as Record<string, string>) ?? {},
-        ownerTeamId: params["ownerTeamId"] as string | undefined,
+          (input_data["environment"] as Host["environment"]) ?? "production",
+        labels: (input_data["labels"] as Record<string, string>) ?? {},
         connectionStatus: "online",
         collectorStatus: "installing",
         createdAt: ctx.nowIso(),
@@ -291,11 +302,11 @@ export function createEngine(ctx: BaseContext): Engine {
         scope.memberHostIds.push(host.id);
         scope.updatedAt = ctx.nowIso();
       }
-      action.resultSummary = `已创建主机 ${host.name}`;
+      action.result_summary = `已创建主机 ${host.name}`;
       return;
     }
-    if (action.tool === "telemetry.host.install") {
-      const hostId = String(params["hostId"] ?? "");
+    if (plan.tool === "telemetry.host.install") {
+      const hostId = String(input_data["hostId"] ?? "");
       const existing = db.collectors.find(
         (entry) => entry.targetType === "host" && entry.targetId === hostId,
       );
@@ -306,11 +317,11 @@ export function createEngine(ctx: BaseContext): Engine {
       } else {
         db.collectors.push({
           id: nextId(db, "col"),
-          enterpriseId: action.enterpriseId,
+          enterpriseId: plan.enterprise_id,
           targetType: "host",
           targetId: hostId,
           role: "leaf",
-          profile: String(params["profile"] ?? "host-basic"),
+          profile: String(input_data["profile"] ?? "host-basic"),
           version: "v24.1.3",
           desiredRevision: 1,
           effectiveRevision: 1,
@@ -323,20 +334,20 @@ export function createEngine(ctx: BaseContext): Engine {
       if (host) {
         host.collectorStatus = "converged";
         host.telemetryRoute = String(
-          params["telemetryRoute"] ?? "direct_argus",
+          input_data["telemetryRoute"] ?? "direct_argus",
         );
         host.updatedAt = ctx.nowIso();
       }
       return;
     }
-    if (action.tool === "telemetry.kubernetes.install") {
+    if (plan.tool === "telemetry.kubernetes.install") {
       db.collectors.push({
         id: nextId(db, "col"),
-        enterpriseId: action.enterpriseId,
+        enterpriseId: plan.enterprise_id,
         targetType: "kubernetes_cluster",
-        targetId: String(params["clusterId"] ?? ""),
+        targetId: String(input_data["clusterId"] ?? ""),
         role: "daemonset",
-        profile: String(params["profile"] ?? "k8s-daemonset"),
+        profile: String(input_data["profile"] ?? "k8s-daemonset"),
         version: "v24.1.3",
         desiredRevision: 1,
         effectiveRevision: 1,
@@ -346,13 +357,13 @@ export function createEngine(ctx: BaseContext): Engine {
       });
       return;
     }
-    if (action.tool === "telemetry.collector.configure") {
-      const hostId = String(params["hostId"] ?? "");
+    if (plan.tool === "telemetry.collector.configure") {
+      const hostId = String(input_data["hostId"] ?? "");
       const collector = db.collectors.find(
         (entry) => entry.targetType === "host" && entry.targetId === hostId,
       );
       if (collector) {
-        collector.profile = String(params["profile"] ?? collector.profile);
+        collector.profile = String(input_data["profile"] ?? collector.profile);
         collector.desiredRevision += 1;
         collector.effectiveRevision = collector.desiredRevision;
         collector.status = "converged";
@@ -360,20 +371,20 @@ export function createEngine(ctx: BaseContext): Engine {
       }
       return;
     }
-    if (action.tool === "telemetry.collector.route") {
+    if (plan.tool === "telemetry.collector.route") {
       const host = db.hosts.find(
-        (entry) => entry.id === String(params["hostId"] ?? ""),
+        (entry) => entry.id === String(input_data["hostId"] ?? ""),
       );
       if (host) {
-        host.telemetryRoute = String(params["route"] ?? "direct_argus");
+        host.telemetryRoute = String(input_data["route"] ?? "direct_argus");
         host.updatedAt = ctx.nowIso();
       }
       return;
     }
-    if (action.tool === "telemetry.collector.upgrade") {
-      const toVersion = String(params["toVersion"] ?? "v24.2.0");
+    if (plan.tool === "telemetry.collector.upgrade") {
+      const toVersion = String(input_data["toVersion"] ?? "v24.2.0");
       for (const collector of db.collectors) {
-        if (collector.enterpriseId === action.enterpriseId) {
+        if (collector.enterpriseId === plan.enterprise_id) {
           collector.version = toVersion;
           collector.desiredRevision += 1;
           collector.effectiveRevision = collector.desiredRevision;
@@ -383,22 +394,22 @@ export function createEngine(ctx: BaseContext): Engine {
       }
       return;
     }
-    if (action.tool === "kubernetes.cluster.create") {
+    if (plan.tool === "kubernetes.cluster.create") {
       db.clusters.push({
         id: nextId(db, "k8s"),
-        enterpriseId: action.enterpriseId,
-        name: String(params["name"] ?? "new-cluster"),
-        apiServer: String(params["apiServer"] ?? ""),
+        enterpriseId: plan.enterprise_id,
+        name: String(input_data["name"] ?? "new-cluster"),
+        apiServer: String(input_data["apiServer"] ?? ""),
         connectionMode:
-          (params["connectionMode"] as
+          (input_data["connectionMode"] as
             "via_bastion" | "direct" | "in_cluster") ?? "direct",
-        bastionScopeId: params["bastionScopeId"] as string | undefined,
-        credentialRef: String(params["credentialRef"] ?? ""),
+        bastionScopeId: input_data["bastionScopeId"] as string | undefined,
+        credentialRef: String(input_data["credentialRef"] ?? ""),
         version: "v1.31.4",
         environment:
-          (params["environment"] as "development" | "staging" | "production") ??
+          (input_data["environment"] as "development" | "staging" | "production") ??
           "production",
-        tags: (params["tags"] as Record<string, string>) ?? {},
+        labels: (input_data["labels"] as Record<string, string>) ?? {},
         connectionStatus: "connected",
         nodeCount: 0,
         readyNodeCount: 0,
@@ -407,9 +418,9 @@ export function createEngine(ctx: BaseContext): Engine {
       });
       return;
     }
-    if (action.tool === "connector.cert.rotate") {
+    if (plan.tool === "connector.cert.rotate") {
       const connector = db.connectors.find(
-        (entry) => entry.id === params["connectorId"],
+        (entry) => entry.id === input_data["connectorId"],
       );
       if (connector) {
         connector.certificateExpiresAt = new Date(
@@ -476,8 +487,8 @@ export function createEngine(ctx: BaseContext): Engine {
       const action = createPendingAction({
         tool: "host.create",
         title: "新增主机",
-        conversationId,
-        params: {
+        conversation_id: conversationId,
+        input_data: {
           name: `host-new-${db.hosts.length + 1}`,
           address: ipMatch?.[0] ?? "10.0.9.10",
           port: 22,
@@ -493,7 +504,7 @@ export function createEngine(ctx: BaseContext): Engine {
         interactiveCardId: "cs-host-create-confirm",
         version: "3.0.1",
         title: "新增主机确认",
-        pendingActionRef: action.actionRef,
+        pendingActionRef: action.action_ref,
         actionBindingId: nextId(db, "cab"),
       };
       cards.push(card);
@@ -534,15 +545,15 @@ export function createEngine(ctx: BaseContext): Engine {
     };
     db.messages.push(message);
     if (conversation) conversation.lastMessageAt = message.createdAt;
-    const membership = db.memberships.find(
+    const enterpriseUser = db.enterpriseUsers.find(
       (entry) => entry.userId === ctx.actor().id,
     );
-    if (model && membership) {
+    if (model && enterpriseUser) {
       db.usagePoints.push({
         date: message.createdAt.slice(0, 10),
         modelId: model.id,
-        departmentId: membership.departmentId,
-        userId: membership.userId,
+        departmentId: enterpriseUser.departmentId,
+        userId: enterpriseUser.userId,
         inputTokens,
         outputTokens,
         requestCount: 1,

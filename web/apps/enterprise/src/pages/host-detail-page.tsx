@@ -157,11 +157,11 @@ function OverviewTab({ host }: { host: Host }) {
                 value: formatDateTime(host.createdAt),
               },
               {
-                label: t("hosts.overview.kv.tags"),
+                label: t("hosts.overview.kv.labels"),
                 value:
-                  Object.keys(host.tags).length > 0 ? (
+                  Object.keys(host.labels).length > 0 ? (
                     <span className="argus-host-tile__tags">
-                      {Object.entries(host.tags).map(([key, value]) => (
+                      {Object.entries(host.labels).map(([key, value]) => (
                         <Badge key={key} tone="neutral">
                           {key}={value}
                         </Badge>

@@ -5,7 +5,7 @@
 本文连接三类信息：
 
 - `docs/00` 至 `docs/12` 已确定的产品和架构约束。
-- 仓库截至 2026-08-15 的实际代码状态。
+- 仓库截至 2026-08-16 的实际代码状态。
 - 从当前骨架推进到可安装、可升级、可验证的 Kubernetes 交付物的实施顺序。
 
 本文不改变既有架构边界。规范性约束仍以[已决策事项与系统不变量](./00-decisions-and-invariants.md)为准，完整目标部署设计仍以[服务组件与 Kubernetes 一键部署](./10-service-components-and-kubernetes-deployment.md)为准。
@@ -35,19 +35,20 @@
 
 ### 3.1 总体结论
 
-截至 2026-08-15，当前仓库是“前端产品原型较完整、M0 契约已冻结、后端业务仍处于骨架阶段、Evaluation 部署基座已经可安装”的状态：
+截至 2026-08-16，当前仓库是“M0 契约与 M1 前端基座已完成、前端产品原型较完整、后端业务仍处于骨架阶段、Evaluation 部署基座已经可安装”的状态：
 
 | 范围 | 当前状态 | 可交付程度 |
 | --- | --- | --- |
-| 企业门户 | 页面、路由、i18n、共享 UI、mock 领域和 Playwright E2E 已存在 | 可进行前端产品流程验证 |
-| 平台门户 | 页面、路由、i18n、Sandbox/企业/管理员管理 mock 已存在 | 可进行前端产品流程验证 |
-| 初始化门户 | 初始化向导、校验、i18n 和 mock 状态机已存在 | 可进行前端产品流程验证 |
-| API Client | 已有覆盖当前原型的手写领域接口和 localStorage mock；M0 已新增独立的 `@argus/api-client/contracts` 生成契约 | 现有根接口尚未迁移，真实 Adapter 仍待 M1 |
+| 企业门户 | 页面、懒加载路由、i18n、共享 UI、mock 领域和 Playwright E2E 已存在 | 可进行前端产品流程验证，并可显式切换 real 传输基座 |
+| 平台门户 | 页面、懒加载路由、i18n、Sandbox/企业/管理员管理 mock 已存在 | 可进行前端产品流程验证，并可显式切换 real 传输基座 |
+| 初始化门户 | 初始化向导、校验、i18n 和 mock 状态机已存在 | 可进行前端产品流程验证，并可显式切换 real 传输基座 |
+| Card Runtime | 独立 Origin 构建、Manifest/内容哈希/CSP 校验、可执行 Card 文档、`window.argusCard` 和 MessagePort Bridge 已完成 | 浏览器安全运行基座可用；CardVersion 持久化与服务端 Binding 治理属于 M5 |
+| API Client | `@argus/api-client/contracts` 生成契约、领域 Port、版本化 localStorage mock、显式 real Adapter 和 HTTP/可恢复 SSE/WebSocket Transport 已完成 | mock/real 显式选择且配置错误 fail closed；真实领域 Path 由 M2 及后续里程碑补充 |
 | `argus-server` | 可启动 HTTP Server，已有 `/healthz`、`/readyz` 和语言协商 | 仅服务骨架 |
 | Worker/Gateway/Telemetry/Connector | 进程入口和生命周期骨架已存在 | 尚无领域行为、Agent Loop 和协议实现 |
 | `argusctl` | 已实现 preflight、plan、镜像、install、status、verify、tunnel、uninstall | 可安装和验证 Evaluation；Production 安装硬阻断 |
 | OpenAPI/protobuf/migration | M0 OpenAPI、JSON Schema、protobuf、错误/状态注册表、Go/TypeScript/Proto 生成和 Breaking Check 已完成；已有最小 PostgreSQL/ClickHouse Migration | 契约可供实现使用，但数据库与领域服务仍未落地 |
-| Kubernetes 交付物 | 三个 Dockerfile、六个 Chart、Profile、Schema、版本锁和本地 Registry Loader 已存在 | 可部署完整 Evaluation 基座 |
+| Kubernetes 交付物 | Dockerfile、六个 Chart、Profile、Schema、版本锁和本地 Registry Loader 已存在；Web 镜像提供四个前端入口 | 可部署完整 Evaluation 基座 |
 
 因此，现阶段可以声明“完整依赖和运行角色可部署”，但不能把前端 mock 流程、后端进程健康和“业务后端已完成”视为同一完成度。
 
@@ -58,25 +59,26 @@
 | `web/apps/setup` | 首次初始化 | Setup Token、系统信息、超级管理员、OpenSandbox、确认提交 |
 | `web/apps/platform` | 平台超级管理员域 | 平台概览、企业、平台管理员、Sandbox、审计、账号 |
 | `web/apps/enterprise` | 企业业务域 | Chatbox、主机、Kubernetes、任务、审批、组织权限、模型、Card、Secret、审计 |
+| `web/apps/card-runtime` | 独立 Card Origin | CSP 下加载并运行已校验的 Card 文档，通过 MessagePort 与 Host 通信 |
 
-三个应用当前都通过 `VITE_API_MODE` 选择 API 模式，但除 `mock` 外的值会回退到 mock。M0 已提供 `@argus/api-client/contracts`；M1 必须补齐真实 HTTP/SSE/WebSocket Adapter，并让现有 mock 与真实 Adapter 共同消费生成契约。
+三个门户都必须通过 `VITE_API_MODE=mock|real` 显式选择 API 模式。未知模式、real 缺少 `VITE_API_BASE_URL`、Enterprise real 缺少 `VITE_CARD_ORIGIN`，以及 Setup real 缺少 `VITE_PLATFORM_URL` 时都会停止启动，不会回退到 mock。M1 已让 mock 与 real Adapter 共同消费生成契约；real Adapter 当前提供可信 HTTP/可恢复 SSE/WebSocket 传输基座，尚未冻结的领域操作稳定返回 `CLIENT_OPERATION_UNAVAILABLE`，真实身份与 IAM Path 从 M2 开始补充。
 
-共享包目录已经按目标边界建立，但实现仍存在一致性欠账，不能视为边界已经完全收敛：
+共享包目录已在 M1 按目标边界收敛；后续领域实现必须继续复用这些包，不能在业务应用内重新建立平行基座：
 
 | 包 | 职责 |
 | --- | --- |
-| `@argus/ui` | 目标中的唯一通用组件库；仍需清理业务应用内平行样式/组件 |
+| `@argus/ui` | 唯一通用组件库，承载 AppShell、UserMenu、认证状态页、表格、抽屉、图标按钮和通用表单反馈 |
 | `@argus/design-tokens` | 主题语义 Token |
-| `@argus/api-client` | 领域客户端接口、类型和 mock 实现 |
-| `@argus/auth` | 登录 Session 和前端认证状态 |
-| `@argus/card-host` | 当前 Card iframe、Host Bridge 和绑定调用；尚未完成 CSP、MessagePort 和 Manifest 安全契约 |
+| `@argus/api-client` | 生成契约、领域 Port、mock/real Adapter、HTTP/SSE/WebSocket Transport 和未冻结临时类型 |
+| `@argus/auth` | `unknown → checking → authenticated | anonymous | unavailable` 认证状态；localStorage 只保存非权威启动提示 |
+| `@argus/card-host` | Manifest/RenderPlan 与内容哈希校验、精确 Origin 握手、MessagePort Bridge 和受控 Binding 调用 |
 | `@argus/observability` | 前端遥测上下文和事件入口 |
 
-当前 Enterprise Playwright 共 25 条用例并全部通过，主要验证浏览器内 mock 流程；Platform 和 Setup 也有基础发布检查。该套件可以验证静态镜像和前端交互，但仍不等同于真实业务 API、Connector、遥测或 Kubernetes 全链路 E2E。
+当前 Enterprise Playwright 覆盖 32 条浏览器场景，同时启动 Enterprise、Platform、Setup 和 Card Runtime 四个 Origin；除既有 mock 产品流程外，还覆盖 Audience 隔离、Labels、Card Bridge/CSP、Setup 跳转以及 `zh-CN/en-US × light/dark` 核心页面 axe 门禁。该套件可以验证静态镜像和前端交互，但仍不等同于真实业务 API、Connector、遥测或 Kubernetes 全链路 E2E。
 
-当前前端还存在必须在真实业务开发前处理的偏差：公开 `PendingAction.params` 暴露了本应仅服务端保存的私有参数；Card Runtime 仍使用全局 `postMessage('*')` 而非 MessagePort/CSP；认证状态持久化在 localStorage；Enterprise 页面级样式文件接近 2000 行并存在 `.argus-*`、Design Token 和组件边界不一致；Setup 登录跳转仍是占位行为，Setup 构建存在约 557 KB Chunk 警告。现有 `typecheck/lint/test/build/e2e` 通过只能说明当前原型自洽，不代表这些架构门禁已经满足。
+M1 已清除 Project、Membership、旧 `tags` 和公开 PendingAction 私有字段，认证启动必须调用 `auth.me()`，Card Runtime、样式、i18n、a11y、Bundle Budget、real 构建无 mock seed 与四入口镜像 Smoke 均有自动化门禁。当前前端的主要剩余边界不是继续重写基座，而是由 M2 及后续里程碑在既有 real Adapter 上补充真实领域 Path，并把 provisional 类型随对应契约冻结逐步删除。
 
-Agent 运行时当前仍只有目录骨架和前端 mock 流事件：M0 已冻结 ConversationEvent、Run/Step/Task、ModelCall、ToolResultProjection、ContextSnapshot、Tool Metadata 和上下文预算契约，但尚无持久化、Agent Loop、ContextAssembler 或 Compactor 实现。前端 mock 仍直接生成回复和 Tool Trace，不能作为真实 Harness、恢复或上下文压缩实现。目标实现见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
+Agent 运行时当前仍只有目录骨架：M0 已冻结 ConversationEvent、Run/Step/Task、ModelCall、ToolResultProjection、ContextSnapshot、Tool Metadata 和上下文预算契约，M1 前端 mock 已通过这些冻结 envelope 驱动页面 reducer，但尚无服务端持久化、Agent Loop、ContextAssembler 或 Compactor 实现。mock 的协议形状和断线恢复测试不能替代真实 Harness。目标实现见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
 
 ### 3.3 后端程序与运行角色
 
@@ -95,7 +97,7 @@ Agent 运行时当前仍只有目录骨架和前端 mock 流事件：M0 已冻�
 
 ### 3.4 已交付部署基础与剩余边界
 
-截至 2026-08-15 已交付：
+截至 2026-08-16 已交付：
 
 - Backend/Web/安全修复 MinIO 多阶段 Dockerfile，ARM64 实际构建和 AMD64 OCI 构建路径。
 - `ArgusInstallConfig v1alpha1` JSON Schema、Evaluation/Production Profile 和版本锁定清单。
@@ -107,7 +109,7 @@ Agent 运行时当前仍只有目录骨架和前端 mock 流事件：M0 已冻�
 仍未完成且不能由部署基座替代：
 
 - 真实 OpenAPI/protobuf 业务接口、身份/RBAC、Connector、Agent、OTLP 摄入和查询业务实现。
-- 前端从 localStorage mock 切换到真实 HTTP/SSE/WebSocket 客户端。
+- 在 M1 real Adapter/Transport 上补充真实 Setup、Identity、IAM 和后续业务 Path，并逐步将门户流程从 mock 切换到真实服务。
 - SBOM、镜像签名、漏洞门禁、备份恢复和独立 Upgrade 工作流。
 - Production PostgreSQL HA 与 OpenSandbox 强化 Runtime ADR；两项未完成前 Production 安装保持硬阻断。
 

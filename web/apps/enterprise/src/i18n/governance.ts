@@ -85,7 +85,8 @@ export const governanceZh = {
       },
       cancelDialog: {
         title: "取消任务",
-        description: "确定要取消该任务吗？进行中的步骤将被中止，已完成的步骤不会回滚。",
+        description:
+          "确定要取消该任务吗？进行中的步骤将被中止，已完成的步骤不会回滚。",
         confirm: "确认取消",
       },
       actionFailed: "操作失败，请重试",
@@ -238,7 +239,8 @@ export const governanceEn = {
         skipped: "Skipped",
       },
       emptyTitle: "No matching tasks",
-      emptyDescription: "Adjust the filters or refresh to load the latest tasks.",
+      emptyDescription:
+        "Adjust the filters or refresh to load the latest tasks.",
       detail: {
         overview: "Overview",
         steps: "Steps",
@@ -296,7 +298,8 @@ export const governanceEn = {
       },
       expired: "Expired",
       emptyTitle: "Nothing to handle",
-      emptyDescription: "No actions under the current filters. Check back later.",
+      emptyDescription:
+        "No actions under the current filters. Check back later.",
       selectHintTitle: "No action selected",
       selectHint:
         "Select an entry on the left to review the full preview and confirm or approve it.",
@@ -324,7 +327,8 @@ export const governanceEn = {
         progress: "Approved {done}/{min}",
         decisions: "Decisions",
         noDecisions: "No decisions yet",
-        separation: "Separation of duty: the initiator cannot approve their own action",
+        separation:
+          "Separation of duty: the initiator cannot approve their own action",
         sodBlockedTitle: "You cannot approve your own action",
         sodBlockedDescription:
           "You initiated this action and the policy enforces separation of duty. Wait for another approver.",

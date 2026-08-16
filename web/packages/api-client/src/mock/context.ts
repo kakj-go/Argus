@@ -1,12 +1,12 @@
 import type {
   AuditOrigin,
-  ChatStreamEvent,
   ListQuery,
   Page,
-  PendingAction,
-  Task,
+  PendingActionPublic,
   User,
 } from "../types";
+import type { TaskViewModel } from "../provisional";
+import type { MockChatStreamEvent as ChatStreamEvent } from "./chat-types";
 import type { Emitter, MockDb } from "./store";
 
 export interface AuditEntry {
@@ -21,8 +21,8 @@ export interface AuditEntry {
 export interface CreatePendingActionInput {
   tool: string;
   title?: string;
-  params: Record<string, unknown>;
-  conversationId?: string;
+  input_data: Record<string, unknown>;
+  conversation_id?: string;
 }
 
 /** Shared plumbing handed to every mock domain implementation. */
@@ -43,15 +43,15 @@ export interface BaseContext {
     predicate: (item: T) => boolean,
     what: string,
   ): T;
-  emitTask(task: Task): void;
+  emitTask(task: TaskViewModel): void;
 }
 
 /** Two-phase action engine and chat streaming, see mock/engine.ts. */
 export interface Engine {
-  createPendingAction(input: CreatePendingActionInput): PendingAction;
-  getAction(actionRef: string): PendingAction;
-  ensureNotExpired(action: PendingAction): void;
-  startExecution(action: PendingAction): Task;
+  createPendingAction(input: CreatePendingActionInput): PendingActionPublic;
+  getAction(actionRef: string): PendingActionPublic;
+  ensureNotExpired(action: PendingActionPublic): void;
+  startExecution(action: PendingActionPublic): TaskViewModel;
   streamReply(
     conversationId: string,
     text: string,

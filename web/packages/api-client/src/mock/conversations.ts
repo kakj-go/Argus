@@ -1,7 +1,220 @@
 import type { ArgusApiClient } from "../client";
-import type { ChatMessage } from "../types";
+import type {
+  AgentEvent,
+  ConversationEvent,
+  StreamEventEnvelope,
+} from "../generated/contracts";
+import type { MockChatMessage as ChatMessage } from "./chat-types";
+import type { MockChatStreamEvent } from "./chat-types";
 import type { MockContext } from "./context";
 import { nextId } from "./store";
+
+function serializeMessage(message: ChatMessage): Record<string, unknown> {
+  return {
+    message_id: message.id,
+    conversation_id: message.conversationId,
+    role: message.role,
+    content: message.content,
+    created_at: message.createdAt,
+    ...(message.modelId ? { model_id: message.modelId } : {}),
+    ...(message.modelRevision ? { model_revision: message.modelRevision } : {}),
+    ...(message.inputPricePerMillionSnapshot !== undefined
+      ? { input_price_per_million_snapshot: message.inputPricePerMillionSnapshot }
+      : {}),
+    ...(message.outputPricePerMillionSnapshot !== undefined
+      ? { output_price_per_million_snapshot: message.outputPricePerMillionSnapshot }
+      : {}),
+    ...(message.inputTokens !== undefined ? { input_tokens: message.inputTokens } : {}),
+    ...(message.outputTokens !== undefined ? { output_tokens: message.outputTokens } : {}),
+    ...(message.createdInteractiveCardId
+      ? { created_interactive_card_id: message.createdInteractiveCardId }
+      : {}),
+    tool_calls: (message.toolCalls ?? []).map((call) => ({
+      call_id: call.callId,
+      tool_name: call.toolName,
+      status: call.status,
+      ...(call.summary ? { summary: call.summary } : {}),
+      ...(call.durationMs !== undefined ? { duration_ms: call.durationMs } : {}),
+      started_at: call.startedAt,
+    })),
+    cards: (message.cards ?? []).map((card) => ({
+      card_instance_id: card.id,
+      interactive_card_id: card.interactiveCardId,
+      version: card.version,
+      ...(card.title ? { title: card.title } : {}),
+      ...(card.pendingActionRef ? { pending_action_ref: card.pendingActionRef } : {}),
+      ...(card.actionBindingId ? { action_binding_id: card.actionBindingId } : {}),
+    })),
+    ...(message.event
+      ? {
+          card_action_result: {
+            type: message.event.type,
+            origin: message.event.origin,
+            actor_user_id: message.event.actorUserId,
+            card_instance_id: message.event.cardInstanceId,
+            action: message.event.action,
+            tool: message.event.tool,
+            status: message.event.status,
+            ...(message.event.resultRef
+              ? { result_ref: message.event.resultRef }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function conversationEvent(
+  enterpriseId: string,
+  message: ChatMessage,
+  sequence: number,
+): ConversationEvent {
+  return {
+    schema_version: "argus.conversation_event/v1",
+    event_id: `conversation-${message.id}`,
+    sequence,
+    enterprise_id: enterpriseId,
+    conversation_id: message.conversationId,
+    event_type: message.event
+      ? "card_action_result"
+      : message.role === "user"
+        ? "user_message"
+        : "assistant_message",
+    actor_type: message.role === "user" ? "user" : "model",
+    occurred_at: message.createdAt,
+    content_hash: `mock-content-${message.id}`.padEnd(64, "0"),
+    data_classification: "internal",
+    payload: { message: serializeMessage(message) },
+  };
+}
+
+function agentEvent(
+  runId: string,
+  sequence: number,
+  source: MockChatStreamEvent,
+  occurredAt: string,
+): AgentEvent {
+  let event_type: AgentEvent["event_type"] = "message_delta";
+  let payload: Record<string, unknown> = {};
+  if (source.type === "message_start") {
+    event_type = "message_started";
+    payload = { message_id: source.messageId };
+  } else if (source.type === "token") {
+    payload = { message_id: source.messageId, delta: source.delta };
+  } else if (source.type === "tool_call") {
+    event_type = "tool_call_started";
+    payload = {
+      message_id: source.messageId,
+      tool_call_id: source.toolCall.callId,
+      tool_name: source.toolCall.toolName,
+      started_at: source.toolCall.startedAt,
+    };
+  } else if (source.type === "tool_call_update") {
+    event_type = "tool_call_completed";
+    payload = {
+      message_id: source.messageId,
+      tool_call_id: source.callId,
+      status: source.status,
+      duration_ms: source.durationMs,
+      ...(source.summary ? { summary: source.summary } : {}),
+    };
+  } else if (source.type === "card") {
+    event_type = source.card.pendingActionRef
+      ? "pending_action_created"
+      : "message_delta";
+    payload = {
+      message_id: source.messageId,
+      card: {
+        card_instance_id: source.card.id,
+        interactive_card_id: source.card.interactiveCardId,
+        version: source.card.version,
+        ...(source.card.title ? { title: source.card.title } : {}),
+        ...(source.card.pendingActionRef
+          ? { pending_action_ref: source.card.pendingActionRef }
+          : {}),
+        ...(source.card.actionBindingId
+          ? { action_binding_id: source.card.actionBindingId }
+          : {}),
+      },
+      ...(source.card.pendingActionRef
+        ? { action_ref: source.card.pendingActionRef }
+        : {}),
+    };
+  } else if (source.type === "interactive_card_created") {
+    payload = {
+      message_id: source.messageId,
+      created_interactive_card_id: source.interactiveCardId,
+    };
+  } else if (source.type === "card_action_result") {
+    event_type = "message_completed";
+    payload = { message_id: source.messageId };
+  } else if (source.type === "message_done") {
+    event_type = "message_completed";
+    payload = {
+      message_id: source.message.id,
+      message: serializeMessage(source.message),
+    };
+  } else if (source.type === "error") {
+    event_type = "run_failed";
+    payload = { error_code: "MOCK_STREAM_FAILED", message: source.message };
+  }
+  return {
+    schema_version: "argus.agent_event/v1",
+    event_id: `${runId}-event-${sequence}`,
+    sequence,
+    run_id: runId,
+    event_type,
+    occurred_at: occurredAt,
+    payload,
+  };
+}
+
+async function* streamEnvelopes(
+  source: AsyncIterable<MockChatStreamEvent>,
+  signal?: AbortSignal,
+): AsyncGenerator<StreamEventEnvelope> {
+  const runId = `run-${crypto.randomUUID()}`;
+  let sequence = 0;
+  for await (const event of source) {
+    if (signal?.aborted) return;
+    sequence += 1;
+    const agent = agentEvent(runId, sequence, event, new Date().toISOString());
+    yield {
+      schema_version: "argus.stream_event/v1",
+      event_id: agent.event_id,
+      sequence,
+      event_type: "agent_event",
+      occurred_at: agent.occurred_at,
+      terminal: false,
+      resume_cursor: agent.event_id,
+      data: agent,
+    };
+    if (event.type === "message_done") {
+      sequence += 1;
+      const completed: AgentEvent = {
+        schema_version: "argus.agent_event/v1",
+        event_id: `${runId}-event-${sequence}`,
+        sequence,
+        run_id: runId,
+        event_type: "run_completed",
+        occurred_at: new Date().toISOString(),
+        payload: { stop_reason: "completed" },
+      };
+      yield {
+        schema_version: "argus.stream_event/v1",
+        event_id: completed.event_id,
+        sequence,
+        event_type: "agent_event",
+        occurred_at: completed.occurred_at,
+        terminal: true,
+        close_reason: "normal",
+        resume_cursor: completed.event_id,
+        data: completed,
+      };
+      return;
+    }
+  }
+}
 
 /** Conversations and streaming assistant replies. */
 export function createConversationsDomain(
@@ -58,11 +271,13 @@ export function createConversationsDomain(
       ctx.save();
       return conversation;
     },
-    async listMessages(conversationId) {
+    async listEvents(conversationId) {
       await ctx.pause();
-      return db.messages.filter(
-        (entry) => entry.conversationId === conversationId,
-      );
+      return db.messages
+        .filter((entry) => entry.conversationId === conversationId)
+        .map((message, index) =>
+          conversationEvent(ctx.enterpriseId(), message, index + 1),
+        );
     },
     async updateModel(id, modelId) {
       await ctx.pause();
@@ -83,16 +298,16 @@ export function createConversationsDomain(
       ctx.save();
       return conversation;
     },
-    sendMessage(conversationId, input) {
+    sendMessage(conversationId, input, options) {
       const conversation = ctx.mustFind(
         db.conversations,
         (entry) => entry.id === conversationId,
         "conversation",
       );
-      const membership = db.memberships.find(
+      const enterpriseUser = db.enterpriseUsers.find(
         (entry) => entry.userId === ctx.actor().id,
       );
-      if (!membership) throw new Error("enterprise membership required");
+      if (!enterpriseUser) throw new Error("enterprise enterpriseUser required");
       const month = ctx.nowIso().slice(0, 7);
       const points = db.usagePoints.filter(
         (point) =>
@@ -100,22 +315,22 @@ export function createConversationsDomain(
           point.date.startsWith(month),
       );
       const departmentUsed = points
-        .filter((point) => point.departmentId === membership.departmentId)
+        .filter((point) => point.departmentId === enterpriseUser.departmentId)
         .reduce((sum, point) => sum + point.amount, 0);
       const userUsed = points
-        .filter((point) => point.userId === membership.userId)
+        .filter((point) => point.userId === enterpriseUser.userId)
         .reduce((sum, point) => sum + point.amount, 0);
       const departmentQuota = db.modelQuotas.find(
         (quota) =>
           quota.modelId === conversation.selectedModelId &&
           quota.subjectType === "department" &&
-          quota.subjectId === membership.departmentId,
+          quota.subjectId === enterpriseUser.departmentId,
       );
       const userQuota = db.modelQuotas.find(
         (quota) =>
           quota.modelId === conversation.selectedModelId &&
           quota.subjectType === "user" &&
-          quota.subjectId === membership.userId,
+          quota.subjectId === enterpriseUser.userId,
       );
       if (departmentQuota && departmentUsed >= departmentQuota.monthlyAmount) {
         throw new Error("department quota exhausted");
@@ -168,7 +383,7 @@ export function createConversationsDomain(
         };
         db.interactiveCards.push(card);
         ctx.save();
-        return (async function* () {
+        return streamEnvelopes((async function* () {
           const messageId = nextId(db, "msg");
           yield { type: "message_start" as const, messageId };
           yield {
@@ -192,9 +407,12 @@ export function createConversationsDomain(
           db.messages.push(message);
           ctx.save();
           yield { type: "message_done" as const, message };
-        })();
+        })(), options?.signal);
       }
-      return ctx.streamReply(conversationId, input.text);
+      return streamEnvelopes(
+        ctx.streamReply(conversationId, input.text),
+        options?.signal,
+      );
     },
     subscribe(conversationId, listener) {
       return ctx.emitter.on(`chat:${conversationId}`, listener);

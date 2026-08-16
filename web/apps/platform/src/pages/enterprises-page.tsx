@@ -141,7 +141,7 @@ export function EnterprisesPage() {
             {
               key: "code",
               header: t("enterprises.table.code"),
-              render: (row) => <code className="mono">{row.code}</code>,
+              render: (row) => <code className="argus-mono">{row.code}</code>,
             },
             { key: "timezone", header: t("enterprises.table.timezone") },
             {
@@ -167,7 +167,7 @@ export function EnterprisesPage() {
               key: "id",
               header: t("common.actions"),
               render: (row) => (
-                <div className="row-actions">
+                <div className="argus-row-actions">
                   <Button
                     onClick={() => setDetail(findEnterprise(row.id))}
                     size="sm"
@@ -234,7 +234,10 @@ export function EnterprisesPage() {
             value={name}
           />
         </Field>
-        <Field hint={t("enterprises.form.codeHint")} label={t("enterprises.form.code")}>
+        <Field
+          hint={t("enterprises.form.codeHint")}
+          label={t("enterprises.form.code")}
+        >
           <Input
             onChange={(event) => setCode(event.target.value)}
             pattern="[a-z0-9-]+"
@@ -313,20 +316,23 @@ export function EnterprisesPage() {
         width={560}
       >
         {detail && (
-          <div className="drawer-stack">
+          <div className="argus-drawer-stack">
             <KeyValueGrid
               columns={2}
               items={[
                 {
                   label: t("enterprises.detail.id"),
-                  value: <code className="mono">{detail.id}</code>,
+                  value: <code className="argus-mono">{detail.id}</code>,
                 },
                 { label: t("enterprises.table.name"), value: detail.name },
                 {
                   label: t("enterprises.table.code"),
-                  value: <code className="mono">{detail.code}</code>,
+                  value: <code className="argus-mono">{detail.code}</code>,
                 },
-                { label: t("enterprises.table.timezone"), value: detail.timezone },
+                {
+                  label: t("enterprises.table.timezone"),
+                  value: detail.timezone,
+                },
                 {
                   label: t("enterprises.table.status"),
                   value: (
@@ -349,7 +355,7 @@ export function EnterprisesPage() {
                 },
               ]}
             />
-            <section className="drawer-section">
+            <section className="argus-drawer-section">
               <h3>{t("enterprises.quota.title")}</h3>
               <QuotaEditor enterpriseId={detail.id} />
             </section>

@@ -48,8 +48,7 @@ export function AuditPage() {
 
   const events = useQuery({
     queryKey: ["platform", "audit", { search }],
-    queryFn: () =>
-      api.platform.audit.list({ query: search || undefined }),
+    queryFn: () => api.platform.audit.list({ query: search || undefined }),
   });
 
   const actionOptions = useMemo(() => {
@@ -96,7 +95,7 @@ export function AuditPage() {
 
   return (
     <PageShell description={t("audit.description")} title={t("audit.title")}>
-      <div className="platform-stack">
+      <div className="argus-platform-stack">
         <FilterBar
           filters={[
             {
@@ -148,7 +147,9 @@ export function AuditPage() {
               {
                 key: "action",
                 header: t("audit.table.action"),
-                render: (row) => <code className="mono">{row.action}</code>,
+                render: (row) => (
+                  <code className="argus-mono">{row.action}</code>
+                ),
               },
               { key: "resource", header: t("audit.table.resource") },
               {
@@ -198,7 +199,7 @@ export function AuditPage() {
             items={[
               {
                 label: t("audit.detail.id"),
-                value: <code className="mono">{selected.id}</code>,
+                value: <code className="argus-mono">{selected.id}</code>,
               },
               {
                 label: t("audit.detail.actor"),
@@ -206,7 +207,7 @@ export function AuditPage() {
               },
               {
                 label: t("audit.detail.action"),
-                value: <code className="mono">{selected.action}</code>,
+                value: <code className="argus-mono">{selected.action}</code>,
               },
               { label: t("audit.detail.origin"), value: selected.origin },
               {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, LoaderCircle, Wrench, X } from "lucide-react";
-import type { ToolCallTrace } from "@argus/api-client";
+import type { ToolCallTrace } from "./chat-view-model";
 
 function formatDuration(durationMs?: number): string {
   if (durationMs === undefined) return "";

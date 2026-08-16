@@ -2,18 +2,41 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
   redirect,
 } from "@tanstack/react-router";
-import { useAuthStore } from "@argus/auth";
+import { usePlatformAuthStore } from "@argus/auth";
 import { PlatformShell } from "./components/platform-shell";
-import { AccountPage } from "./pages/account-page";
-import { AdminsPage } from "./pages/admins-page";
-import { AuditPage } from "./pages/audit-page";
-import { DashboardPage } from "./pages/dashboard-page";
-import { EnterprisesPage } from "./pages/enterprises-page";
-import { LoginPage } from "./pages/login-page";
-import { SandboxPage } from "./pages/sandbox-page";
+
+const LoginPage = lazyRouteComponent(
+  () => import("./pages/login-page"),
+  "LoginPage",
+);
+const DashboardPage = lazyRouteComponent(
+  () => import("./pages/dashboard-page"),
+  "DashboardPage",
+);
+const EnterprisesPage = lazyRouteComponent(
+  () => import("./pages/enterprises-page"),
+  "EnterprisesPage",
+);
+const AdminsPage = lazyRouteComponent(
+  () => import("./pages/admins-page"),
+  "AdminsPage",
+);
+const SandboxPage = lazyRouteComponent(
+  () => import("./pages/sandbox-page"),
+  "SandboxPage",
+);
+const AuditPage = lazyRouteComponent(
+  () => import("./pages/audit-page"),
+  "AuditPage",
+);
+const AccountPage = lazyRouteComponent(
+  () => import("./pages/account-page"),
+  "AccountPage",
+);
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -34,8 +57,8 @@ const authedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "authed",
   beforeLoad: ({ location }) => {
-    const session = useAuthStore.getState().session;
-    if (!session || session.user.platformRole !== "platform_super_admin") {
+    const session = usePlatformAuthStore.getState().session;
+    if (!session || session.session.audience !== "platform") {
       throw redirect({
         to: "/login",
         search: { redirect: location.href },

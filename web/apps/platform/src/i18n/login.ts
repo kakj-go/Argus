@@ -23,6 +23,7 @@ export const loginEn = {
   "login.submit": "Sign in",
   "login.submitting": "Signing in…",
   "login.failed": "Sign-in failed: invalid credentials",
-  "login.notSuperAdmin": "This account is not a platform super admin; access denied",
+  "login.notSuperAdmin":
+    "This account is not a platform super admin; access denied",
   "login.hint": "Demo account: admin / 123456",
 };

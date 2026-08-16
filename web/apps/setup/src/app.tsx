@@ -98,9 +98,9 @@ export default function App() {
   let content: ReactNode;
   if (statusQuery.isPending) {
     content = (
-      <Card className="setup-card">
+      <Card className="argus-setup-card">
         <CardContent>
-          <div className="setup-loading">
+          <div className="argus-setup-loading">
             <LoaderCircle aria-hidden className="argus-spin" size={20} />
             <span>{t("setup.loading")}</span>
           </div>
@@ -109,9 +109,9 @@ export default function App() {
     );
   } else if (statusQuery.isError) {
     content = (
-      <Card className="setup-card">
+      <Card className="argus-setup-card">
         <CardContent>
-          <div className="setup-fields">
+          <div className="argus-setup-fields">
             <Alert
               description={t("setup.statusError.description")}
               title={t("setup.statusError.title")}
@@ -131,7 +131,7 @@ export default function App() {
     content = <InitializedTerminal />;
   } else {
     content = (
-      <Card className="setup-card">
+      <Card className="argus-setup-card">
         <CardContent>
           <Wizard
             canNext={canNext}
@@ -177,7 +177,7 @@ export default function App() {
               />
             )}
             {step === 3 && (
-              <div className="setup-fields">
+              <div className="argus-setup-fields">
                 <StepReview draft={draft} />
                 {submitMutation.isError && (
                   <Alert
@@ -195,12 +195,12 @@ export default function App() {
   }
 
   return (
-    <main className="setup-shell">
-      <div className="setup-appearance">
+    <main className="argus-setup-shell">
+      <div className="argus-setup-appearance">
         <AppearanceControls />
       </div>
-      <header className="setup-header">
-        <div className="setup-brand">◉</div>
+      <header className="argus-setup-header">
+        <div className="argus-setup-brand">◉</div>
         <Badge tone="accent">{t("setup.badge")}</Badge>
         <h1>{t("setup.title")}</h1>
         <p>{t("setup.subtitle")}</p>

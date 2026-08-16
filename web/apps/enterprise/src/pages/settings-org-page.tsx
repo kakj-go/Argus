@@ -7,7 +7,6 @@ import { OrgAccessTab } from "../components/settings/org-access-tab";
 import { OrgBindingsTab } from "../components/settings/org-bindings-tab";
 import { OrgDepartmentsTab } from "../components/settings/org-departments-tab";
 import { OrgPoliciesTab } from "../components/settings/org-policies-tab";
-import { OrgProjectsTab } from "../components/settings/org-projects-tab";
 import { OrgRolesTab } from "../components/settings/org-roles-tab";
 import { OrgScopesTab } from "../components/settings/org-scopes-tab";
 import { OrgUsersTab } from "../components/settings/org-users-tab";
@@ -15,7 +14,6 @@ import { OrgUsersTab } from "../components/settings/org-users-tab";
 const TAB_KEYS = [
   "users",
   "departments",
-  "projects",
   "roles",
   "bindings",
   "scopes",
@@ -46,9 +44,6 @@ export function SettingsOrgPage() {
         </TabsContent>
         <TabsContent value="departments">
           <OrgDepartmentsTab />
-        </TabsContent>
-        <TabsContent value="projects">
-          <OrgProjectsTab />
         </TabsContent>
         <TabsContent value="roles">
           <OrgRolesTab />

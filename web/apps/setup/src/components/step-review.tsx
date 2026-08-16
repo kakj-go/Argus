@@ -55,8 +55,8 @@ export function StepReview({ draft }: { draft: SetupDraft }) {
   }
 
   return (
-    <div className="setup-fields">
-      <p className="setup-step-intro">{t("setup.review.intro")}</p>
+    <div className="argus-setup-fields">
+      <p className="argus-setup-step-intro">{t("setup.review.intro")}</p>
       <KeyValueGrid columns={2} items={items} />
     </div>
   );

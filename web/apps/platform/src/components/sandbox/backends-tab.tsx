@@ -71,7 +71,9 @@ export function BackendsTab() {
   });
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["platform", "sandboxBackends"] });
+    queryClient.invalidateQueries({
+      queryKey: ["platform", "sandboxBackends"],
+    });
 
   const save = useMutation({
     mutationFn: (input: FormState) =>
@@ -119,8 +121,8 @@ export function BackendsTab() {
   }));
 
   return (
-    <div className="platform-stack">
-      <div className="tab-toolbar">
+    <div className="argus-platform-stack">
+      <div className="argus-tab-toolbar">
         <Button onClick={() => setForm(EMPTY_FORM)} variant="primary">
           {t("sandbox.backends.add")}
         </Button>
@@ -130,7 +132,9 @@ export function BackendsTab() {
         <Alert
           description={`${testResult.result.checks
             .map((check) => `${check.name}: ${check.status}`)
-            .join(" · ")} — ${t("sandbox.backends.test.latency", { ms: testResult.result.latencyMs })}`}
+            .join(
+              " · ",
+            )} — ${t("sandbox.backends.test.latency", { ms: testResult.result.latencyMs })}`}
           title={t(
             testResult.result.success
               ? "sandbox.backends.test.success"
@@ -149,23 +153,28 @@ export function BackendsTab() {
             {
               key: "endpoint",
               header: t("sandbox.backends.table.endpoint"),
-              render: (row) => <code className="mono">{row.endpoint}</code>,
+              render: (row) => (
+                <code className="argus-mono">{row.endpoint}</code>
+              ),
             },
             {
               key: "credentialRef",
               header: t("sandbox.backends.table.credential"),
-              render: (row) => <code className="mono">{row.credentialRef}</code>,
+              render: (row) => (
+                <code className="argus-mono">{row.credentialRef}</code>
+              ),
             },
             {
               key: "tlsVerify",
               header: t("sandbox.backends.table.tls"),
-              render: (row) =>
-                t(row.tlsVerify ? "common.yes" : "common.no"),
+              render: (row) => t(row.tlsVerify ? "common.yes" : "common.no"),
             },
             {
               key: "defaultStorage",
               header: t("sandbox.backends.table.storage"),
-              render: (row) => <code className="mono">{row.defaultStorage}</code>,
+              render: (row) => (
+                <code className="argus-mono">{row.defaultStorage}</code>
+              ),
             },
             {
               key: "healthStatus",
@@ -193,7 +202,7 @@ export function BackendsTab() {
               key: "id",
               header: t("common.actions"),
               render: (row) => (
-                <div className="row-actions">
+                <div className="argus-row-actions">
                   <Button
                     onClick={() =>
                       setForm({
@@ -235,9 +244,7 @@ export function BackendsTab() {
         onSubmit={() => form && save.mutate(form)}
         open={form !== null}
         submitLabel={t("common.save")}
-        title={t(
-          form?.id ? "sandbox.backends.edit" : "sandbox.backends.add",
-        )}
+        title={t(form?.id ? "sandbox.backends.edit" : "sandbox.backends.add")}
       >
         {form && (
           <>
@@ -277,13 +284,11 @@ export function BackendsTab() {
                 value={form.defaultStorage}
               />
             </Field>
-            <label className="switch-row">
+            <label className="argus-switch-row">
               <Switch
                 checked={form.tlsVerify}
                 label={t("sandbox.backends.form.tlsVerify")}
-                onChange={(checked) =>
-                  setForm({ ...form, tlsVerify: checked })
-                }
+                onChange={(checked) => setForm({ ...form, tlsVerify: checked })}
               />
               <span>{t("sandbox.backends.form.tlsVerify")}</span>
             </label>

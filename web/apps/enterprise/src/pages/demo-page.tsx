@@ -87,7 +87,7 @@ function DemoSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="demo-section" id={id}>
+    <section className="argus-demo-section" id={id}>
       <header>
         <div>
           <span>0{demoNav.findIndex((item) => item.id === id) + 1}</span>
@@ -111,7 +111,7 @@ function DemoBlock({
   className?: string;
 }) {
   return (
-    <Card className={`demo-block ${className}`}>
+    <Card className={`argus-demo-block ${className}`}>
       <CardHeader description={description} title={title} />
       <CardContent>{children}</CardContent>
     </Card>
@@ -131,8 +131,8 @@ export function DemoPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
   return (
-    <div className="demo-page">
-      <aside className="demo-nav">
+    <div className="argus-demo-page">
+      <aside className="argus-demo-nav">
         <div>
           <b>Argus UI</b>
           <span>v0.1.0 · {resolvedTheme}</span>
@@ -142,7 +142,7 @@ export function DemoPage() {
             {t(item.key)}
           </a>
         ))}
-        <div className="demo-nav__meta">
+        <div className="argus-demo-nav__meta">
           <span>
             <i /> React 19
           </span>
@@ -154,8 +154,8 @@ export function DemoPage() {
           </span>
         </div>
       </aside>
-      <div className="demo-content">
-        <header className="demo-hero">
+      <div className="argus-demo-content">
+        <header className="argus-demo-hero">
           <Badge tone="accent">{t("demo.badge")}</Badge>
           <h1>{t("demo.title")}</h1>
           <p>{t("demo.description")}</p>
@@ -178,9 +178,9 @@ export function DemoPage() {
           id="foundations"
           title={t("demo.foundations")}
         >
-          <div className="demo-grid two">
+          <div className="argus-demo-grid argus-two">
             <DemoBlock title={text("语义颜色", "Semantic colors")}>
-              <div className="swatches">
+              <div className="argus-swatches">
                 {[
                   ["Canvas", "--bg-canvas"],
                   ["Surface", "--bg-surface"],
@@ -202,26 +202,26 @@ export function DemoPage() {
               </div>
             </DemoBlock>
             <DemoBlock title={text("文字层级", "Type hierarchy")}>
-              <div className="type-scale">
-                <div className="display">
+              <div className="argus-type-scale">
+                <div className="argus-display">
                   {text(
                     "复杂系统，也应一目了然。",
                     "Complex systems should still feel clear.",
                   )}
                 </div>
-                <div className="heading">
+                <div className="argus-heading">
                   {text(
                     "企业资源与运行状态",
                     "Enterprise resources and runtime",
                   )}
                 </div>
-                <div className="body">
+                <div className="argus-body">
                   {text(
                     "正文用于清晰描述业务状态、风险与下一步动作。",
                     "Body copy clearly explains business state, risk, and the next action.",
                   )}
                 </div>
-                <div className="caption">
+                <div className="argus-caption">
                   {text("辅助信息", "Supporting detail")} · 2026-08-15 10:32:04
                 </div>
                 <code>tool_call_id: tc_01JAK2</code>
@@ -237,9 +237,9 @@ export function DemoPage() {
           id="actions"
           title={t("demo.actions")}
         >
-          <div className="demo-grid two">
+          <div className="argus-demo-grid argus-two">
             <DemoBlock title="Button">
-              <div className="demo-stack">
+              <div className="argus-demo-stack">
                 <div>
                   <Button variant="primary">
                     {text("主要操作", "Primary")}
@@ -278,7 +278,7 @@ export function DemoPage() {
               </div>
             </DemoBlock>
             <DemoBlock title="StatusBadge">
-              <div className="badge-wall">
+              <div className="argus-badge-wall">
                 <Badge tone="neutral">{text("默认", "Default")}</Badge>
                 <Badge dot tone="success">
                   {text("在线", "Online")}
@@ -295,7 +295,7 @@ export function DemoPage() {
                 <Badge tone="accent">production</Badge>
               </div>
               <Divider label={text("业务示例", "Business examples")} />
-              <div className="badge-wall">
+              <div className="argus-badge-wall">
                 <Badge tone="success">
                   <Check size={11} />
                   {text("监控中", "Monitoring")}
@@ -312,7 +312,7 @@ export function DemoPage() {
               <Divider
                 label={text("StatusBadge 全 tone", "StatusBadge tones")}
               />
-              <div className="badge-wall">
+              <div className="argus-badge-wall">
                 <StatusBadge tone="neutral">
                   {text("未知", "Unknown")}
                 </StatusBadge>
@@ -341,9 +341,9 @@ export function DemoPage() {
           id="forms"
           title={t("demo.forms")}
         >
-          <div className="demo-grid two">
+          <div className="argus-demo-grid argus-two">
             <DemoBlock title={text("输入控件", "Input controls")}>
-              <div className="form-demo">
+              <div className="argus-form-demo">
                 <Field
                   hint={text(
                     "名称在企业内唯一",
@@ -384,8 +384,8 @@ export function DemoPage() {
               </div>
             </DemoBlock>
             <DemoBlock title={text("选择与开关", "Selection and switches")}>
-              <div className="form-demo">
-                <div className="demo-row">
+              <div className="argus-form-demo">
+                <div className="argus-demo-row">
                   <span>
                     <b>{text("启用 Provider", "Enable provider")}</b>
                     <small>
@@ -415,7 +415,7 @@ export function DemoPage() {
                 </MenuItem>
                 <MenuItem
                   end={
-                    <span className="muted-copy">
+                    <span className="argus-muted-copy">
                       {text("12 项", "12 items")}
                     </span>
                   }
@@ -491,7 +491,7 @@ export function DemoPage() {
           id="navigation"
           title={t("demo.navigation")}
         >
-          <div className="demo-grid two">
+          <div className="argus-demo-grid argus-two">
             <DemoBlock title="Tabs">
               <Tabs defaultValue="overview">
                 <TabsList>
@@ -531,7 +531,7 @@ export function DemoPage() {
               </Tabs>
             </DemoBlock>
             <DemoBlock title="Overlay">
-              <div className="demo-stack">
+              <div className="argus-demo-stack">
                 <div>
                   <Dialog
                     description={text(
@@ -556,7 +556,7 @@ export function DemoPage() {
                       </Button>
                     }
                   >
-                    <div className="form-demo">
+                    <div className="argus-form-demo">
                       <Field label={text("名称", "Name")}>
                         <Input
                           placeholder={text(
@@ -633,7 +633,7 @@ export function DemoPage() {
                       "每行一个，格式 key=value",
                       "One per line, key=value",
                     )}
-                    label={text("标签", "Tags")}
+                    label={text("标签", "Labels")}
                   >
                     <Textarea rows={3} />
                   </Field>
@@ -650,7 +650,7 @@ export function DemoPage() {
                   open={confirmOpen}
                   title={text("删除资源", "Delete resource")}
                 >
-                  <p className="muted-copy">
+                  <p className="argus-muted-copy">
                     <code>host-web-11（10.0.0.11:22）</code>
                   </p>
                 </ConfirmDialog>
@@ -666,7 +666,7 @@ export function DemoPage() {
           id="data"
           title={t("demo.data")}
         >
-          <div className="metric-demo">
+          <div className="argus-metric-demo">
             <Metric
               change={text("较昨日 +3.2%", "+3.2% vs yesterday")}
               label={text("摄入速率", "Ingest rate")}
@@ -700,8 +700,8 @@ export function DemoPage() {
               "Resource identity, state, source, and data time must remain traceable in details.",
             )}
           >
-            <div className="table-toolbar">
-              <div className="filter-search">
+            <div className="argus-table-toolbar">
+              <div className="argus-filter-search">
                 <Search size={15} />
                 <Input placeholder={text("搜索资源", "Search resources")} />
               </div>
@@ -773,11 +773,11 @@ export function DemoPage() {
               ]}
               getRowKey={(row) => String(row.name)}
             />
-            <div className="pagination-demo">
+            <div className="argus-pagination-demo">
               <Pagination onChange={setPage} page={page} totalPages={12} />
             </div>
           </DemoBlock>
-          <div className="demo-grid two">
+          <div className="argus-demo-grid argus-two">
             <DemoBlock title="DescriptionList">
               <DescriptionList
                 items={[
@@ -817,7 +817,7 @@ export function DemoPage() {
               />
             </DemoBlock>
           </div>
-          <div className="metric-demo">
+          <div className="argus-metric-demo">
             <StatCard
               label={text("待我审批", "Awaiting my approval")}
               tone="warning"
@@ -843,7 +843,7 @@ export function DemoPage() {
             )}
             title="MetricChart"
           >
-            <div className="demo-grid three">
+            <div className="argus-demo-grid argus-three">
               <MetricChart
                 height={160}
                 labels={["10:00", "10:05", "10:10", "10:15", "10:20", "10:25"]}
@@ -884,7 +884,7 @@ export function DemoPage() {
               />
             </div>
           </DemoBlock>
-          <div className="demo-grid two">
+          <div className="argus-demo-grid argus-two">
             <DemoBlock title="KeyValueGrid">
               <KeyValueGrid
                 columns={2}
@@ -908,7 +908,7 @@ export function DemoPage() {
                 ]}
               />
             </DemoBlock>
-            <DemoBlock className="no-padding" title="LogViewer">
+            <DemoBlock className="argus-no-padding" title="LogViewer">
               <LogViewer
                 fileName="collector-install.log"
                 height={220}
@@ -937,7 +937,7 @@ export function DemoPage() {
               />
             </DemoBlock>
           </div>
-          <DemoBlock className="no-padding" title="TerminalEmulator">
+          <DemoBlock className="argus-no-padding" title="TerminalEmulator">
             <TerminalEmulator
               height={220}
               host="host-web-11"
@@ -969,9 +969,9 @@ export function DemoPage() {
           id="feedback"
           title={t("demo.feedback")}
         >
-          <div className="demo-grid two">
+          <div className="argus-demo-grid argus-two">
             <DemoBlock title="Alerts">
-              <div className="form-demo">
+              <div className="argus-form-demo">
                 <Alert
                   description={text(
                     "Collector Desired 与 Effective Revision 一致。",
@@ -1002,7 +1002,7 @@ export function DemoPage() {
               </div>
             </DemoBlock>
             <DemoBlock title="Progress + Loading">
-              <div className="form-demo">
+              <div className="argus-form-demo">
                 <Progress
                   label={text("传输 Artifact", "Transfer artifact")}
                   value={62}
@@ -1052,7 +1052,7 @@ export function DemoPage() {
                 ]}
               />
             </DemoBlock>
-            <DemoBlock className="no-padding" title="EmptyErrorState">
+            <DemoBlock className="argus-no-padding" title="EmptyErrorState">
               <EmptyState
                 action={
                   <Button size="sm" variant="secondary">
@@ -1076,7 +1076,7 @@ export function DemoPage() {
           id="patterns"
           title={t("demo.patterns")}
         >
-          <DemoBlock className="no-padding" title="PageShell + FilterBar">
+          <DemoBlock className="argus-no-padding" title="PageShell + FilterBar">
             <PageShell
               actions={
                 <>
@@ -1134,8 +1134,8 @@ export function DemoPage() {
                   placeholder: text("搜索主机名或 IP…", "Search name or IP…"),
                 }}
               />
-              <div className="badge-wall" style={{ padding: "4px 2px" }}>
-                <span className="muted-copy">
+              <div className="argus-badge-wall" style={{ padding: "4px 2px" }}>
+                <span className="argus-muted-copy">
                   {text("当前筛选：", "Active filters: ")}
                   {[
                     demoSearch &&
@@ -1158,10 +1158,10 @@ export function DemoPage() {
           id="ai-cards"
           title={t("demo.aiCards")}
         >
-          <div className="ai-demo-grid">
+          <div className="argus-ai-demo-grid">
             <div>
-              <div className="mini-message">
-                <span className="agent-avatar">
+              <div className="argus-mini-message">
+                <span className="argus-agent-avatar">
                   <Sparkles size={14} />
                 </span>
                 <div>
@@ -1190,7 +1190,6 @@ export function DemoPage() {
                 expiresAt={Date.now() + 10 * 60_000}
                 onCancel={() => {}}
                 onConfirm={() => {}}
-                planHash="sha256:9f2c…a41d"
                 risk="write"
                 riskLabel={text(
                   "中风险 · 需人工确认",
@@ -1206,14 +1205,14 @@ export function DemoPage() {
                 </p>
               </PreviewCommitCard>
             </div>
-            <div className="demo-side-card">
+            <div className="argus-demo-side-card">
               <Card>
                 <CardHeader
                   action={<Badge tone="info">system</Badge>}
                   title={text("主机概览", "Host overview")}
                 />
                 <CardContent>
-                  <div className="four-metrics">
+                  <div className="argus-four-metrics">
                     <Metric label="CPU" unit="%" value="42" />
                     <Metric
                       label={text("内存", "Memory")}
@@ -1227,11 +1226,11 @@ export function DemoPage() {
                       value="18"
                     />
                   </div>
-                  <div className="spark-bars">
+                  <div className="argus-spark-bars">
                     {[30, 42, 36, 55, 48, 62, 58, 73, 64, 78, 70, 83].map(
                       (v, i) => (
                         <i
-                          className={i > 9 ? "hot" : ""}
+                          className={i > 9 ? "argus-hot" : ""}
                           key={i}
                           style={{ height: `${v}%` }}
                         />
@@ -1243,7 +1242,7 @@ export function DemoPage() {
                   <Badge dot tone="success">
                     {text("数据正常", "Data healthy")}
                   </Badge>
-                  <span className="push-right muted-copy">
+                  <span className="argus-push-right argus-muted-copy">
                     {text(
                       "host.metrics · 8 秒前",
                       "host.metrics · 8 seconds ago",
@@ -1260,7 +1259,7 @@ export function DemoPage() {
             </div>
           </div>
         </DemoSection>
-        <footer className="demo-footer">
+        <footer className="argus-demo-footer">
           <span>◉ Argus Design System</span>
           <p>
             {text(

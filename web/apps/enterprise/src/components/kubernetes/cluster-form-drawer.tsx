@@ -6,7 +6,7 @@ import {
   type ClusterConnectionMode,
   type Environment,
   type K8sCluster,
-  type PendingAction,
+  type PendingActionPublic,
 } from "@argus/api-client";
 import { Field, FormDrawer, Input, Select, Textarea } from "@argus/ui";
 import { PendingActionCard } from "./pending-action-card";
@@ -19,8 +19,7 @@ const CONNECTION_MODES: ClusterConnectionMode[] = [
 const ENVIRONMENTS: Environment[] = ["development", "staging", "production"];
 
 export type ClusterFormState =
-  | { mode: "create" }
-  | { mode: "edit"; cluster: K8sCluster };
+  { mode: "create" } | { mode: "edit"; cluster: K8sCluster };
 
 /**
  * 添加/编辑集群抽屉。kubeconfig 先写入 Secret 再引用其 id（credentialRef），
@@ -46,7 +45,8 @@ export function ClusterFormDrawer({
   const [environment, setEnvironment] = useState<Environment>("production");
   const [kubeconfig, setKubeconfig] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [pendingAction, setPendingAction] =
+    useState<PendingActionPublic | null>(null);
 
   const scopesQuery = useQuery({
     queryKey: ["connectors", "bastionScopes"],
@@ -72,7 +72,11 @@ export function ClusterFormDrawer({
   const submit = useMutation({
     mutationFn: async () => {
       if (editing) {
-        const patch: { name?: string; environment?: Environment; credentialRef?: string } = {
+        const patch: {
+          name?: string;
+          environment?: Environment;
+          credentialRef?: string;
+        } = {
           name: name.trim(),
           environment,
         };
@@ -194,7 +198,9 @@ export function ClusterFormDrawer({
           <Field label={t("kubernetes.form.connectionMode")}>
             <Select
               disabled={editing !== null}
-              onValueChange={(value) => setConnectionMode(value as ClusterConnectionMode)}
+              onValueChange={(value) =>
+                setConnectionMode(value as ClusterConnectionMode)
+              }
               options={CONNECTION_MODES.map((mode) => ({
                 value: mode,
                 label: t(`kubernetes.mode.${mode}`),

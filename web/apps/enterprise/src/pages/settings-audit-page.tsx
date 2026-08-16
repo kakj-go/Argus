@@ -30,7 +30,13 @@ type AuditRow = {
   summary: string;
 };
 
-const ACTION_TYPES = ["create", "update", "delete", "login", "approve"] as const;
+const ACTION_TYPES = [
+  "create",
+  "update",
+  "delete",
+  "login",
+  "approve",
+] as const;
 type ActionType = (typeof ACTION_TYPES)[number];
 
 function actionTypeOf(action: string): ActionType | "other" {
@@ -220,7 +226,9 @@ export function SettingsAuditPage() {
               {
                 key: "action",
                 header: t("settings.audit.table.action"),
-                render: (row) => <code className="mono">{row.action}</code>,
+                render: (row) => (
+                  <code className="argus-mono">{row.action}</code>
+                ),
               },
               { key: "resource", header: t("settings.audit.table.resource") },
               {
@@ -248,7 +256,7 @@ export function SettingsAuditPage() {
                     size="sm"
                     variant="ghost"
                   >
-                    <code className="mono">{row.id}</code>
+                    <code className="argus-mono">{row.id}</code>
                   </Button>
                 ),
               },
@@ -277,7 +285,7 @@ export function SettingsAuditPage() {
             items={[
               {
                 label: t("settings.audit.detail.id"),
-                value: <code className="mono">{selected.id}</code>,
+                value: <code className="argus-mono">{selected.id}</code>,
               },
               {
                 label: t("settings.audit.detail.actor"),
@@ -285,7 +293,7 @@ export function SettingsAuditPage() {
               },
               {
                 label: t("settings.audit.detail.action"),
-                value: <code className="mono">{selected.action}</code>,
+                value: <code className="argus-mono">{selected.action}</code>,
               },
               {
                 label: t("settings.audit.detail.origin"),

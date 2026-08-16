@@ -9,17 +9,17 @@ import { useQuery } from "@tanstack/react-query";
 import { House, Menu, MessageSquarePlus, Settings2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Conversation } from "@argus/api-client";
+import type { Conversation } from "@argus/api-client/provisional";
 import { useApi } from "@argus/api-client";
-import { Button, SearchInput } from "@argus/ui";
+import { AppShell, Button, SearchInput } from "@argus/ui";
 import { useUiStore } from "../store/ui";
 import { AccountActions } from "./account-actions";
 
 function Brand() {
   return (
-    <Link className="brand" to="/">
-      <span className="brand__mark">◉</span>
-      <span className="brand__name">
+    <Link className="argus-brand" to="/">
+      <span className="argus-brand__mark">◉</span>
+      <span className="argus-brand__name">
         Argus<small>enterprise</small>
       </span>
     </Link>
@@ -100,9 +100,9 @@ function ConversationList() {
 
   return (
     <>
-      <div className="sidebar__action">
+      <div className="argus-sidebar__action">
         <Button
-          className="chat-new-button"
+          className="argus-chat-new-button"
           onClick={() => openConversation()}
           variant="primary"
         >
@@ -116,19 +116,19 @@ function ConversationList() {
           value={keyword}
         />
       </div>
-      <div className="chat-history">
+      <div className="argus-chat-history">
         {data && data.items.length === 0 && (
-          <p className="chat-history__empty">{t("shell.chat.empty")}</p>
+          <p className="argus-chat-history__empty">{t("shell.chat.empty")}</p>
         )}
         {data && data.items.length > 0 && groups.length === 0 && (
-          <p className="chat-history__empty">{t("shell.chat.noMatch")}</p>
+          <p className="argus-chat-history__empty">{t("shell.chat.noMatch")}</p>
         )}
         {groups.map((group) => (
-          <div className="chat-history__group" key={group.key}>
-            <div className="nav-section__label">
+          <div className="argus-chat-history__group" key={group.key}>
+            <div className="argus-nav-section__label">
               {t(`shell.chat.group.${group.key}`)}
             </div>
-            <div className="sessions">
+            <div className="argus-sessions">
               {group.items.map((item) => (
                 <button
                   className={item.id === search.c ? "is-active" : ""}
@@ -137,9 +137,7 @@ function ConversationList() {
                   type="button"
                 >
                   <span>{item.title}</span>
-                  <small>
-                  {formatTime(item.lastMessageAt, i18n.language)}
-                  </small>
+                  <small>{formatTime(item.lastMessageAt, i18n.language)}</small>
                 </button>
               ))}
             </div>
@@ -157,15 +155,17 @@ function Sidebar() {
     <>
       <div
         aria-hidden
-        className={`mobile-scrim ${mobileNavOpen ? "is-visible" : ""}`}
+        className={`argus-mobile-scrim ${mobileNavOpen ? "is-visible" : ""}`}
         onClick={() => setMobileNavOpen(false)}
       />
-      <aside className={`sidebar ${mobileNavOpen ? "is-mobile-open" : ""}`}>
-        <div className="sidebar__head">
+      <aside
+        className={`argus-sidebar ${mobileNavOpen ? "is-mobile-open" : ""}`}
+      >
+        <div className="argus-sidebar__head">
           <Brand />
           <Button
             aria-label={t("shell.closeNavigation")}
-            className="mobile-close"
+            className="argus-mobile-close"
             onClick={() => setMobileNavOpen(false)}
             size="icon"
             variant="ghost"
@@ -174,8 +174,8 @@ function Sidebar() {
           </Button>
         </div>
         <ConversationList />
-        <div className="sidebar__footer">
-          <Link className="chat-admin-link" to="/hosts">
+        <div className="argus-sidebar__footer">
+          <Link className="argus-chat-admin-link" to="/hosts">
             <Settings2 size={15} />
             <span>{t("shell.enterAdmin")}</span>
           </Link>
@@ -189,20 +189,20 @@ function Header() {
   const { t } = useTranslation();
   const setMobileNavOpen = useUiStore((state) => state.setMobileNavOpen);
   return (
-    <header className="topbar">
+    <header className="argus-topbar">
       <Button
         aria-label={t("shell.openNavigation")}
-        className="mobile-menu"
+        className="argus-mobile-menu"
         onClick={() => setMobileNavOpen(true)}
         size="icon"
         variant="ghost"
       >
         <Menu size={18} />
       </Button>
-      <div className="topbar__title">
+      <div className="argus-topbar__title">
         <span>{t("shell.nav.chat")}</span>
       </div>
-      <div className="topbar__actions">
+      <div className="argus-topbar__actions">
         <AccountActions />
       </div>
     </header>
@@ -219,7 +219,7 @@ function MobileNavigation() {
     { key: "shell.nav.management", to: "/hosts", icon: Settings2 },
   ];
   return (
-    <nav className="mobile-primary">
+    <nav className="argus-mobile-primary">
       {items.map((item) => (
         <Link
           className={pathname === item.to ? "is-active" : ""}
@@ -240,15 +240,13 @@ function MobileNavigation() {
  */
 export function ChatShell() {
   return (
-    <div className="app-shell chat-shell">
-      <Sidebar />
-      <div className="app-main">
-        <Header />
-        <main className="page-content">
-          <Outlet />
-        </main>
-      </div>
-      <MobileNavigation />
-    </div>
+    <AppShell
+      className="argus-chat-shell"
+      header={<Header />}
+      overlay={<MobileNavigation />}
+      sidebar={<Sidebar />}
+    >
+      <Outlet />
+    </AppShell>
   );
 }

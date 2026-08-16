@@ -2,25 +2,25 @@
 .argus-k8s-cluster-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 12px;
+  gap: var(--space-px-12);
 }
 
 .argus-k8s-cluster-card__head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-px-8);
   flex-wrap: wrap;
 }
 
 .argus-k8s-cluster-card__name {
-  font-size: 14px;
+  font-size: var(--font-size-14);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .argus-k8s-cluster-card__server {
-  margin-top: 2px;
-  font-size: 11px;
+  margin-top: var(--space-px-2);
+  font-size: var(--font-size-11);
   color: var(--text-tertiary);
   font-family: var(--font-mono, monospace);
   word-break: break-all;
@@ -29,22 +29,22 @@
 .argus-k8s-kv {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  margin: 12px 0;
+  gap: var(--space-px-8) var(--space-px-12);
+  margin: var(--space-px-12) 0;
 }
 
 .argus-k8s-kv__item dt {
-  font-size: 11px;
+  font-size: var(--font-size-11);
   color: var(--text-tertiary);
 }
 
 .argus-k8s-kv__item dd {
-  margin: 2px 0 0;
-  font-size: 12px;
+  margin: var(--space-px-2) 0 0;
+  font-size: var(--font-size-12);
   color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-px-6);
 }
 .argus-k8s-collector-action {
   display: inline-flex;
@@ -62,35 +62,35 @@
 
 .argus-k8s-card-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-px-8);
   flex-wrap: wrap;
-  padding-top: 10px;
+  padding-top: var(--space-px-10);
   border-top: 1px solid var(--border-subtle);
 }
 
 .argus-k8s-test-result {
-  margin-top: 10px;
-  padding: 10px 12px;
+  margin-top: var(--space-px-10);
+  padding: var(--space-px-10) var(--space-px-12);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   background: var(--bg-muted);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-px-8);
 }
 
 .argus-k8s-test-result__summary {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: var(--space-px-8);
+  font-size: var(--font-size-12);
   color: var(--text-secondary);
 }
 
 .argus-k8s-test-result__checks {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-px-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -99,8 +99,8 @@
 .argus-k8s-test-result__checks li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
+  gap: var(--space-px-8);
+  font-size: var(--font-size-11);
   color: var(--text-secondary);
 }
 
@@ -111,13 +111,13 @@
 .argus-k8s-stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-px-12);
 }
 
 .argus-k8s-stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  gap: var(--space-px-12);
 }
 
 .argus-k8s-link-button {
@@ -134,8 +134,8 @@
 }
 
 .argus-k8s-section-title {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin: 0 0 var(--space-px-8);
+  font-size: var(--font-size-12);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -146,38 +146,38 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-px-6);
 }
 
 .argus-k8s-events li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: var(--space-px-8);
+  font-size: var(--font-size-12);
   color: var(--text-secondary);
 }
 
 .argus-k8s-profile-switches {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-px-10);
 }
 
 .argus-k8s-profile-switches__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: var(--space-px-12);
+  padding: var(--space-px-8) var(--space-px-12);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  font-size: 12px;
+  border-radius: var(--radius-10);
+  font-size: var(--font-size-12);
   color: var(--text-primary);
 }
 
 .argus-k8s-drawer-section + .argus-k8s-drawer-section {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: var(--space-px-16);
+  padding-top: var(--space-px-16);
   border-top: 1px solid var(--border-subtle);
 }
 

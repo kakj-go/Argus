@@ -37,7 +37,8 @@ web/
 ├── apps/
 │   ├── setup/
 │   ├── enterprise/
-│   └── platform/
+│   ├── platform/
+│   └── card-runtime/
 └── packages/
     ├── ui/
     ├── design-tokens/
@@ -50,9 +51,10 @@ web/
 - `setup` 只承载首次初始化。
 - `platform` 只承载平台超级管理员能力。
 - `enterprise` 包含 Chatbox 和企业管理后台。
+- `card-runtime` 只承载独立 Origin 的框架无关 Card iframe 运行时，不接入门户认证状态或业务路由。
 - `ui` 是唯一通用组件实现，业务应用不得维护平行组件库。
-- `api-client` 由 OpenAPI 生成基础类型和调用代码，在其上封装固定企业、AuthorizationVersion、DataScope 投影、错误和流式协议；客户端上下文不能替代服务端资源归属检查。后端就绪前由包内置 mock 实现驱动三个门户与前端 E2E（`VITE_API_MODE` 默认 `mock`），真实 HTTP/SSE/WebSocket Adapter 落地后按同一接口替换。
-- `card-host` 只实现 iframe 生命周期、绑定数据、Host Bridge 和受控 Action/Query 调用。
+- `api-client` 由 OpenAPI 生成基础类型，在其上提供领域 Port、mock/real Adapter 以及 HTTP/SSE/WebSocket Transport；客户端上下文不能替代服务端资源归属检查。三个门户必须显式设置 `VITE_API_MODE=mock|real`，未知模式、real 缺少 Base URL 或调用尚未冻结的领域操作都 fail closed，禁止隐式回退 mock。
+- `card-host` 只实现 iframe 生命周期、Manifest/RenderPlan 校验、Host Bridge 和受控 Action/Query 调用；`card-runtime` 负责独立 Origin 内的 CSP 和 Card 文档执行，两者共同消费生成的 Bridge 契约。
 
 ### 2.2 主题与国际化契约
 
@@ -90,6 +92,8 @@ React 主应用
 Card Host 根据版本化 Manifest 生成最小 CSP，并使用 `MessageChannel/MessagePort`、通道 nonce、消息序号、Origin 校验和版本化消息 Schema。全局 `window.postMessage` 只允许完成一次受限握手，不得以 `targetOrigin='*'` 传输业务消息。浏览器和 Card 只能获得 `query_binding_id` 或 `action_binding_id`，不能获得 Secret、Commit Tool、PendingAction 私有参数或 `argus__token`。
 
 Card Host 在独立的 `host.context` 消息中传递 `locale`、解析后的 `theme/color_scheme` 和白名单语义 Token。Card iframe 不能读取宿主 DOM 或任意 CSS；语言或主题变化由 Host Bridge 推送新 Context，卡片应原地更新而不是重建业务 Action Binding。
+
+M1 Runtime 对 Card 脚本暴露的唯一浏览器对象是 `window.argusCard`，提供 Binding ID 级 `query/action`、最小 `data/context`、更新订阅和高度回报。独立 Origin iframe 使用 `allow-scripts allow-same-origin`：后者只用于保留 Card 自身 Origin 以支持精确 `targetOrigin`，不得把 Card Runtime 与任一门户部署为同源。
 
 交互卡片 Manifest 必须声明 `schema_version`、入口内容哈希、允许资源、Data/Query/Action Slot、Bridge 能力、`supported_locales`、`default_locale` 和主题能力。系统卡片必须完整支持 `zh-CN/en-US` 与 `light/dark`；企业卡片缺少当前语言时可以回退到声明的默认语言，但宿主必须明确标识回退，不得静默显示错误语义。第一版不存在个人卡片。
 

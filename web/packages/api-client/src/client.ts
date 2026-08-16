@@ -5,13 +5,10 @@ import type {
   AuditEvent,
   AuditFilter,
   BastionScope,
-  CardActionResultEvent,
   InteractiveCard,
   InteractiveCardDemoRender,
   InteractiveCardFilter,
   InteractiveCardValidationResult,
-  ChatMessage,
-  ChatStreamEvent,
   CollectionClaim,
   CollectorInstallState,
   ConfirmActionResult,
@@ -19,22 +16,22 @@ import type {
   Connector,
   ConnectorEnrollmentToken,
   ConnectorUninstallCommand,
-  Conversation,
   CreateBastionScopeInput,
   CreateBastionScopeResult,
   CreateInteractiveCardInput,
-  CreateConversationInput,
   CreateEnterpriseAdminInput,
   CreateEnterpriseInput,
   CreateHostInput,
   CreateK8sClusterInput,
   CreateRemoteSessionInput,
+  CreateApiKeyInput,
   CreateRoleBindingInput,
   CreateRoleInput,
   CreateSandboxBackendInput,
   CreateSandboxImageInput,
   CreateSandboxProfileInput,
   CreateSecretInput,
+  CreateServiceAccountInput,
   CreatedApiKey,
   DataScope,
   Enterprise,
@@ -50,16 +47,14 @@ import type {
   K8sWorkloadFilter,
   ListQuery,
   LoginInput,
-  EnterpriseMembership,
   ModelAvailability,
   ModelQuota,
   ModelUsageSummary,
   Page,
-  PendingAction,
+  PendingActionPublic,
   PendingActionFilter,
   PlatformAuditEvent,
   PreviewActionInput,
-  Project,
   RemoteSession,
   Role,
   RoleBinding,
@@ -67,15 +62,13 @@ import type {
   SandboxImage,
   SandboxProfile,
   SandboxSessionMeta,
+  SaveDataScopeInput,
   Secret,
   ServiceAccount,
   SessionInfo,
   SetupResult,
   SetupStatus,
   SetupSubmission,
-  Task,
-  TaskEvent,
-  TaskFilter,
   Unsubscribe,
   TestAndCreateAIModelInput,
   TestAndCreateAIModelResult,
@@ -85,13 +78,24 @@ import type {
   UpdateEnterpriseInput,
   UpdateHostInput,
   UpdateK8sClusterInput,
-  UpdateMembershipInput,
+  UpdateEnterpriseUserInput,
   UpdateRoleBindingInput,
   UpdateSecretInput,
   UsageRange,
   User,
   UpdateBastionScopeInput,
 } from "./types";
+import type {
+  Conversation,
+  CreateConversationInput,
+  SendMessageInput,
+} from "./provisional";
+import type { TaskEvent, TaskFilter, TaskViewModel } from "./provisional";
+import type {
+  ConversationEvent,
+  EnterpriseUser,
+  StreamEventEnvelope,
+} from "./generated/contracts";
 
 /**
  * Typed client for the Argus control plane. Method groups map one-to-one
@@ -113,20 +117,21 @@ export interface ArgusApiClient {
     get(id: string): Promise<Conversation>;
     create(input?: CreateConversationInput): Promise<Conversation>;
     archive(id: string): Promise<Conversation>;
-    listMessages(conversationId: string): Promise<ChatMessage[]>;
+    listEvents(conversationId: string): Promise<ConversationEvent[]>;
     /**
      * Sends a user message and streams the assistant reply: token deltas,
      * tool call progress, inserted cards and the final message.
      */
     sendMessage(
       conversationId: string,
-      input: import("./types").SendMessageInput,
-    ): AsyncIterable<ChatStreamEvent>;
+      input: SendMessageInput,
+      options?: { signal?: AbortSignal; last_event_id?: string },
+    ): AsyncIterable<StreamEventEnvelope>;
     updateModel(id: string, modelId: string): Promise<Conversation>;
-    /** Push events for a conversation (e.g. card_action_result). */
+    /** Push immutable events for a conversation (e.g. card_action_result). */
     subscribe(
       conversationId: string,
-      listener: (event: CardActionResultEvent) => void,
+      listener: (event: ConversationEvent) => void,
     ): Unsubscribe;
   };
 
@@ -135,7 +140,7 @@ export interface ArgusApiClient {
     list(filter?: HostFilter, query?: ListQuery): Promise<Page<Host>>;
     get(id: string): Promise<Host>;
     /** Two-phase creation; confirm via approvals.confirm(actionRef). */
-    previewCreate(input: CreateHostInput): Promise<PendingAction>;
+    previewCreate(input: CreateHostInput): Promise<PendingActionPublic>;
     update(id: string, patch: UpdateHostInput): Promise<Host>;
     delete(id: string): Promise<void>;
     testConnection(id: string): Promise<ConnectionTestResult>;
@@ -144,7 +149,7 @@ export interface ArgusApiClient {
     previewCollectorInstall(
       hostId: string,
       input: { profile: string; telemetryRoute: string },
-    ): Promise<PendingAction>;
+    ): Promise<PendingActionPublic>;
     /** Human remote access sessions (never exposed to AI/cards). */
     listSessions(filter?: {
       hostId?: string;
@@ -181,7 +186,7 @@ export interface ArgusApiClient {
   kubernetes: {
     listClusters(query?: ListQuery): Promise<Page<K8sCluster>>;
     getCluster(id: string): Promise<K8sCluster>;
-    previewCreateCluster(input: CreateK8sClusterInput): Promise<PendingAction>;
+    previewCreateCluster(input: CreateK8sClusterInput): Promise<PendingActionPublic>;
     updateCluster(
       id: string,
       patch: UpdateK8sClusterInput,
@@ -203,14 +208,14 @@ export interface ArgusApiClient {
     previewCollectorInstall(
       clusterId: string,
       input: { profile: string },
-    ): Promise<PendingAction>;
+    ): Promise<PendingActionPublic>;
   };
 
   /** Execution tasks with steps, logs and progress subscriptions. */
   tasks: {
-    list(filter?: TaskFilter, query?: ListQuery): Promise<Page<Task>>;
-    get(id: string): Promise<Task>;
-    cancel(id: string): Promise<Task>;
+    list(filter?: TaskFilter, query?: ListQuery): Promise<Page<TaskViewModel>>;
+    get(id: string): Promise<TaskViewModel>;
+    cancel(id: string): Promise<TaskViewModel>;
     subscribe(listener: (event: TaskEvent) => void): Unsubscribe;
     subscribeTask(
       id: string,
@@ -228,13 +233,13 @@ export interface ArgusApiClient {
     list(
       filter?: PendingActionFilter,
       query?: ListQuery,
-    ): Promise<Page<PendingAction>>;
-    get(actionRef: string): Promise<PendingAction>;
-    preview(input: PreviewActionInput): Promise<PendingAction>;
+    ): Promise<Page<PendingActionPublic>>;
+    get(actionRef: string): Promise<PendingActionPublic>;
+    preview(input: PreviewActionInput): Promise<PendingActionPublic>;
     confirm(actionRef: string): Promise<ConfirmActionResult>;
-    cancel(actionRef: string): Promise<PendingAction>;
-    approve(actionRef: string, comment?: string): Promise<PendingAction>;
-    reject(actionRef: string, reason: string): Promise<PendingAction>;
+    cancel(actionRef: string): Promise<PendingActionPublic>;
+    approve(actionRef: string, comment?: string): Promise<PendingActionPublic>;
+    reject(actionRef: string, reason: string): Promise<PendingActionPublic>;
   };
 
   /** Enterprise OpenAI-compatible models and monthly amount governance. */
@@ -280,19 +285,19 @@ export interface ArgusApiClient {
     listToolSchemas(): Promise<ToolOutputSchema[]>;
   };
 
-  /** Organization: users, departments, projects, roles, bindings, data scopes, policies, API keys. */
+  /** Organization: users, departments, roles, bindings, data scopes, policies, API keys. */
   org: {
     listUsers(): Promise<User[]>;
-    getMembership(userId: string): Promise<EnterpriseMembership | null>;
+    getEnterpriseUser(userId: string): Promise<EnterpriseUser | null>;
     inviteUser(input: InviteUserInput): Promise<User>;
     updateUser(
       userId: string,
       patch: { displayName?: string; status?: User["status"] },
     ): Promise<User>;
-    updateMembership(
+    updateEnterpriseUser(
       userId: string,
-      patch: UpdateMembershipInput,
-    ): Promise<EnterpriseMembership>;
+      patch: UpdateEnterpriseUserInput,
+    ): Promise<EnterpriseUser>;
     listDepartments(): Promise<Department[]>;
     createDepartment(input: {
       name: string;
@@ -303,16 +308,6 @@ export interface ArgusApiClient {
       patch: { name?: string; description?: string },
     ): Promise<Department>;
     deleteDepartment(id: string): Promise<void>;
-    listProjects(): Promise<Project[]>;
-    createProject(input: {
-      name: string;
-      description?: string;
-    }): Promise<Project>;
-    /** 仅名称/描述可改；不提供 delete（默认项目不可删，资源迁移协议未定）。 */
-    updateProject(
-      id: string,
-      patch: { name?: string; description?: string },
-    ): Promise<Project>;
     listRoles(): Promise<Role[]>;
     createRole(input: CreateRoleInput): Promise<Role>;
     updateRole(id: string, patch: Partial<CreateRoleInput>): Promise<Role>;
@@ -325,11 +320,7 @@ export interface ArgusApiClient {
     ): Promise<RoleBinding>;
     deleteRoleBinding(id: string): Promise<void>;
     listDataScopes(): Promise<DataScope[]>;
-    saveDataScope(
-      scope: Omit<DataScope, "id" | "enterpriseId" | "createdAt"> & {
-        id?: string;
-      },
-    ): Promise<DataScope>;
+    saveDataScope(scope: SaveDataScopeInput): Promise<DataScope>;
     deleteDataScope(id: string): Promise<void>;
     listApprovalPolicies(): Promise<ApprovalPolicy[]>;
     saveApprovalPolicy(
@@ -338,19 +329,20 @@ export interface ArgusApiClient {
       },
     ): Promise<ApprovalPolicy>;
     listServiceAccounts(): Promise<ServiceAccount[]>;
-    createServiceAccount(input: {
-      name: string;
-      description?: string;
-      roleIds?: string[];
-    }): Promise<ServiceAccount>;
+    createServiceAccount(input: CreateServiceAccountInput): Promise<ServiceAccount>;
     updateServiceAccount(
       id: string,
-      patch: { description?: string; status?: "active" | "disabled" },
+      patch: {
+        description?: string;
+        status?: "active" | "disabled";
+        allowed_tool_ids?: string[];
+        data_scope_ids?: string[];
+      },
     ): Promise<ServiceAccount>;
     listApiKeys(serviceAccountId: string): Promise<ApiKey[]>;
     createApiKey(
       serviceAccountId: string,
-      input: { name: string; scopes?: string[]; expiresAt?: string },
+      input: CreateApiKeyInput,
     ): Promise<CreatedApiKey>;
     revokeApiKey(id: string): Promise<void>;
   };

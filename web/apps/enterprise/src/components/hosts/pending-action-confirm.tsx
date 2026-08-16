@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi, type ConfirmActionResult, type PendingAction } from "@argus/api-client";
+import {
+  useApi,
+  type ConfirmActionResult,
+  type PendingActionPublic,
+} from "@argus/api-client";
 import { PreviewCommitCard, type PreviewCommitStatus } from "@argus/ui";
 
-function diffLinesOf(action: PendingAction) {
+function diffLinesOf(action: PendingActionPublic) {
   return action.diff.map((line) => ({
     type:
       line.kind === "add"
@@ -24,7 +28,7 @@ export function PendingActionConfirm({
   onDone,
   onCancel,
 }: {
-  action: PendingAction;
+  action: PendingActionPublic;
   onDone?: (result: ConfirmActionResult) => void;
   onCancel?: () => void;
 }) {
@@ -38,10 +42,10 @@ export function PendingActionConfirm({
     if (confirming) return;
     setConfirming(true);
     try {
-      const result = await api.approvals.confirm(action.actionRef);
+      const result = await api.approvals.confirm(action.action_ref);
       setStatus("success");
       setResultMessage(
-        result.task
+        result.execution
           ? t("hosts.preview.submitted")
           : t("hosts.preview.awaitingApproval"),
       );
@@ -58,12 +62,11 @@ export function PendingActionConfirm({
       affected={[]}
       confirming={confirming}
       diff={diffLinesOf(action)}
-      expiresAt={action.expiresAt}
+      expiresAt={action.expires_at}
       onCancel={onCancel}
       onConfirm={() => void confirm()}
-      planHash={action.planHash}
       resultMessage={resultMessage}
-      risk={action.riskLevel}
+      risk={action.risk}
       status={status}
       title={action.title}
     >

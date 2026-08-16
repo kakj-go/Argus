@@ -1,7 +1,8 @@
 /** 平台审计文案。 */
 export const auditZh = {
   "audit.title": "平台审计",
-  "audit.description": "仅平台域事件（enterpriseId = null），企业业务审计不会出现在此门户",
+  "audit.description":
+    "仅平台域事件（enterpriseId = null），企业业务审计不会出现在此门户",
   "audit.filters.allActions": "全部动作",
   "audit.filters.allResources": "全部资源类型",
   "audit.filters.allResults": "全部结果",
@@ -30,7 +31,8 @@ export const auditZh = {
 
 export const auditEn = {
   "audit.title": "Platform audit",
-  "audit.description": "Platform-domain events only (enterpriseId = null); enterprise business audits never appear here",
+  "audit.description":
+    "Platform-domain events only (enterpriseId = null); enterprise business audits never appear here",
   "audit.filters.allActions": "All actions",
   "audit.filters.allResources": "All resource types",
   "audit.filters.allResults": "All results",

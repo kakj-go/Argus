@@ -57,25 +57,28 @@ export function connectionPathKey(
   return "direct";
 }
 
-export function scopeOf(host: Host, scopes: BastionScope[]): BastionScope | undefined {
+export function scopeOf(
+  host: Host,
+  scopes: BastionScope[],
+): BastionScope | undefined {
   return scopes.find((scope) => scope.id === host.bastionScopeId);
 }
 
-/** "key=value" 每行一个 的文本 <-> tags 对象。 */
+/** "key=value" 每行一个 的文本 <-> labels 对象。 */
 export function parseTags(text: string): Record<string, string> {
-  const tags: Record<string, string> = {};
+  const labels: Record<string, string> = {};
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     const index = trimmed.indexOf("=");
     if (index <= 0) continue;
-    tags[trimmed.slice(0, index).trim()] = trimmed.slice(index + 1).trim();
+    labels[trimmed.slice(0, index).trim()] = trimmed.slice(index + 1).trim();
   }
-  return tags;
+  return labels;
 }
 
-export function tagsToText(tags: Record<string, string>): string {
-  return Object.entries(tags)
+export function tagsToText(labels: Record<string, string>): string {
+  return Object.entries(labels)
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
 }
@@ -137,7 +140,10 @@ export function formatDateTime(iso?: string): string {
 }
 
 /** 将 ISO 时间点格式化为 "3 天 2 小时" 风格的时长。 */
-export function formatUptime(fromIso: string, now: number = Date.now()): string {
+export function formatUptime(
+  fromIso: string,
+  now: number = Date.now(),
+): string {
   const start = new Date(fromIso).getTime();
   if (Number.isNaN(start)) return "—";
   const totalMinutes = Math.max(0, Math.floor((now - start) / 60_000));

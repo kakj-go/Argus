@@ -43,9 +43,7 @@ function commandOutput(
   const cmd = raw ?? "";
   switch (cmd) {
     case "ls":
-      return [
-        out("app  etc  home  opt  srv  usr  var"),
-      ];
+      return [out("app  etc  home  opt  srv  usr  var")];
     case "ll":
     case "ls -la":
       return [
@@ -70,7 +68,11 @@ function commandOutput(
         out("/dev/vdb1       200G  122G   78G  61% /var/lib/data"),
       ];
     case "uname":
-      return [out(`Linux ${host.hostname || host.name} 5.15.0-91-generic #101-Ubuntu SMP x86_64 GNU/Linux`)];
+      return [
+        out(
+          `Linux ${host.hostname || host.name} 5.15.0-91-generic #101-Ubuntu SMP x86_64 GNU/Linux`,
+        ),
+      ];
     case "whoami":
       return [out(account)];
     case "pwd":
@@ -82,7 +84,11 @@ function commandOutput(
         out("Swap:        2097152           0     2097152"),
       ];
     case "uptime":
-      return [out(" 10:42:01 up 42 days,  3:17,  2 users,  load average: 0.42, 0.38, 0.31")];
+      return [
+        out(
+          " 10:42:01 up 42 days,  3:17,  2 users,  load average: 0.42, 0.38, 0.31",
+        ),
+      ];
     case "clear":
       return [];
     default:
@@ -99,13 +105,29 @@ function replayLines(session: RemoteSession, host: Host): TerminalLine[] {
     ).toLocaleTimeString();
   const target = `${session.targetAccount}@${host.hostname || host.name}`;
   return [
-    { kind: "stdout", time: at(0), content: `# session ${session.id} → ${target} (${session.protocol})` },
+    {
+      kind: "stdout",
+      time: at(0),
+      content: `# session ${session.id} → ${target} (${session.protocol})`,
+    },
     { kind: "stdin", time: at(1), content: "uname -a" },
-    { kind: "stdout", time: at(1), content: `Linux ${host.hostname || host.name} 5.15.0-91-generic x86_64` },
+    {
+      kind: "stdout",
+      time: at(1),
+      content: `Linux ${host.hostname || host.name} 5.15.0-91-generic x86_64`,
+    },
     { kind: "stdin", time: at(3), content: "df -h" },
-    { kind: "stdout", time: at(3), content: "/dev/vda1   80G   47G   33G  59% /" },
+    {
+      kind: "stdout",
+      time: at(3),
+      content: "/dev/vda1   80G   47G   33G  59% /",
+    },
     { kind: "stdin", time: at(6), content: "top -b -n1 | head -5" },
-    { kind: "stdout", time: at(6), content: "%Cpu(s):  6.2 us,  2.1 sy, 90.9 id" },
+    {
+      kind: "stdout",
+      time: at(6),
+      content: "%Cpu(s):  6.2 us,  2.1 sy, 90.9 id",
+    },
     { kind: "stdin", time: at(9), content: "exit" },
     { kind: "stdout", time: at(9), content: `# session ${session.id} closed` },
   ];
@@ -138,7 +160,9 @@ export function TerminalTab({
   const [liveSession, setLiveSession] = useState<RemoteSession | null>(null);
   const [liveLines, setLiveLines] = useState<TerminalLine[]>([]);
   const [ending, setEnding] = useState(false);
-  const [terminateTarget, setTerminateTarget] = useState<RemoteSession | null>(null);
+  const [terminateTarget, setTerminateTarget] = useState<RemoteSession | null>(
+    null,
+  );
   const [terminating, setTerminating] = useState(false);
   const [replayTarget, setReplayTarget] = useState<RemoteSession | null>(null);
 

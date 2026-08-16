@@ -6,7 +6,7 @@ body {
   background: var(--bg-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   -webkit-font-smoothing: antialiased;
 }
 button,
@@ -20,7 +20,7 @@ a {
 }
 code,
 kbd,
-.mono {
+.argus-mono {
   font-family: var(--font-mono);
 }
 ::-webkit-scrollbar {
@@ -33,349 +33,356 @@ kbd,
 ::-webkit-scrollbar-thumb {
   background: var(--border-default);
   border: 2px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-clip: padding-box;
 }
 
 /* ---------- 外壳：左侧菜单 + 顶栏（与企业门户同款布局，平台域标识区隔） ---------- */
-.app-shell {
+.argus-app-shell {
   --sidebar-width: 242px;
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
 }
-.app-main {
+.argus-app-main {
   grid-column: 2;
   min-width: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
-.page-content {
+.argus-page-content {
   min-height: 0;
   flex: 1;
 }
-.platform-shell .page-content {
+.argus-platform-shell .argus-page-content {
   padding: var(--space-6);
   padding-bottom: var(--space-8);
 }
-.sidebar {
+.argus-sidebar {
   position: fixed;
   z-index: 40;
   inset: 0 auto 0 0;
   width: var(--sidebar-width);
-  padding: 0 10px;
+  padding: 0 var(--space-px-10);
   display: flex;
   flex-direction: column;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   overflow: hidden;
 }
-.sidebar__head {
+.argus-sidebar__head {
   height: 62px;
-  padding: 0 7px;
+  padding: 0 var(--space-px-7);
   display: flex;
   align-items: center;
   flex-shrink: 0;
 }
-.brand {
+.argus-brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-px-9);
   min-width: 0;
 }
-.brand__mark {
+.argus-brand__mark {
   width: 29px;
   height: 29px;
   flex: 0 0 29px;
   display: grid;
   place-items: center;
-  border-radius: 9px;
-  background: linear-gradient(145deg, #e18161, #bd5939);
-  color: white;
-  font-size: 13px;
-  box-shadow: 0 5px 15px rgb(220 118 84 / 18%);
+  border-radius: var(--radius-9);
+  background: linear-gradient(145deg, var(--brand-start), var(--brand-end));
+  color: var(--text-inverse);
+  font-size: var(--font-size-13);
+  box-shadow: 0 5px 15px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 /* 平台域品牌标识使用冷色渐变，与企业门户的暖色区隔 */
-.brand__mark--platform {
-  background: linear-gradient(145deg, #5b8dd9, #34559c);
-  box-shadow: 0 5px 15px rgb(91 141 217 / 20%);
+.argus-brand__mark--platform {
+  background: linear-gradient(
+    145deg,
+    var(--platform-brand-start),
+    var(--platform-brand-end)
+  );
+  box-shadow: 0 5px 15px
+    color-mix(in srgb, var(--platform-brand-start) 20%, transparent);
 }
-.brand__name {
+.argus-brand__name {
   display: grid;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-size-14);
   font-weight: 720;
   letter-spacing: -0.01em;
 }
-.brand__name small {
+.argus-brand__name small {
   color: var(--text-disabled);
-  font: 8px/1.2 var(--font-mono);
+  font: var(--font-size-8)/1.2 var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.sidebar__nav {
+.argus-sidebar__nav {
   flex: 1;
-  padding: 14px 0;
+  padding: var(--space-px-14) 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
-.nav-section + .nav-section {
-  margin-top: 13px;
+.argus-nav-section + .argus-nav-section {
+  margin-top: var(--space-px-13);
 }
-.nav-section__label {
-  padding: 0 9px 6px;
+.argus-nav-section__label {
+  padding: 0 var(--space-px-9) var(--space-px-6);
   color: var(--text-disabled);
-  font-size: 9.5px;
+  font-size: var(--font-size-9-5);
   font-weight: 650;
   letter-spacing: 0.06em;
 }
-.nav-item {
+.argus-nav-item {
   min-height: 36px;
-  padding: 0 9px;
+  padding: 0 var(--space-px-9);
   display: flex;
   align-items: center;
-  gap: 10px;
-  border-radius: 8px;
+  gap: var(--space-px-10);
+  border-radius: var(--radius-8);
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   transition: var(--motion-fast);
   position: relative;
 }
-.nav-item + .nav-item {
-  margin-top: 2px;
+.argus-nav-item + .argus-nav-item {
+  margin-top: var(--space-px-2);
 }
-.nav-item > svg {
+.argus-nav-item > svg {
   flex: 0 0 17px;
 }
-.nav-item > span {
+.argus-nav-item > span {
   flex: 1;
 }
-.nav-item:hover {
+.argus-nav-item:hover {
   color: var(--text-secondary);
   background: var(--bg-elevated);
 }
-.nav-item.active {
+.argus-nav-item.active {
   color: var(--text-primary);
   background: var(--bg-muted);
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 2%) inset;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--overlay-white) 2%, transparent)
+    inset;
 }
-.nav-item.active::before {
+.argus-nav-item.active::before {
   content: "";
   position: absolute;
   left: -10px;
   width: 2px;
   height: 17px;
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 var(--radius-2) var(--radius-2) 0;
   background: var(--accent);
 }
-.sidebar__footer {
-  padding: 9px 7px 13px;
+.argus-sidebar__footer {
+  padding: var(--space-px-9) var(--space-px-7) var(--space-px-13);
   border-top: 1px solid var(--border-subtle);
 }
-.platform-isolation {
+.argus-platform-isolation {
   margin: 0;
   color: var(--text-disabled);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   line-height: 1.6;
 }
-.topbar {
+.argus-topbar {
   position: sticky;
   z-index: 30;
   top: 0;
   height: 62px;
-  padding: 0 20px;
+  padding: 0 var(--space-px-20);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-px-10);
   background: color-mix(in srgb, var(--bg-canvas) 88%, transparent);
   border-bottom: 1px solid var(--border-subtle);
   backdrop-filter: blur(16px);
 }
-.topbar__actions {
+.argus-topbar__actions {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-px-5);
 }
-.user-menu {
+.argus-user-menu {
   height: 42px;
-  margin-left: 3px;
-  padding: 4px 4px 4px 6px;
+  margin-left: var(--space-px-3);
+  padding: var(--space-px-4) var(--space-px-4) var(--space-px-4)
+    var(--space-px-6);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-px-8);
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-9);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
 }
-.user-menu:hover {
+.argus-user-menu:hover {
   background: var(--bg-surface);
 }
-.user-menu > span:nth-child(2) {
+.argus-user-menu > span:nth-child(2) {
   display: grid;
   min-width: 70px;
   text-align: left;
 }
-.user-menu b {
-  font-size: 11px;
+.argus-user-menu b {
+  font-size: var(--font-size-11);
 }
-.user-menu small {
+.argus-user-menu small {
   color: var(--text-disabled);
-  font-size: 9px;
-  margin-top: 2px;
+  font-size: var(--font-size-9);
+  margin-top: var(--space-px-2);
 }
 
 /* ---------- 登录页 ---------- */
-.login-page {
+.argus-login-page {
   min-height: 100vh;
-  padding: 24px;
+  padding: var(--space-px-24);
   display: grid;
   place-items: center;
   background: var(--bg-canvas);
 }
-.login-page__controls {
+.argus-login-page__controls {
   position: fixed;
   top: 14px;
   right: 16px;
 }
-.login-card {
+.argus-login-card {
   width: min(380px, 100%);
-  padding: 28px;
+  padding: var(--space-px-28);
   display: grid;
-  gap: 14px;
+  gap: var(--space-px-14);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: var(--radius-14);
   box-shadow: var(--shadow-lg);
 }
-.login-card__brand {
+.argus-login-card__brand {
   justify-content: center;
 }
-.login-card h1 {
+.argus-login-card h1 {
   margin: 0;
   text-align: center;
-  font-size: 18px;
+  font-size: var(--font-size-18);
   color: var(--text-primary);
 }
-.login-card__subtitle {
-  margin: -8px 0 4px;
+.argus-login-card__subtitle {
+  margin: calc(var(--space-px-8) * -1) 0 var(--space-px-4);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   color: var(--text-tertiary);
 }
-.login-card__submit {
+.argus-login-card__submit {
   width: 100%;
   justify-content: center;
 }
-.login-card__error {
+.argus-login-card__error {
   margin: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: var(--space-px-8) var(--space-px-10);
+  border-radius: var(--radius-8);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
   color: var(--danger);
-  font-size: 11.5px;
+  font-size: var(--font-size-11-5);
 }
-.login-card__hint {
+.argus-login-card__hint {
   margin: 0;
   text-align: center;
   color: var(--text-disabled);
-  font-size: 10.5px;
+  font-size: var(--font-size-10-5);
 }
 
 /* ---------- 页面通用布局 ---------- */
-.platform-stack {
+.argus-platform-stack {
   display: grid;
-  gap: 14px;
+  gap: var(--space-px-14);
 }
-.stat-row {
+.argus-stat-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
+  gap: var(--space-px-12);
 }
-.tab-toolbar {
+.argus-tab-toolbar {
   display: flex;
   justify-content: flex-end;
 }
-.row-actions {
+.argus-row-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: var(--space-px-2);
 }
-.cell-with-badge {
+.argus-cell-with-badge {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: var(--space-px-5);
 }
-.drawer-stack {
+.argus-drawer-stack {
   display: grid;
-  gap: 18px;
+  gap: var(--space-px-18);
 }
-.drawer-section > h3 {
-  margin: 0 0 10px;
+.argus-drawer-section > h3 {
+  margin: 0 0 var(--space-px-10);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 650;
 }
-.form-grid {
+.argus-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--space-px-10);
 }
-.switch-row {
+.argus-switch-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-px-10);
   min-height: 30px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   cursor: pointer;
 }
 
 /* ---------- 配额编辑器 ---------- */
-.quota-editor {
+.argus-quota-editor {
   display: grid;
-  gap: 14px;
+  gap: var(--space-px-14);
 }
-.quota-editor__profiles {
+.argus-quota-editor__profiles {
   display: grid;
-  gap: 6px;
+  gap: var(--space-px-6);
 }
-.quota-editor__profile {
+.argus-quota-editor__profile {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-px-8);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   cursor: pointer;
 }
 
 /* ---------- 我的账号 ---------- */
-.account-password-form {
+.argus-account-password-form {
   display: grid;
-  gap: 14px;
+  gap: var(--space-px-14);
   max-width: 420px;
 }
 
 /* ---------- Tabs 内容间距 ---------- */
 .argus-tabs__content {
-  padding-top: 14px;
+  padding-top: var(--space-px-14);
 }
 
 @media (max-width: 900px) {
-  .app-shell {
+  .argus-app-shell {
     grid-template-columns: minmax(0, 1fr);
   }
-  .sidebar {
+  .argus-sidebar {
     display: none;
   }
-  .app-main {
+  .argus-app-main {
     grid-column: 1;
   }
-  .form-grid {
+  .argus-form-grid {
     grid-template-columns: 1fr;
   }
 }

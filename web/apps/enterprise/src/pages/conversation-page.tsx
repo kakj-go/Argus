@@ -3,16 +3,14 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Check, PanelRight, Pencil, X } from "lucide-react";
-import type {
-  AIModel,
-  InteractiveCardCreateCommand,
-  ModelAvailability,
-} from "@argus/api-client";
+import type { AIModel, ModelAvailability } from "@argus/api-client";
+import type { InteractiveCardCreateCommand } from "@argus/api-client/provisional";
 import { useApi } from "@argus/api-client";
 import { Button, Input, Select } from "@argus/ui";
 import { ChatComposer } from "../components/chat/composer";
 import { ChatContextPanel } from "../components/chat/context-panel";
 import { ChatMessageList } from "../components/chat/message-list";
+import { chatMessageFromPublic } from "../components/chat/chat-view-model";
 import { useChatStream } from "../components/chat/use-chat-stream";
 import { useUiStore } from "../store/ui";
 import "../styles/chat.css";
@@ -25,17 +23,15 @@ const EXAMPLE_KEYS = [
 ] as const;
 
 /** 欢迎空态：产品简介 + 示例问题快捷按钮（点击直接发送）。 */
-function Welcome({
-  onExample,
-}: {
-  onExample: (text: string) => void;
-}) {
+function Welcome({ onExample }: { onExample: (text: string) => void }) {
   const { t } = useTranslation();
   return (
     <div className="argus-chat-welcome">
       <span className="argus-chat-welcome__mark">◉</span>
       <h1 className="argus-chat-welcome__title">{t("chat.welcome.title")}</h1>
-      <p className="argus-chat-welcome__desc">{t("chat.welcome.description")}</p>
+      <p className="argus-chat-welcome__desc">
+        {t("chat.welcome.description")}
+      </p>
       <div className="argus-chat-welcome__examples">
         {EXAMPLE_KEYS.map((key) => (
           <button
@@ -72,11 +68,8 @@ function ConversationHeader({
   const api = useApi();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const {
-    contextPanelOpen,
-    toggleContextPanel,
-    renameConversation,
-  } = useUiStore();
+  const { contextPanelOpen, toggleContextPanel, renameConversation } =
+    useUiStore();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   const [archiving, setArchiving] = useState(false);
@@ -152,7 +145,9 @@ function ConversationHeader({
           className="argus-input argus-chat__model-select"
           onValueChange={onModelChange}
           options={models.map((model) => {
-            const state = availability.find((entry) => entry.modelId === model.id);
+            const state = availability.find(
+              (entry) => entry.modelId === model.id,
+            );
             return {
               value: model.id,
               disabled: !state?.available,
@@ -203,18 +198,31 @@ export function ConversationPage() {
   const titleOverride = useUiStore((state) =>
     conversationId ? state.conversationTitles[conversationId] : undefined,
   );
-  const { streaming, pendingUser, sending, error, send, stop } =
-    useChatStream();
+  const {
+    streaming,
+    pendingUser,
+    sending,
+    error,
+    stopReason,
+    compaction,
+    send,
+    stop,
+  } = useChatStream();
 
   const { data: conversation } = useQuery({
     queryKey: ["conversations", "detail", conversationId],
     queryFn: () => api.conversations.get(conversationId ?? ""),
     enabled: Boolean(conversationId),
   });
-  const { data: messages } = useQuery({
-    queryKey: ["conversations", conversationId, "messages"],
-    queryFn: () => api.conversations.listMessages(conversationId ?? ""),
+  const { data: events } = useQuery({
+    queryKey: ["conversations", conversationId, "events"],
+    queryFn: () => api.conversations.listEvents(conversationId ?? ""),
     enabled: Boolean(conversationId),
+  });
+  const messages = (events ?? []).flatMap((event) => {
+    const payload = event.payload as Record<string, unknown>;
+    const message = chatMessageFromPublic(payload.message);
+    return message ? [message] : [];
   });
   const { data: models = [] } = useQuery({
     queryKey: ["models", "chat"],
@@ -238,7 +246,7 @@ export function ConversationPage() {
     if (!conversationId) return;
     return api.conversations.subscribe(conversationId, () => {
       void queryClient.invalidateQueries({
-        queryKey: ["conversations", conversationId, "messages"],
+        queryKey: ["conversations", conversationId, "events"],
       });
     });
   }, [api, conversationId, queryClient]);
@@ -283,13 +291,15 @@ export function ConversationPage() {
             conversationId={conversationId}
             models={models}
             onModelChange={(modelId) => void changeModel(modelId)}
-            selectedModelId={conversation?.selectedModelId ?? preferredModelId ?? ""}
+            selectedModelId={
+              conversation?.selectedModelId ?? preferredModelId ?? ""
+            }
             title={title}
           />
         )}
         {conversationId ? (
           <ChatMessageList
-            messages={messages ?? []}
+            messages={messages}
             pendingUser={pendingUser}
             streaming={streaming}
           />
@@ -299,6 +309,23 @@ export function ConversationPage() {
         {error && (
           <div className="argus-chat-composer__note" role="alert">
             {t("chat.error.sendFailed")}
+          </div>
+        )}
+        {!error && stopReason && stopReason !== "completed" && (
+          <div className="argus-chat-composer__note" role="status">
+            {t(
+              stopReason === "output_limit"
+                ? "chat.stop.outputLimit"
+                : `chat.stop.${stopReason}`,
+            )}
+          </div>
+        )}
+        {compaction.status !== "idle" && (
+          <div className="argus-chat-composer__note" role="status">
+            {t(`chat.compaction.${compaction.status}`, {
+              before: compaction.tokens_before ?? 0,
+              after: compaction.tokens_after ?? 0,
+            })}
           </div>
         )}
         <ChatComposer
@@ -312,7 +339,7 @@ export function ConversationPage() {
           sending={sending}
         />
       </div>
-      {contextPanelOpen && <ChatContextPanel messages={messages ?? []} />}
+      {contextPanelOpen && <ChatContextPanel messages={messages} />}
     </div>
   );
 }

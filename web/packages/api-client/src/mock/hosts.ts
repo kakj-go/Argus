@@ -50,7 +50,7 @@ export function createHostsDomain(ctx: MockContext): ArgusApiClient["hosts"] {
       return ctx.createPendingAction({
         tool: "host.create",
         title: `新增主机 ${input.name}`,
-        params: { ...input },
+        input_data: { ...input },
       });
     },
     async update(id, patch) {
@@ -124,7 +124,7 @@ export function createHostsDomain(ctx: MockContext): ArgusApiClient["hosts"] {
       return ctx.createPendingAction({
         tool: "telemetry.host.install",
         title: `安装 OTLP 收集器 · ${host.name}`,
-        params: {
+        input_data: {
           hostId,
           profile: input.profile,
           telemetryRoute: input.telemetryRoute,

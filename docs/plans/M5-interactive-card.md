@@ -12,7 +12,7 @@
 ## 任务
 
 - [ ] `M5-MANIFEST-01` 实现版本化 Manifest、内容哈希、CSP 能力和不可变 CardVersion。
-- [ ] `M5-RUNTIME-01` 实现独立 Origin/严格 sandbox、MessagePort Bridge、nonce、序号、大小限制和销毁。
+- [ ] `M5-RUNTIME-01` 将 M1 已完成的独立 Origin、`window.argusCard`、CSP/内容哈希和 MessagePort Bridge 接入服务端 CardVersion 与 RenderPlan 校验，补齐运行时发布、缓存和治理；不得重做第二套浏览器传输协议或允许 Card 绕过 Binding ID API。
 - [ ] `M5-BINDING-01` 实现 DataSlot、QuerySlot、ActionSlot、SlotBinding 和 Schema Catalog。
 - [ ] `M5-RENDER-01` 实现 RenderPlan 校验、`tool_call_id + path` 来源追踪和最小数据投影。
 - [ ] `M5-SYSTEM-01` 先交付只读资源列表、PendingAction 预览和遥测基础系统 Card。
@@ -39,3 +39,4 @@
 
 - 个人 Card。
 - iframe 任意 Tool 调用或任意外网。
+- M1 已完成的 Card Host、独立 `card-runtime` 构建、精确 Origin 握手、CSP、nonce、序号、大小和 Binding ID 浏览器门禁。

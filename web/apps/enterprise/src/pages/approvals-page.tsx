@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock } from "lucide-react";
 import type {
-  PendingAction,
+  PendingActionPublic,
   PendingActionStatus,
   RiskLevel,
 } from "@argus/api-client";
@@ -35,7 +35,10 @@ import {
 
 type ScopeFilter = "all" | "mine" | "confirmation" | "done";
 
-const SCOPE_STATUSES: Record<Exclude<ScopeFilter, "all">, PendingActionStatus[]> = {
+const SCOPE_STATUSES: Record<
+  Exclude<ScopeFilter, "all">,
+  PendingActionStatus[]
+> = {
   mine: ["awaiting_approval"],
   confirmation: ["awaiting_confirmation"],
   done: DONE_PENDING_STATUSES,
@@ -56,7 +59,7 @@ export function ApprovalsPage() {
   const filter = useMemo(
     () => ({
       ...(search.trim() ? { query: search.trim() } : {}),
-      ...(risk ? { riskLevel: [risk as RiskLevel] } : {}),
+      ...(risk ? { risk: [risk as RiskLevel] } : {}),
       ...(scope !== "all" ? { status: SCOPE_STATUSES[scope] } : {}),
     }),
     [search, risk, scope],
@@ -78,7 +81,7 @@ export function ApprovalsPage() {
 
   const groups = RISK_ORDER.map((riskLevel) => ({
     riskLevel,
-    items: actions.filter((action) => action.riskLevel === riskLevel),
+    items: actions.filter((action) => action.risk === riskLevel),
   })).filter((group) => group.items.length > 0);
 
   const awaitingMine = allActions.filter(
@@ -86,12 +89,13 @@ export function ApprovalsPage() {
   ).length;
   const handledToday = allActions.filter(
     (action) =>
-      DONE_PENDING_STATUSES.includes(action.status) && isToday(action.updatedAt),
+      DONE_PENDING_STATUSES.includes(action.status) &&
+      isToday(action.updated_at),
   ).length;
   const highestRisk = RISK_ORDER.find((riskLevel) =>
     allActions.some(
       (action) =>
-        action.riskLevel === riskLevel &&
+        action.risk === riskLevel &&
         OPEN_PENDING_STATUSES.includes(action.status),
     ),
   );
@@ -188,11 +192,11 @@ export function ApprovalsPage() {
                 {group.items.map((action) => (
                   <ApprovalInboxItem
                     action={action}
-                    key={action.id}
+                    key={action.action_ref}
                     locale={locale}
                     now={now}
-                    onSelect={() => setSelectedRef(action.actionRef)}
-                    selected={selectedRef === action.actionRef}
+                    onSelect={() => setSelectedRef(action.action_ref)}
+                    selected={selectedRef === action.action_ref}
                   />
                 ))}
               </section>
@@ -222,7 +226,7 @@ function ApprovalInboxItem({
   now,
   locale,
 }: {
-  action: PendingAction;
+  action: PendingActionPublic;
   selected: boolean;
   onSelect: () => void;
   now: number;
@@ -230,7 +234,7 @@ function ApprovalInboxItem({
 }) {
   const { t } = useTranslation();
   const open = OPEN_PENDING_STATUSES.includes(action.status);
-  const expired = open && isExpired(action.expiresAt, now);
+  const expired = open && isExpired(action.expires_at, now);
 
   return (
     <button
@@ -247,8 +251,8 @@ function ApprovalInboxItem({
     >
       <span className="argus-approval-item__top">
         <span className="argus-approval-item__title">{action.title}</span>
-        <Badge tone={riskTone(action.riskLevel)}>
-          {t(`governance.approvals.risk.${action.riskLevel}`)}
+        <Badge tone={riskTone(action.risk)}>
+          {t(`governance.approvals.risk.${action.risk}`)}
         </Badge>
         <StatusBadge tone={pendingStatusTone(action.status)}>
           {t(`governance.approvals.status.${action.status}`)}
@@ -256,15 +260,7 @@ function ApprovalInboxItem({
       </span>
       <p className="argus-approval-item__summary">{action.summary}</p>
       <span className="argus-approval-item__meta">
-        <span>{action.createdByName ?? action.createdBy}</span>
-        <span>·</span>
-        <span>
-          {action.conversationId
-            ? t("governance.approvals.source.chatbox")
-            : t("governance.approvals.source.admin")}
-        </span>
-        <span>·</span>
-        <span>{formatDateTime(action.createdAt, locale)}</span>
+        <span>{formatDateTime(action.created_at, locale)}</span>
         {open && (
           <>
             <span>·</span>
@@ -274,7 +270,7 @@ function ApprovalInboxItem({
               <Clock aria-hidden size={11} />
               {expired
                 ? t("governance.approvals.expired")
-                : formatCountdown(action.expiresAt, now)}
+                : formatCountdown(action.expires_at, now)}
             </span>
           </>
         )}

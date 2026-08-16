@@ -7,7 +7,7 @@
 ## 前置条件
 
 - M0 完成。
-- M1 HTTP Adapter、路由守卫和认证边界可用。
+- M1 HTTP/SSE/WebSocket Transport、显式 real Adapter、路由守卫和认证边界已完成。
 
 ## 任务
 
@@ -20,7 +20,7 @@
 - [ ] `M2-AUTH-02` 实现列表/详情/批量/游标的统一企业与 DataScope 过滤。
 - [ ] `M2-MACHINE-01` 实现 ServiceAccount/APIKey 单次显示、哈希、Tool/DataScope Scope、轮换与撤销。
 - [ ] `M2-AUDIT-01` 实现平台/企业审计分域、字段脱敏和审计查询授权。
-- [ ] `M2-WEB-01` 将 setup/platform/enterprise 的身份与 IAM 核心流程切到真实 API。
+- [ ] `M2-WEB-01` 在 M1 real Adapter 上补充冻结后的 Setup/Identity/IAM Path，将三个门户核心流程切到真实 API；禁止复制 DTO、重写 Transport 或回退 mock。
 - [ ] `M2-OUTBOX-01` 建立授权变化 Outbox 和 Redis 快速失效，不让 Redis 成为事实来源。
 
 ## 测试
@@ -41,3 +41,4 @@
 
 - Host/Kubernetes 真实资源接入。
 - Agent、Card、Remote Access 和 Telemetry。
+- M1 已完成的前端 Adapter、认证恢复状态机、Card Runtime 传输基座和样式/UI 门禁。

@@ -3,11 +3,8 @@ import { useTranslation } from "react-i18next";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { Button, Card, CardContent, StatusBadge } from "@argus/ui";
 
-/**
- * 平台控制台登录入口。真实部署中指向平台控制台应用；
- * 当前仓库内无独立登录路由，先落到 "/" 占位。
- */
-const LOGIN_URL = "/";
+const PLATFORM_URL =
+  import.meta.env.VITE_PLATFORM_URL ?? "http://localhost:4174";
 
 function TerminalLayout({
   badge,
@@ -25,10 +22,12 @@ function TerminalLayout({
   actionLabel: string;
 }) {
   return (
-    <Card className="setup-card">
+    <Card className="argus-setup-card">
       <CardContent>
-        <div className="setup-terminal">
-          <span className={`setup-terminal__icon is-${badgeTone}`}>{icon}</span>
+        <div className="argus-setup-terminal">
+          <span className={`argus-setup-terminal__icon is-${badgeTone}`}>
+            {icon}
+          </span>
           <StatusBadge tone={badgeTone === "success" ? "success" : "accent"}>
             {badge}
           </StatusBadge>
@@ -36,7 +35,7 @@ function TerminalLayout({
           <p>{description}</p>
           <Button
             onClick={() => {
-              window.location.href = LOGIN_URL;
+              window.location.href = PLATFORM_URL;
             }}
             variant="primary"
           >

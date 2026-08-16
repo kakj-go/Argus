@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Task, TaskEvent } from "@argus/api-client";
+import type { TaskEvent, TaskViewModel } from "@argus/api-client/provisional";
 import { useApi } from "@argus/api-client";
 import {
   Button,
@@ -54,7 +54,7 @@ export function TaskDetailDrawer({
   useEffect(() => {
     if (!open || taskId === null) return;
     return api.tasks.subscribeTask(taskId, (event: TaskEvent) => {
-      queryClient.setQueryData<Task>(detailQueryKey, (current) => {
+      queryClient.setQueryData<TaskViewModel>(detailQueryKey, (current) => {
         if (!current) return current;
         switch (event.type) {
           case "task_updated":
@@ -97,10 +97,7 @@ export function TaskDetailDrawer({
       footer={
         <>
           {active && (
-            <Button
-              onClick={() => setCancelConfirmOpen(true)}
-              variant="danger"
-            >
+            <Button onClick={() => setCancelConfirmOpen(true)} variant="danger">
               {t("governance.tasks.detail.cancelTask")}
             </Button>
           )}
@@ -172,7 +169,10 @@ export function TaskDetailDrawer({
                 {
                   label: t("governance.tasks.detail.duration"),
                   value: active
-                    ? formatDuration(task.startedAt, new Date(now).toISOString())
+                    ? formatDuration(
+                        task.startedAt,
+                        new Date(now).toISOString(),
+                      )
                     : formatDuration(task.startedAt, task.finishedAt),
                 },
                 {

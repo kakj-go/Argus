@@ -1,13 +1,13 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useApi, type Role, type RoleBinding } from "@argus/api-client";
-import { useAuthStore } from "@argus/auth";
+import { useEnterpriseAuthStore } from "@argus/auth";
 
-/** 与 mock resolvePermissions 一致的有效期判断（active 且在 validFrom/validUntil 内）。 */
+/** 与 mock resolvePermissions 一致的有效期判断（active 且在 valid_from/valid_until 内）。 */
 function isEffective(binding: RoleBinding, nowIso: string): boolean {
   if (binding.status !== "active") return false;
-  if (binding.validFrom && binding.validFrom > nowIso) return false;
-  if (binding.validUntil && binding.validUntil <= nowIso) return false;
+  if (binding.valid_from && binding.valid_from > nowIso) return false;
+  if (binding.valid_until && binding.valid_until <= nowIso) return false;
   return true;
 }
 
@@ -17,9 +17,9 @@ function isEffective(binding: RoleBinding, nowIso: string): boolean {
  */
 export function useMyEffectiveBindings(): RoleBinding[] {
   const api = useApi();
-  const userId = useAuthStore((state) => state.session?.user.id);
-  const departmentId = useAuthStore(
-    (state) => state.session?.membership?.departmentId,
+  const userId = useEnterpriseAuthStore((state) => state.session?.user.id);
+  const departmentId = useEnterpriseAuthStore(
+    (state) => state.session?.session.department_id,
   );
   const { data } = useQuery({
     queryKey: ["org", "role-bindings"],
@@ -30,10 +30,10 @@ export function useMyEffectiveBindings(): RoleBinding[] {
     const now = new Date().toISOString();
     return (data ?? []).filter(
       (binding) =>
-        ((binding.subjectType === "user" && binding.subjectId === userId) ||
-          (binding.subjectType === "department" &&
+        ((binding.subject_type === "user" && binding.subject_id === userId) ||
+          (binding.subject_type === "department" &&
             departmentId !== undefined &&
-            binding.subjectId === departmentId)) &&
+            binding.subject_id === departmentId)) &&
         isEffective(binding, now),
     );
   }, [data, userId, departmentId]);
@@ -48,8 +48,8 @@ export function useMyRoles(): Role[] {
     queryFn: () => api.org.listRoles(),
   });
   return useMemo(() => {
-    const roleIds = new Set(bindings.map((binding) => binding.roleId));
-    return (roles ?? []).filter((role) => roleIds.has(role.id));
+    const role_ids = new Set(bindings.map((binding) => binding.role_id));
+    return (roles ?? []).filter((role) => role_ids.has(role.id));
   }, [roles, bindings]);
 }
 

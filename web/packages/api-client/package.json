@@ -5,7 +5,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./contracts": "./src/generated/contracts.ts"
+    "./contracts": "./src/generated/contracts.ts",
+    "./provisional": "./src/provisional/index.ts",
+    "./mock": "./src/mock/index.ts",
+    "./real": "./src/adapters/real.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

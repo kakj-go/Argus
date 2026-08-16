@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useApi } from "@argus/api-client";
-import { useAuthStore } from "@argus/auth";
+import { useEnterpriseAuthStore } from "@argus/auth";
+import { AuthStatePage } from "@argus/ui";
 
 /**
  * 会话恢复：zustand store 从 localStorage 同步水合，
@@ -9,29 +10,19 @@ import { useAuthStore } from "@argus/auth";
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const api = useApi();
-  const hasSession = useAuthStore((state) => Boolean(state.session));
-  const setSession = useAuthStore((state) => state.setSession);
+  const status = useEnterpriseAuthStore((state) => state.status);
+  const error = useEnterpriseAuthStore((state) => state.error);
+  const restore = useEnterpriseAuthStore((state) => state.restore);
 
   useEffect(() => {
-    if (!hasSession) return;
-    let cancelled = false;
-    api
-      .auth.me()
-      .then((session) => {
-        if (cancelled) return;
-        setSession(
-          session.membership && !session.user.platformRole ? session : null,
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setSession(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // 仅在挂载时校验一次
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void restore(api);
+  }, [api, restore]);
 
+  if (status === "unknown" || status === "checking") {
+    return <AuthStatePage status="checking" />;
+  }
+  if (status === "unavailable") {
+    return <AuthStatePage message={error} status="unavailable" />;
+  }
   return <>{children}</>;
 }

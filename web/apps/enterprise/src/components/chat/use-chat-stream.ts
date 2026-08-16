@@ -1,7 +1,15 @@
 import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ChatMessage, InteractiveCardCreateCommand } from "@argus/api-client";
 import { useApi } from "@argus/api-client";
+import type {
+  InteractiveCardCreateCommand,
+} from "@argus/api-client/provisional";
+import type { ChatMessage } from "./chat-view-model";
+import {
+  initialConversationProjection,
+  reduceStreamEnvelope,
+  type CompactionView,
+} from "./event-reducer";
 
 export type ChatStreamState = {
   /** 正在流式生成的 AI 消息（未落库，message_done 后清空并改用查询数据）。 */
@@ -10,19 +18,19 @@ export type ChatStreamState = {
   pendingUser: ChatMessage | null;
   sending: boolean;
   error: string | null;
+  stopReason: "completed" | "cancelled" | "failed" | "output_limit" | null;
+  compaction: CompactionView;
   send: (
     conversationId: string,
     text: string,
     command?: InteractiveCardCreateCommand,
   ) => Promise<void>;
-  /** 中断当前的流式消费循环。 */
+  /** 中断当前网络流和本地消费循环。 */
   stop: () => void;
 };
 
 /**
- * 消费 conversations.sendMessage 的 AsyncIterable：
- * message_start → tool_call/tool_call_update → token* → card → message_done。
- * 完成后 invalidate ["conversations"]，让消息列表与侧栏会话列表一起刷新。
+ * 消费冻结的 StreamEventEnvelope/AgentEvent，并通过纯 reducer 生成展示模型。
  */
 export function useChatStream(): ChatStreamState {
   const api = useApi();
@@ -31,10 +39,17 @@ export function useChatStream(): ChatStreamState {
   const [pendingUser, setPendingUser] = useState<ChatMessage | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const stopRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const [stopReason, setStopReason] = useState<
+    "completed" | "cancelled" | "failed" | "output_limit" | null
+  >(null);
+  const [compaction, setCompaction] = useState<CompactionView>({
+    status: "idle",
+  });
 
   const stop = useCallback(() => {
-    stopRef.current = true;
+    abortRef.current?.abort();
+    setStopReason("cancelled");
   }, []);
 
   const send = useCallback(
@@ -44,9 +59,12 @@ export function useChatStream(): ChatStreamState {
       command?: InteractiveCardCreateCommand,
     ) => {
       if (sending) return;
-      stopRef.current = false;
+      const controller = new AbortController();
+      abortRef.current = controller;
       setSending(true);
       setError(null);
+      setStopReason(null);
+      setCompaction({ status: "idle" });
       setPendingUser({
         id: `local-user-${Date.now()}`,
         conversationId,
@@ -55,87 +73,59 @@ export function useChatStream(): ChatStreamState {
         createdAt: new Date().toISOString(),
       });
 
-      let acc: ChatMessage | null = null;
-      const patch = () => {
-        if (acc) setStreaming({ ...acc });
-      };
+      let projection = initialConversationProjection;
 
       try {
-        const stream = api.conversations.sendMessage(conversationId, {
-          text,
-          command,
-        });
-        for await (const event of stream) {
-          if (stopRef.current) break;
-          switch (event.type) {
-            case "message_start":
-              acc = {
-                id: event.messageId,
-                conversationId,
-                role: "assistant",
-                content: "",
-                createdAt: new Date().toISOString(),
-                toolCalls: [],
-                cards: [],
-              };
-              patch();
-              break;
-            case "token":
-              if (acc) {
-                acc.content += event.delta;
-                patch();
-              }
-              break;
-            case "tool_call":
-              if (acc) {
-                acc.toolCalls = [...(acc.toolCalls ?? []), event.toolCall];
-                patch();
-              }
-              break;
-            case "tool_call_update":
-              if (acc) {
-                acc.toolCalls = (acc.toolCalls ?? []).map((call) =>
-                  call.callId === event.callId
-                    ? {
-                        ...call,
-                        status: event.status,
-                        durationMs: event.durationMs,
-                        summary: event.summary,
-                      }
-                    : call,
-                );
-                patch();
-              }
-              break;
-            case "card":
-              if (acc) {
-                acc.cards = [...(acc.cards ?? []), event.card];
-                patch();
-              }
-              break;
-            case "error":
-              setError(event.message);
-              break;
-            case "message_done":
-            case "card_action_result":
-            case "interactive_card_created":
-              // message_done 后消息已落库，统一由下面的 invalidate 刷新。
-              break;
-          }
+        const stream = api.conversations.sendMessage(
+          conversationId,
+          { text, command },
+          { signal: controller.signal },
+        );
+        for await (const envelope of stream) {
+          projection = reduceStreamEnvelope(projection, envelope);
+          setCompaction(projection.compaction);
+          const completed = projection.completed_message;
+          setStreaming(
+            completed ?? {
+              id: projection.message_id ?? `stream-${conversationId}`,
+              conversationId,
+              role: "assistant",
+              content: projection.message_text,
+              createdAt: envelope.occurred_at,
+              toolCalls: [...projection.tool_calls.values()],
+              cards: [...projection.cards],
+            },
+          );
+          if (projection.stop_reason) setStopReason(projection.stop_reason);
+        }
+        if (!controller.signal.aborted && !projection.stop_reason) {
+          setStopReason("completed");
         }
       } catch {
-        setError("send failed");
+        if (!controller.signal.aborted) {
+          setError("send failed");
+          setStopReason("failed");
+        }
       } finally {
         // 等待列表刷新完成再清掉本地乐观消息，避免流式内容闪烁消失。
         await queryClient.invalidateQueries({ queryKey: ["conversations"] });
-        acc = null;
         setStreaming(null);
         setPendingUser(null);
         setSending(false);
+        abortRef.current = null;
       }
     },
     [api, queryClient, sending],
   );
 
-  return { streaming, pendingUser, sending, error, send, stop };
+  return {
+    streaming,
+    pendingUser,
+    sending,
+    error,
+    stopReason,
+    compaction,
+    send,
+    stop,
+  };
 }

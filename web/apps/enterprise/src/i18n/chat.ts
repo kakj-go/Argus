@@ -107,6 +107,16 @@ export const chatZh = {
       sendFailed: "消息发送失败，请重试。",
       loadFailed: "会话加载失败。",
     },
+    stop: {
+      cancelled: "生成已由用户停止。",
+      outputLimit: "模型已达到本次输出上限。",
+      failed: "生成未完成，请重试。",
+    },
+    compaction: {
+      running: "正在压缩上下文（压缩前 {{before}} Token）…",
+      completed: "上下文压缩完成：{{before}} → {{after}} Token。",
+      failed: "上下文压缩失败，已保留原始会话事件。",
+    },
   },
 };
 
@@ -216,6 +226,16 @@ export const chatEn = {
     error: {
       sendFailed: "Failed to send the message. Please retry.",
       loadFailed: "Failed to load the conversation.",
+    },
+    stop: {
+      cancelled: "Generation was stopped by the user.",
+      outputLimit: "The model reached the output limit for this response.",
+      failed: "Generation did not complete. Please retry.",
+    },
+    compaction: {
+      running: "Compacting context ({{before}} tokens before compaction)…",
+      completed: "Context compaction completed: {{before}} → {{after}} tokens.",
+      failed: "Context compaction failed; original conversation events were preserved.",
     },
   },
 };

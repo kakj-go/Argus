@@ -36,8 +36,14 @@ export default defineConfig({
           reuseExistingServer: !process.env.CI,
         },
         {
-          command: "pnpm --filter @argus/setup dev",
+          command:
+            "VITE_PLATFORM_URL=http://127.0.0.1:4174/login pnpm --filter @argus/setup dev",
           url: "http://127.0.0.1:4175",
+          reuseExistingServer: !process.env.CI,
+        },
+        {
+          command: "pnpm --filter @argus/card-runtime dev",
+          url: "http://127.0.0.1:4176",
           reuseExistingServer: !process.env.CI,
         },
       ],

@@ -4,56 +4,56 @@
 .argus-settings-stack {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-px-16);
 }
 
 .argus-settings-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-px-10);
 }
 
 .argus-settings-section__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-px-12);
 }
 
 .argus-settings-section__title {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--font-size-14);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .argus-settings-section__hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   color: var(--text-secondary);
 }
 
 .argus-settings-stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
+  gap: var(--space-px-12);
 }
 
 .argus-settings-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-px-14);
 }
 
 .argus-settings-check-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-px-6);
   max-height: 220px;
   overflow: auto;
-  padding: 8px;
+  padding: var(--space-px-8);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-8);
 }
 
 .argus-settings-check-list .argus-check-item {
@@ -72,7 +72,7 @@
 .argus-settings-check-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 18px;
+  gap: var(--space-px-10) var(--space-px-18);
 }
 
 .argus-settings-check-row .argus-check-item {
@@ -83,7 +83,25 @@
 .argus-settings-inline-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-px-6);
+}
+
+.argus-settings-selector-list {
+  display: grid;
+  gap: var(--space-px-8);
+}
+
+.argus-settings-selector-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.45fr) minmax(0, 1fr) auto;
+  gap: var(--space-px-8);
+  align-items: center;
+}
+
+@media (max-width: 720px) {
+  .argus-settings-selector-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 角色权限矩阵：按资源分组 × 动作网格 */
@@ -91,15 +109,15 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   overflow: hidden;
 }
 
 .argus-perm-matrix__row {
   display: grid;
   grid-template-columns: 180px 1fr;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: var(--space-px-12);
+  padding: var(--space-px-10) var(--space-px-12);
   align-items: start;
 }
 
@@ -109,57 +127,57 @@
 
 .argus-perm-matrix__resource {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   color: var(--text-primary);
-  padding-top: 2px;
+  padding-top: var(--space-px-2);
 }
 
 .argus-perm-matrix__cells {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 16px;
+  gap: var(--space-px-6) var(--space-px-16);
 }
 
 .argus-perm-matrix__cells .argus-check-item {
   cursor: pointer;
   user-select: none;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 
 .argus-settings-warning {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   color: var(--warning);
 }
 
 .argus-settings-key-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-px-8);
 }
 
 .argus-settings-key-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--space-px-10);
+  padding: var(--space-px-8) var(--space-px-10);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-8);
 }
 
 .argus-settings-key-row__meta {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-px-2);
   min-width: 0;
 }
 
 .argus-settings-key-row__meta small {
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 
 .argus-settings-clickable-row {
@@ -167,5 +185,8 @@
 }
 
 .argus-settings-clickable-row:hover td {
-  background: var(--bg-hover, rgb(255 255 255 / 3%));
+  background: var(
+    --bg-hover,
+    color-mix(in srgb, var(--overlay-white) 3%, transparent)
+  );
 }

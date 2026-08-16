@@ -155,7 +155,9 @@ export function SettingsSecretsPage() {
               {
                 key: "createdBy",
                 header: t("settings.secrets.createdBy"),
-                render: (row) => <code className="mono">{row.createdBy}</code>,
+                render: (row) => (
+                  <code className="argus-mono">{row.createdBy}</code>
+                ),
               },
               {
                 key: "updatedAt",

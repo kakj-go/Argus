@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, XCircle } from "lucide-react";
-import type { ChatMessage } from "@argus/api-client";
+import type { ChatMessage } from "./chat-view-model";
 
 /** card_action_result 事件消息的紧凑回显条（成功/失败 + 摘要）。 */
 export function ActionResultBar({ message }: { message: ChatMessage }) {

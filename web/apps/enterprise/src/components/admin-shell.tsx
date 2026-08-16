@@ -1,8 +1,4 @@
-import {
-  Link,
-  Outlet,
-  useRouterState,
-} from "@tanstack/react-router";
+import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -27,13 +23,7 @@ import {
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@argus/api-client";
-import {
-  Badge,
-  Button,
-  Dialog,
-  Input,
-  Tooltip,
-} from "@argus/ui";
+import { AppShell, Badge, Button, Dialog, Input, Tooltip } from "@argus/ui";
 import { useUiStore } from "../store/ui";
 import { AccountActions } from "./account-actions";
 
@@ -52,10 +42,10 @@ type AdminNavSection = {
 
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <Link className="brand" to="/">
-      <span className="brand__mark">◉</span>
+    <Link className="argus-brand" to="/">
+      <span className="argus-brand__mark">◉</span>
       {!compact && (
-        <span className="brand__name">
+        <span className="argus-brand__name">
           Argus<small>enterprise</small>
         </span>
       )}
@@ -85,12 +75,19 @@ function useAdminCounts() {
   };
 }
 
-function buildSections(counts: ReturnType<typeof useAdminCounts>): AdminNavSection[] {
+function buildSections(
+  counts: ReturnType<typeof useAdminCounts>,
+): AdminNavSection[] {
   return [
     {
       groupKey: "shell.groups.resources",
       items: [
-        { key: "shell.nav.hosts", to: "/hosts", icon: Server, count: counts.hosts },
+        {
+          key: "shell.nav.hosts",
+          to: "/hosts",
+          icon: Server,
+          count: counts.hosts,
+        },
         {
           key: "shell.nav.kubernetes",
           to: "/kubernetes",
@@ -122,8 +119,16 @@ function buildSections(counts: ReturnType<typeof useAdminCounts>): AdminNavSecti
           to: "/settings/interactive-cards",
           icon: Component,
         },
-        { key: "shell.nav.settingsSecrets", to: "/settings/secrets", icon: KeyRound },
-        { key: "shell.nav.settingsAudit", to: "/settings/audit", icon: ScrollText },
+        {
+          key: "shell.nav.settingsSecrets",
+          to: "/settings/secrets",
+          icon: KeyRound,
+        },
+        {
+          key: "shell.nav.settingsAudit",
+          to: "/settings/audit",
+          icon: ScrollText,
+        },
       ],
     },
   ];
@@ -138,17 +143,17 @@ function Sidebar() {
     <>
       <div
         aria-hidden
-        className={`mobile-scrim ${mobileNavOpen ? "is-visible" : ""}`}
+        className={`argus-mobile-scrim ${mobileNavOpen ? "is-visible" : ""}`}
         onClick={() => setMobileNavOpen(false)}
       />
       <aside
-        className={`sidebar ${sidebarCollapsed ? "is-collapsed" : ""} ${mobileNavOpen ? "is-mobile-open" : ""}`}
+        className={`argus-sidebar ${sidebarCollapsed ? "is-collapsed" : ""} ${mobileNavOpen ? "is-mobile-open" : ""}`}
       >
-        <div className="sidebar__head">
+        <div className="argus-sidebar__head">
           <Brand compact={sidebarCollapsed} />
           <Button
             aria-label={t("shell.closeNavigation")}
-            className="mobile-close"
+            className="argus-mobile-close"
             onClick={() => setMobileNavOpen(false)}
             size="icon"
             variant="ghost"
@@ -156,17 +161,22 @@ function Sidebar() {
             <X size={17} />
           </Button>
         </div>
-        <nav aria-label={t("shell.mainNavigation")} className="sidebar__nav">
+        <nav
+          aria-label={t("shell.mainNavigation")}
+          className="argus-sidebar__nav"
+        >
           {sections.map((section) => (
-            <div className="nav-section" key={section.groupKey}>
+            <div className="argus-nav-section" key={section.groupKey}>
               {!sidebarCollapsed && (
-                <div className="nav-section__label">{t(section.groupKey)}</div>
+                <div className="argus-nav-section__label">
+                  {t(section.groupKey)}
+                </div>
               )}
               {section.items.map((item) => (
                 <Tooltip content={t(item.key)} key={item.key}>
                   <Link
                     activeProps={{ className: "active" }}
-                    className="nav-item"
+                    className="argus-nav-item"
                     onClick={() => setMobileNavOpen(false)}
                     to={item.to}
                   >
@@ -174,8 +184,10 @@ function Sidebar() {
                     {!sidebarCollapsed && (
                       <>
                         <span>{t(item.key)}</span>
-                        {item.alert && <i className="nav-alert" />}
-                        {item.count !== undefined && <small>{item.count}</small>}
+                        {item.alert && <i className="argus-nav-alert" />}
+                        {item.count !== undefined && (
+                          <small>{item.count}</small>
+                        )}
                       </>
                     )}
                   </Link>
@@ -184,9 +196,9 @@ function Sidebar() {
             </div>
           ))}
         </nav>
-        <div className="sidebar__footer">
+        <div className="argus-sidebar__footer">
           <button
-            className="collapse-button"
+            className="argus-collapse-button"
             onClick={toggleSidebar}
             type="button"
           >
@@ -216,14 +228,14 @@ function CommandDialog() {
       open={commandOpen}
       title={t("shell.command.title")}
     >
-      <div className="command-search">
+      <div className="argus-command-search">
         <Search size={16} />
         <Input autoFocus placeholder={t("shell.command.placeholder")} />
       </div>
-      <div className="command-list">
+      <div className="argus-command-list">
         <span>{t("shell.command.suggestion")}</span>
         <Link onClick={() => setCommandOpen(false)} to="/">
-          <span className="bot-line">◉</span>
+          <span className="argus-bot-line">◉</span>
           {t("shell.command.newChat")}
           <kbd>↵</kbd>
         </Link>
@@ -267,28 +279,28 @@ function Header() {
         ? "shell.nav.clusterDetail"
         : undefined);
   return (
-    <header className="topbar">
+    <header className="argus-topbar">
       <Button
         aria-label={t("shell.openNavigation")}
-        className="mobile-menu"
+        className="argus-mobile-menu"
         onClick={() => setMobileNavOpen(true)}
         size="icon"
         variant="ghost"
       >
         <Menu size={18} />
       </Button>
-      <Link className="back-to-chat" to="/">
+      <Link className="argus-back-to-chat" to="/">
         <ArrowLeft size={14} />
         <span>{t("shell.backToChat")}</span>
       </Link>
-      <div className="topbar__title">
+      <div className="argus-topbar__title">
         <span>{titleKey ? t(titleKey) : "Argus"}</span>
         <Badge dot tone="success">
           {t("shell.healthy")}
         </Badge>
       </div>
       <button
-        className="search-trigger"
+        className="argus-search-trigger"
         onClick={() => setCommandOpen(true)}
         type="button"
       >
@@ -296,7 +308,7 @@ function Header() {
         <span>{t("shell.search")}</span>
         <kbd>⌘ K</kbd>
       </button>
-      <div className="topbar__actions">
+      <div className="argus-topbar__actions">
         <AccountActions />
         <Tooltip content={t("shell.notifications")}>
           <Button
@@ -331,7 +343,7 @@ function MobileNavigation() {
     },
   ];
   return (
-    <nav className="mobile-primary">
+    <nav className="argus-mobile-primary">
       {items.map((item) => (
         <Link
           activeOptions={{ exact: item.exact }}
@@ -382,16 +394,18 @@ export function AdminShell() {
   }, [setCommandOpen, toggleSidebar]);
 
   return (
-    <div className={`app-shell admin-shell ${collapsed ? "is-collapsed" : ""}`}>
-      <Sidebar />
-      <div className="app-main">
-        <Header />
-        <main className="page-content">
-          <Outlet />
-        </main>
-      </div>
-      <MobileNavigation />
-      <CommandDialog />
-    </div>
+    <AppShell
+      className={`argus-admin-shell ${collapsed ? "is-collapsed" : ""}`}
+      header={<Header />}
+      overlay={
+        <>
+          <MobileNavigation />
+          <CommandDialog />
+        </>
+      }
+      sidebar={<Sidebar />}
+    >
+      <Outlet />
+    </AppShell>
   );
 }

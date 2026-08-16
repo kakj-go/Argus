@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { type ReactNode } from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { type ReactNode, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MetricChart } from "./chart";
 import { FilterBar, SearchInput } from "./filter";
+import { Field, Input } from "./form";
 import { KeyValueGrid } from "./key-value-grid";
 import { LocaleProvider } from "./locale";
 import { LogViewer } from "./log-viewer";
@@ -101,6 +102,31 @@ describe("ConfirmDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认" }));
     expect(onConfirm).toHaveBeenCalled();
   });
+
+  it("closes with Escape and restores focus to the trigger", async () => {
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Open dialog</button>
+          <ConfirmDialog
+            onConfirm={() => {}}
+            onOpenChange={setOpen}
+            open={open}
+            title="Dialog"
+          />
+        </>
+      );
+    }
+    render(<Harness />, { wrapper: Wrapper });
+    const trigger = screen.getByRole("button", { name: "Open dialog" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
 });
 
 describe("FormDrawer", () => {
@@ -113,6 +139,36 @@ describe("FormDrawer", () => {
     );
     expect(screen.getByText("New host")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "提交" })).toBeInTheDocument();
+  });
+
+  it("submits from an input with Enter", () => {
+    const onSubmit = vi.fn();
+    render(
+      <FormDrawer onOpenChange={() => {}} onSubmit={onSubmit} open title="New host">
+        <Input aria-label="hostname" />
+      </FormDrawer>,
+      { wrapper: Wrapper },
+    );
+    fireEvent.keyDown(screen.getByLabelText("hostname"), { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Field", () => {
+  it("associates validation errors with the input", () => {
+    render(
+      <Field error="Hostname is required" label="Hostname">
+        <Input />
+      </Field>,
+      { wrapper: Wrapper },
+    );
+    const input = screen.getByLabelText("Hostname");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    const messageId = input.getAttribute("aria-describedby");
+    expect(messageId).toBeTruthy();
+    expect(document.getElementById(messageId!)).toHaveTextContent(
+      "Hostname is required",
+    );
   });
 });
 
@@ -136,7 +192,6 @@ describe("PreviewCommitCard", () => {
         affected={[{ name: "web-01", detail: "restart" }]}
         expiresAt={Date.now() + 60_000}
         onConfirm={onConfirm}
-        planHash="abc123"
         risk="dangerous"
         title="Restart nginx"
       >
@@ -145,7 +200,6 @@ describe("PreviewCommitCard", () => {
       { wrapper: Wrapper },
     );
     expect(screen.getByText("Restart nginx")).toBeInTheDocument();
-    expect(screen.getByText("abc123")).toBeInTheDocument();
     expect(screen.getByText("web-01")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认执行" }));
     expect(onConfirm).toHaveBeenCalled();
@@ -181,8 +235,10 @@ describe("MetricChart", () => {
       />,
       { wrapper: Wrapper },
     );
-    expect(container.querySelector("svg")).toBeInTheDocument();
-    expect(screen.getByText("cpu")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "cpu" })).toBeInTheDocument();
+    expect(container.querySelector(".argus-chart__legend")).toHaveTextContent(
+      "cpu",
+    );
     rerender(
       <LocaleProvider>
         <MetricChart series={[{ name: "mem", points: [3, 2, 1] }]} type="bar" />

@@ -83,7 +83,7 @@ export function createConnectorsDomain(
         enterpriseId: ctx.enterpriseId(),
         name: input.name,
         environment: input.environment,
-        tags: input.tags ?? {},
+        labels: input.labels ?? {},
         status: "pending",
         memberHostIds: [],
         createdAt: ctx.nowIso(),
@@ -113,7 +113,7 @@ export function createConnectorsDomain(
       if (input.environment !== undefined) {
         scope.environment = input.environment;
       }
-      if (input.tags !== undefined) scope.tags = input.tags;
+      if (input.labels !== undefined) scope.labels = input.labels;
       scope.updatedAt = ctx.nowIso();
 
       const host = db.hosts.find((entry) => entry.id === scope.connectorHostId);
@@ -122,8 +122,8 @@ export function createConnectorsDomain(
         if (input.environment !== undefined) {
           host.environment = input.environment;
         }
-        if (input.tags !== undefined) {
-          host.tags = { ...input.tags, role: "bastion" };
+        if (input.labels !== undefined) {
+          host.labels = { ...input.labels, role: "bastion" };
         }
         host.updatedAt = ctx.nowIso();
       }

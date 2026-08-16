@@ -1,10 +1,10 @@
 import type {
   InteractiveCard,
   Host,
-  PendingAction,
-  Task,
+  PendingActionPublic,
   ModelUsagePoint,
 } from "../types";
+import type { TaskViewModel } from "../provisional";
 import { calculateModelAmount } from "../types";
 import { createOrgSeed } from "./seed-org";
 import type { MockDb } from "./store";
@@ -33,7 +33,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     platform: "linux",
     connectionMode: "direct_ssh",
     environment: "production",
-    tags: {},
+    labels: {},
     connectionStatus: "online",
     collectorStatus: "not_installed",
     createdAt: ago(90 * DAY),
@@ -52,7 +52,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       connectorId: "conn-sh-01",
       collectorStatus: "converged",
       telemetryRoute: "edge-gw-sh",
-      tags: { region: "cn-east", role: "bastion" },
+      labels: { region: "cn-east", role: "bastion" },
     }),
     host({
       id: "host-web-11",
@@ -63,7 +63,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       connectorId: "conn-sh-01",
       credentialRef: "sec-ssh-prod",
       collectorStatus: "converged",
-      tags: { region: "cn-east", role: "web" },
+      labels: { region: "cn-east", role: "web" },
     }),
     host({
       id: "host-web-12",
@@ -75,7 +75,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       credentialRef: "sec-ssh-prod",
       connectionStatus: "onboarding",
       collectorStatus: "installing",
-      tags: { region: "cn-east", role: "web", team: "payment" },
+      labels: { region: "cn-east", role: "web", team: "payment" },
       createdAt: ago(2 * HOUR),
       updatedAt: ago(10 * MINUTE),
     }),
@@ -89,7 +89,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       credentialRef: "sec-ssh-prod",
       collectorStatus: "backlog",
       telemetryRoute: "edge-gw-sh",
-      tags: { region: "cn-east", role: "db", criticality: "high" },
+      labels: { region: "cn-east", role: "db", criticality: "high" },
     }),
     // Bastion Scope: 北京机房堡垒机-02
     host({
@@ -101,7 +101,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       connectorId: "conn-bj-01",
       environment: "staging",
       collectorStatus: "converged",
-      tags: { region: "cn-north", role: "bastion" },
+      labels: { region: "cn-north", role: "bastion" },
     }),
     host({
       id: "host-app-bj-01",
@@ -113,7 +113,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       credentialRef: "sec-ssh-prod",
       environment: "staging",
       collectorStatus: "converged",
-      tags: { region: "cn-north", role: "app" },
+      labels: { region: "cn-north", role: "app" },
     }),
     host({
       id: "host-cache-bj-01",
@@ -125,7 +125,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       credentialRef: "sec-ssh-prod",
       environment: "staging",
       collectorStatus: "converged",
-      tags: { region: "cn-north", role: "cache" },
+      labels: { region: "cn-north", role: "cache" },
     }),
     // Independent public hosts
     host({
@@ -135,7 +135,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       connectionMode: "direct_ssh",
       credentialRef: "sec-ssh-prod",
       collectorStatus: "converged",
-      tags: { region: "public", role: "web" },
+      labels: { region: "public", role: "web" },
     }),
     host({
       id: "host-win-ad-02",
@@ -148,7 +148,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       environment: "staging",
       connectionStatus: "offline",
       collectorStatus: "interrupted",
-      tags: { region: "public", role: "ad" },
+      labels: { region: "public", role: "ad" },
       updatedAt: ago(12 * MINUTE),
     }),
     // Globex hosts
@@ -161,7 +161,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       bastionScopeId: "scope-gz",
       connectorId: "conn-gz-01",
       connectionStatus: "offline",
-      tags: { region: "cn-south", role: "bastion" },
+      labels: { region: "cn-south", role: "bastion" },
     }),
     host({
       id: "host-batch-07",
@@ -171,7 +171,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       connectionMode: "direct_ssh",
       credentialRef: "sec-g-ssh",
       environment: "staging",
-      tags: { region: "public", role: "batch" },
+      labels: { region: "public", role: "batch" },
     }),
     host({
       id: "host-dev-01",
@@ -181,13 +181,13 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       connectionMode: "direct_ssh",
       credentialRef: "sec-g-ssh",
       environment: "development",
-      tags: { region: "public", role: "dev" },
+      labels: { region: "public", role: "dev" },
     }),
   ];
 
   const task = (
-    partial: Partial<Task> & Pick<Task, "id" | "type" | "title" | "status">,
-  ): Task => ({
+    partial: Partial<TaskViewModel> & Pick<TaskViewModel, "id" | "type" | "title" | "status">,
+  ): TaskViewModel => ({
     enterpriseId: "ent-acme",
     origin: "admin_ui",
     createdBy: "u-chenxi",
@@ -208,7 +208,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     finishedAt: iso(at + 30_000),
   });
 
-  const tasks: Task[] = [
+  const tasks: TaskViewModel[] = [
     task({
       id: "task-8d72",
       type: "collector_install",
@@ -316,31 +316,65 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     }),
   ];
 
+  const actionPlans: MockDb["actionPlans"] = {};
   const pendingAction = (
-    partial: Partial<PendingAction> &
-      Pick<PendingAction, "id" | "tool" | "title" | "riskLevel" | "status">,
-  ): PendingAction => ({
-    enterpriseId: "ent-acme",
-    actionRef: `pa_ref_${partial.id}`,
-    summary: partial.title ?? "",
-    preview: {},
-    params: {},
-    diff: [],
-    planHash: `sha256:${partial.id}9f2ca41d`,
-    expiresAt: iso(30 * MINUTE),
-    createdBy: "u-wanglei",
-    createdByName: "王磊",
-    createdAt: ago(20 * MINUTE),
-    updatedAt: ago(20 * MINUTE),
-    ...partial,
-  });
+    partial: Partial<PendingActionPublic> &
+      Pick<PendingActionPublic, "title" | "risk" | "status"> & {
+        id: string;
+        tool: string;
+        input_data?: Record<string, unknown>;
+        created_by?: string;
+        created_by_name?: string;
+        conversation_id?: string;
+        task_id?: string;
+      },
+  ): PendingActionPublic => {
+    const {
+      id,
+      tool,
+      input_data = {},
+      created_by = "u-wanglei",
+      created_by_name = "王磊",
+      conversation_id,
+      task_id,
+      ...publicAction
+    } = partial;
+    const action_ref = `pa_ref_${id}`;
+    actionPlans[action_ref] = {
+      tool,
+      enterprise_id: "ent-acme",
+      created_by,
+      created_by_name,
+      conversation_id,
+      task_id,
+      input_data,
+      approval_decisions: [],
+    };
+    return {
+      schema_version: "argus.pending_action/v1",
+      action_ref,
+      summary: partial.title,
+      preview: {},
+      diff: [],
+      expires_at: iso(30 * MINUTE),
+      available_actions:
+        partial.status === "awaiting_confirmation"
+          ? ["confirm", "cancel"]
+          : partial.status === "awaiting_approval"
+            ? ["approve", "reject", "cancel"]
+            : [],
+      created_at: ago(20 * MINUTE),
+      updated_at: ago(20 * MINUTE),
+      ...publicAction,
+    };
+  };
 
-  const pendingActions: PendingAction[] = [
+  const pendingActions: PendingActionPublic[] = [
     pendingAction({
       id: "pa-0001",
       tool: "kubernetes.workload.restart",
       title: "重启 payment-worker",
-      riskLevel: "dangerous",
+      risk: "dangerous",
       status: "awaiting_approval",
       summary: "重启 k8s-staging/staging 下 payment-worker 的全部 6 个 Pod",
       preview: {
@@ -349,7 +383,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         workload: "payment-worker",
         ready: "5/6",
       },
-      params: {
+      input_data: {
         clusterId: "k8s-staging",
         namespace: "staging",
         workload: "payment-worker",
@@ -363,23 +397,21 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       ],
       approval: {
         required: true,
-        policyId: "ap-prod-danger",
-        policyName: "生产危险操作审批",
-        minApprovers: 1,
-        approverRoleIds: ["role-po"],
-        separationOfDuty: true,
-        decisions: [],
+        policy_ref: "ap-prod-danger",
+        minimum_approvers: 1,
+        approved_count: 0,
+        separation_of_duty: true,
       },
-      createdBy: "u-lina",
-      createdByName: "李娜",
-      createdAt: ago(4 * MINUTE),
-      updatedAt: ago(4 * MINUTE),
+      created_by: "u-lina",
+      created_by_name: "李娜",
+      created_at: ago(4 * MINUTE),
+      updated_at: ago(4 * MINUTE),
     }),
     pendingAction({
       id: "pa-0002",
       tool: "telemetry.collector.upgrade",
       title: "升级 12 个 Collector",
-      riskLevel: "write",
+      risk: "write",
       status: "awaiting_confirmation",
       summary: "v24.1.3 → v24.2.0 · batch 3 · 自动回滚",
       preview: {
@@ -388,43 +420,43 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         batch: 3,
         targets: 12,
       },
-      params: { toVersion: "v24.2.0", batch: 3 },
+      input_data: { toVersion: "v24.2.0", batch: 3 },
       diff: [
         {
           kind: "change",
           text: "~ collector image v24.1.3 → v24.2.0 (12 targets)",
         },
       ],
-      createdAt: ago(18 * MINUTE),
-      updatedAt: ago(18 * MINUTE),
+      created_at: ago(18 * MINUTE),
+      updated_at: ago(18 * MINUTE),
     }),
     pendingAction({
       id: "pa-0003",
       tool: "connector.cert.rotate",
       title: "轮换 Connector 证书",
-      riskLevel: "write",
+      risk: "write",
       status: "awaiting_confirmation",
       summary: "上海机房堡垒机-01 · conn-sh-01 证书轮换",
       preview: { connector: "conn-sh-01", scope: "上海机房堡垒机-01" },
-      params: { connectorId: "conn-sh-01" },
+      input_data: { connectorId: "conn-sh-01" },
       diff: [
         {
           kind: "change",
           text: "~ connector certificate rotated (overlap window 10m)",
         },
       ],
-      createdAt: ago(HOUR),
-      updatedAt: ago(HOUR),
+      created_at: ago(HOUR),
+      updated_at: ago(HOUR),
     }),
     pendingAction({
       id: "pa-0004",
       tool: "host.create",
       title: "新增主机 host-web-12",
-      riskLevel: "write",
+      risk: "write",
       status: "executing",
-      createdBy: "u-chenxi",
-      createdByName: "陈曦",
-      conversationId: "conv-1",
+      created_by: "u-chenxi",
+      created_by_name: "陈曦",
+      conversation_id: "conv-1",
       summary: "10.0.0.12 · SSH via Bastion · 上海机房堡垒机-01",
       preview: {
         name: "host-web-12",
@@ -432,7 +464,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         connectionMode: "via_bastion",
         telemetry: "install argus-otelcol",
       },
-      params: {
+      input_data: {
         name: "host-web-12",
         address: "10.0.0.12",
         port: 22,
@@ -444,12 +476,13 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         { kind: "add", text: "+ telemetry.collector v24.1.3" },
         {
           kind: "note",
-          text: "~ tags prod, team:payment · 无端口与防火墙变更",
+          text: "~ labels prod, team:payment · 无端口与防火墙变更",
         },
       ],
-      taskId: "task-8f21",
-      createdAt: ago(14 * MINUTE),
-      updatedAt: ago(12 * MINUTE),
+      task_id: "task-8f21",
+      execution_ref: "task-8f21",
+      created_at: ago(14 * MINUTE),
+      updated_at: ago(12 * MINUTE),
     }),
   ];
 
@@ -575,7 +608,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
   }
 
   const db: MockDb = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     seq: {},
     platformState: { state: "initialized", name: "Argus" },
     enterprises: [
@@ -640,7 +673,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         createdAt: ago(2 * DAY),
       },
     ],
-    // users/credentials/memberships/departments/projects/roles/roleBindings/
+    // users/credentials/enterpriseUsers/departments/roles/roleBindings/
     // dataScopes/approvalPolicies/serviceAccounts/apiKeys 来自 seed-org.ts。
     ...createOrgSeed(now),
     secrets: [
@@ -770,7 +803,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         enterpriseId: "ent-acme",
         name: "上海机房堡垒机-01",
         environment: "production",
-        tags: { region: "cn-east" },
+        labels: { region: "cn-east" },
         status: "active",
         connectorHostId: "host-gw-sh-01",
         activeConnectorId: "conn-sh-01",
@@ -784,7 +817,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         enterpriseId: "ent-acme",
         name: "北京机房堡垒机-02",
         environment: "staging",
-        tags: { region: "cn-north" },
+        labels: { region: "cn-north" },
         status: "active",
         connectorHostId: "host-gw-bj-01",
         activeConnectorId: "conn-bj-01",
@@ -797,7 +830,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         enterpriseId: "ent-globex",
         name: "广州机房堡垒机-03",
         environment: "production",
-        tags: { region: "cn-south" },
+        labels: { region: "cn-south" },
         status: "degraded",
         connectorHostId: "host-gw-gz-01",
         activeConnectorId: "conn-gz-01",
@@ -810,7 +843,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         enterpriseId: "ent-acme",
         name: "上海灾备堡垒机",
         environment: "production",
-        tags: { region: "cn-east" },
+        labels: { region: "cn-east" },
         status: "pending",
         memberHostIds: [],
         createdAt: ago(HOUR),
@@ -887,7 +920,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         credentialRef: "sec-kube-prod",
         version: "v1.31.4",
         environment: "production",
-        tags: { region: "cn-east" },
+        labels: { region: "cn-east" },
         connectionStatus: "connected",
         nodeCount: 42,
         readyNodeCount: 42,
@@ -903,7 +936,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         credentialRef: "sec-kube-staging",
         version: "v1.30.6",
         environment: "staging",
-        tags: { region: "public" },
+        labels: { region: "public" },
         connectionStatus: "degraded",
         nodeCount: 8,
         readyNodeCount: 7,
@@ -1020,6 +1053,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     ],
     tasks,
     pendingActions,
+    actionPlans,
     conversations: [
       {
         id: "conv-1",

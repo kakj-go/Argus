@@ -1,4 +1,22 @@
 import type { Environment, ISODateString, RiskLevel } from "./common";
+import type {
+  ApiKey,
+  DataScope,
+  EnterpriseUser,
+  Permission,
+  PlatformUser,
+  RoleBinding,
+  Session,
+} from "../generated/contracts";
+
+export type {
+  ApiKey,
+  DataScope,
+  Department,
+  Role,
+  RoleBinding,
+  ServiceAccount,
+} from "../generated/contracts";
 
 export type PlatformRole = "platform_super_admin";
 export type UserStatus = "active" | "invited" | "disabled";
@@ -15,74 +33,24 @@ export interface User {
   createdAt: ISODateString;
 }
 
-export interface EnterpriseMembership {
-  userId: string;
-  enterpriseId: string;
-  departmentId: string;
-}
-
-export interface Project {
-  id: string;
-  enterpriseId: string;
-  name: string;
-  description?: string;
-  default: boolean;
-  createdAt: ISODateString;
-}
-
-export type RoleBindingSubjectType = "user" | "department";
-export type RoleBindingScopeType = "enterprise" | "project";
-export type RoleBindingStatus = "active" | "disabled";
-
-export interface RoleBinding {
-  id: string;
-  enterpriseId: string;
-  subjectType: RoleBindingSubjectType;
-  subjectId: string;
-  roleId: string;
-  /** enterprise→当前企业 id；project→项目 id。 */
-  scopeType: RoleBindingScopeType;
-  scopeId: string;
-  validFrom?: ISODateString;
-  validUntil?: ISODateString;
-  status: RoleBindingStatus;
-  createdAt: ISODateString;
-}
+export type RoleBindingSubjectType = RoleBinding["subject_type"];
+export type RoleBindingStatus = RoleBinding["status"];
 
 export interface CreateRoleBindingInput {
-  subjectType: RoleBindingSubjectType;
-  subjectId: string;
-  roleId: string;
-  scopeType: RoleBindingScopeType;
-  scopeId: string;
-  validFrom?: ISODateString;
-  validUntil?: ISODateString;
+  subject_type: RoleBindingSubjectType;
+  subject_id: string;
+  role_id: string;
+  data_scope_ids: string[];
+  valid_from?: ISODateString;
+  valid_until?: ISODateString;
   status?: RoleBindingStatus;
 }
 
 export interface UpdateRoleBindingInput {
+  data_scope_ids?: string[];
   status?: RoleBindingStatus;
-  validFrom?: ISODateString;
-  validUntil?: ISODateString;
-}
-
-export interface Department {
-  id: string;
-  enterpriseId: string;
-  name: string;
-  description?: string;
-  default: boolean;
-  createdAt: ISODateString;
-}
-
-export interface Role {
-  id: string;
-  enterpriseId: string;
-  name: string;
-  description?: string;
-  builtin: boolean;
-  permissions: string[];
-  createdAt: ISODateString;
+  valid_from?: ISODateString;
+  valid_until?: ISODateString;
 }
 
 export interface CreateRoleInput {
@@ -91,18 +59,26 @@ export interface CreateRoleInput {
   permissions: string[];
 }
 
-export interface DataScope {
-  id: string;
-  enterpriseId: string;
+export interface SaveDataScopeInput {
+  id?: string;
   name: string;
-  subjectType: "role" | "department" | "user";
-  subjectId: string;
-  environments: Environment[];
-  tagExpression?: string;
-  resourceGroupIds?: string[];
-  resourceIds?: string[];
-  onlyOwned: boolean;
-  createdAt: ISODateString;
+  description?: string;
+  resource_types: DataScope["resource_types"];
+  explicit_resource_ids: string[];
+  label_selector?: DataScope["label_selector"];
+  status?: DataScope["status"];
+}
+
+export interface CreateServiceAccountInput {
+  name: string;
+  description?: string;
+  allowed_tool_ids?: string[];
+  data_scope_ids?: string[];
+}
+
+export interface CreateApiKeyInput {
+  name: string;
+  expires_at?: string;
 }
 
 export interface ApprovalPolicy {
@@ -119,32 +95,8 @@ export interface ApprovalPolicy {
   createdAt: ISODateString;
 }
 
-export interface ServiceAccount {
-  id: string;
-  enterpriseId: string;
-  name: string;
-  description?: string;
-  roleIds: string[];
-  status: "active" | "disabled";
-  lastUsedAt?: ISODateString;
-  createdAt: ISODateString;
-}
-
-export interface ApiKey {
-  id: string;
-  enterpriseId: string;
-  serviceAccountId: string;
-  name: string;
-  prefix: string;
-  scopes: string[];
-  status: "active" | "revoked";
-  expiresAt?: ISODateString;
-  lastUsedAt?: ISODateString;
-  createdAt: ISODateString;
-}
-
 export interface CreatedApiKey {
-  apiKey: ApiKey;
+  api_key: ApiKey;
   secret: string;
 }
 
@@ -154,19 +106,20 @@ export interface LoginInput {
 }
 
 export interface SessionInfo {
-  user: User;
-  membership: EnterpriseMembership | null;
+  session: Session;
+  user: PlatformUser | EnterpriseUser;
+  permissions: Permission[];
 }
 
 export interface InviteUserInput {
   username: string;
-  displayName: string;
+  display_name: string;
   email?: string;
   /** 邀请时创建企业范围 RoleBinding。 */
-  roleIds?: string[];
-  departmentId: string;
+  role_ids?: string[];
+  department_id: string;
 }
 
-export interface UpdateMembershipInput {
-  departmentId?: string;
+export interface UpdateEnterpriseUserInput {
+  department_id?: string;
 }

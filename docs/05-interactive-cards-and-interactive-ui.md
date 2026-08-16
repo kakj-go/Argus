@@ -70,6 +70,15 @@
 
 Card iframe 使用独立 Origin 或严格 `sandbox`，Host 根据 Manifest 生成最小 CSP。全局 `postMessage` 只允许完成一次带明确 `targetOrigin` 的握手，随后把 `MessagePort` 移交给 iframe；所有业务消息使用版本化 Schema、nonce、单调序号和大小限制。
 
+M1 的浏览器基座固定使用独立 Card Origin，并为 iframe 设置 `sandbox="allow-scripts allow-same-origin"`。这里的 `allow-same-origin` 只恢复 Card 自身独立 Origin，使精确 `targetOrigin` 握手可以投递；Card 与 Enterprise Host 仍然跨 Origin，不能读取宿主 DOM、Cookie 或存储。若去掉 `allow-same-origin`，sandbox 会把 iframe 变成 opaque origin，只能使用 `targetOrigin="*"`，与安全不变量冲突。
+
+Card 脚本只通过 `window.argusCard` 使用浏览器 Bridge：
+
+- `query(query_binding_id)` 和 `action(action_binding_id)` 返回 Promise；Runtime 只发送 Binding ID 与随机 Request ID，不接受任意参数对象。
+- `data`、`context` 提供当前最小数据和 `locale/color_scheme/design_tokens`；`onData`、`onContext` 订阅原地更新。
+- `resize()` 回报内容高度；Runtime 也通过 `ResizeObserver` 自动回报。
+- Binding 结果、数据、Context 和销毁只通过握手转移的 `MessagePort` 传输；Card 不获得 Port、Token、Tool 名称或宿主 API Client。
+
 浏览器和 iframe 只能获得解析后的数据、`query_binding_id` 或 `action_binding_id`。Secret、任意 Tool 名称、PendingAction 私有参数、Commit Token、`argus__token`、生产凭证和人工远程会话票据永不进入卡片或公开 DTO。
 
 ## 8. 测试要求

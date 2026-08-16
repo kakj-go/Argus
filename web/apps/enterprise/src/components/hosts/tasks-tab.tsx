@@ -2,13 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import {
-  useApi,
-  type AuditEvent,
-  type Host,
-  type Task,
-  type TaskStatus,
-} from "@argus/api-client";
+import { useApi, type AuditEvent, type Host } from "@argus/api-client";
+import type { TaskStatus, TaskViewModel } from "@argus/api-client/provisional";
 import {
   Badge,
   Button,
@@ -51,7 +46,7 @@ function taskTone(
 }
 
 /** 单个任务卡片：点击展开步骤 Timeline + LogViewer 日志。 */
-function TaskCard({ task }: { task: Task }) {
+function TaskCard({ task }: { task: TaskViewModel }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const running = LIVE_STATUSES.includes(task.status);
@@ -140,7 +135,7 @@ export function TasksTab({ host }: { host: Host }) {
   const { t } = useTranslation();
   const api = useApi();
   // 订阅推送的实时任务快照，覆盖列表查询结果。
-  const [liveTasks, setLiveTasks] = useState<Record<string, Task>>({});
+  const [liveTasks, setLiveTasks] = useState<Record<string, TaskViewModel>>({});
 
   const tasksQuery = useQuery({
     queryKey: ["tasks", "host", host.id],
@@ -226,7 +221,9 @@ export function TasksTab({ host }: { host: Host }) {
   return (
     <div className="argus-hosts-stack">
       <section className="argus-detail-section">
-        <h3 className="argus-detail-section__title">{t("hosts.tasks.title")}</h3>
+        <h3 className="argus-detail-section__title">
+          {t("hosts.tasks.title")}
+        </h3>
         {hostTasks.length > 0 ? (
           hostTasks.map((task) => <TaskCard key={task.id} task={task} />)
         ) : (
