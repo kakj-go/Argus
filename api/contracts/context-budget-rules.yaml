@@ -1,0 +1,9 @@
+version: argus.context_budget_rules/v1
+hard_input_limit_formula: context_window_tokens-reserved_output_tokens-safety_margin_tokens
+retention_unit: tokens
+cut_boundary: complete_event_group
+compaction_mode: incremental
+provider_compaction_authoritative: false
+oversized_latest_input_error: CONTEXT_INPUT_TOO_LARGE
+compaction_failure_error: CONTEXT_COMPACTION_FAILED
+charge_compaction_to_run: true

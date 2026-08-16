@@ -1,3 +1,13 @@
-# Protobuf
+# Protobuf contracts
 
-内部服务、Gateway 转发和 Connector 双向流的 protobuf 源文件放在此目录，使用 Buf 执行 lint、代码生成和 breaking-change 检查。
+This module owns internal RPC, Connector control streams, and trusted
+telemetry identity messages. Buf performs lint, code generation, and breaking
+checks.
+
+Go and gRPC plugins are pinned in `go.mod` and executed locally through
+`go tool`; normal generation does not depend on Buf Schema Registry plugin
+availability or rate limits.
+
+Connector and collector tenant identity is derived from mTLS credentials and
+server-side registration. Client hello messages intentionally do not contain
+an authoritative `enterprise_id`.

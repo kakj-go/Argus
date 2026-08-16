@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/v1/agent/agent-private.schema.json",
+  "$ref": "#/$defs/TaskRecord",
+  "$defs": {
+    "TaskRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "lease_owner", "lease_until", "fence_token", "idempotency_key", "payload_ref"],
+      "properties": {
+        "task_id": {"type": "string"},
+        "lease_owner": {"type": "string"},
+        "lease_until": {"type": "string", "format": "date-time"},
+        "fence_token": {"type": "integer", "minimum": 1},
+        "idempotency_key": {"type": "string", "minLength": 16, "maxLength": 128},
+        "not_before": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "payload_ref": {"type": "string"}
+      }
+    },
+    "ModelContextProjectionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "run_version", "projection_hash", "source_event_ids", "tool_catalog_hash", "created_at"],
+      "properties": {
+        "run_id": {"type": "string"},
+        "run_version": {"type": "integer", "minimum": 1},
+        "projection_hash": {"type": "string", "minLength": 32},
+        "source_event_ids": {"type": "array", "items": {"type": "string"}},
+        "context_snapshot_id": {"type": "string"},
+        "tool_catalog_hash": {"type": "string", "minLength": 32},
+        "created_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

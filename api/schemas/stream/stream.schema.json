@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/v1/stream/stream.schema.json",
+  "title": "StreamEventEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "sequence", "event_type", "occurred_at", "data"],
+  "properties": {
+    "schema_version": {"const": "argus.stream_event/v1"},
+    "event_id": {"type": "string", "minLength": 1},
+    "sequence": {"type": "integer", "minimum": 1},
+    "event_type": {"enum": ["agent_event", "task_event", "card_action_result", "authorization_invalidated", "stream_closing"]},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "authorization_version": {"type": "integer", "minimum": 1},
+    "resume_cursor": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "terminal": {"type": "boolean", "default": false},
+    "close_reason": {"enum": ["normal", "server_drain", "authorization_revoked", "session_expired", "protocol_error", "message_too_large", "resource_unavailable", "replaced_connection", "internal_error"]},
+    "data": {"$ref": "../common/public-json.schema.json#/$defs/PublicJsonObject"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"event_type": {"enum": ["authorization_invalidated", "stream_closing"]}}, "required": ["event_type"]},
+      "then": {"required": ["terminal", "close_reason"], "properties": {"terminal": {"const": true}}}
+    },
+    {
+      "if": {"properties": {"terminal": {"const": true}}, "required": ["terminal"]},
+      "then": {"required": ["close_reason"]}
+    },
+    {
+      "if": {"properties": {"terminal": {"const": false}}, "required": ["terminal"]},
+      "then": {"not": {"required": ["close_reason"]}}
+    }
+  ]
+}

@@ -4,7 +4,7 @@
 
 | 里程碑 | 文件 | 主要交付 |
 | --- | --- | --- |
-| M0 | [契约与文档](./M0-contract-and-documentation.md) | 身份、labels/DataScope、API、PendingAction、Card 契约 |
+| M0（已完成） | [契约与文档](./M0-contract-and-documentation.md) | 身份、labels/DataScope、API、PendingAction、Card、Agent/Stream/Telemetry 契约与生成门禁 |
 | M1 | [前端基础](./M1-frontend-foundation.md) | real/mock Adapter、UI/样式/i18n/认证/Card 前端整改 |
 | M2 | [初始化、身份与授权](./M2-bootstrap-identity-rbac.md) | Setup、平台/企业身份、Department、RoleBinding/DataScope、Session、审计 |
 | M3 | [资源与 Connector](./M3-resource-and-connector.md) | Host/Kubernetes labels、Secret/Credential、Bastion Scope、Connector、Direct Executor |

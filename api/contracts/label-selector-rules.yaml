@@ -1,0 +1,15 @@
+version: argus.label_selector_rules/v1
+user_key_pattern: '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+value_pattern: '^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$'
+system_key_prefix: argus.io/
+max_key_length: 63
+max_value_length: 63
+max_labels: 64
+max_labels_json_bytes: 4096
+max_requirements: 16
+max_values_per_in: 32
+max_total_values: 128
+operators: [eq, in, exists, not_exists]
+canonical_order: [key, operator, values]
+canonical_encoding: rfc8785_json_canonicalization_scheme
+hash_algorithm: sha256

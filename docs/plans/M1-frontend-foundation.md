@@ -6,11 +6,11 @@
 
 ## 前置条件
 
-- M0 的 OpenAPI、错误、PendingAction、Card 和流式契约已冻结。
+- M0 的 OpenAPI、JSON Schema、protobuf、错误、PendingAction、Card 和流式契约已冻结，`@argus/api-client/contracts` 可独立编译。
 
 ## 任务
 
-- [ ] `M1-API-01` 将 `@argus/api-client` 拆为生成契约、mock Adapter、HTTP Adapter、SSE Adapter、WebSocket Adapter。
+- [ ] `M1-API-01` 保留 M0 的 `@argus/api-client/contracts` 生成入口，将现有根接口拆为 mock Adapter、HTTP Adapter、SSE Adapter、WebSocket Adapter，并让所有 Adapter 消费同一生成契约。
 - [ ] `M1-API-02` 生产模式缺少真实 Adapter 时 fail closed，不再静默回退 mock。
 - [ ] `M1-CHAT-01` 使用 M0 生成契约替换手写 ChatMessage/ToolCallTrace，支持 Run、AgentEvent、稳定停止原因、可恢复 SSE 游标和 Context Compaction 状态展示。
 - [ ] `M1-ACTION-01` 从公开类型和 localStorage 数据删除 `PendingAction.params` 与所有私有 Token/计划字段。

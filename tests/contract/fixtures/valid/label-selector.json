@@ -1,0 +1,8 @@
+{
+  "schema_version": "argus.label_selector/v1",
+  "requirements": [
+    {"key": "environment", "operator": "eq", "values": ["staging"]},
+    {"key": "team", "operator": "in", "values": ["payments", "sre"]},
+    {"key": "argus.io/collector", "operator": "exists"}
+  ]
+}

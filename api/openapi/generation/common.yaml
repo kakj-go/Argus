@@ -1,0 +1,13 @@
+openapi: 3.1.0
+info: {title: Argus Common Contracts, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+paths: {}
+components:
+  schemas:
+    Locale: {$ref: ../components/common.yaml#/components/schemas/Locale}
+    RequestId: {$ref: ../components/common.yaml#/components/schemas/RequestId}
+    IdempotencyKey: {$ref: ../components/common.yaml#/components/schemas/IdempotencyKey}
+    ApiError: {$ref: ../components/common.yaml#/components/schemas/ApiError}
+    CursorPage: {$ref: ../components/common.yaml#/components/schemas/CursorPage}
+    BatchResult: {$ref: ../components/common.yaml#/components/schemas/BatchResult}
+    ResourceRef: {$ref: ../components/common.yaml#/components/schemas/ResourceRef}

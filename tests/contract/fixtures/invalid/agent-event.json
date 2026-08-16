@@ -1,0 +1,9 @@
+{
+  "schema_version": "argus.agent_event/v1",
+  "event_id": "agent_evt_01",
+  "sequence": 7,
+  "run_id": "run_01",
+  "event_type": "tool_call_completed",
+  "occurred_at": "2026-08-15T02:45:00Z",
+  "payload": {"result": {"token_hash": "must-not-pass"}}
+}

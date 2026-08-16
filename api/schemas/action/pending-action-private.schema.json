@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/v1/action/pending-action-private.schema.json",
+  "title": "PendingActionPrivateRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "action_ref", "enterprise_id", "creator_user_id", "authorization_version", "preview_call_id", "plan_record_id", "token_record_id", "status", "expires_at", "created_at", "updated_at"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "action_ref": {"type": "string", "minLength": 1},
+    "enterprise_id": {"type": "string", "minLength": 1},
+    "creator_user_id": {"type": "string", "minLength": 1},
+    "conversation_id": {"type": "string", "minLength": 1},
+    "authorization_version": {"type": "integer", "minimum": 1},
+    "resource_scope_snapshot_ref": {"type": "string", "minLength": 1},
+    "preview_call_id": {"type": "string", "minLength": 1},
+    "plan_record_id": {"type": "string", "minLength": 1},
+    "token_record_id": {"type": "string", "minLength": 1},
+    "risk": {"enum": ["write", "dangerous", "critical"]},
+    "policy_version": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["prepared", "awaiting_confirmation", "awaiting_approval", "ready", "executing", "succeeded", "failed", "result_unknown", "cancelled", "expired", "rejected", "invalidated"]},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  }
+}

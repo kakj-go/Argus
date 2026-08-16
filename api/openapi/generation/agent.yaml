@@ -1,0 +1,18 @@
+openapi: 3.1.0
+info: {title: Argus Agent Contracts, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+paths: {}
+components:
+  schemas:
+    ConversationEvent: {$ref: ../../schemas/agent/agent.schema.json#/$defs/ConversationEvent}
+    AgentEvent: {$ref: ../../schemas/agent/agent.schema.json#/$defs/AgentEvent}
+    RunCheckpoint: {$ref: ../../schemas/agent/agent.schema.json#/$defs/RunCheckpoint}
+    Run: {$ref: ../../schemas/agent/agent.schema.json#/$defs/Run}
+    Step: {$ref: ../../schemas/agent/agent.schema.json#/$defs/Step}
+    Task: {$ref: ../../schemas/agent/agent.schema.json#/$defs/Task}
+    ContextSnapshot: {$ref: ../../schemas/agent/agent.schema.json#/$defs/ContextSnapshot}
+    ToolResultProjection: {$ref: ../../schemas/agent/agent.schema.json#/$defs/ToolResultProjection}
+    ToolMetadata: {$ref: ../../schemas/agent/agent.schema.json#/$defs/ToolMetadata}
+    ModelCapabilities: {$ref: ../../schemas/agent/agent.schema.json#/$defs/ModelCapabilities}
+    ContextBudget: {$ref: ../../schemas/agent/agent.schema.json#/$defs/ContextBudget}
+    ModelCall: {$ref: ../../schemas/agent/agent.schema.json#/$defs/ModelCall}

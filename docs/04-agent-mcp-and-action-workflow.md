@@ -190,7 +190,7 @@ sequenceDiagram
 
     U->>A: 添加主机
     A->>P: 提交待验证参数
-    P->>S: 保存不可变计划和 Token 哈希
+    P->>S: 分别保存 PendingAction、不可变计划记录和加密 Token Record
     P-->>A: 仅公开 preview + action_ref + expires_at
     A->>R: 绑定预览数据和 Action Slot
     R-->>H: Card Instance
@@ -358,7 +358,7 @@ Commit Tool 不得出现在 Model Agent 的 Tool Registry 投影中。Tool Gatew
 
 ## 11. Pending Action、审批和执行状态
 
-Pending Action 表示不可变计划，User Confirmation 表示发起人确认，Approval Request 表示额外审批，Execution 表示实际执行，四者不能合并成一个布尔字段。
+Pending Action 表示操作生命周期并只引用不可变计划记录和私有 Token Record；不可变计划记录保存 Preview 冻结的执行参数和哈希，Token Record 独立保存加密的一次性能力及消费状态。User Confirmation 表示发起人确认，Approval Request 表示额外审批，Execution 表示实际执行，这些对象不能合并成一个布尔字段或一条混合私有记录。
 
 ```mermaid
 stateDiagram-v2

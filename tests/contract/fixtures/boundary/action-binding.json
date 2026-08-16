@@ -1,0 +1,6 @@
+{
+  "binding_id": "cab_boundary",
+  "action": "reject",
+  "expires_at": "2026-08-15T23:59:59Z",
+  "status": "invalidated"
+}

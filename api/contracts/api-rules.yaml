@@ -1,0 +1,17 @@
+version: argus.api_rules/v1
+json_field_case: snake_case
+rest_prefix: /api/v1
+cursor:
+  opaque_and_signed: true
+  binds: [enterprise_id, authorization_version, data_scope_hash, filter_hash, sort, expires_at]
+  client_constructible: false
+batch:
+  default_atomic: true
+  best_effort_requires_explicit_contract: true
+partial:
+  reasons: [authorization_filtered, budget_truncated, source_timeout, source_unavailable]
+  may_not_include_hidden_resource_names: true
+idempotency_key:
+  header: Idempotency-Key
+  min_length: 16
+  max_length: 128

@@ -1,0 +1,12 @@
+{
+  "schema_version": "argus.stream_event/v1",
+  "event_id": "evt_01",
+  "sequence": 9,
+  "event_type": "authorization_invalidated",
+  "occurred_at": "2026-08-15T01:45:00Z",
+  "authorization_version": 38,
+  "resume_cursor": "opaque-signed-cursor",
+  "terminal": true,
+  "close_reason": "authorization_revoked",
+  "data": {"reason_code": "AUTHORIZATION_VERSION_STALE"}
+}

@@ -1,0 +1,89 @@
+components:
+  schemas:
+    Locale:
+      type: string
+      enum: [zh-CN, en-US]
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [code, message_key, request_id]
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message: {type: string}
+        request_id: {$ref: "#/components/schemas/RequestId"}
+        trace_id: {type: string, minLength: 1}
+        retryable: {type: boolean, default: false}
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required: [partial, reasons]
+      properties:
+        partial: {type: boolean}
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [authorization_filtered, budget_truncated, source_timeout, source_unavailable]
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required: [next_cursor, has_more, partial]
+      properties:
+        next_cursor:
+          type: [string, "null"]
+        has_more: {type: boolean}
+        partial: {$ref: "#/components/schemas/PartialMetadata"}
+    BatchItemResult:
+      type: object
+      additionalProperties: false
+      required: [item_key, status]
+      properties:
+        item_key: {type: string, minLength: 1}
+        status: {type: string, enum: [succeeded, failed, skipped]}
+        resource_ref: {$ref: "#/components/schemas/ResourceRef"}
+        error: {$ref: "#/components/schemas/ApiError"}
+    BatchResult:
+      type: object
+      additionalProperties: false
+      required: [atomic, partial, items]
+      properties:
+        atomic:
+          type: boolean
+          description: True unless an operation explicitly documents best-effort semantics.
+        partial: {$ref: "#/components/schemas/PartialMetadata"}
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/BatchItemResult"}
+    ResourceRef:
+      type: object
+      additionalProperties: false
+      required: [resource_type, resource_id, version]
+      properties:
+        resource_type:
+          type: string
+          enum: [host, kubernetes_cluster, connector, managed_account, telemetry_query, artifact]
+        resource_id: {type: string, minLength: 1}
+        version: {type: integer, format: int64, minimum: 1}

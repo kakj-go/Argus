@@ -99,7 +99,7 @@ Card Host 在独立的 `host.context` 消息中传递 `locale`、解析后的 `t
 | --- | --- | --- |
 | 语言 | Go | 四个服务端程序、Connector 和 `argusctl` 使用同一工具链并固定 Go 版本 |
 | HTTP | `net/http` + `chi` | 保持传输层轻量，领域复杂度不放入 Web 框架 |
-| 外部 API | REST + OpenAPI 3.1 | 使用 `oapi-codegen` 生成服务端接口和前端客户端类型 |
+| 外部 API | REST + OpenAPI 3.1 | 使用 `oapi-codegen` 生成 Go 类型/接口，使用 `openapi-typescript` 生成 TypeScript 契约；前端 Adapter 在生成契约之上封装 |
 | 内部 RPC | gRPC + protobuf | 使用 Buf 管理 lint、生成和 breaking change；Connector 使用双向流 |
 | MCP | 官方 Go MCP SDK + Argus Tool Gateway | SDK 只处理协议；权限、私有 Token 分流和 Tool 投影由 Argus 实现 |
 | Agent Harness | Go 小内核，语义参考 Pi agent-core | Provider-neutral Message/Event、可插拔 ContextAssembler、顺序优先的 Tool Loop；不引入第二套 Workflow Runtime |

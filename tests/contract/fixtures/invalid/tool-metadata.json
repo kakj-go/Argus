@@ -1,0 +1,10 @@
+{
+  "tool_name": "host.create.commit",
+  "input_schema_version": "host.create.commit/v1",
+  "output_schema_version": "host.create.result/v1",
+  "risk": "write",
+  "agent_visibility": "visible",
+  "execution_mode": "parallel_safe",
+  "result_projection_schema": "host.create_projection/v1",
+  "required_permissions": ["host.create"]
+}

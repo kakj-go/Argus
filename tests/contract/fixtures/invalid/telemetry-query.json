@@ -1,0 +1,9 @@
+{
+  "schema_version": "argus.telemetry_query/v1",
+  "enterprise_id": "ent_fake",
+  "signal": "sql",
+  "resource_ids": [],
+  "time_range": {"from": "bad", "to": "bad"},
+  "field_projection": [],
+  "budget": {"max_rows": 0, "max_scan_bytes": 0, "timeout_ms": 1}
+}

@@ -1,0 +1,5 @@
+{
+  "atomic": true,
+  "partial": {"partial": false, "reasons": []},
+  "items": [{"item_key": "host_01", "status": "unknown"}]
+}

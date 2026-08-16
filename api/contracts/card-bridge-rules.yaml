@@ -1,0 +1,16 @@
+version: argus.card_bridge_rules/v1
+bridge_version: argus.card_bridge/v1
+handshake_transport: window_post_message
+business_transport: message_port
+require_exact_origin: true
+min_nonce_length: 16
+sequence_rule: strictly_increasing
+max_message_bytes: 1048576
+binding_only_invocations: [query.invoke, action.invoke]
+forbidden_payload_keys:
+  - argus__token
+  - secret
+  - credential
+  - private_param
+  - commit_tool
+  - remote_access_ticket

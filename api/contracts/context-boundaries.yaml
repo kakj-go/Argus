@@ -1,0 +1,28 @@
+version: argus.context_boundaries/v1
+groups:
+  tool_call:
+    starts_with: [tool_call_requested]
+    contains: [tool_call_started]
+    ends_with: [tool_call_result]
+  pending_action:
+    starts_with: [pending_action_created]
+    contains: [user_confirmation, approval_update]
+    ends_with: [execution_update]
+  execution:
+    starts_with: [execution_update]
+    contains: [execution_update]
+    ends_with: [execution_update]
+legal_cut_after:
+  - user_message
+  - assistant_message
+  - model_usage
+  - tool_call_result
+  - execution_update
+  - card_action_result
+  - run_state_changed
+  - context_compacted
+never_compact_active:
+  - latest_user_message
+  - incomplete_tool_call
+  - active_pending_action
+  - current_waiting_reason

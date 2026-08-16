@@ -1,0 +1,14 @@
+{
+  "schema_version": "argus.pending_action/v1",
+  "action_ref": "pa_boundary",
+  "title": "边界动作",
+  "summary": "结果仍需对账",
+  "risk": "critical",
+  "preview": {"result": {"state": "unknown"}},
+  "diff": [],
+  "status": "result_unknown",
+  "available_actions": [],
+  "expires_at": "2026-08-15T23:59:59Z",
+  "created_at": "2026-08-15T00:00:00Z",
+  "updated_at": "2026-08-15T23:59:59Z"
+}

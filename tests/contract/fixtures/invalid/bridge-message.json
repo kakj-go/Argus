@@ -1,0 +1,10 @@
+{
+  "bridge_version": "argus.card_bridge/v1",
+  "message_id": "msg_01",
+  "sequence": 3,
+  "nonce": "0123456789abcdef",
+  "type": "host.context",
+  "payload": {
+    "context": {"argus__token": "private-value"}
+  }
+}

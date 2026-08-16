@@ -1,0 +1,11 @@
+version: argus.stream_rules/v1
+sse:
+  event_id_field: id
+  event_type_field: event
+  payload_field: data
+  resume_header: Last-Event-ID
+  heartbeat_frame: comment
+  terminal_events: [authorization_invalidated, stream_closing]
+  stale_cursor_error_codes: [CURSOR_EXPIRED, STREAM_CURSOR_STALE, AUTHORIZATION_VERSION_STALE]
+websocket_and_grpc:
+  close_reasons: [normal, server_drain, authorization_revoked, session_expired, protocol_error, message_too_large, resource_unavailable, replaced_connection, internal_error]

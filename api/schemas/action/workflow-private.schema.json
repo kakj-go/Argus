@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/v1/action/workflow-private.schema.json",
+  "$ref": "#/$defs/ActionBindingRecord",
+  "$defs": {
+    "ActionBindingRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binding_id", "card_instance_id", "action_ref", "action", "enterprise_id", "user_id", "authorization_version", "request_id", "expires_at", "status", "created_at"],
+      "properties": {
+        "binding_id": {"type": "string"},
+        "card_instance_id": {"type": "string"},
+        "action_ref": {"type": "string"},
+        "action": {"enum": ["confirm", "cancel", "approve", "reject"]},
+        "enterprise_id": {"type": "string"},
+        "user_id": {"type": "string"},
+        "conversation_id": {"type": "string"},
+        "authorization_version": {"type": "integer", "minimum": 1},
+        "resource_scope_snapshot_ref": {"type": "string"},
+        "request_id": {"type": "string", "minLength": 16, "maxLength": 128},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "status": {"enum": ["pending", "consumed", "cancelled", "expired", "invalidated"]},
+        "created_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "ApprovalRequestRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval_request_id", "policy_id", "policy_version", "eligible_subject_refs"],
+      "properties": {
+        "approval_request_id": {"type": "string"},
+        "policy_id": {"type": "string"},
+        "policy_version": {"type": "integer", "minimum": 1},
+        "eligible_subject_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "ExecutionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution_id", "enterprise_id", "idempotency_key", "fence_token", "attempt"],
+      "properties": {
+        "execution_id": {"type": "string"},
+        "enterprise_id": {"type": "string"},
+        "idempotency_key": {"type": "string", "minLength": 16, "maxLength": 128},
+        "fence_token": {"type": "integer", "minimum": 1},
+        "attempt": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

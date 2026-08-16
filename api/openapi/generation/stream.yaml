@@ -1,0 +1,13 @@
+openapi: 3.1.0
+info: {title: Argus Stream Contracts, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security:
+  - sessionCookie: []
+paths:
+  /conversations/{conversation_id}/events:
+    $ref: ../argus.yaml#/paths/~1conversations~1{conversation_id}~1events
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    StreamEventEnvelope: {$ref: ../../schemas/stream/stream.schema.json}

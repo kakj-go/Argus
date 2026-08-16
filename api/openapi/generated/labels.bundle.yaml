@@ -1,0 +1,138 @@
+openapi: 3.1.0
+info:
+  title: Argus Label Contracts
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+paths: {}
+components:
+  schemas:
+    Labels:
+      type: object
+      maxProperties: 64
+      propertyNames:
+        anyOf:
+          - $ref: '#/components/schemas/UserLabelKey'
+          - $ref: '#/components/schemas/SystemLabelKey'
+      additionalProperties:
+        $ref: '#/components/schemas/LabelValue'
+    UserLabels:
+      type: object
+      maxProperties: 64
+      propertyNames:
+        $ref: '#/components/schemas/UserLabelKey'
+      additionalProperties:
+        $ref: '#/components/schemas/LabelValue'
+    LabelSet:
+      type: object
+      additionalProperties: false
+      required:
+        - labels
+        - labels_version
+      properties:
+        labels:
+          $ref: '#/components/schemas/Labels'
+        labels_version:
+          type: integer
+          minimum: 1
+    UserLabelUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - labels
+        - expected_labels_version
+      properties:
+        labels:
+          $ref: '#/components/schemas/UserLabels'
+        expected_labels_version:
+          type: integer
+          minimum: 1
+    LabelSelector:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - requirements
+      properties:
+        schema_version:
+          const: argus.label_selector/v1
+        requirements:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/LabelRequirement'
+    UserLabelKey:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+    SystemLabelKey:
+      type: string
+      maxLength: 72
+      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+      readOnly: true
+    LabelValue:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
+    LabelRequirement:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+            - values
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              const: eq
+            values:
+              type: array
+              minItems: 1
+              maxItems: 1
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/LabelValue'
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+            - values
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              const: in
+            values:
+              type: array
+              minItems: 1
+              maxItems: 32
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/LabelValue'
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              enum:
+                - exists
+                - not_exists

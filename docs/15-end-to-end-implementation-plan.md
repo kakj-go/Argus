@@ -122,7 +122,7 @@ M1 与 M2 可以在 M0 契约稳定后部分并行，但真实页面接入必须
 
 ### 6.2 前端
 
-- `@argus/api-client` 分为 contract、mock Adapter、HTTP Adapter、SSE Adapter 和 WebSocket Adapter。
+- `@argus/api-client` 的 `./contracts` 子路径由 `openapi-typescript` 生成；M1 再把根接口拆为 contract、mock Adapter、HTTP Adapter、SSE Adapter 和 WebSocket Adapter。
 - `@argus/ui` 是唯一通用组件库；业务应用不维护平行组件。
 - 样式类名统一 `.argus-*`，颜色/字号/间距/圆角只用 Design Token。
 - 每个业务模块维护独立 i18n 文件并在模块清单注册。
@@ -180,14 +180,12 @@ M8 结束时至少通过以下全链路场景：
 
 ## 9. 当前建议起点
 
-立即从 M0 开始，不先开发新的业务页面。第一批应冻结：
+截至 2026-08-16，M0 契约与文档冻结已经完成：OpenAPI、JSON Schema、protobuf、错误/状态注册表、PendingAction 三层私有存储边界、Go/TypeScript/Proto 生成、全量 DTO Fixture、安全投影、完整事件组切点和 Breaking Check 均已建立。
 
-- EnterpriseUser/Department/Session。
-- Host/Kubernetes `labels` 与标签选择器。
-- RoleBinding/DataScope/AuthorizationVersion。
-- API 错误、分页游标、SSE 事件和 WebSocket 握手。
-- PendingAction 公共/内部 DTO 与 ActionBinding。
-- Card Manifest、RenderPlan 和 Bridge 消息 Schema。
-- ConversationEvent、RunCheckpoint、ModelContextProjection、ContextSnapshot、ToolResultProjection 和 AgentEvent Schema。
+下一步从 M1 开始：
 
-M0 完成后，M1 清理前端架构欠账，M2 同时建立第一条真实 Setup → Platform → Enterprise 授权垂直闭环。这条路径是后续 Connector、Agent、Card、远程访问和遥测的共同根基。
+- 让现有 mock 和新增 HTTP/SSE/WebSocket Adapter 消费 `@argus/api-client/contracts`。
+- 删除 Project/Membership/tags、公开 PendingAction 私有参数和旧 Chat/Card 流式类型。
+- 完成组件、样式、i18n、认证边界和 Card Host 安全欠账。
+
+M1 完成后进入 M2，建立第一条真实 Setup → Platform → Enterprise 授权垂直闭环。这条路径是后续 Connector、Agent、Card、远程访问和遥测的共同根基。

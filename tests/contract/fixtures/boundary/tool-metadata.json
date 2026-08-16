@@ -1,0 +1,10 @@
+{
+  "tool_name": "host.list",
+  "input_schema_version": "host.list/v1",
+  "output_schema_version": "host.list.result/v1",
+  "risk": "read",
+  "agent_visibility": "visible",
+  "execution_mode": "parallel_safe",
+  "result_projection_schema": "host.list_projection/v1",
+  "required_permissions": ["host.read"]
+}

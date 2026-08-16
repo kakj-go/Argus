@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/v1/action/pending-action-public.schema.json",
+  "title": "PendingActionPublic",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "action_ref", "title", "summary", "risk", "preview", "diff", "status", "available_actions", "expires_at", "created_at", "updated_at"],
+  "properties": {
+    "schema_version": {"const": "argus.pending_action/v1"},
+    "action_ref": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1, "maxLength": 256},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "risk": {"enum": ["read", "write", "dangerous", "critical"]},
+    "preview": {"$ref": "../common/public-json.schema.json#/$defs/PublicJsonObject"},
+    "diff": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "text"],
+        "properties": {
+          "kind": {"enum": ["add", "remove", "change", "note"]},
+          "text": {"type": "string", "maxLength": 2048}
+        }
+      }
+    },
+    "status": {"enum": ["prepared", "awaiting_confirmation", "awaiting_approval", "ready", "executing", "succeeded", "failed", "result_unknown", "cancelled", "expired", "rejected", "invalidated"]},
+    "available_actions": {"type": "array", "uniqueItems": true, "items": {"enum": ["confirm", "cancel", "approve", "reject"]}},
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "minimum_approvers", "approved_count", "separation_of_duty"],
+      "properties": {
+        "required": {"type": "boolean"},
+        "policy_ref": {"type": "string"},
+        "minimum_approvers": {"type": "integer", "minimum": 0},
+        "approved_count": {"type": "integer", "minimum": 0},
+        "separation_of_duty": {"type": "boolean"}
+      }
+    },
+    "execution_ref": {"type": "string", "minLength": 1},
+    "result_summary": {"type": "string", "maxLength": 4096},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  }
+}

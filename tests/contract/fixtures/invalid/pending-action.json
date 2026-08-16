@@ -1,0 +1,14 @@
+{
+  "schema_version": "argus.pending_action/v1",
+  "action_ref": "pa_01",
+  "title": "创建主机",
+  "summary": "invalid private payload",
+  "risk": "write",
+  "preview": {"connection": {"token_hash": "must-not-pass"}},
+  "diff": [],
+  "status": "ready",
+  "available_actions": ["confirm"],
+  "expires_at": "2026-08-15T02:00:00Z",
+  "created_at": "2026-08-15T01:45:00Z",
+  "updated_at": "2026-08-15T01:45:00Z"
+}

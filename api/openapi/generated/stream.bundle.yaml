@@ -1,0 +1,207 @@
+openapi: 3.1.0
+info:
+  title: Argus Stream Contracts
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /conversations/{conversation_id}/events:
+    get:
+      operationId: streamConversationEvents
+      summary: Resume a conversation event stream.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+      responses:
+        '200':
+          description: SSE frames whose data field validates as StreamEventEnvelope.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '409':
+          description: Resume cursor is expired or bound to a stale authorization version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    StreamEventEnvelope:
+      $ref: '#/components/schemas/stream.schema'
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    stream.schema:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      $id: https://argus.io/schemas/v1/stream/stream.schema.json
+      title: StreamEventEnvelope
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - event_id
+        - sequence
+        - event_type
+        - occurred_at
+        - data
+      properties:
+        schema_version:
+          const: argus.stream_event/v1
+        event_id:
+          type: string
+          minLength: 1
+        sequence:
+          type: integer
+          minimum: 1
+        event_type:
+          enum:
+            - agent_event
+            - task_event
+            - card_action_result
+            - authorization_invalidated
+            - stream_closing
+        occurred_at:
+          type: string
+          format: date-time
+        authorization_version:
+          type: integer
+          minimum: 1
+        resume_cursor:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        terminal:
+          type: boolean
+          default: false
+        close_reason:
+          enum:
+            - normal
+            - server_drain
+            - authorization_revoked
+            - session_expired
+            - protocol_error
+            - message_too_large
+            - resource_unavailable
+            - replaced_connection
+            - internal_error
+        data:
+          $ref: '#/components/schemas/PublicJsonObject'
+      allOf:
+        - if:
+            properties:
+              event_type:
+                enum:
+                  - authorization_invalidated
+                  - stream_closing
+            required:
+              - event_type
+          then:
+            required:
+              - terminal
+              - close_reason
+            properties:
+              terminal:
+                const: true
+        - if:
+            properties:
+              terminal:
+                const: true
+            required:
+              - terminal
+          then:
+            required:
+              - close_reason
+        - if:
+            properties:
+              terminal:
+                const: false
+            required:
+              - terminal
+          then:
+            not:
+              required:
+                - close_reason
+  parameters:
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema:
+        $ref: '#/components/schemas/RequestId'

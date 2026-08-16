@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/v1/action/workflow.schema.json",
+  "$ref": "#/$defs/ActionBinding",
+  "$defs": {
+    "ApprovalDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision_id", "actor_user_id", "decision", "decided_at"],
+      "properties": {
+        "decision_id": {"type": "string"},
+        "actor_user_id": {"type": "string"},
+        "decision": {"enum": ["approved", "rejected"]},
+        "reason": {"type": "string", "maxLength": 4096},
+        "decided_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "ApprovalRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval_request_id", "action_ref", "minimum_approvers", "separation_of_duty", "decisions", "status", "expires_at", "created_at", "updated_at"],
+      "properties": {
+        "approval_request_id": {"type": "string"},
+        "action_ref": {"type": "string"},
+        "minimum_approvers": {"type": "integer", "minimum": 1},
+        "separation_of_duty": {"type": "boolean"},
+        "decisions": {"type": "array", "items": {"$ref": "#/$defs/ApprovalDecision"}},
+        "status": {"enum": ["pending", "approved", "rejected", "expired", "invalidated"]},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "ActionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binding_id", "action", "expires_at", "status"],
+      "properties": {
+        "binding_id": {"type": "string"},
+        "action": {"enum": ["confirm", "cancel", "approve", "reject"]},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "status": {"enum": ["pending", "consumed", "cancelled", "expired", "invalidated"]}
+      }
+    },
+    "Execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution_id", "action_ref", "status", "created_at", "updated_at"],
+      "properties": {
+        "execution_id": {"type": "string"},
+        "action_ref": {"type": "string"},
+        "status": {"enum": ["pending", "running", "succeeded", "failed", "result_unknown", "cancelled"]},
+        "result_ref": {"type": "string"},
+        "error_code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

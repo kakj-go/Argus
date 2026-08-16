@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/v1/action/pending-action-plan.schema.json",
+  "title": "PendingActionPlanRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "pending_action_id",
+    "enterprise_id",
+    "preview_call_id",
+    "commit_tool",
+    "authorization_version",
+    "plan_schema_version",
+    "plan_hash",
+    "immutable_plan",
+    "created_at"
+  ],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "pending_action_id": {"type": "string", "minLength": 1},
+    "enterprise_id": {"type": "string", "minLength": 1},
+    "preview_call_id": {"type": "string", "minLength": 1},
+    "commit_tool": {"type": "string", "pattern": "^[a-z][a-z0-9_.]+\\.commit$"},
+    "authorization_version": {"type": "integer", "minimum": 1},
+    "resource_scope_snapshot_ref": {"type": "string", "minLength": 1},
+    "plan_schema_version": {"type": "string", "minLength": 1},
+    "plan_hash": {"type": "string", "minLength": 32},
+    "immutable_plan": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Resolved private execution parameters frozen by the preview step."
+    },
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

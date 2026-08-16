@@ -1,0 +1,15 @@
+version: argus.action_rules/v1
+preview:
+  public_schema_version: argus.pending_action/v1
+  private_result_field: _meta.argus__token
+  minimum_token_entropy_bits: 256
+  persist_token_as: encrypted_reference_and_hash
+commit:
+  model_agent_visibility: hidden
+  allowed_callers: [action_executor]
+  accepted_business_fields: []
+  accepted_private_fields: [argus__token, execution_context]
+  execution_context_generated_by: action_executor
+idempotency:
+  binding_key: [binding_id, request_id]
+  execution_key: [action_ref, execution_id]

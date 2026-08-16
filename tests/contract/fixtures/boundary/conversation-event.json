@@ -1,0 +1,11 @@
+{
+  "schema_version": "argus.conversation_event/v1",
+  "event_id": "evt_boundary",
+  "sequence": 1,
+  "enterprise_id": "ent_01",
+  "conversation_id": "chat_01",
+  "event_type": "user_message",
+  "occurred_at": "2026-08-15T00:00:00Z",
+  "content_hash": "0123456789abcdef0123456789abcdef",
+  "payload": {}
+}

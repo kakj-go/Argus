@@ -1,0 +1,12 @@
+{
+  "schema_version": "argus.tool_result_projection/v1",
+  "tool_call_id": "call_01",
+  "projection_schema_version": "host.list_projection/v1",
+  "result_ref": "result_01",
+  "result_hash": "0123456789abcdef0123456789abcdef",
+  "summary": {"diagnostic": {"secret": "must-not-pass"}},
+  "resource_refs": [],
+  "partial": false,
+  "original_bytes": 100,
+  "projected_bytes": 50
+}

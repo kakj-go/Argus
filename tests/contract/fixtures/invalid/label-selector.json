@@ -1,0 +1,6 @@
+{
+  "schema_version": "argus.label_selector/v1",
+  "requirements": [
+    {"key": "Project Name", "operator": "eq", "values": ["支付平台"]}
+  ]
+}

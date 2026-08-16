@@ -1,0 +1,14 @@
+{
+  "schema_version": "argus.pending_action/v1",
+  "action_ref": "pa_01",
+  "title": "创建主机",
+  "summary": "创建 staging 主机 web-01",
+  "risk": "write",
+  "preview": {"name": "web-01", "labels": {"environment": "staging"}},
+  "diff": [{"kind": "add", "text": "host web-01"}],
+  "status": "awaiting_confirmation",
+  "available_actions": ["confirm", "cancel"],
+  "expires_at": "2026-08-15T02:00:00Z",
+  "created_at": "2026-08-15T01:45:00Z",
+  "updated_at": "2026-08-15T01:45:00Z"
+}

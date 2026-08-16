@@ -1,0 +1,14 @@
+{
+  "schema_version": "argus.tool_result_projection/v1",
+  "tool_call_id": "call_01",
+  "projection_schema_version": "host.list_projection/v1",
+  "result_ref": "result_01",
+  "result_hash": "0123456789abcdef0123456789abcdef",
+  "summary": {"total": 42, "sampled": 10},
+  "samples": [{"resource_id": "host_01", "status": "offline"}],
+  "resource_refs": [{"resource_type": "host", "resource_id": "host_01", "version": 3}],
+  "partial": true,
+  "partial_reasons": ["budget_truncated"],
+  "original_bytes": 400000,
+  "projected_bytes": 2400
+}

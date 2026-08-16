@@ -1,0 +1,48 @@
+name: Contracts
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - "docs/**"
+      - "internal/gen/**"
+      - "scripts/**"
+      - "tests/contract/**"
+      - "web/packages/api-client/**"
+      - ".github/workflows/contracts.yml"
+      - "Makefile"
+      - "go.mod"
+      - "go.sum"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: make contract-lint
+      - run: make contract-check
+      - run: make contract-breaking
+      - run: go test ./internal/gen/...
+      - run: pnpm --filter @argus/api-client typecheck

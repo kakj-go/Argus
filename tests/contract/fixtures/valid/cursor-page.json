@@ -1,0 +1,5 @@
+{
+  "next_cursor": "opaque-signed-cursor",
+  "has_more": true,
+  "partial": {"partial": true, "reasons": ["authorization_filtered"]}
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/v1/common/public-json.schema.json",
+  "$ref": "#/$defs/PublicJsonValue",
+  "$defs": {
+    "PublicJsonValue": {
+      "x-argus-typescript-type": "unknown",
+      "oneOf": [
+        {"type": "null"},
+        {"type": "boolean"},
+        {"type": "number"},
+        {"type": "string"},
+        {"type": "array", "items": {"$ref": "#/$defs/PublicJsonValue"}},
+        {"$ref": "#/$defs/PublicJsonObject"}
+      ]
+    },
+    "PublicJsonObject": {
+      "x-argus-typescript-type": "unknown",
+      "type": "object",
+      "propertyNames": {
+        "allOf": [
+          {"pattern": "^[a-z][a-z0-9_]*$"},
+          {"not": {"pattern": "(^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)"}}
+        ]
+      },
+      "additionalProperties": {"$ref": "#/$defs/PublicJsonValue"}
+    }
+  }
+}

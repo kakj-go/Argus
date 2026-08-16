@@ -1,0 +1,8 @@
+{
+  "bridge_version": "argus.card_bridge/v1",
+  "message_id": "msg_boundary",
+  "sequence": 0,
+  "nonce": "0123456789abcdef",
+  "type": "host.context",
+  "payload": {"locale": "zh-CN", "theme": {"color_scheme": "dark"}}
+}

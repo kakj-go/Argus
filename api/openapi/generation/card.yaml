@@ -1,0 +1,11 @@
+openapi: 3.1.0
+info: {title: Argus Card Contracts, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+paths: {}
+components:
+  schemas:
+    CardManifest: {$ref: ../../schemas/card/card.schema.json#/$defs/CardManifest}
+    DataBinding: {$ref: ../../schemas/card/card.schema.json#/$defs/DataBinding}
+    QueryBinding: {$ref: ../../schemas/card/card.schema.json#/$defs/QueryBinding}
+    RenderPlan: {$ref: ../../schemas/card/card.schema.json#/$defs/RenderPlan}
+    BridgeMessage: {$ref: ../../schemas/card/card.schema.json#/$defs/BridgeMessage}

@@ -1,0 +1,14 @@
+{
+  "schema_version": "argus.card_manifest/v1",
+  "card_id": "card_host_list",
+  "revision": 1,
+  "source": "system",
+  "entrypoint_hash": "0123456789abcdef0123456789abcdef",
+  "bridge_version": "argus.card_bridge/v1",
+  "slots": [{"name": "hosts", "kind": "data", "value_type": "array", "required": true}],
+  "allowed_resources": ["inline_style", "inline_script"],
+  "supported_locales": ["zh-CN", "en-US"],
+  "default_locale": "zh-CN",
+  "supported_color_schemes": ["light", "dark"],
+  "max_message_bytes": 65536
+}

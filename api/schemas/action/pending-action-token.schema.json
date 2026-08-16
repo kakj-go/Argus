@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argus.io/schemas/v1/action/pending-action-token.schema.json",
+  "title": "PendingActionTokenRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "pending_action_id",
+    "enterprise_id",
+    "token_hash",
+    "token_ciphertext_ref",
+    "status",
+    "expires_at",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "pending_action_id": {"type": "string", "minLength": 1},
+    "enterprise_id": {"type": "string", "minLength": 1},
+    "token_hash": {"type": "string", "minLength": 32},
+    "token_ciphertext_ref": {"type": "string", "minLength": 1},
+    "status": {"enum": ["active", "consumed", "revoked", "expired"]},
+    "consumed_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  }
+}

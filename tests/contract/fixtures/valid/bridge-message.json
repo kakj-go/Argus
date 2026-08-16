@@ -1,0 +1,11 @@
+{
+  "bridge_version": "argus.card_bridge/v1",
+  "message_id": "msg_01",
+  "sequence": 3,
+  "nonce": "0123456789abcdef",
+  "type": "action.invoke",
+  "payload": {
+    "action_binding_id": "cab_01",
+    "request_id": "request_00000001"
+  }
+}

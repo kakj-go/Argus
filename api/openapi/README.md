@@ -1,3 +1,20 @@
-# OpenAPI
+# OpenAPI contracts
 
-第一版外部 REST API 的 OpenAPI 3.1 源文件放在此目录。生成代码不是业务规则来源，HTTP Handler 必须调用 `internal` 中的领域服务。
+`argus.yaml` is the OpenAPI 3.1 entry point for browser and external HTTP
+contracts. Public JSON fields use `snake_case`, and the first version is served
+under `/api/v1`.
+
+The source is split by domain under `components/`. Runtime documents such as
+label selectors, pending actions, cards, agent events, and telemetry queries
+are owned by JSON Schema under `api/schemas` and referenced from OpenAPI.
+
+`generation/` contains reference-only manifests that partition the unified
+authority into common, identity, authorization, labels, action, card, agent,
+stream, and telemetry generated packages. They do not redefine DTO fields.
+
+Generated Go and TypeScript files are derived artifacts. Do not edit them or
+use them as the source of business rules.
+
+Dynamic public JSON is recursively validated by JSON Schema. The TypeScript
+generator intentionally maps it to `unknown`, so callers must narrow data only
+after the corresponding runtime schema has accepted it.

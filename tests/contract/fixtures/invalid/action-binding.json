@@ -1,0 +1,7 @@
+{
+  "binding_id": "cab_01",
+  "action": "commit",
+  "target_tool": "host.create.commit",
+  "expires_at": "2026-08-15T03:00:00Z",
+  "status": "pending"
+}

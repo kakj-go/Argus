@@ -1,0 +1,112 @@
+components:
+  schemas:
+    Enterprise:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, default_locale, created_at, updated_at]
+      properties:
+        id: {type: string, minLength: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        status: {type: string, enum: [active, suspended, disabled]}
+        default_locale: {type: string, enum: [zh-CN, en-US]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    PlatformUser:
+      type: object
+      additionalProperties: false
+      required: [id, username, display_name, role, status, mfa_enabled, created_at]
+      properties:
+        id: {type: string, minLength: 1}
+        username: {type: string, minLength: 1, maxLength: 128}
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        email: {type: string, format: email}
+        role: {type: string, const: platform_super_admin}
+        status: {type: string, enum: [active, disabled]}
+        mfa_enabled: {type: boolean}
+        created_at: {type: string, format: date-time}
+    EnterpriseUser:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, department_id, username, display_name, status, mfa_enabled, authorization_version, created_at, updated_at]
+      properties:
+        id: {type: string, minLength: 1}
+        enterprise_id: {type: string, minLength: 1}
+        department_id: {type: string, minLength: 1}
+        username: {type: string, minLength: 1, maxLength: 128}
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        email: {type: string, format: email}
+        status: {type: string, enum: [active, invited, disabled]}
+        mfa_enabled: {type: boolean}
+        authorization_version: {$ref: "./authorization.yaml#/components/schemas/AuthorizationVersion"}
+        last_login_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    Department:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, is_default, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, minLength: 1}
+        enterprise_id: {type: string, minLength: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        is_default: {type: boolean}
+        status: {type: string, enum: [active, disabled]}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    Session:
+      type: object
+      additionalProperties: false
+      required: [id, audience, user_id, locale, issued_at, expires_at]
+      properties:
+        id: {type: string, minLength: 1}
+        audience: {type: string, enum: [platform, enterprise]}
+        user_id: {type: string, minLength: 1}
+        enterprise_id: {type: string, minLength: 1}
+        department_id: {type: string, minLength: 1}
+        authorization_version: {$ref: "./authorization.yaml#/components/schemas/AuthorizationVersion"}
+        locale: {type: string, enum: [zh-CN, en-US]}
+        csrf_required: {type: boolean, default: true}
+        issued_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+      oneOf:
+        - properties:
+            audience: {const: platform}
+          not:
+            anyOf:
+              - required: [enterprise_id]
+              - required: [department_id]
+              - required: [authorization_version]
+        - properties:
+            audience: {const: enterprise}
+          required: [enterprise_id, department_id, authorization_version]
+    ServiceAccount:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, status, authorization_version, created_at, updated_at]
+      properties:
+        id: {type: string, minLength: 1}
+        enterprise_id: {type: string, minLength: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        status: {type: string, enum: [active, disabled]}
+        allowed_tool_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        data_scope_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        authorization_version: {$ref: "./authorization.yaml#/components/schemas/AuthorizationVersion"}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ApiKey:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, service_account_id, name, prefix, status, created_at]
+      properties:
+        id: {type: string, minLength: 1}
+        enterprise_id: {type: string, minLength: 1}
+        service_account_id: {type: string, minLength: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        prefix: {type: string, minLength: 4, maxLength: 32}
+        status: {type: string, enum: [active, revoked, expired]}
+        expires_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}

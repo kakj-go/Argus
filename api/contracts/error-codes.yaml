@@ -1,0 +1,22 @@
+version: argus.error_codes/v1
+codes:
+  INVALID_ARGUMENT: {http_status: 400, message_key: errors.common.invalid_argument, retryable: false}
+  AUTHENTICATION_REQUIRED: {http_status: 401, message_key: errors.auth.authentication_required, retryable: false}
+  AUTHORIZATION_DENIED: {http_status: 403, message_key: errors.auth.authorization_denied, retryable: false}
+  AUTHORIZATION_VERSION_STALE: {http_status: 409, message_key: errors.auth.authorization_version_stale, retryable: false}
+  CURSOR_INVALID: {http_status: 400, message_key: errors.pagination.cursor_invalid, retryable: false}
+  CURSOR_EXPIRED: {http_status: 409, message_key: errors.pagination.cursor_expired, retryable: true}
+  IDEMPOTENCY_CONFLICT: {http_status: 409, message_key: errors.common.idempotency_conflict, retryable: false}
+  LABEL_INVALID: {http_status: 422, message_key: errors.labels.invalid, retryable: false}
+  LABEL_RESERVED: {http_status: 403, message_key: errors.labels.reserved, retryable: false}
+  LABEL_LIMIT_EXCEEDED: {http_status: 422, message_key: errors.labels.limit_exceeded, retryable: false}
+  LABEL_SELECTOR_TOO_COMPLEX: {http_status: 422, message_key: errors.labels.selector_too_complex, retryable: false}
+  PENDING_ACTION_EXPIRED: {http_status: 409, message_key: errors.actions.pending_action_expired, retryable: false}
+  PENDING_ACTION_INVALIDATED: {http_status: 409, message_key: errors.actions.pending_action_invalidated, retryable: false}
+  ACTION_STATE_CONFLICT: {http_status: 409, message_key: errors.actions.state_conflict, retryable: true}
+  RESULT_UNKNOWN: {http_status: 202, message_key: errors.execution.result_unknown, retryable: true}
+  STREAM_CURSOR_STALE: {http_status: 409, message_key: errors.stream.cursor_stale, retryable: true}
+  STREAM_PROTOCOL_ERROR: {http_status: 400, message_key: errors.stream.protocol_error, retryable: false}
+  CONTEXT_INPUT_TOO_LARGE: {http_status: 422, message_key: errors.agent.context_input_too_large, retryable: false}
+  CONTEXT_COMPACTION_FAILED: {http_status: 503, message_key: errors.agent.context_compaction_failed, retryable: true}
+  CONTRACT_VERSION_UNSUPPORTED: {http_status: 400, message_key: errors.common.contract_version_unsupported, retryable: false}

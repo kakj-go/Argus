@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package argus.connector.v1;
+
+option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1;connectorv1";
+
+import "argus/common/v1/common.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+service ConnectorControlService {
+  rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+}
+
+message ConnectRequest {
+  uint64 sequence = 1;
+  oneof frame {
+    ConnectorHello hello = 2;
+    ConnectorHeartbeat heartbeat = 3;
+    CommandResult command_result = 4;
+    ClientAcknowledge acknowledge = 5;
+    RemoteAccessData remote_access_data = 6;
+  }
+}
+
+message ConnectResponse {
+  uint64 sequence = 1;
+  oneof frame {
+    ConnectorWelcome welcome = 2;
+    ConnectorCommand command = 3;
+    ServerAcknowledge acknowledge = 4;
+    RemoteAccessOpen remote_access_open = 5;
+    RemoteAccessData remote_access_data = 6;
+    RemoteAccessClose remote_access_close = 7;
+    argus.common.v1.StreamClose close = 8;
+  }
+}
+
+message ConnectorHello {
+  string protocol_version = 1;
+  string instance_id = 2;
+  string software_version = 3;
+  repeated string capabilities = 4;
+  uint64 last_acknowledged_server_sequence = 5;
+  bytes client_nonce = 6;
+}
+
+message ConnectorWelcome {
+  string protocol_version = 1;
+  uint64 connection_epoch = 2;
+  google.protobuf.Timestamp server_time = 3;
+  google.protobuf.Duration heartbeat_interval = 4;
+  uint32 max_message_bytes = 5;
+  uint32 max_inflight_commands = 6;
+  bytes server_nonce = 7;
+}
+
+message ConnectorHeartbeat {
+  uint64 connection_epoch = 1;
+  google.protobuf.Timestamp sent_at = 2;
+  uint32 active_commands = 3;
+  uint32 active_remote_access_streams = 4;
+}
+
+message ConnectorCommand {
+  string command_id = 1;
+  uint64 connection_epoch = 2;
+  string command_type = 3;
+  bytes payload = 4;
+  string payload_hash = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  string idempotency_key = 7;
+}
+
+message CommandResult {
+  string command_id = 1;
+  uint64 connection_epoch = 2;
+  string status = 3;
+  bytes result = 4;
+  string result_hash = 5;
+  argus.common.v1.ErrorStatus error = 6;
+}
+
+message ClientAcknowledge {
+  uint64 server_sequence = 1;
+}
+
+message ServerAcknowledge {
+  uint64 client_sequence = 1;
+}
+
+message RemoteAccessOpen {
+  string stream_id = 1;
+  string session_id = 2;
+  string managed_account_id = 3;
+  string protocol = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  uint32 max_frame_bytes = 6;
+}
+
+message RemoteAccessData {
+  string stream_id = 1;
+  uint64 stream_sequence = 2;
+  bytes data = 3;
+  bool end_of_stream = 4;
+}
+
+message RemoteAccessClose {
+  string stream_id = 1;
+  argus.common.v1.StreamClose close = 2;
+}

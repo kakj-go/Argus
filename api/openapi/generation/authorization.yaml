@@ -1,0 +1,12 @@
+openapi: 3.1.0
+info: {title: Argus Authorization Contracts, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+paths: {}
+components:
+  schemas:
+    Permission: {$ref: ../components/authorization.yaml#/components/schemas/Permission}
+    AuthorizationVersion: {$ref: ../components/authorization.yaml#/components/schemas/AuthorizationVersion}
+    Role: {$ref: ../components/authorization.yaml#/components/schemas/Role}
+    RoleBinding: {$ref: ../components/authorization.yaml#/components/schemas/RoleBinding}
+    DataScope: {$ref: ../components/authorization.yaml#/components/schemas/DataScope}
+    AuthorizationDecision: {$ref: ../components/authorization.yaml#/components/schemas/AuthorizationDecision}

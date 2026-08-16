@@ -1,0 +1,10 @@
+openapi: 3.1.0
+info: {title: Argus Action Contracts, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+paths: {}
+components:
+  schemas:
+    PendingActionPublic: {$ref: ../../schemas/action/pending-action-public.schema.json}
+    ActionBinding: {$ref: ../../schemas/action/workflow.schema.json#/$defs/ActionBinding}
+    ApprovalRequest: {$ref: ../../schemas/action/workflow.schema.json#/$defs/ApprovalRequest}
+    Execution: {$ref: ../../schemas/action/workflow.schema.json#/$defs/Execution}

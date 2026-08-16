@@ -1,0 +1,14 @@
+{
+  "schema_version": "argus.card_manifest/v1",
+  "card_id": "card_host_list",
+  "revision": 0,
+  "source": "personal",
+  "entrypoint_hash": "short",
+  "bridge_version": "v0",
+  "slots": [],
+  "allowed_resources": ["network"],
+  "supported_locales": ["zh-CN"],
+  "default_locale": "zh-CN",
+  "supported_color_schemes": ["light"],
+  "max_message_bytes": 2
+}

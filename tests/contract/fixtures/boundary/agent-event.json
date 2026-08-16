@@ -1,0 +1,9 @@
+{
+  "schema_version": "argus.agent_event/v1",
+  "event_id": "agent_evt_boundary",
+  "sequence": 1,
+  "run_id": "run_01",
+  "event_type": "run_started",
+  "occurred_at": "2026-08-15T00:00:00Z",
+  "payload": {}
+}

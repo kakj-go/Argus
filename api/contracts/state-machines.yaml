@@ -1,0 +1,43 @@
+version: argus.state_machines/v1
+machines:
+  pending_action_token:
+    initial: active
+    terminal: [consumed, revoked, expired]
+    transitions:
+      active: [consumed, revoked, expired]
+      consumed: []
+      revoked: []
+      expired: []
+  pending_action:
+    initial: prepared
+    terminal: [succeeded, failed, cancelled, expired, rejected, invalidated]
+    transitions:
+      prepared: [awaiting_confirmation]
+      awaiting_confirmation: [awaiting_approval, ready, cancelled, expired, invalidated]
+      awaiting_approval: [ready, rejected, cancelled, expired, invalidated]
+      ready: [executing, cancelled, expired, invalidated]
+      executing: [succeeded, failed, result_unknown]
+      result_unknown: [succeeded, failed]
+  action_binding:
+    initial: pending
+    terminal: [consumed, cancelled, expired, invalidated]
+    transitions:
+      pending: [consumed, cancelled, expired, invalidated]
+  approval_request:
+    initial: pending
+    terminal: [approved, rejected, expired, invalidated]
+    transitions:
+      pending: [approved, rejected, expired, invalidated]
+  execution:
+    initial: pending
+    terminal: [succeeded, failed, cancelled]
+    transitions:
+      pending: [running, cancelled]
+      running: [succeeded, failed, result_unknown, cancelled]
+      result_unknown: [succeeded, failed]
+  context_snapshot:
+    initial: pending
+    terminal: [failed, superseded]
+    transitions:
+      pending: [active, failed]
+      active: [superseded]

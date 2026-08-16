@@ -1,0 +1,72 @@
+components:
+  schemas:
+    Permission:
+      type: string
+      pattern: "^[a-z][a-z0-9_.]+$"
+    AuthorizationVersion:
+      type: integer
+      format: int64
+      minimum: 1
+    Role:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, builtin, permissions, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, minLength: 1}
+        enterprise_id: {type: string, minLength: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        builtin: {type: boolean}
+        permissions: {type: array, uniqueItems: true, items: {$ref: "#/components/schemas/Permission"}}
+        status: {type: string, enum: [active, disabled]}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RoleBinding:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, subject_type, subject_id, role_id, data_scope_ids, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, minLength: 1}
+        enterprise_id: {type: string, minLength: 1}
+        subject_type: {type: string, enum: [user, department, service_account]}
+        subject_id: {type: string, minLength: 1}
+        role_id: {type: string, minLength: 1}
+        data_scope_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        valid_from: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+        status: {type: string, enum: [active, disabled]}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DataScope:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, resource_types, explicit_resource_ids, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, minLength: 1}
+        enterprise_id: {type: string, minLength: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        resource_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, enum: [host, kubernetes_cluster]}
+        explicit_resource_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        label_selector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}
+        status: {type: string, enum: [active, disabled]}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AuthorizationDecision:
+      type: object
+      additionalProperties: false
+      required: [decision, reason_code, obligations, authorization_version, matched_data_scope_ids]
+      properties:
+        decision: {type: string, enum: [ALLOW, DENY, REQUIRE_MFA, REQUIRE_APPROVAL]}
+        reason_code: {type: string, pattern: "^[A-Z][A-Z0-9_]*$"}
+        obligations: {type: array, uniqueItems: true, items: {type: string, enum: [step_up_mfa, approval, audit_high_priority, session_recording]}}
+        authorization_version: {$ref: "#/components/schemas/AuthorizationVersion"}
+        policy_version: {type: integer, format: int64, minimum: 1}
+        matched_data_scope_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}

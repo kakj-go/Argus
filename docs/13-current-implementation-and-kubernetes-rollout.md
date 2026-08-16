@@ -35,18 +35,18 @@
 
 ### 3.1 总体结论
 
-当前仓库是“前端产品原型较完整、后端业务仍处于骨架阶段、Evaluation 部署基座已经可安装”的状态：
+截至 2026-08-15，当前仓库是“前端产品原型较完整、M0 契约已冻结、后端业务仍处于骨架阶段、Evaluation 部署基座已经可安装”的状态：
 
 | 范围 | 当前状态 | 可交付程度 |
 | --- | --- | --- |
 | 企业门户 | 页面、路由、i18n、共享 UI、mock 领域和 Playwright E2E 已存在 | 可进行前端产品流程验证 |
 | 平台门户 | 页面、路由、i18n、Sandbox/企业/管理员管理 mock 已存在 | 可进行前端产品流程验证 |
 | 初始化门户 | 初始化向导、校验、i18n 和 mock 状态机已存在 | 可进行前端产品流程验证 |
-| API Client | 已有覆盖当前原型的手写领域接口和类型，当前只有 localStorage mock 实现 | 不是冻结契约，尚不能连接真实后端 |
+| API Client | 已有覆盖当前原型的手写领域接口和 localStorage mock；M0 已新增独立的 `@argus/api-client/contracts` 生成契约 | 现有根接口尚未迁移，真实 Adapter 仍待 M1 |
 | `argus-server` | 可启动 HTTP Server，已有 `/healthz`、`/readyz` 和语言协商 | 仅服务骨架 |
 | Worker/Gateway/Telemetry/Connector | 进程入口和生命周期骨架已存在 | 尚无领域行为、Agent Loop 和协议实现 |
 | `argusctl` | 已实现 preflight、plan、镜像、install、status、verify、tunnel、uninstall | 可安装和验证 Evaluation；Production 安装硬阻断 |
-| OpenAPI/protobuf/migration | OpenAPI/protobuf 仍为目录骨架；已有最小 PostgreSQL/ClickHouse Migration | 只初始化版本和安装检查表，不代表业务 Schema 完成 |
+| OpenAPI/protobuf/migration | M0 OpenAPI、JSON Schema、protobuf、错误/状态注册表、Go/TypeScript/Proto 生成和 Breaking Check 已完成；已有最小 PostgreSQL/ClickHouse Migration | 契约可供实现使用，但数据库与领域服务仍未落地 |
 | Kubernetes 交付物 | 三个 Dockerfile、六个 Chart、Profile、Schema、版本锁和本地 Registry Loader 已存在 | 可部署完整 Evaluation 基座 |
 
 因此，现阶段可以声明“完整依赖和运行角色可部署”，但不能把前端 mock 流程、后端进程健康和“业务后端已完成”视为同一完成度。
@@ -59,7 +59,7 @@
 | `web/apps/platform` | 平台超级管理员域 | 平台概览、企业、平台管理员、Sandbox、审计、账号 |
 | `web/apps/enterprise` | 企业业务域 | Chatbox、主机、Kubernetes、任务、审批、组织权限、模型、Card、Secret、审计 |
 
-三个应用当前都通过 `VITE_API_MODE` 选择 API 模式，但除 `mock` 外的值会回退到 mock。生产接入前必须补齐真实 HTTP/SSE/WebSocket 客户端，并让 OpenAPI 生成类型逐步替代手写传输契约。
+三个应用当前都通过 `VITE_API_MODE` 选择 API 模式，但除 `mock` 外的值会回退到 mock。M0 已提供 `@argus/api-client/contracts`；M1 必须补齐真实 HTTP/SSE/WebSocket Adapter，并让现有 mock 与真实 Adapter 共同消费生成契约。
 
 共享包目录已经按目标边界建立，但实现仍存在一致性欠账，不能视为边界已经完全收敛：
 
@@ -76,7 +76,7 @@
 
 当前前端还存在必须在真实业务开发前处理的偏差：公开 `PendingAction.params` 暴露了本应仅服务端保存的私有参数；Card Runtime 仍使用全局 `postMessage('*')` 而非 MessagePort/CSP；认证状态持久化在 localStorage；Enterprise 页面级样式文件接近 2000 行并存在 `.argus-*`、Design Token 和组件边界不一致；Setup 登录跳转仍是占位行为，Setup 构建存在约 557 KB Chunk 警告。现有 `typecheck/lint/test/build/e2e` 通过只能说明当前原型自洽，不代表这些架构门禁已经满足。
 
-Agent 相关当前也只有目录骨架和前端 mock 流事件：尚无持久化 ConversationEvent、Run/Step、ModelCall、ToolCall/ToolResult、Agent Loop、ContextAssembler、ToolResultProjection 或 ContextSnapshot。前端 mock 仍直接生成回复和 Tool Trace，不能作为真实 Harness、恢复或上下文压缩实现。目标契约见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
+Agent 运行时当前仍只有目录骨架和前端 mock 流事件：M0 已冻结 ConversationEvent、Run/Step/Task、ModelCall、ToolResultProjection、ContextSnapshot、Tool Metadata 和上下文预算契约，但尚无持久化、Agent Loop、ContextAssembler 或 Compactor 实现。前端 mock 仍直接生成回复和 Tool Trace，不能作为真实 Harness、恢复或上下文压缩实现。目标实现见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
 
 ### 3.3 后端程序与运行角色
 
@@ -321,49 +321,17 @@ argus-e2e-<run-id>-observability
 
 ## 11. 实施路线
 
-### 11.1 M0：冻结交付契约
+里程碑唯一口径为[端到端实现计划](./15-end-to-end-implementation-plan.md)和[分阶段任务文件](./plans/README.md)，不在本盘点文档维护另一套编号。
 
-- 完成 PostgreSQL 和 Sandbox Runtime ADR。
-- 建立 `ArgusInstallConfig` JSON Schema 和版本锁定清单。
-- 固化前端 Host/API 路由、OpenAPI、protobuf、错误模型和健康检查契约。
-
-### 11.2 M1：可运行的 Evaluation 基座
-
-- 构建 `argus-backend`、`argus-web` 和必要的 Writer 镜像。
-- 实现 Foundation、Operator、Data 和 Platform Helm Release。
-- 实现 `argusctl plan/install/status/uninstall` 的幂等阶段框架。
-- 先让现有服务骨架、健康检查和静态前端在临时 Namespace 可验证。
-
-### 11.3 M2：控制面闭环
-
-- 落地 PostgreSQL Migration、Session、Setup Token、平台/企业身份、Department、RoleBinding/DataScope 和 AuthorizationVersion。
-- 实现真实 `@argus/api-client` HTTP/SSE 客户端。
-- 将 setup、platform、enterprise 核心流程从 mock 切到真实 API。
-
-### 11.4 M3：执行与连接闭环
-
-- 实现 Worker Lease/Fence/Outbox、Pending Action 和审批。
-- 实现 Provider-neutral 单 Agent Loop、不可变 ConversationEvent、Typed RunCheckpoint、ToolResultProjection 和可恢复 ContextSnapshot。
-- 实现 Connector mTLS、Gateway Registry、Bastion Scope、Host 和 Direct Executor 固定出口。
-- 完成人工 Remote Access 与自动化 Execution 的票据、队列和审计隔离。
-
-### 11.5 M4：遥测闭环
-
-- 实现 Ingest 认证、Kafka Topic/ACL、Writer、ClickHouse Schema 和 Query 强制授权。
-- 完成 Collector Distribution/Profile、Artifact Tunnel、Node/Host Binding 和 Collection Claim。
-- 将 Metrics/Logs/Traces 测试加入 `argusctl verify` 和临时 Namespace E2E。
-
-### 11.6 M5：Production 门禁
-
-- 补齐 HA、PDB/HPA、Topology Spread、备份恢复、Operator 升级和灾难演练。
-- 验证 Redis 清空、Pod 删除、Gateway Drain、Writer Rebalance、Kafka 积压和 ClickHouse Replica 故障。
-- 发布 Production Profile 前完成容量基线、安全扫描、镜像签名和全链路 E2E。
+- M0 契约与文档冻结已完成，首次合并后成为后续 Breaking Check 基线。
+- 下一步执行 M1 前端与 API 基座，把手写 DTO/Mock 迁移到生成契约并建立真实 Adapter 边界。
+- M2 交付 Setup → Platform → Enterprise 身份授权垂直闭环；后续按 M3-M8 依次推进资源连接、Agent/Action、Card、远程访问、遥测和 Production 门禁。
 
 ## 12. 当前优先级结论
 
-当前最合理的第一交付目标是在现有可重复安装的 Evaluation 基座上完成“真实控制面垂直闭环”：
+M0 已完成。当前最合理的下一交付目标是在现有可重复安装的 Evaluation 基座上完成“前端/API 基座 → 真实控制面垂直闭环”：
 
-1. 冻结身份、标签/DataScope、错误、流式、PendingAction 和 Card 契约。
+1. 按 M1 清理 Project/Membership/tags/PendingAction 私有字段等旧前端契约，建立显式 mock/real Adapter。
 2. 以初始化、平台/企业身份、Department、RoleBinding/DataScope、Session 和审计替换第一批 mock。
 3. 用真实 HTTP 客户端跑通三个门户，并在临时命名空间验证跨企业和范围外资源拒绝。
 4. 再进入 Connector、执行、Card、Remote Access 和 Telemetry 的分阶段闭环。

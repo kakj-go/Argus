@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package argus.common.v1;
+
+option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/common/v1;commonv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+enum CloseReason {
+  CLOSE_REASON_UNSPECIFIED = 0;
+  CLOSE_REASON_NORMAL = 1;
+  CLOSE_REASON_SERVER_DRAIN = 2;
+  CLOSE_REASON_AUTHORIZATION_REVOKED = 3;
+  CLOSE_REASON_SESSION_EXPIRED = 4;
+  CLOSE_REASON_PROTOCOL_ERROR = 5;
+  CLOSE_REASON_MESSAGE_TOO_LARGE = 6;
+  CLOSE_REASON_RESOURCE_UNAVAILABLE = 7;
+  CLOSE_REASON_REPLACED_CONNECTION = 8;
+  CLOSE_REASON_INTERNAL_ERROR = 9;
+}
+
+message ResourceRef {
+  string resource_type = 1;
+  string resource_id = 2;
+  int64 version = 3;
+}
+
+message ErrorStatus {
+  string code = 1;
+  string message_key = 2;
+  google.protobuf.Struct params = 3;
+  bool retryable = 4;
+}
+
+message StreamClose {
+  CloseReason reason = 1;
+  ErrorStatus error = 2;
+  google.protobuf.Timestamp retry_after = 3;
+}

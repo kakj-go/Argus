@@ -1,0 +1,11 @@
+openapi: 3.1.0
+info: {title: Argus Label Contracts, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+paths: {}
+components:
+  schemas:
+    Labels: {$ref: ../../schemas/labels/labels.schema.json#/$defs/Labels}
+    UserLabels: {$ref: ../../schemas/labels/labels.schema.json#/$defs/UserLabels}
+    LabelSet: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSet}
+    UserLabelUpdate: {$ref: ../../schemas/labels/labels.schema.json#/$defs/UserLabelUpdate}
+    LabelSelector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}

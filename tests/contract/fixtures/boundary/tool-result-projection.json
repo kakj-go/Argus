@@ -1,0 +1,13 @@
+{
+  "schema_version": "argus.tool_result_projection/v1",
+  "tool_call_id": "call_boundary",
+  "projection_schema_version": "empty/v1",
+  "result_ref": "result_boundary",
+  "result_hash": "0123456789abcdef0123456789abcdef",
+  "summary": {},
+  "samples": [],
+  "resource_refs": [],
+  "partial": false,
+  "original_bytes": 0,
+  "projected_bytes": 0
+}

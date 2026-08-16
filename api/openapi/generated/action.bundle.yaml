@@ -1,0 +1,280 @@
+openapi: 3.1.0
+info:
+  title: Argus Action Contracts
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+paths: {}
+components:
+  schemas:
+    PendingActionPublic:
+      $ref: '#/components/schemas/pending-action-public.schema'
+    ActionBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - binding_id
+        - action
+        - expires_at
+        - status
+      properties:
+        binding_id:
+          type: string
+        action:
+          enum:
+            - confirm
+            - cancel
+            - approve
+            - reject
+        expires_at:
+          type: string
+          format: date-time
+        status:
+          enum:
+            - pending
+            - consumed
+            - cancelled
+            - expired
+            - invalidated
+    ApprovalRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - approval_request_id
+        - action_ref
+        - minimum_approvers
+        - separation_of_duty
+        - decisions
+        - status
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        approval_request_id:
+          type: string
+        action_ref:
+          type: string
+        minimum_approvers:
+          type: integer
+          minimum: 1
+        separation_of_duty:
+          type: boolean
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalDecision'
+        status:
+          enum:
+            - pending
+            - approved
+            - rejected
+            - expired
+            - invalidated
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Execution:
+      type: object
+      additionalProperties: false
+      required:
+        - execution_id
+        - action_ref
+        - status
+        - created_at
+        - updated_at
+      properties:
+        execution_id:
+          type: string
+        action_ref:
+          type: string
+        status:
+          enum:
+            - pending
+            - running
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+        result_ref:
+          type: string
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    pending-action-public.schema:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      $id: https://argus.io/schemas/v1/action/pending-action-public.schema.json
+      title: PendingActionPublic
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - action_ref
+        - title
+        - summary
+        - risk
+        - preview
+        - diff
+        - status
+        - available_actions
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        schema_version:
+          const: argus.pending_action/v1
+        action_ref:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        risk:
+          enum:
+            - read
+            - write
+            - dangerous
+            - critical
+        preview:
+          $ref: '#/components/schemas/PublicJsonObject'
+        diff:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - kind
+              - text
+            properties:
+              kind:
+                enum:
+                  - add
+                  - remove
+                  - change
+                  - note
+              text:
+                type: string
+                maxLength: 2048
+        status:
+          enum:
+            - prepared
+            - awaiting_confirmation
+            - awaiting_approval
+            - ready
+            - executing
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+            - expired
+            - rejected
+            - invalidated
+        available_actions:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - confirm
+              - cancel
+              - approve
+              - reject
+        approval:
+          type: object
+          additionalProperties: false
+          required:
+            - required
+            - minimum_approvers
+            - approved_count
+            - separation_of_duty
+          properties:
+            required:
+              type: boolean
+            policy_ref:
+              type: string
+            minimum_approvers:
+              type: integer
+              minimum: 0
+            approved_count:
+              type: integer
+              minimum: 0
+            separation_of_duty:
+              type: boolean
+        execution_ref:
+          type: string
+          minLength: 1
+        result_summary:
+          type: string
+          maxLength: 4096
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ApprovalDecision:
+      type: object
+      additionalProperties: false
+      required:
+        - decision_id
+        - actor_user_id
+        - decision
+        - decided_at
+      properties:
+        decision_id:
+          type: string
+        actor_user_id:
+          type: string
+        decision:
+          enum:
+            - approved
+            - rejected
+        reason:
+          type: string
+          maxLength: 4096
+        decided_at:
+          type: string
+          format: date-time

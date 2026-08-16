@@ -1,0 +1,156 @@
+openapi: 3.1.0
+info:
+  title: Argus Control Plane Contract
+  version: 1.0.0
+  description: Shared v1 DTO and stream contracts frozen by milestone M0.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /conversations/{conversation_id}/events:
+    get:
+      operationId: streamConversationEvents
+      summary: Resume a conversation event stream.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+      responses:
+        "200":
+          description: SSE frames whose data field validates as StreamEventEnvelope.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "409":
+          description: Resume cursor is expired or bound to a stale authorization version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    Locale:
+      $ref: ./components/common.yaml#/components/schemas/Locale
+    RequestId:
+      $ref: ./components/common.yaml#/components/schemas/RequestId
+    IdempotencyKey:
+      $ref: ./components/common.yaml#/components/schemas/IdempotencyKey
+    ApiError:
+      $ref: ./components/common.yaml#/components/schemas/ApiError
+    CursorPage:
+      $ref: ./components/common.yaml#/components/schemas/CursorPage
+    BatchResult:
+      $ref: ./components/common.yaml#/components/schemas/BatchResult
+    ResourceRef:
+      $ref: ./components/common.yaml#/components/schemas/ResourceRef
+    Enterprise:
+      $ref: ./components/identity.yaml#/components/schemas/Enterprise
+    PlatformUser:
+      $ref: ./components/identity.yaml#/components/schemas/PlatformUser
+    EnterpriseUser:
+      $ref: ./components/identity.yaml#/components/schemas/EnterpriseUser
+    Department:
+      $ref: ./components/identity.yaml#/components/schemas/Department
+    Session:
+      $ref: ./components/identity.yaml#/components/schemas/Session
+    ServiceAccount:
+      $ref: ./components/identity.yaml#/components/schemas/ServiceAccount
+    ApiKey:
+      $ref: ./components/identity.yaml#/components/schemas/ApiKey
+    Role:
+      $ref: ./components/authorization.yaml#/components/schemas/Role
+    Permission:
+      $ref: ./components/authorization.yaml#/components/schemas/Permission
+    AuthorizationVersion:
+      $ref: ./components/authorization.yaml#/components/schemas/AuthorizationVersion
+    RoleBinding:
+      $ref: ./components/authorization.yaml#/components/schemas/RoleBinding
+    DataScope:
+      $ref: ./components/authorization.yaml#/components/schemas/DataScope
+    AuthorizationDecision:
+      $ref: ./components/authorization.yaml#/components/schemas/AuthorizationDecision
+    Labels:
+      $ref: ../schemas/labels/labels.schema.json#/$defs/Labels
+    UserLabels:
+      $ref: ../schemas/labels/labels.schema.json#/$defs/UserLabels
+    LabelSet:
+      $ref: ../schemas/labels/labels.schema.json#/$defs/LabelSet
+    UserLabelUpdate:
+      $ref: ../schemas/labels/labels.schema.json#/$defs/UserLabelUpdate
+    LabelSelector:
+      $ref: ../schemas/labels/labels.schema.json#/$defs/LabelSelector
+    PendingActionPublic:
+      $ref: ../schemas/action/pending-action-public.schema.json
+    ActionBinding:
+      $ref: ../schemas/action/workflow.schema.json#/$defs/ActionBinding
+    ApprovalRequest:
+      $ref: ../schemas/action/workflow.schema.json#/$defs/ApprovalRequest
+    Execution:
+      $ref: ../schemas/action/workflow.schema.json#/$defs/Execution
+    CardManifest:
+      $ref: ../schemas/card/card.schema.json#/$defs/CardManifest
+    DataBinding:
+      $ref: ../schemas/card/card.schema.json#/$defs/DataBinding
+    QueryBinding:
+      $ref: ../schemas/card/card.schema.json#/$defs/QueryBinding
+    RenderPlan:
+      $ref: ../schemas/card/card.schema.json#/$defs/RenderPlan
+    BridgeMessage:
+      $ref: ../schemas/card/card.schema.json#/$defs/BridgeMessage
+    ConversationEvent:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/ConversationEvent
+    AgentEvent:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/AgentEvent
+    RunCheckpoint:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/RunCheckpoint
+    Run:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/Run
+    Step:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/Step
+    Task:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/Task
+    ContextSnapshot:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/ContextSnapshot
+    ToolResultProjection:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/ToolResultProjection
+    ToolMetadata:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/ToolMetadata
+    ModelCapabilities:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/ModelCapabilities
+    ContextBudget:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/ContextBudget
+    ModelCall:
+      $ref: ../schemas/agent/agent.schema.json#/$defs/ModelCall
+    StreamEventEnvelope:
+      $ref: ../schemas/stream/stream.schema.json
+    TelemetryQuery:
+      $ref: ../schemas/telemetry/query.schema.json
+    TrustedTelemetryIdentity:
+      $ref: ../schemas/telemetry/query.schema.json#/$defs/TrustedTelemetryIdentity
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  parameters:
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {$ref: "#/components/schemas/RequestId"}
