@@ -41,3 +41,39 @@ machines:
     transitions:
       pending: [active, failed]
       active: [superseded]
+  platform_state:
+    initial: uninitialized
+    terminal: [initialized]
+    transitions:
+      uninitialized: [initializing]
+      initializing: [uninitialized, initialized]
+      initialized: []
+  session:
+    initial: active
+    terminal: [expired, revoked]
+    transitions:
+      active: [expired, revoked]
+      expired: []
+      revoked: []
+  temporary_credential:
+    initial: active
+    terminal: [consumed, expired, revoked]
+    transitions:
+      active: [consumed, expired, revoked]
+      consumed: []
+      expired: []
+      revoked: []
+  api_key:
+    initial: active
+    terminal: [revoked, expired]
+    transitions:
+      active: [revoked, expired]
+      revoked: []
+      expired: []
+  enterprise:
+    initial: active
+    terminal: [disabled]
+    transitions:
+      active: [suspended, disabled]
+      suspended: [active, disabled]
+      disabled: []

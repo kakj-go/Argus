@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import {
   useApi,
   type CreatedApiKey,
@@ -287,31 +290,55 @@ function ServiceAccountDrawer({
   dataScopes: DataScope[];
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [allowedTools, setAllowedTools] = useState("");
-  const [dataScopeIds, setDataScopeIds] = useState<string[]>([]);
+  const serviceAccountSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, t("settings.common.required")),
+        description: z.string().trim(),
+        allowed_tools: z.string(),
+        data_scope_ids: z.array(z.string()),
+      }),
+    [t],
+  );
+  type ServiceAccountForm = z.infer<typeof serviceAccountSchema>;
+  const {
+    control,
+    register,
+    reset,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ServiceAccountForm>({
+    resolver: zodResolver(serviceAccountSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      allowed_tools: "",
+      data_scope_ids: [],
+    },
+  });
 
   useEffect(() => {
     if (!open) return;
-    setName(account?.name ?? "");
-    setDescription(account?.description ?? "");
-    setAllowedTools((account?.allowed_tool_ids ?? []).join("\n"));
-    setDataScopeIds(account?.data_scope_ids ?? []);
-  }, [account, open]);
+    reset({
+      name: account?.name ?? "",
+      description: account?.description ?? "",
+      allowed_tools: (account?.allowed_tool_ids ?? []).join("\n"),
+      data_scope_ids: account?.data_scope_ids ?? [],
+    });
+  }, [account, open, reset]);
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={() =>
+      onSubmit={handleSubmit((values) =>
         onSubmit({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          allowed_tool_ids: parseList(allowedTools),
-          data_scope_ids: dataScopeIds,
-        })
-      }
+          name: values.name,
+          description: values.description || undefined,
+          allowed_tool_ids: parseList(values.allowed_tools),
+          data_scope_ids: values.data_scope_ids,
+        }),
+      )}
       open={open}
       title={
         account
@@ -320,38 +347,32 @@ function ServiceAccountDrawer({
       }
     >
       <div className="argus-settings-form">
-        <Field label={t("settings.common.name")}>
-          <Input
-            disabled={Boolean(account)}
-            onChange={(event) => setName(event.target.value)}
-            required
-            value={name}
-          />
+        <Field error={errors.name?.message} label={t("settings.common.name")}>
+          <Input {...register("name")} disabled={Boolean(account)} required />
         </Field>
         <Field label={t("settings.common.description")}>
-          <Input
-            onChange={(event) => setDescription(event.target.value)}
-            value={description}
-          />
+          <Input {...register("description")} />
         </Field>
         <Field
           hint={t("settings.org.accessTab.allowedToolsHint")}
           label={t("settings.org.accessTab.allowedTools")}
         >
-          <Textarea
-            onChange={(event) => setAllowedTools(event.target.value)}
-            rows={4}
-            value={allowedTools}
-          />
+          <Textarea {...register("allowed_tools")} rows={4} />
         </Field>
         <Field label={t("settings.org.accessTab.dataScopes")}>
-          <CheckList
-            onChange={setDataScopeIds}
-            options={dataScopes.map((scope) => ({
-              id: scope.id,
-              label: scope.name,
-            }))}
-            value={dataScopeIds}
+          <Controller
+            control={control}
+            name="data_scope_ids"
+            render={({ field }) => (
+              <CheckList
+                onChange={field.onChange}
+                options={dataScopes.map((scope) => ({
+                  id: scope.id,
+                  label: scope.name,
+                }))}
+                value={field.value}
+              />
+            )}
           />
         </Field>
       </div>
@@ -373,10 +394,27 @@ function ApiKeysDrawer({
     queryKey: ["org", "apiKeys", account.id],
     queryFn: () => api.org.listApiKeys(account.id),
   });
-  const [keyName, setKeyName] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
   const [created, setCreated] = useState<CreatedApiKey | null>(null);
+  const [rotating, setRotating] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const keySchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, t("settings.common.required")),
+        expires_at: z.string(),
+      }),
+    [t],
+  );
+  type KeyForm = z.infer<typeof keySchema>;
+  const {
+    register,
+    reset,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<KeyForm>({
+    resolver: zodResolver(keySchema),
+    defaultValues: { name: "", expires_at: "" },
+  });
 
   const invalidate = () =>
     queryClient.invalidateQueries({
@@ -384,15 +422,16 @@ function ApiKeysDrawer({
     });
 
   const create = useMutation({
-    mutationFn: () =>
+    mutationFn: (input: KeyForm) =>
       api.org.createApiKey(account.id, {
-        name: keyName.trim(),
-        expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+        name: input.name,
+        expires_at: input.expires_at
+          ? new Date(input.expires_at).toISOString()
+          : undefined,
       }),
     onSuccess: (result) => {
       setCreated(result);
-      setKeyName("");
-      setExpiresAt("");
+      reset();
       void invalidate();
     },
   });
@@ -401,6 +440,14 @@ function ApiKeysDrawer({
     mutationFn: (id: string) => api.org.revokeApiKey(id),
     onSuccess: () => {
       setRevoking(null);
+      void invalidate();
+    },
+  });
+  const rotate = useMutation({
+    mutationFn: (id: string) => api.org.rotateApiKey(id),
+    onSuccess: (result) => {
+      setRotating(null);
+      setCreated(result);
       void invalidate();
     },
   });
@@ -450,6 +497,13 @@ function ApiKeysDrawer({
                   </small>
                 </div>
                 <Button
+                  onClick={() => setRotating(key.id)}
+                  size="sm"
+                  variant="ghost"
+                >
+                  {t("settings.org.accessTab.rotate")}
+                </Button>
+                <Button
                   onClick={() => setRevoking(key.id)}
                   size="sm"
                   variant="ghost"
@@ -460,30 +514,38 @@ function ApiKeysDrawer({
             ))}
           </div>
         )}
-        <Field label={t("settings.org.accessTab.keyName")}>
-          <Input
-            onChange={(event) => setKeyName(event.target.value)}
-            value={keyName}
-          />
+        <Field
+          error={errors.name?.message}
+          label={t("settings.org.accessTab.keyName")}
+        >
+          <Input {...register("name")} />
         </Field>
         <Field label={t("settings.org.accessTab.expiresAt")}>
           <Input
+            {...register("expires_at")}
             min={toDateTimeLocal(new Date().toISOString())}
-            onChange={(event) => setExpiresAt(event.target.value)}
             type="datetime-local"
-            value={expiresAt}
           />
         </Field>
         <Button
-          disabled={!keyName.trim()}
           loading={create.isPending}
-          onClick={() => create.mutate()}
+          onClick={handleSubmit((values) => create.mutate(values))}
           variant="primary"
         >
           {t("settings.org.accessTab.createKey")}
         </Button>
       </div>
 
+      <ConfirmDialog
+        description={t("settings.org.accessTab.rotateDescription")}
+        loading={rotate.isPending}
+        onConfirm={() => rotating && rotate.mutate(rotating)}
+        onOpenChange={(open) => {
+          if (!open) setRotating(null);
+        }}
+        open={rotating !== null}
+        title={t("settings.org.accessTab.rotateTitle")}
+      />
       <ConfirmDialog
         danger
         description={t("settings.org.accessTab.revokeDescription")}

@@ -51,7 +51,7 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 | `argus__token` | Preview Tool 返回给 Argus 服务端的私有一次性提交能力；模型、用户、浏览器和卡片均不可见 |
 | Action Executor | `argus-server` 内负责校验 Card Action、消费私有 Token 并直接调用 Commit Tool 的确定性模块 |
 | Host Bridge | 沙箱卡片与 Argus 宿主之间唯一的受控通信通道 |
-| Platform Super Admin | 首次初始化创建的平台超级管理员，只管理企业、企业管理员和平台 OpenSandbox 基座 |
+| Platform Super Admin | 首次初始化创建的平台超级管理员；M2 管理企业、企业管理员和平台审计，OpenSandbox 治理在 M4 接入 |
 | Enterprise Admin | 企业管理员，管理本企业用户、模型、Agent、资源、权限和业务设置 |
 | Resource Label | Host 和 KubernetesCluster 的用户自定义 `labels`，用于企业内归类、过滤和资源范围选择；`argus.io/*` 为系统保留命名空间 |
 | DataScope | 由显式资源 ID 和/或经过校验的标签选择器构成的企业内资源授权范围 |

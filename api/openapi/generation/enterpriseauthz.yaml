@@ -1,0 +1,29 @@
+openapi: 3.1.0
+info: {title: Argus Enterprise Authorization API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/permissions: {$ref: ../argus.yaml#/paths/~1enterprise~1permissions}
+  /enterprise/roles: {$ref: ../argus.yaml#/paths/~1enterprise~1roles}
+  "/enterprise/roles/{id}":
+    $ref: "../argus.yaml#/paths/~1enterprise~1roles~1{id}"
+  /enterprise/role-bindings: {$ref: ../argus.yaml#/paths/~1enterprise~1role-bindings}
+  "/enterprise/role-bindings/{id}":
+    $ref: "../argus.yaml#/paths/~1enterprise~1role-bindings~1{id}"
+  /enterprise/data-scopes: {$ref: ../argus.yaml#/paths/~1enterprise~1data-scopes}
+  "/enterprise/data-scopes/{id}":
+    $ref: "../argus.yaml#/paths/~1enterprise~1data-scopes~1{id}"
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    PermissionPage: {$ref: ../components/m2.yaml#/components/schemas/PermissionPage}
+    RoleCreate: {$ref: ../components/m2.yaml#/components/schemas/RoleCreate}
+    RoleUpdate: {$ref: ../components/m2.yaml#/components/schemas/RoleUpdate}
+    RolePage: {$ref: ../components/m2.yaml#/components/schemas/RolePage}
+    RoleBindingCreate: {$ref: ../components/m2.yaml#/components/schemas/RoleBindingCreate}
+    RoleBindingUpdate: {$ref: ../components/m2.yaml#/components/schemas/RoleBindingUpdate}
+    RoleBindingPage: {$ref: ../components/m2.yaml#/components/schemas/RoleBindingPage}
+    DataScopeCreate: {$ref: ../components/m2.yaml#/components/schemas/DataScopeCreate}
+    DataScopeUpdate: {$ref: ../components/m2.yaml#/components/schemas/DataScopeUpdate}
+    DataScopePage: {$ref: ../components/m2.yaml#/components/schemas/DataScopePage}

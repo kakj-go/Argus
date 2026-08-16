@@ -58,6 +58,14 @@ spec:
           envFrom:
             - configMapRef:
                 name: argus-runtime-config
+          {{- if eq $item.name "argus-server" }}
+            - secretRef:
+                name: argus-runtime-secrets
+          volumeMounts:
+            - name: setup-token
+              mountPath: /var/run/secrets/argus/setup
+              readOnly: true
+          {{- end }}
           {{- if ne $item.name "argus-server" }}
           env:
             - {name: ARGUS_HEALTH_ADDRESS, value: ":8081"}
@@ -75,6 +83,15 @@ spec:
           resources:
             requests: {cpu: 25m, memory: 64Mi}
             limits: {cpu: 500m, memory: 256Mi}
+      {{- if eq $item.name "argus-server" }}
+      volumes:
+        - name: setup-token
+          secret:
+            secretName: {{ required "setupTokenSecretName is required" $root.Values.setupTokenSecretName }}
+            items:
+              - {key: setup-token, path: token}
+              - {key: setup-token-expires-at, path: expires-at}
+      {{- end }}
 {{- end }}
 ---
 apiVersion: v1

@@ -209,6 +209,7 @@ type ApiKey struct {
 	Prefix           string       `json:"prefix"`
 	ServiceAccountId string       `json:"service_account_id"`
 	Status           ApiKeyStatus `json:"status"`
+	Version          int64        `json:"version"`
 }
 
 // ApiKeyStatus defines model for ApiKey.Status.
@@ -235,12 +236,16 @@ type DepartmentStatus string
 
 // Enterprise defines model for Enterprise.
 type Enterprise struct {
+	Code          string                  `json:"code"`
 	CreatedAt     time.Time               `json:"created_at"`
 	DefaultLocale EnterpriseDefaultLocale `json:"default_locale"`
 	Id            string                  `json:"id"`
 	Name          string                  `json:"name"`
+	Remark        *string                 `json:"remark,omitempty"`
 	Status        EnterpriseStatus        `json:"status"`
+	Timezone      string                  `json:"timezone"`
 	UpdatedAt     time.Time               `json:"updated_at"`
+	Version       int64                   `json:"version"`
 }
 
 // EnterpriseDefaultLocale defines model for Enterprise.DefaultLocale.
@@ -263,6 +268,7 @@ type EnterpriseUser struct {
 	Status               EnterpriseUserStatus `json:"status"`
 	UpdatedAt            time.Time            `json:"updated_at"`
 	Username             string               `json:"username"`
+	Version              int64                `json:"version"`
 }
 
 // EnterpriseUserStatus defines model for EnterpriseUser.Status.
@@ -278,6 +284,7 @@ type PlatformUser struct {
 	Role        PlatformUserRole     `json:"role"`
 	Status      PlatformUserStatus   `json:"status"`
 	Username    string               `json:"username"`
+	Version     int64                `json:"version"`
 }
 
 // PlatformUserRole defines model for PlatformUser.Role.
@@ -298,6 +305,7 @@ type ServiceAccount struct {
 	Name                 string               `json:"name"`
 	Status               ServiceAccountStatus `json:"status"`
 	UpdatedAt            time.Time            `json:"updated_at"`
+	Version              int64                `json:"version"`
 }
 
 // ServiceAccountStatus defines model for ServiceAccount.Status.

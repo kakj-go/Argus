@@ -16,8 +16,11 @@ components:
       required:
         - id
         - name
+        - code
         - status
+        - timezone
         - default_locale
+        - version
         - created_at
         - updated_at
       properties:
@@ -28,17 +31,31 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+        code:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{1,62}$
         status:
           type: string
           enum:
             - active
             - suspended
             - disabled
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 128
         default_locale:
           type: string
           enum:
             - zh-CN
             - en-US
+        remark:
+          type: string
+          maxLength: 2048
+        version:
+          type: integer
+          format: int64
+          minimum: 1
         created_at:
           type: string
           format: date-time
@@ -55,6 +72,7 @@ components:
         - role
         - status
         - mfa_enabled
+        - version
         - created_at
       properties:
         id:
@@ -81,6 +99,10 @@ components:
             - disabled
         mfa_enabled:
           type: boolean
+        version:
+          type: integer
+          format: int64
+          minimum: 1
         created_at:
           type: string
           format: date-time
@@ -96,6 +118,7 @@ components:
         - status
         - mfa_enabled
         - authorization_version
+        - version
         - created_at
         - updated_at
       properties:
@@ -129,6 +152,10 @@ components:
           type: boolean
         authorization_version:
           $ref: '#/components/schemas/AuthorizationVersion'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
         last_login_at:
           type: string
           format: date-time
@@ -253,6 +280,7 @@ components:
         - name
         - status
         - authorization_version
+        - version
         - created_at
         - updated_at
       properties:
@@ -288,6 +316,10 @@ components:
             minLength: 1
         authorization_version:
           $ref: '#/components/schemas/AuthorizationVersion'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
         created_at:
           type: string
           format: date-time
@@ -304,6 +336,7 @@ components:
         - name
         - prefix
         - status
+        - version
         - created_at
       properties:
         id:
@@ -329,6 +362,10 @@ components:
             - active
             - revoked
             - expired
+        version:
+          type: integer
+          format: int64
+          minimum: 1
         expires_at:
           type: string
           format: date-time

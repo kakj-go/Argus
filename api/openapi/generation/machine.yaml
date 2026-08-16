@@ -1,0 +1,24 @@
+openapi: 3.1.0
+info: {title: Argus Machine Identity API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/service-accounts: {$ref: ../argus.yaml#/paths/~1enterprise~1service-accounts}
+  "/enterprise/service-accounts/{id}":
+    $ref: "../argus.yaml#/paths/~1enterprise~1service-accounts~1{id}"
+  "/enterprise/service-accounts/{service_account_id}/api-keys":
+    $ref: "../argus.yaml#/paths/~1enterprise~1service-accounts~1{service_account_id}~1api-keys"
+  "/enterprise/api-keys/{id}/rotate":
+    $ref: "../argus.yaml#/paths/~1enterprise~1api-keys~1{id}~1rotate"
+  "/enterprise/api-keys/{id}/revoke":
+    $ref: "../argus.yaml#/paths/~1enterprise~1api-keys~1{id}~1revoke"
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    ServiceAccountCreate: {$ref: ../components/m2.yaml#/components/schemas/ServiceAccountCreate}
+    ServiceAccountUpdate: {$ref: ../components/m2.yaml#/components/schemas/ServiceAccountUpdate}
+    ServiceAccountPage: {$ref: ../components/m2.yaml#/components/schemas/ServiceAccountPage}
+    ApiKeyCreate: {$ref: ../components/m2.yaml#/components/schemas/ApiKeyCreate}
+    CreatedApiKeySecret: {$ref: ../components/m2.yaml#/components/schemas/CreatedApiKeySecret}
+    ApiKeyPage: {$ref: ../components/m2.yaml#/components/schemas/ApiKeyPage}

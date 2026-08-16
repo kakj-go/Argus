@@ -14,13 +14,6 @@ export interface SetupSuperAdminInput {
   password: string;
 }
 
-export interface SetupSandboxInput {
-  enabled: boolean;
-  endpoint?: string;
-  credentialRef?: string;
-  defaultStorage?: string;
-}
-
 export interface SetupSubmission {
   /** Deployment-provided one-time Setup Token. */
   setupToken: string;
@@ -29,7 +22,6 @@ export interface SetupSubmission {
   timezone: string;
   externalUrl: string;
   superAdmin: SetupSuperAdminInput;
-  sandbox: SetupSandboxInput;
 }
 
 export interface SetupResult {

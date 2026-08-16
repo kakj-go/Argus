@@ -3,6 +3,7 @@ import type {
   ApiKey,
   DataScope,
   EnterpriseUser,
+  EnterpriseUserUpdate,
   Permission,
   PlatformUser,
   RoleBinding,
@@ -31,6 +32,9 @@ export interface User {
   mfaEnabled: boolean;
   lastLoginAt?: ISODateString;
   createdAt: ISODateString;
+  version?: number;
+  temporaryPassword?: string;
+  temporaryPasswordExpiresAt?: ISODateString;
 }
 
 export type RoleBindingSubjectType = RoleBinding["subject_type"];
@@ -49,8 +53,8 @@ export interface CreateRoleBindingInput {
 export interface UpdateRoleBindingInput {
   data_scope_ids?: string[];
   status?: RoleBindingStatus;
-  valid_from?: ISODateString;
-  valid_until?: ISODateString;
+  valid_from?: ISODateString | null;
+  valid_until?: ISODateString | null;
 }
 
 export interface CreateRoleInput {
@@ -120,6 +124,7 @@ export interface InviteUserInput {
   department_id: string;
 }
 
-export interface UpdateEnterpriseUserInput {
-  department_id?: string;
-}
+export type UpdateEnterpriseUserInput = Omit<
+  EnterpriseUserUpdate,
+  "expected_version"
+>;

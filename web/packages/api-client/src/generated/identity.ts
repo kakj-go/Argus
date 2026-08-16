@@ -5,10 +5,15 @@ export interface components {
         Enterprise: {
             id: string;
             name: string;
+            code: string;
             /** @enum {string} */
             status: "active" | "suspended" | "disabled";
+            timezone: string;
             /** @enum {string} */
             default_locale: "zh-CN" | "en-US";
+            remark?: string;
+            /** Format: int64 */
+            version: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -25,6 +30,8 @@ export interface components {
             /** @enum {string} */
             status: "active" | "disabled";
             mfa_enabled: boolean;
+            /** Format: int64 */
+            version: number;
             /** Format: date-time */
             created_at: string;
         };
@@ -40,6 +47,8 @@ export interface components {
             status: "active" | "invited" | "disabled";
             mfa_enabled: boolean;
             authorization_version: components["schemas"]["AuthorizationVersion"];
+            /** Format: int64 */
+            version: number;
             /** Format: date-time */
             last_login_at?: string;
             /** Format: date-time */
@@ -95,6 +104,8 @@ export interface components {
             allowed_tool_ids?: string[];
             data_scope_ids?: string[];
             authorization_version: components["schemas"]["AuthorizationVersion"];
+            /** Format: int64 */
+            version: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -108,6 +119,8 @@ export interface components {
             prefix: string;
             /** @enum {string} */
             status: "active" | "revoked" | "expired";
+            /** Format: int64 */
+            version: number;
             /** Format: date-time */
             expires_at?: string;
             /** Format: date-time */

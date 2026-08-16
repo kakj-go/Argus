@@ -186,7 +186,8 @@ export function createSeedDb(now: number = Date.now()): MockDb {
   ];
 
   const task = (
-    partial: Partial<TaskViewModel> & Pick<TaskViewModel, "id" | "type" | "title" | "status">,
+    partial: Partial<TaskViewModel> &
+      Pick<TaskViewModel, "id" | "type" | "title" | "status">,
   ): TaskViewModel => ({
     enterpriseId: "ent-acme",
     origin: "admin_ui",
@@ -639,7 +640,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         username: "root",
         displayName: "企业超级管理员",
         email: "root@acme.example",
-        inviteStatus: "activated",
+        credentialStatus: "active",
         lastLoginAt: ago(HOUR),
         createdAt: ago(120 * DAY),
       },
@@ -649,7 +650,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         username: "chenxi",
         displayName: "陈曦",
         email: "chenxi@acme.example",
-        inviteStatus: "activated",
+        credentialStatus: "active",
         lastLoginAt: ago(2 * HOUR),
         createdAt: ago(120 * DAY),
       },
@@ -659,7 +660,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         username: "globex-admin",
         displayName: "Globex 管理员",
         email: "admin@globex.example",
-        inviteStatus: "activated",
+        credentialStatus: "active",
         lastLoginAt: ago(DAY),
         createdAt: ago(80 * DAY),
       },
@@ -669,7 +670,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         username: "globex-ops",
         displayName: "待激活管理员",
         email: "ops@globex.example",
-        inviteStatus: "pending",
+        credentialStatus: "temporary_password",
         createdAt: ago(2 * DAY),
       },
     ],

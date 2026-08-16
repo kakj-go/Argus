@@ -13,6 +13,7 @@
     "@argus/api-client": "workspace:*",
     "@argus/auth": "workspace:*",
     "@argus/ui": "workspace:*",
+    "@hookform/resolvers": "^5.8.0",
     "@tanstack/react-query": "^5.83.0",
     "@tanstack/react-router": "^1.130.9",
     "@vitejs/plugin-react": "^4.7.0",
@@ -20,7 +21,9 @@
     "lucide-react": "^0.536.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-hook-form": "^7.85.0",
     "react-i18next": "^15.6.1",
-    "vite": "^7.0.6"
+    "vite": "^7.0.6",
+    "zod": "^4.4.3"
   }
 }

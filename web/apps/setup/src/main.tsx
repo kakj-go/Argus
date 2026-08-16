@@ -1,10 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  ApiProvider,
-  createConfiguredApiClient,
-} from "@argus/api-client";
+import { ApiProvider, createConfiguredApiClient } from "@argus/api-client";
 import {
   initializeTheme,
   LocaleProvider,
@@ -48,6 +45,7 @@ async function createApi() {
       }
     }
     return createConfiguredApiClient({
+      portal: "setup",
       mode,
       mock: { initialized },
       locale: () =>
@@ -55,6 +53,7 @@ async function createApi() {
     });
   }
   return createConfiguredApiClient({
+    portal: "setup",
     mode: mode ?? "",
     base_url: import.meta.env.VITE_API_BASE_URL,
     locale: () =>

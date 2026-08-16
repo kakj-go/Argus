@@ -1,0 +1,353 @@
+components:
+  schemas:
+    PlatformState:
+      type: string
+      enum: [uninitialized, initializing, initialized]
+    SetupStatus:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: {$ref: "#/components/schemas/PlatformState"}
+        platform_name: {type: string, minLength: 1, maxLength: 128}
+    SetupSuperAdminInput:
+      type: object
+      additionalProperties: false
+      required: [username, display_name, password]
+      properties:
+        username: {type: string, minLength: 3, maxLength: 128}
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        email: {type: string, format: email}
+        password: {type: string, minLength: 12, maxLength: 1024, writeOnly: true}
+    SetupInitializeRequest:
+      type: object
+      additionalProperties: false
+      required: [platform_name, default_locale, timezone, external_url, super_admin]
+      properties:
+        platform_name: {type: string, minLength: 1, maxLength: 128}
+        default_locale: {$ref: "./common.yaml#/components/schemas/Locale"}
+        timezone: {type: string, minLength: 1, maxLength: 128}
+        external_url: {type: string, format: uri}
+        super_admin: {$ref: "#/components/schemas/SetupSuperAdminInput"}
+    SetupInitializeResult:
+      type: object
+      additionalProperties: false
+      required: [state, platform_user_id]
+      properties:
+        state: {type: string, const: initialized}
+        platform_user_id: {type: string, format: uuid}
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: {type: string, minLength: 1, maxLength: 128}
+        password: {type: string, minLength: 1, maxLength: 1024, writeOnly: true}
+    PasswordChangeChallenge:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, audience, expires_at]
+      properties:
+        challenge_id: {type: string, minLength: 32, maxLength: 256, writeOnly: true}
+        audience: {type: string, enum: [platform, enterprise]}
+        expires_at: {type: string, format: date-time}
+    AuthenticatedSession:
+      type: object
+      additionalProperties: false
+      required: [session, user, permissions, csrf_token]
+      properties:
+        session: {$ref: "./identity.yaml#/components/schemas/Session"}
+        user:
+          oneOf:
+            - {$ref: "./identity.yaml#/components/schemas/PlatformUser"}
+            - {$ref: "./identity.yaml#/components/schemas/EnterpriseUser"}
+        permissions:
+          type: array
+          uniqueItems: true
+          items: {$ref: "./authorization.yaml#/components/schemas/Permission"}
+        csrf_token: {type: string, minLength: 32, maxLength: 256, writeOnly: true}
+    LoginResult:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [status, authenticated_session]
+          properties:
+            status: {type: string, const: authenticated}
+            authenticated_session: {$ref: "#/components/schemas/AuthenticatedSession"}
+        - type: object
+          additionalProperties: false
+          required: [status, password_change_challenge]
+          properties:
+            status: {type: string, const: password_change_required}
+            password_change_challenge: {$ref: "#/components/schemas/PasswordChangeChallenge"}
+    CompletePasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, temporary_password, new_password]
+      properties:
+        challenge_id: {type: string, minLength: 32, maxLength: 256, writeOnly: true}
+        temporary_password: {type: string, minLength: 1, maxLength: 1024, writeOnly: true}
+        new_password: {type: string, minLength: 12, maxLength: 1024, writeOnly: true}
+    PasswordUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password, expected_version]
+      properties:
+        current_password: {type: string, minLength: 1, maxLength: 1024, writeOnly: true}
+        new_password: {type: string, minLength: 12, maxLength: 1024, writeOnly: true}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    EnterpriseCreate:
+      type: object
+      additionalProperties: false
+      required: [name, code, timezone]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        code: {type: string, pattern: "^[a-z][a-z0-9-]{1,62}$"}
+        timezone: {type: string, minLength: 1, maxLength: 128}
+        default_locale: {$ref: "./common.yaml#/components/schemas/Locale"}
+        remark: {type: string, maxLength: 2048}
+    EnterpriseUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        timezone: {type: string, minLength: 1, maxLength: 128}
+        default_locale: {$ref: "./common.yaml#/components/schemas/Locale"}
+        remark: {type: string, maxLength: 2048}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    EnterprisePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "./identity.yaml#/components/schemas/Enterprise"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    EnterpriseAdminCreate:
+      type: object
+      additionalProperties: false
+      required: [enterprise_id, username, display_name]
+      properties:
+        enterprise_id: {type: string, format: uuid}
+        username: {type: string, minLength: 3, maxLength: 128}
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        email: {type: string, format: email}
+    EnterpriseUserCreate:
+      type: object
+      additionalProperties: false
+      required: [username, display_name, department_id]
+      properties:
+        username: {type: string, minLength: 3, maxLength: 128}
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        email: {type: string, format: email}
+        department_id: {type: string, format: uuid}
+        role_ids: {type: array, uniqueItems: true, items: {type: string, format: uuid}}
+    EnterpriseUserUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        email: {type: [string, "null"], format: email}
+        department_id: {type: string, format: uuid}
+        status: {type: string, enum: [active, disabled]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    CreatedUserCredential:
+      type: object
+      additionalProperties: false
+      required: [user, temporary_password, expires_at]
+      properties:
+        user: {$ref: "./identity.yaml#/components/schemas/EnterpriseUser"}
+        temporary_password: {type: string, minLength: 24, writeOnly: true}
+        expires_at: {type: string, format: date-time}
+    EnterpriseUserPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "./identity.yaml#/components/schemas/EnterpriseUser"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    DepartmentCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+    DepartmentUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        status: {type: string, enum: [active, disabled]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    DepartmentPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "./identity.yaml#/components/schemas/Department"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    ServiceAccountCreate:
+      type: object
+      additionalProperties: false
+      required: [name, allowed_tool_ids, data_scope_ids]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        allowed_tool_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 256}}
+        data_scope_ids: {type: array, uniqueItems: true, items: {type: string, format: uuid}}
+    ServiceAccountUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        description: {type: string, maxLength: 1024}
+        allowed_tool_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 256}}
+        data_scope_ids: {type: array, uniqueItems: true, items: {type: string, format: uuid}}
+        status: {type: string, enum: [active, disabled]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    ServiceAccountPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "./identity.yaml#/components/schemas/ServiceAccount"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    ApiKeyCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        expires_at: {type: string, format: date-time}
+    CreatedApiKeySecret:
+      type: object
+      additionalProperties: false
+      required: [api_key, secret]
+      properties:
+        api_key: {$ref: "./identity.yaml#/components/schemas/ApiKey"}
+        secret: {type: string, pattern: "^argus_ak_[A-Za-z0-9_-]{6,32}\\.[A-Za-z0-9_-]{32,256}$", writeOnly: true}
+    ApiKeyPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "./identity.yaml#/components/schemas/ApiKey"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    RoleCreate:
+      type: object
+      additionalProperties: false
+      required: [name, permissions]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        permissions: {type: array, uniqueItems: true, items: {$ref: "./authorization.yaml#/components/schemas/Permission"}}
+    RoleUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        permissions: {type: array, uniqueItems: true, items: {$ref: "./authorization.yaml#/components/schemas/Permission"}}
+        status: {type: string, enum: [active, disabled]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    RolePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "./authorization.yaml#/components/schemas/Role"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    RoleBindingCreate:
+      type: object
+      additionalProperties: false
+      required: [subject_type, subject_id, role_id, data_scope_ids]
+      properties:
+        subject_type: {type: string, enum: [user, department, service_account]}
+        subject_id: {type: string, format: uuid}
+        role_id: {type: string, format: uuid}
+        data_scope_ids: {type: array, uniqueItems: true, items: {type: string, format: uuid}}
+        valid_from: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+    RoleBindingUpdate:
+      type: object
+      additionalProperties: false
+      required: [valid_from, valid_until, expected_version]
+      properties:
+        data_scope_ids: {type: array, uniqueItems: true, items: {type: string, format: uuid}}
+        valid_from: {type: [string, "null"], format: date-time}
+        valid_until: {type: [string, "null"], format: date-time}
+        status: {type: string, enum: [active, disabled]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    RoleBindingPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "./authorization.yaml#/components/schemas/RoleBinding"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    DataScopeCreate:
+      type: object
+      additionalProperties: false
+      required: [name, resource_types, explicit_resource_ids]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        resource_types: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [host, kubernetes_cluster]}}
+        explicit_resource_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        label_selector: {$ref: "../../schemas/labels/labels.schema.json#/$defs/LabelSelector"}
+    DataScopeUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, resource_types, explicit_resource_ids, expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        resource_types: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [host, kubernetes_cluster]}}
+        explicit_resource_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        label_selector: {$ref: "../../schemas/labels/labels.schema.json#/$defs/LabelSelector"}
+        status: {type: string, enum: [active, disabled]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    DataScopePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "./authorization.yaml#/components/schemas/DataScope"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    PermissionPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "./authorization.yaml#/components/schemas/Permission"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required: [id, domain, actor_type, actor_id, action, result, details, previous_hash, event_hash, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        domain: {type: string, enum: [platform, enterprise]}
+        enterprise_id: {type: string, format: uuid}
+        actor_type: {type: string, enum: [platform_user, enterprise_user, service_account, system]}
+        actor_id: {type: string, minLength: 1}
+        action: {type: string, pattern: "^[a-z][a-z0-9_.]+$"}
+        resource_type: {type: string, minLength: 1, maxLength: 128}
+        resource_id: {type: string, minLength: 1, maxLength: 256}
+        result: {type: string, enum: [success, failure, denied]}
+        details: {type: object, additionalProperties: true}
+        previous_hash: {type: string, pattern: "^[a-f0-9]{64}$"}
+        event_hash: {type: string, pattern: "^[a-f0-9]{64}$"}
+        created_at: {type: string, format: date-time}
+    AuditEventPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/AuditEvent"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}

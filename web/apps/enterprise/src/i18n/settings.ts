@@ -31,6 +31,8 @@ export const settingsZh = {
       no: "否",
       members: "成员",
       optional: "（可选）",
+      required: "此字段不能为空",
+      emailInvalid: "请输入有效的邮箱地址",
     },
     org: {
       title: "组织与权限",
@@ -59,7 +61,12 @@ export const settingsZh = {
         enable: "启用",
         disableTitle: "禁用用户",
         disableDescription: "禁用后该用户将无法登录本企业，可随时恢复。",
+        enableTitle: "启用用户",
+        enableDescription: "启用后该用户可以重新登录并使用现有授权。",
         empty: "暂无用户",
+        credentialTitle: "临时密码已创建",
+        credentialDescription:
+          "该密码仅显示一次。关闭后无法再次查看，用户首次登录时必须立即修改密码。",
       },
       bindingsTab: {
         create: "新建授权",
@@ -81,6 +88,7 @@ export const settingsZh = {
         permanent: "永久有效",
         immutableHint:
           "主体、角色与范围创建后不可修改；如需变更请删除后重新创建。",
+        dateRangeInvalid: "失效时间不能早于生效时间",
         deleteTitle: "删除授权绑定",
         deleteDescription: "删除后对应主体将立即失去该角色授予的权限。",
         empty: "暂无授权绑定",
@@ -89,10 +97,17 @@ export const settingsZh = {
         create: "新建部门",
         createTitle: "新建部门",
         editTitle: "编辑部门",
+        disable: "禁用",
+        enable: "启用",
+        default: "默认",
         memberCount: "成员数",
         memberIds: "成员",
-        deleteTitle: "删除部门",
-        deleteDescription: "删除部门不会删除成员账号，仅解除部门关系。",
+        disableTitle: "禁用部门",
+        disableDescription: "禁用后该部门不可继续使用，历史记录仍会保留。",
+        enableTitle: "启用部门",
+        enableDescription: "启用后该部门可重新用于用户归属和授权。",
+        defaultLocked: "默认部门不可禁用",
+        membersLocked: "请先迁移部门内成员，再禁用该部门",
         empty: "暂无部门",
       },
       rolesTab: {
@@ -113,11 +128,17 @@ export const settingsZh = {
         createTitle: "新建数据权限范围",
         editTitle: "编辑数据权限范围",
         resourceTypes: "资源类型",
+        resourceTypeRequired: "至少选择一种资源类型",
         resourceType: { host: "主机", kubernetes_cluster: "Kubernetes 集群" },
         labelSelector: "标签选择器",
         labelSelectorHint: "所有条件按 AND 组合；不同范围之间按并集授权。",
         labelKey: "标签键",
+        labelKeyInvalid: "标签键格式无效",
+        labelKeyDuplicate: "同一选择器中标签键不能重复",
         labelValues: "标签值，多个值用逗号分隔",
+        labelValuesInvalid:
+          "eq 只能有一个值；in 最多 32 个值，且值必须符合标签格式",
+        labelValuesTooMany: "一个选择器中的标签值总数不能超过 128",
         operator: "操作符",
         addRequirement: "添加条件",
         resourceIds: "资源 ID 列表",
@@ -164,6 +185,9 @@ export const settingsZh = {
         keyCreatedTitle: "APIKey 创建成功",
         keyCreatedWarning: "密钥原值仅展示一次，请立即复制并妥善保存。",
         revoke: "吊销",
+        rotate: "轮换",
+        rotateTitle: "轮换 APIKey",
+        rotateDescription: "轮换会立即吊销当前 Key，并只显示一次新密钥。",
         revokeTitle: "吊销 APIKey",
         revokeDescription: "吊销后使用该密钥的调用将立即失败，且不可恢复。",
         disableSa: "禁用",
@@ -300,6 +324,8 @@ export const settingsEn = {
       no: "No",
       members: "Members",
       optional: " (optional)",
+      required: "This field is required",
+      emailInvalid: "Enter a valid email address",
     },
     org: {
       title: "Organization & Access",
@@ -331,7 +357,13 @@ export const settingsEn = {
         disableTitle: "Disable user",
         disableDescription:
           "A disabled user can no longer sign in to this enterprise. You can re-enable at any time.",
+        enableTitle: "Enable user",
+        enableDescription:
+          "The user can sign in again and use their existing grants after being enabled.",
         empty: "No users yet",
+        credentialTitle: "Temporary password created",
+        credentialDescription:
+          "This password is shown once. It cannot be retrieved after closing, and the user must change it on first sign-in.",
       },
       bindingsTab: {
         create: "New binding",
@@ -353,6 +385,7 @@ export const settingsEn = {
         permanent: "Permanent",
         immutableHint:
           "Subject, role, and scope cannot be changed after creation; delete and recreate instead.",
+        dateRangeInvalid: "The end date cannot be earlier than the start date",
         deleteTitle: "Delete role binding",
         deleteDescription:
           "The subject immediately loses the permissions granted by this role.",
@@ -362,11 +395,19 @@ export const settingsEn = {
         create: "New department",
         createTitle: "New department",
         editTitle: "Edit department",
+        disable: "Disable",
+        enable: "Enable",
+        default: "Default",
         memberCount: "Members",
         memberIds: "Members",
-        deleteTitle: "Delete department",
-        deleteDescription:
-          "Deleting a department does not delete member accounts; it only removes the grouping.",
+        disableTitle: "Disable department",
+        disableDescription:
+          "The department can no longer be used, while its history is retained.",
+        enableTitle: "Enable department",
+        enableDescription:
+          "Users can be assigned to the department and use its grants again.",
+        defaultLocked: "The default department cannot be disabled",
+        membersLocked: "Move all members before disabling this department",
         empty: "No departments yet",
       },
       rolesTab: {
@@ -390,6 +431,7 @@ export const settingsEn = {
         createTitle: "New data scope",
         editTitle: "Edit data scope",
         resourceTypes: "Resource types",
+        resourceTypeRequired: "Select at least one resource type",
         resourceType: {
           host: "Host",
           kubernetes_cluster: "Kubernetes cluster",
@@ -398,7 +440,13 @@ export const settingsEn = {
         labelSelectorHint:
           "Requirements are combined with AND; separate data scopes are unioned.",
         labelKey: "Label key",
+        labelKeyInvalid: "Invalid label key format",
+        labelKeyDuplicate: "A label key may appear only once per selector",
         labelValues: "Label values, comma-separated",
+        labelValuesInvalid:
+          "eq requires one value; in accepts at most 32 contract-valid label values",
+        labelValuesTooMany:
+          "A selector may contain at most 128 values in total",
         operator: "Operator",
         addRequirement: "Add requirement",
         resourceIds: "Resource IDs",
@@ -449,6 +497,10 @@ export const settingsEn = {
         keyCreatedWarning:
           "The secret is shown exactly once. Copy and store it now.",
         revoke: "Revoke",
+        rotate: "Rotate",
+        rotateTitle: "Rotate APIKey",
+        rotateDescription:
+          "Rotation revokes the current key immediately and shows the replacement secret once.",
         revokeTitle: "Revoke APIKey",
         revokeDescription:
           "Calls using this key fail immediately after revocation. This cannot be undone.",

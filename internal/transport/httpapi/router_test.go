@@ -1,13 +1,21 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/kakj-go/Argus/internal/transport/httpapi"
 )
+
+type readinessFunc func(context.Context) error
+
+func (function readinessFunc) Ready(ctx context.Context) error {
+	return function(ctx)
+}
 
 func TestHealthEndpoints(t *testing.T) {
 	t.Parallel()
@@ -75,5 +83,31 @@ func TestLanguageNegotiation(t *testing.T) {
 		if body.Locale != test.want {
 			t.Fatalf("locale = %q, want %q", body.Locale, test.want)
 		}
+	}
+}
+
+func TestReadinessAllowsRedisDegraded(t *testing.T) {
+	t.Parallel()
+	router := httpapi.NewRouterWithOptions(httpapi.RouterOptions{
+		PostgreSQL: readinessFunc(func(context.Context) error { return nil }),
+		Redis: readinessFunc(func(context.Context) error {
+			return errors.New("redis unavailable")
+		}),
+	})
+	request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	responseRecorder := httptest.NewRecorder()
+	router.ServeHTTP(responseRecorder, request)
+	if responseRecorder.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", responseRecorder.Code, http.StatusOK)
+	}
+	var body struct {
+		Status       string            `json:"status"`
+		Dependencies map[string]string `json:"dependencies"`
+	}
+	if err := json.NewDecoder(responseRecorder.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Status != "ready" || body.Dependencies["redis"] != "degraded" {
+		t.Fatalf("unexpected readiness response: %#v", body)
 	}
 }

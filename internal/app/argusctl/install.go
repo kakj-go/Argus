@@ -150,7 +150,15 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 		return err
 	}
 
-	setupToken, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, cfg.Spec.ReleaseID+"-generated-secrets", "setup-token", 32)
+	setupSecret := cfg.Spec.ReleaseID + "-generated-secrets"
+	if err := ensureSetupToken(ctx, clients, cfg.Spec.Namespaces.System, setupSecret); err != nil {
+		return err
+	}
+	idempotencyKey, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, setupSecret, "idempotency-encryption-key", 32)
+	if err != nil {
+		return err
+	}
+	cursorSigningKey, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, setupSecret, "cursor-signing-key", 32)
 	if err != nil {
 		return err
 	}
@@ -161,7 +169,7 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err := clients.setStage(ctx, cfg, "platform", "running", "installing migrations and platform roles"); err != nil {
 		return err
 	}
-	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-platform", cfg.Spec.Namespaces.System, platformChart, platformValues(cfg, setupToken)); err != nil {
+	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-platform", cfg.Spec.Namespaces.System, platformChart, platformValues(cfg, credentials, setupSecret, idempotencyKey, cursorSigningKey)); err != nil {
 		return err
 	}
 	if err := waitForPlatform(ctx, clients, cfg); err != nil {
@@ -221,10 +229,24 @@ func dataValues(cfg *InstallConfig, secrets map[string]string) map[string]any {
 	}
 }
 
-func platformValues(cfg *InstallConfig, setupToken string) map[string]any {
+func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecret, idempotencyKey, cursorSigningKey string) map[string]any {
+	allowedOrigins := []any{"http://localhost:4173", "http://localhost:4174", "http://localhost:4175"}
+	secureCookies := false
+	if cfg.Spec.Profile == "production" {
+		allowedOrigins = []any{
+			"https://" + cfg.Spec.Exposure.EnterpriseHost,
+			"https://" + cfg.Spec.Exposure.PlatformHost,
+			"https://" + cfg.Spec.Exposure.SetupHost,
+		}
+		secureCookies = true
+	}
 	return map[string]any{
-		"releaseId": cfg.Spec.ReleaseID, "namespaces": namespacesValues(cfg), "replicas": 1, "setupToken": setupToken,
+		"releaseId": cfg.Spec.ReleaseID, "namespaces": namespacesValues(cfg), "replicas": 1, "setupTokenSecretName": setupSecret,
 		"images": map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
+		"runtime": map[string]any{
+			"postgresqlPassword": credentials["postgresql-password"], "redisPassword": credentials["redis-password"],
+			"idempotencyEncryptionKey": idempotencyKey, "cursorSigningKey": cursorSigningKey, "allowedOrigins": allowedOrigins, "secureCookies": secureCookies,
+		},
 	}
 }
 
@@ -333,6 +355,36 @@ func ensureSecretValue(ctx context.Context, clients *kubeClients, namespace, nam
 		return "", fmt.Errorf("persist generated secret %s/%s: %w", namespace, name, err)
 	}
 	return value, nil
+}
+
+func ensureSetupToken(ctx context.Context, clients *kubeClients, namespace, name string) error {
+	secrets := clients.typed.CoreV1().Secrets(namespace)
+	secret, err := secrets.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		secret = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{"app.kubernetes.io/part-of": "argus"}}, Data: map[string][]byte{}}
+	}
+	expiresAt, parseErr := time.Parse(time.RFC3339, string(secret.Data["setup-token-expires-at"]))
+	if len(secret.Data["setup-token"]) > 0 && parseErr == nil && time.Now().UTC().Before(expiresAt) {
+		return nil
+	}
+	token, err := randomSecret(32)
+	if err != nil {
+		return err
+	}
+	if secret.Data == nil {
+		secret.Data = map[string][]byte{}
+	}
+	secret.Data["setup-token"] = []byte(token)
+	secret.Data["setup-token-expires-at"] = []byte(time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339))
+	if secret.ResourceVersion == "" {
+		_, err = secrets.Create(ctx, secret, metav1.CreateOptions{})
+	} else {
+		_, err = secrets.Update(ctx, secret, metav1.UpdateOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("persist setup token secret %s/%s: %w", namespace, name, err)
+	}
+	return nil
 }
 
 func randomSecret(size int) (string, error) {

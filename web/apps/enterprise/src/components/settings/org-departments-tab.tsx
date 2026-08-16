@@ -1,6 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMemo } from "react";
+import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import { useApi, type Department } from "@argus/api-client";
 import {
   Badge,
@@ -10,6 +14,7 @@ import {
   Field,
   FormDrawer,
   Input,
+  StatusBadge,
 } from "@argus/ui";
 import { useOrgDepartments, useOrgUsers } from "./org-users-tab";
 
@@ -19,6 +24,7 @@ type DepartmentRow = {
   description: string;
   is_default: boolean;
   member_count: number;
+  status: Department["status"];
 };
 
 export function OrgDepartmentsTab() {
@@ -30,7 +36,7 @@ export function OrgDepartmentsTab() {
   const [editing, setEditing] = useState<Department | null | undefined>(
     undefined,
   );
-  const [deleting, setDeleting] = useState<Department | null>(null);
+  const [statusTarget, setStatusTarget] = useState<DepartmentRow | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["org"] });
   const save = useMutation({
     mutationFn: (input: { id?: string; name: string; description?: string }) =>
@@ -42,10 +48,16 @@ export function OrgDepartmentsTab() {
       void invalidate();
     },
   });
-  const remove = useMutation({
-    mutationFn: (id: string) => api.org.deleteDepartment(id),
+  const toggleStatus = useMutation({
+    mutationFn: async (department: DepartmentRow) => {
+      if (department.status === "active") {
+        await api.org.deleteDepartment(department.id);
+      } else {
+        await api.org.updateDepartment(department.id, { status: "active" });
+      }
+    },
     onSuccess: () => {
-      setDeleting(null);
+      setStatusTarget(null);
       void invalidate();
     },
   });
@@ -76,6 +88,17 @@ export function OrgDepartmentsTab() {
           { key: "description", header: t("settings.common.description") },
           { key: "member_count", header: t("settings.common.members") },
           {
+            key: "status",
+            header: t("settings.common.status"),
+            render: (row) => (
+              <StatusBadge
+                tone={row.status === "active" ? "success" : "neutral"}
+              >
+                {t(`settings.common.${row.status}`)}
+              </StatusBadge>
+            ),
+          },
+          {
             key: "actions",
             header: t("settings.common.actions"),
             render: (row) => (
@@ -94,18 +117,24 @@ export function OrgDepartmentsTab() {
                   {t("settings.common.edit")}
                 </Button>
                 <Button
-                  disabled={row.is_default}
-                  onClick={() =>
-                    setDeleting(
-                      departments.data?.find(
-                        (department) => department.id === row.id,
-                      ) ?? null,
-                    )
+                  disabled={
+                    row.status === "active" &&
+                    (row.is_default || row.member_count > 0)
                   }
+                  onClick={() => setStatusTarget(row)}
                   size="sm"
+                  title={
+                    row.status === "active" && row.is_default
+                      ? t("settings.org.departments.defaultLocked")
+                      : row.status === "active" && row.member_count > 0
+                        ? t("settings.org.departments.membersLocked")
+                        : undefined
+                  }
                   variant="ghost"
                 >
-                  {t("settings.common.delete")}
+                  {row.status === "active"
+                    ? t("settings.org.departments.disable")
+                    : t("settings.org.departments.enable")}
                 </Button>
               </span>
             ),
@@ -116,6 +145,7 @@ export function OrgDepartmentsTab() {
           name: department.name,
           description: department.description ?? "",
           is_default: department.is_default,
+          status: department.status,
           member_count: (users.data ?? []).filter(
             (user) => user.department_id === department.id,
           ).length,
@@ -131,12 +161,21 @@ export function OrgDepartmentsTab() {
         />
       )}
       <ConfirmDialog
-        danger
-        loading={remove.isPending}
-        onConfirm={() => deleting && remove.mutate(deleting.id)}
-        onOpenChange={(open) => !open && setDeleting(null)}
-        open={Boolean(deleting)}
-        title={t("settings.org.departments.deleteTitle")}
+        danger={statusTarget?.status === "active"}
+        description={
+          statusTarget?.status === "active"
+            ? t("settings.org.departments.disableDescription")
+            : t("settings.org.departments.enableDescription")
+        }
+        loading={toggleStatus.isPending}
+        onConfirm={() => statusTarget && toggleStatus.mutate(statusTarget)}
+        onOpenChange={(open) => !open && setStatusTarget(null)}
+        open={statusTarget !== null}
+        title={
+          statusTarget?.status === "active"
+            ? t("settings.org.departments.disableTitle")
+            : t("settings.org.departments.enableTitle")
+        }
       />
     </div>
   );
@@ -154,13 +193,36 @@ function DepartmentDrawer({
   onSubmit: (input: { name: string; description?: string }) => void;
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState(department?.name ?? "");
-  const [description, setDescription] = useState(department?.description ?? "");
+  const departmentSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, t("settings.common.required")),
+        description: z.string().trim(),
+      }),
+    [t],
+  );
+  type DepartmentForm = z.infer<typeof departmentSchema>;
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<DepartmentForm>({
+    resolver: zodResolver(departmentSchema),
+    defaultValues: {
+      name: department?.name ?? "",
+      description: department?.description ?? "",
+    },
+  });
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={(open) => !open && onClose()}
-      onSubmit={() => onSubmit({ name, description: description || undefined })}
+      onSubmit={handleSubmit((values) =>
+        onSubmit({
+          name: values.name,
+          description: values.description || undefined,
+        }),
+      )}
       open
       title={
         department
@@ -169,18 +231,11 @@ function DepartmentDrawer({
       }
     >
       <div className="argus-settings-form">
-        <Field label={t("settings.common.name")}>
-          <Input
-            onChange={(event) => setName(event.target.value)}
-            required
-            value={name}
-          />
+        <Field error={errors.name?.message} label={t("settings.common.name")}>
+          <Input {...register("name")} required />
         </Field>
         <Field label={t("settings.common.description")}>
-          <Input
-            onChange={(event) => setDescription(event.target.value)}
-            value={description}
-          />
+          <Input {...register("description")} />
         </Field>
       </div>
     </FormDrawer>

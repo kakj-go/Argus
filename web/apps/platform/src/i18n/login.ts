@@ -10,6 +10,14 @@ export const loginZh = {
   "login.submitting": "登录中…",
   "login.failed": "登录失败：账号或密码错误",
   "login.notSuperAdmin": "该账号不是平台超级管理员，已拒绝登录",
+  "login.changePasswordTitle": "设置新密码",
+  "login.changePasswordSubtitle": "临时密码仅用于首次登录，请设置长期密码",
+  "login.newPassword": "新密码",
+  "login.confirmPassword": "确认新密码",
+  "login.passwordMismatch": "两次输入的新密码不一致",
+  "login.passwordTooShort": "新密码至少需要 12 位",
+  "login.required": "此字段不能为空",
+  "login.changePasswordSubmit": "完成改密并登录",
   "login.hint": "演示账号：admin / 123456",
 };
 
@@ -25,5 +33,14 @@ export const loginEn = {
   "login.failed": "Sign-in failed: invalid credentials",
   "login.notSuperAdmin":
     "This account is not a platform super admin; access denied",
+  "login.changePasswordTitle": "Set a new password",
+  "login.changePasswordSubtitle":
+    "The temporary password is only valid for first sign-in.",
+  "login.newPassword": "New password",
+  "login.confirmPassword": "Confirm new password",
+  "login.passwordMismatch": "The new passwords do not match",
+  "login.passwordTooShort": "The new password must be at least 12 characters",
+  "login.required": "This field is required",
+  "login.changePasswordSubmit": "Change password and sign in",
   "login.hint": "Demo account: admin / 123456",
 };

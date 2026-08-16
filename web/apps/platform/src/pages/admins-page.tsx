@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import { useApi, type EnterpriseAdmin } from "@argus/api-client";
 import {
   Alert,
@@ -26,20 +29,20 @@ type AdminRow = {
   email: string;
   enterpriseId: string;
   enterpriseName: string;
-  inviteStatus: EnterpriseAdmin["inviteStatus"];
+  credentialStatus: EnterpriseAdmin["credentialStatus"];
   lastLoginAt?: string;
 };
 
-type AdminAction = "resend" | "resetAuth" | "disable";
+type AdminAction = "resetAuth" | "disable";
 
-function inviteTone(status: EnterpriseAdmin["inviteStatus"]) {
-  if (status === "activated") return "success" as const;
-  if (status === "pending") return "warning" as const;
+function credentialTone(status: EnterpriseAdmin["credentialStatus"]) {
+  if (status === "active") return "success" as const;
+  if (status === "temporary_password") return "warning" as const;
   return "danger" as const;
 }
 
 /**
- * 企业管理员：邀请（创建后展示激活链接）、重发邀请、重置认证、禁用。
+ * 企业管理员：创建后一次性展示临时密码，并支持重置认证和禁用。
  * 明确不提供代登录。
  */
 export function AdminsPage() {
@@ -47,20 +50,45 @@ export function AdminsPage() {
   const api = useApi();
   const queryClient = useQueryClient();
 
-  const [inviteOpen, setInviteOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [created, setCreated] = useState<EnterpriseAdmin | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     type: AdminAction;
     admin: AdminRow;
   } | null>(null);
 
-  const [enterpriseId, setEnterpriseId] = useState("");
-  const [username, setUsername] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [activation, setActivation] = useState<
-    "invite_link" | "temporary_password"
-  >("invite_link");
+  const adminSchema = useMemo(
+    () =>
+      z.object({
+        enterpriseId: z.string().min(1, t("admins.form.required")),
+        username: z.string().trim().min(3, t("admins.form.usernameInvalid")),
+        displayName: z.string().trim().min(1, t("admins.form.required")),
+        email: z
+          .string()
+          .trim()
+          .refine(
+            (value) => value === "" || z.email().safeParse(value).success,
+            t("admins.form.emailInvalid"),
+          ),
+      }),
+    [t],
+  );
+  type AdminForm = z.infer<typeof adminSchema>;
+  const {
+    control,
+    register,
+    reset,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<AdminForm>({
+    resolver: zodResolver(adminSchema),
+    defaultValues: {
+      enterpriseId: "",
+      username: "",
+      displayName: "",
+      email: "",
+    },
+  });
 
   const enterprises = useQuery({
     queryKey: ["platform", "enterprises"],
@@ -75,31 +103,27 @@ export function AdminsPage() {
     queryClient.invalidateQueries({ queryKey: ["platform", "admins"] });
 
   const create = useMutation({
-    mutationFn: () =>
+    mutationFn: (input: AdminForm) =>
       api.platform.admins.create({
-        enterpriseId,
-        username: username.trim(),
-        displayName: displayName.trim(),
-        email: email.trim() || undefined,
-        activation,
+        enterpriseId: input.enterpriseId,
+        username: input.username,
+        displayName: input.displayName,
+        email: input.email || undefined,
       }),
     onSuccess: (admin) => {
-      setInviteOpen(false);
+      setCreateOpen(false);
       setCreated(admin);
-      setUsername("");
-      setDisplayName("");
-      setEmail("");
+      reset();
       void invalidate();
     },
   });
 
   const action = useMutation({
     mutationFn: (input: { type: AdminAction; id: string }) =>
-      input.type === "resend"
-        ? api.platform.admins.resendInvite(input.id)
-        : api.platform.admins[input.type](input.id),
-    onSuccess: () => {
+      api.platform.admins[input.type](input.id),
+    onSuccess: (admin, input) => {
       setPendingAction(null);
+      if (input.type === "resetAuth") setCreated(admin);
       void invalidate();
     },
   });
@@ -114,7 +138,7 @@ export function AdminsPage() {
     email: item.email ?? "",
     enterpriseId: item.enterpriseId,
     enterpriseName: enterpriseName(item.enterpriseId),
-    inviteStatus: item.inviteStatus,
+    credentialStatus: item.credentialStatus,
     lastLoginAt: item.lastLoginAt,
   }));
 
@@ -127,8 +151,13 @@ export function AdminsPage() {
       actions={
         <Button
           onClick={() => {
-            setEnterpriseId(activeEnterprises[0]?.id ?? "");
-            setInviteOpen(true);
+            reset({
+              enterpriseId: activeEnterprises[0]?.id ?? "",
+              username: "",
+              displayName: "",
+              email: "",
+            });
+            setCreateOpen(true);
           }}
           variant="primary"
         >
@@ -167,11 +196,11 @@ export function AdminsPage() {
               },
               { key: "enterpriseName", header: t("admins.table.enterprise") },
               {
-                key: "inviteStatus",
-                header: t("admins.table.inviteStatus"),
+                key: "credentialStatus",
+                header: t("admins.table.credentialStatus"),
                 render: (row) => (
-                  <StatusBadge tone={inviteTone(row.inviteStatus)}>
-                    {t(`admins.status.${row.inviteStatus}`)}
+                  <StatusBadge tone={credentialTone(row.credentialStatus)}>
+                    {t(`admins.status.${row.credentialStatus}`)}
                   </StatusBadge>
                 ),
               },
@@ -187,15 +216,6 @@ export function AdminsPage() {
                   <div className="argus-row-actions">
                     <Button
                       onClick={() =>
-                        setPendingAction({ type: "resend", admin: row })
-                      }
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {t("admins.action.resend")}
-                    </Button>
-                    <Button
-                      onClick={() =>
                         setPendingAction({ type: "resetAuth", admin: row })
                       }
                       size="sm"
@@ -203,7 +223,7 @@ export function AdminsPage() {
                     >
                       {t("admins.action.resetAuth")}
                     </Button>
-                    {row.inviteStatus !== "disabled" && (
+                    {row.credentialStatus !== "disabled" && (
                       <Button
                         onClick={() =>
                           setPendingAction({ type: "disable", admin: row })
@@ -224,68 +244,56 @@ export function AdminsPage() {
         )}
       </div>
 
-      {/* 邀请管理员 */}
+      {/* 创建临时密码管理员 */}
       <FormDrawer
         description={t("admins.form.description")}
         loading={create.isPending}
-        onOpenChange={setInviteOpen}
-        onSubmit={() => create.mutate()}
-        open={inviteOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) reset();
+        }}
+        onSubmit={handleSubmit((values) => create.mutate(values))}
+        open={createOpen}
         submitLabel={t("common.create")}
         title={t("admins.form.title")}
       >
-        <Field label={t("admins.form.enterprise")}>
-          <Select
-            onValueChange={setEnterpriseId}
-            options={activeEnterprises.map((enterprise) => ({
-              value: enterprise.id,
-              label: enterprise.name,
-            }))}
-            value={enterpriseId}
+        <Field
+          error={errors.enterpriseId?.message}
+          label={t("admins.form.enterprise")}
+        >
+          <Controller
+            control={control}
+            name="enterpriseId"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                options={activeEnterprises.map((enterprise) => ({
+                  value: enterprise.id,
+                  label: enterprise.name,
+                }))}
+                value={field.value}
+              />
+            )}
           />
         </Field>
-        <Field label={t("admins.form.displayName")}>
-          <Input
-            onChange={(event) => setDisplayName(event.target.value)}
-            required
-            value={displayName}
-          />
+        <Field
+          error={errors.displayName?.message}
+          label={t("admins.form.displayName")}
+        >
+          <Input {...register("displayName")} required />
         </Field>
-        <Field label={t("admins.form.username")}>
-          <Input
-            onChange={(event) => setUsername(event.target.value)}
-            required
-            value={username}
-          />
+        <Field
+          error={errors.username?.message}
+          label={t("admins.form.username")}
+        >
+          <Input {...register("username")} required />
         </Field>
-        <Field label={t("admins.form.email")}>
-          <Input
-            onChange={(event) => setEmail(event.target.value)}
-            type="email"
-            value={email}
-          />
-        </Field>
-        <Field label={t("admins.form.activation")}>
-          <Select
-            onValueChange={(value) =>
-              setActivation(value as "invite_link" | "temporary_password")
-            }
-            options={[
-              {
-                value: "invite_link",
-                label: t("admins.activation.invite_link"),
-              },
-              {
-                value: "temporary_password",
-                label: t("admins.activation.temporary_password"),
-              },
-            ]}
-            value={activation}
-          />
+        <Field error={errors.email?.message} label={t("admins.form.email")}>
+          <Input {...register("email")} type="email" />
         </Field>
       </FormDrawer>
 
-      {/* 创建成功后展示激活链接 */}
+      {/* 创建或重置成功后只展示一次临时密码。 */}
       <FormDrawer
         footer={
           <Button onClick={() => setCreated(null)} variant="primary">
@@ -305,17 +313,14 @@ export function AdminsPage() {
               title={t("admins.created.title")}
               tone="success"
             />
-            <CodeBlock
-              code={`https://enterprise.argus.local/activate/${created.id}?user=${created.username}`}
-              language="text"
-            />
+            <CodeBlock code={created.temporaryPassword ?? ""} language="text" />
           </div>
         )}
       </FormDrawer>
 
       {/* 操作确认 */}
       <ConfirmDialog
-        danger={pendingAction?.type !== "resend"}
+        danger
         description={
           pendingAction
             ? `${pendingAction.admin.displayName} (${pendingAction.admin.username}) — ${t(`admins.confirm.${pendingAction.type}.description`)}`

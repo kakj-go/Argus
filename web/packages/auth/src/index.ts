@@ -1,13 +1,14 @@
 import { create, type StoreApi, type UseBoundStore } from "zustand";
-import type { ArgusApiClient, LoginInput, SessionInfo } from "@argus/api-client";
+import type {
+  ArgusApiClient,
+  CompletePasswordChangeRequest,
+  LoginInput,
+  SessionInfo,
+} from "@argus/api-client";
 
 export type AuthAudience = "platform" | "enterprise";
 export type AuthStatus =
-  | "unknown"
-  | "checking"
-  | "authenticated"
-  | "anonymous"
-  | "unavailable";
+  "unknown" | "checking" | "authenticated" | "anonymous" | "unavailable";
 
 interface BootstrapHint {
   audience: AuthAudience;
@@ -24,6 +25,10 @@ export interface AuthState {
   error: string | null;
   restore: (client: ArgusApiClient) => Promise<void>;
   login: (client: ArgusApiClient, input: LoginInput) => Promise<SessionInfo>;
+  completePasswordChange: (
+    client: ArgusApiClient,
+    input: CompletePasswordChangeRequest,
+  ) => Promise<SessionInfo>;
   logout: (client: ArgusApiClient) => Promise<void>;
   clear: () => void;
 }
@@ -48,7 +53,10 @@ function isAudience(session: SessionInfo, audience: AuthAudience): boolean {
   return session.session.audience === audience;
 }
 
-function persistHint(audience: AuthAudience, session: SessionInfo | null): void {
+function persistHint(
+  audience: AuthAudience,
+  session: SessionInfo | null,
+): void {
   if (typeof window === "undefined") return;
   if (!session) {
     window.localStorage.removeItem(storageKey(audience));
@@ -111,6 +119,16 @@ function createAuthStore(
         await client.auth.logout().catch(() => undefined);
         persistHint(audience, null);
         set({ status: "anonymous", session: null });
+        throw new Error(`Unexpected ${audience} session audience`);
+      }
+      persistHint(audience, session);
+      set({ status: "authenticated", session, hint: loadHint(audience) });
+      return session;
+    },
+    completePasswordChange: async (client, input) => {
+      const session = await client.auth.completePasswordChange(input);
+      if (!isAudience(session, audience)) {
+        await client.auth.logout().catch(() => undefined);
         throw new Error(`Unexpected ${audience} session audience`);
       }
       persistHint(audience, session);

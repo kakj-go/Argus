@@ -1,0 +1,25 @@
+openapi: 3.1.0
+info: {title: Argus Platform Administration API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /platform/enterprises: {$ref: ../argus.yaml#/paths/~1platform~1enterprises}
+  "/platform/enterprises/{id}":
+    $ref: "../argus.yaml#/paths/~1platform~1enterprises~1{id}"
+  "/platform/enterprises/{id}/{state_action}":
+    $ref: "../argus.yaml#/paths/~1platform~1enterprises~1{id}~1{state_action}"
+  /platform/enterprise-admins: {$ref: ../argus.yaml#/paths/~1platform~1enterprise-admins}
+  "/platform/enterprise-admins/{id}/reset-password":
+    $ref: "../argus.yaml#/paths/~1platform~1enterprise-admins~1{id}~1reset-password"
+  "/platform/enterprise-admins/{id}/disable":
+    $ref: "../argus.yaml#/paths/~1platform~1enterprise-admins~1{id}~1disable"
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    EnterpriseCreate: {$ref: ../components/m2.yaml#/components/schemas/EnterpriseCreate}
+    EnterpriseUpdate: {$ref: ../components/m2.yaml#/components/schemas/EnterpriseUpdate}
+    EnterprisePage: {$ref: ../components/m2.yaml#/components/schemas/EnterprisePage}
+    EnterpriseAdminCreate: {$ref: ../components/m2.yaml#/components/schemas/EnterpriseAdminCreate}
+    CreatedUserCredential: {$ref: ../components/m2.yaml#/components/schemas/CreatedUserCredential}
+    EnterpriseUserPage: {$ref: ../components/m2.yaml#/components/schemas/EnterpriseUserPage}

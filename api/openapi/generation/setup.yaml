@@ -1,0 +1,30 @@
+openapi: 3.1.0
+info: {title: Argus Setup and Authentication API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /setup/status: {$ref: ../argus.yaml#/paths/~1setup~1status}
+  /setup/initialize: {$ref: ../argus.yaml#/paths/~1setup~1initialize}
+  "/{audience}/auth/login":
+    $ref: "../argus.yaml#/paths/~1{audience}~1auth~1login"
+  "/{audience}/auth/session":
+    $ref: "../argus.yaml#/paths/~1{audience}~1auth~1session"
+  "/{audience}/auth/complete-password-change":
+    $ref: "../argus.yaml#/paths/~1{audience}~1auth~1complete-password-change"
+  "/{audience}/account/password":
+    $ref: "../argus.yaml#/paths/~1{audience}~1account~1password"
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+    setupToken: {$ref: ../argus.yaml#/components/securitySchemes/setupToken}
+  schemas:
+    PlatformState: {$ref: ../components/m2.yaml#/components/schemas/PlatformState}
+    SetupStatus: {$ref: ../components/m2.yaml#/components/schemas/SetupStatus}
+    SetupInitializeRequest: {$ref: ../components/m2.yaml#/components/schemas/SetupInitializeRequest}
+    SetupInitializeResult: {$ref: ../components/m2.yaml#/components/schemas/SetupInitializeResult}
+    LoginRequest: {$ref: ../components/m2.yaml#/components/schemas/LoginRequest}
+    PasswordChangeChallenge: {$ref: ../components/m2.yaml#/components/schemas/PasswordChangeChallenge}
+    AuthenticatedSession: {$ref: ../components/m2.yaml#/components/schemas/AuthenticatedSession}
+    LoginResult: {$ref: ../components/m2.yaml#/components/schemas/LoginResult}
+    CompletePasswordChangeRequest: {$ref: ../components/m2.yaml#/components/schemas/CompletePasswordChangeRequest}
+    PasswordUpdateRequest: {$ref: ../components/m2.yaml#/components/schemas/PasswordUpdateRequest}

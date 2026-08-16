@@ -57,7 +57,6 @@ test("setup completes once and remains permanently locked", async ({
   await passwords.nth(0).fill("ArgusE2Epass123!");
   await passwords.nth(1).fill("ArgusE2Epass123!");
   await page.getByRole("button", { name: "下一步" }).click();
-  await page.getByRole("button", { name: "跳过" }).click();
   await page.getByRole("button", { name: "确认初始化" }).click();
 
   await expect(

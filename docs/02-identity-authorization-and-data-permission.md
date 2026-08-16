@@ -39,11 +39,11 @@ policy obligations satisfied
 - Policy、ApprovalPolicy：上下文限制、MFA、审批和会话约束。
 - AuthorizationVersion：授权变化后使旧票据、缓存和待执行操作失效的版本。
 
-第一版不提供 `EnterpriseMembership`、用户到多个企业的 Membership、企业切换、Project 或通用用户 Group。同一登录身份不能同时具有 PlatformRole 和 EnterpriseRole；邮箱或登录名的唯一性及外部 IdP 映射必须执行同样约束。
+第一版不提供 `EnterpriseMembership`、用户到多个企业的 Membership、企业切换、Project 或通用用户 Group。同一登录身份不能同时具有 PlatformRole 和 EnterpriseRole。M2 本地认证要求 Enterprise 用户名全局大小写不敏感唯一，因为登录请求不携带企业参数；后续外部 IdP 映射必须执行同样的唯一身份约束。
 
 ### 2.2 平台和企业管理域
 
-平台管理域第一版只有 `platform_super_admin`。它负责初始化、创建企业、创建或禁用初始企业管理员、企业状态和平台 OpenSandbox 基座，但不能进入企业工作台，也不能读取企业资源、模型、监控正文、远程会话、Secret、Tool Result 或企业审计正文。
+平台管理域第一版只有 `platform_super_admin`。它负责初始化、创建企业、创建或禁用初始企业管理员和企业状态，但不能进入企业工作台，也不能读取企业资源、模型、监控正文、远程会话、Secret、Tool Result 或企业审计正文。OpenSandbox 由 Helm 部署，平台治理 API 在 M4 Agent/Sandbox 接入前补充，不属于 M2 Setup 或身份闭环。
 
 企业身份只有在自身 `enterprise_id` 有效、用户启用且 Department 有效时才能进入工作台。企业 API 与平台 API 必须使用不同的路由守卫、Session Audience 和服务端授权入口。
 
@@ -60,6 +60,8 @@ resource_approver
 ```
 
 `enterprise_admin` 是企业控制面管理员，可以管理用户、部门、角色、策略、模型和资源配置，但不自动获得生产 Shell、目标账号、Secret 原值或 AI 生产执行权限。管理员扩大自己的 DataScope 或 RemoteAccessGrant 必须经过 Step-up Authentication 并写入高优先级审计。
+
+M2 只实现 `ALLOW | DENY` 和本地密码认证，用于 Evaluation 身份授权闭环。MFA、恢复码、Step-up 和 Production 强制策略在 M8 完成；在此之前不能把 Evaluation Profile 声明为 Production 身份安全就绪。
 
 ## 3. 资源标签和 DataScope
 
@@ -335,8 +337,9 @@ Access Request 与 Action Approval 必须分离。创建人确认不能满足“
 | 新 Telemetry Query | 立即拒绝 |
 | SSE/WebSocket/Live Tail | 建立、恢复和周期性检查时拒绝并断开 |
 | Automation | 下次执行按 ServiceAccount 当前权限重新判断 |
+| APIKey | Key 的 AuthorizationVersion 与当前 ServiceAccount 不一致时立即拒绝 |
 
-Redis 可以缓存授权结果和版本，但 PostgreSQL 保存权威授权状态。短期 Token、ActionBinding、游标和会话票据必须绑定 AuthorizationVersion；仅依赖 TTL 不满足生产撤权要求。
+Redis 可以缓存授权结果和版本，但 PostgreSQL 保存权威授权状态。Redis 不可用时已有 Session 仍从 PostgreSQL 校验，新登录因限流依赖不可用而保守拒绝。短期 Token、APIKey、ActionBinding、游标和会话票据必须绑定 AuthorizationVersion；仅依赖 TTL 不满足生产撤权要求。
 
 ## 12. 审计要求
 

@@ -23,6 +23,8 @@ const usage = `usage:
   argusctl install --config FILE
   argusctl status --config FILE [--output text|json]
   argusctl verify --config FILE [--output text|json] [--artifacts DIR]
+  argusctl setup-token rotate --config FILE
+  argusctl admin reset-password --config FILE --user-id UUID
   argusctl tunnel --config FILE
   argusctl uninstall --config FILE --delete-data --delete-owned-crds --yes`
 
@@ -62,6 +64,16 @@ func (a *App) run(ctx context.Context, args []string) error {
 			return errors.New("usage: argusctl images build|load|clean --config FILE")
 		}
 		return a.runImages(ctx, args[1], args[2:])
+	case "setup-token":
+		if len(args) < 2 || args[1] != "rotate" {
+			return errors.New("usage: argusctl setup-token rotate --config FILE")
+		}
+		return a.runSetupTokenRotate(ctx, args[2:])
+	case "admin":
+		if len(args) < 2 || args[1] != "reset-password" {
+			return errors.New("usage: argusctl admin reset-password --config FILE --user-id UUID")
+		}
+		return a.runAdminResetPassword(ctx, args[2:])
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
 	}

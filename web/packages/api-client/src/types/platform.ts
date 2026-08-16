@@ -29,10 +29,8 @@ export interface UpdateEnterpriseInput {
   remark?: string;
 }
 
-export type EnterpriseAdminInviteStatus =
-  | "pending"
-  | "activated"
-  | "disabled";
+export type EnterpriseAdminCredentialStatus =
+  "temporary_password" | "active" | "disabled";
 
 export interface EnterpriseAdmin {
   id: string;
@@ -40,9 +38,12 @@ export interface EnterpriseAdmin {
   username: string;
   displayName: string;
   email?: string;
-  inviteStatus: EnterpriseAdminInviteStatus;
+  credentialStatus: EnterpriseAdminCredentialStatus;
   lastLoginAt?: Iso;
   createdAt: Iso;
+  version?: number;
+  temporaryPassword?: string;
+  temporaryPasswordExpiresAt?: Iso;
 }
 
 export interface CreateEnterpriseAdminInput {
@@ -50,7 +51,6 @@ export interface CreateEnterpriseAdminInput {
   username: string;
   displayName: string;
   email?: string;
-  activation: "invite_link" | "temporary_password";
 }
 
 export interface SandboxBackend {

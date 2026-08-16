@@ -1,26 +1,43 @@
 import { describe, expect, it, vi } from "vitest";
 import { createConfiguredApiClient } from "../factory";
 import { createMockApiClient } from "../mock";
-import { ClientConfigurationError, ClientOperationUnavailableError, StreamTerminatedError } from "./errors";
+import {
+  ClientConfigurationError,
+  ClientOperationUnavailableError,
+  StreamTerminatedError,
+} from "./errors";
 import { HttpTransport } from "./http";
 import { decodeSse, parseSseBlock, SseTransport } from "./sse";
 import { WebSocketTransport } from "./websocket";
 
 describe("configured adapter", () => {
   it("fails closed for unknown mode and missing real URL", async () => {
-    await expect(createConfiguredApiClient({ mode: "auto" })).rejects.toBeInstanceOf(ClientConfigurationError);
-    await expect(createConfiguredApiClient({ mode: "real" })).rejects.toBeInstanceOf(ClientConfigurationError);
+    await expect(
+      createConfiguredApiClient({ portal: "setup", mode: "auto" }),
+    ).rejects.toBeInstanceOf(ClientConfigurationError);
+    await expect(
+      createConfiguredApiClient({ portal: "setup", mode: "real" }),
+    ).rejects.toBeInstanceOf(ClientConfigurationError);
   });
 
   it("returns a stable unavailable error for unfrozen real operations", async () => {
-    const client = await createConfiguredApiClient({ mode: "real", base_url: "https://api.example.test" });
-    await expect(client.hosts.list()).rejects.toBeInstanceOf(ClientOperationUnavailableError);
-    await expect(client.hosts.list()).rejects.toMatchObject({ code: "CLIENT_OPERATION_UNAVAILABLE" });
+    const client = await createConfiguredApiClient({
+      portal: "enterprise",
+      mode: "real",
+      base_url: "https://api.example.test",
+    });
+    await expect(client.hosts.list()).rejects.toBeInstanceOf(
+      ClientOperationUnavailableError,
+    );
+    await expect(client.hosts.list()).rejects.toMatchObject({
+      code: "CLIENT_OPERATION_UNAVAILABLE",
+    });
   });
 
   it("keeps mock and real domain method shapes aligned", async () => {
     const mock = createMockApiClient({ persist: false, delay: 0 });
     const real = await createConfiguredApiClient({
+      portal: "enterprise",
       mode: "real",
       base_url: "https://api.example.test",
     });
@@ -34,10 +51,12 @@ describe("configured adapter", () => {
 
 describe("HttpTransport", () => {
   it("applies v1 base URL, cookies, locale, request ID and JSON body", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }));
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
     const transport = new HttpTransport({
       base_url: "https://api.example.test/control/",
       fetch,
@@ -45,7 +64,13 @@ describe("HttpTransport", () => {
       request_id: () => "request-1",
       csrf_token: () => "csrf-1",
     });
-    await expect(transport.request("widgets", { method: "POST", body: { name: "one" }, csrf: true })).resolves.toEqual({ ok: true });
+    await expect(
+      transport.request("widgets", {
+        method: "POST",
+        body: { name: "one" },
+        csrf: true,
+      }),
+    ).resolves.toEqual({ ok: true });
     const [url, init] = fetch.mock.calls[0] as [URL, RequestInit];
     expect(url.href).toBe("https://api.example.test/control/api/v1/widgets");
     expect(init.credentials).toBe("include");
@@ -57,29 +82,53 @@ describe("HttpTransport", () => {
   });
 
   it("handles 204 and fails before network when CSRF is missing", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-    const transport = new HttpTransport({ base_url: "https://api.example.test", fetch });
-    await expect(transport.request("logout", { method: "POST" })).resolves.toBeUndefined();
-    await expect(transport.request("mutate", { method: "POST", csrf: true })).rejects.toMatchObject({ code: "CSRF_TOKEN_MISSING" });
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    const transport = new HttpTransport({
+      base_url: "https://api.example.test",
+      fetch,
+    });
+    await expect(
+      transport.request("logout", { method: "POST" }),
+    ).resolves.toBeUndefined();
+    await expect(
+      transport.request("mutate", { method: "POST", csrf: true }),
+    ).rejects.toMatchObject({ code: "CSRF_TOKEN_MISSING" });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("converts structured HTTP failures to ApiError", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "FORBIDDEN",
+          message_key: "errors.forbidden",
+          request_id: "request-2",
+          retryable: false,
+        }),
+        { status: 403 },
+      ),
+    );
+    const transport = new HttpTransport({
+      base_url: "https://api.example.test",
+      fetch,
+    });
+    await expect(transport.request("secret")).rejects.toMatchObject({
       code: "FORBIDDEN",
-      message_key: "errors.forbidden",
+      status: 403,
       request_id: "request-2",
-      retryable: false,
-    }), { status: 403 }));
-    const transport = new HttpTransport({ base_url: "https://api.example.test", fetch });
-    await expect(transport.request("secret")).rejects.toMatchObject({ code: "FORBIDDEN", status: 403, request_id: "request-2" });
+    });
   });
 });
 
 describe("SSE transport", () => {
   it("parses comments, event names and multiline data", () => {
-    expect(parseSseBlock(": heartbeat\nid: event-1\nevent: agent_event\ndata: {\"a\":1,\ndata: \"b\":2}"))
-      .toEqual({ id: "event-1", event: "agent_event", data: "{\"a\":1,\n\"b\":2}" });
+    expect(
+      parseSseBlock(
+        ': heartbeat\nid: event-1\nevent: agent_event\ndata: {"a":1,\ndata: "b":2}',
+      ),
+    ).toEqual({ id: "event-1", event: "agent_event", data: '{"a":1,\n"b":2}' });
     expect(parseSseBlock(": heartbeat")).toBeNull();
   });
 
@@ -108,13 +157,45 @@ describe("SSE transport", () => {
       terminal: false,
       data: {},
     };
-    const payload = [base, base, { ...base, event_id: "event-2", sequence: 2, terminal: true, event_type: "stream_closing", close_reason: "normal" }]
-      .map((item) => `data: ${JSON.stringify(item)}\n\n`).join("");
-    const fetch = vi.fn().mockResolvedValue(new Response(new ReadableStream({ start(controller) { controller.enqueue(encoder.encode(payload)); controller.close(); } }), { status: 200 }));
-    const transport = new HttpTransport({ base_url: "https://api.example.test", fetch });
+    const payload = [
+      base,
+      base,
+      {
+        ...base,
+        event_id: "event-2",
+        sequence: 2,
+        terminal: true,
+        event_type: "stream_closing",
+        close_reason: "normal",
+      },
+    ]
+      .map((item) => `data: ${JSON.stringify(item)}\n\n`)
+      .join("");
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(payload));
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    const transport = new HttpTransport({
+      base_url: "https://api.example.test",
+      fetch,
+    });
     const events = [];
-    for await (const event of new SseTransport(transport).stream("conversations/c1/events", { last_event_id: "event-0" })) events.push(event);
-    expect(events.map((event) => event.event_id)).toEqual(["event-1", "event-2"]);
+    for await (const event of new SseTransport(transport).stream(
+      "conversations/c1/events",
+      { last_event_id: "event-0" },
+    ))
+      events.push(event);
+    expect(events.map((event) => event.event_id)).toEqual([
+      "event-1",
+      "event-2",
+    ]);
     const headers = fetch.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get("last-event-id")).toBe("event-0");
   });
@@ -138,7 +219,9 @@ describe("SSE transport", () => {
           start(controller) {
             controller.enqueue(
               encoder.encode(
-                items.map((item) => `data: ${JSON.stringify(item)}\n\n`).join(""),
+                items
+                  .map((item) => `data: ${JSON.stringify(item)}\n\n`)
+                  .join(""),
               ),
             );
             controller.close();
@@ -173,8 +256,22 @@ describe("SSE transport", () => {
   });
 
   it("turns stale cursors into a stable terminal error", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "STREAM_CURSOR_STALE", message_key: "errors.stream_cursor_stale", request_id: "r", retryable: false }), { status: 409 }));
-    const stream = new SseTransport(new HttpTransport({ base_url: "https://api.example.test", fetch })).stream("events");
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: "STREAM_CURSOR_STALE",
+            message_key: "errors.stream_cursor_stale",
+            request_id: "r",
+            retryable: false,
+          }),
+          { status: 409 },
+        ),
+      );
+    const stream = new SseTransport(
+      new HttpTransport({ base_url: "https://api.example.test", fetch }),
+    ).stream("events");
     await expect(stream.next()).rejects.toBeInstanceOf(StreamTerminatedError);
   });
 
@@ -194,7 +291,9 @@ describe("SSE transport", () => {
       new Response(
         new ReadableStream({
           start(controller) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(payload)}\n\n`),
+            );
             controller.close();
           },
         }),
@@ -238,7 +337,11 @@ describe("WebSocket transport", () => {
     expect(violation).toHaveBeenCalledWith("MESSAGE_TOO_LARGE", { size: 9 });
     expect(close).toHaveBeenCalledWith(1009, "message_too_large");
     listeners.get("close")?.(
-      new CloseEvent("close", { code: 1001, reason: "server_drain", wasClean: true }),
+      new CloseEvent("close", {
+        code: 1001,
+        reason: "server_drain",
+        wasClean: true,
+      }),
     );
     expect(transport.close_state).toEqual({
       code: 1001,

@@ -1,13 +1,13 @@
 /**
  * 初始化向导文案（`setup.*` 命名空间）。
- * 设计依据 docs/07 §2-4：一次性初始化向导，四步完成平台初始化。
+ * 设计依据 docs/07 §2-4：一次性初始化向导，三步完成平台初始化。
  */
 export const setupZh = {
   setup: {
     badge: "首次初始化",
     title: "欢迎使用 Argus",
     subtitle:
-      "完成一次性系统初始化：验证部署凭据，创建超级管理员，并可选择性接入 OpenSandbox 执行基座。初始化完成后本页面将永久关闭。",
+      "完成一次性系统初始化：验证部署凭据并创建平台超级管理员。初始化完成后本页面将永久关闭。",
     loading: "正在检查系统初始化状态…",
     statusError: {
       title: "无法获取系统状态",
@@ -31,7 +31,6 @@ export const setupZh = {
     steps: {
       token: { title: "验证 Setup Token", description: "部署侧一次性凭据" },
       system: { title: "系统与管理员", description: "平台信息与超级管理员" },
-      sandbox: { title: "OpenSandbox 基座", description: "可选，稍后可配置" },
       review: { title: "确认提交", description: "单事务提交，不可重复" },
     },
     token: {
@@ -95,39 +94,11 @@ export const setupZh = {
         strong: "强",
       },
     },
-    sandbox: {
-      intro:
-        "OpenSandbox 为 Agent 与自动化提供隔离执行环境。本步骤可跳过，初始化后仍可在平台控制台配置。",
-      enable: "启用 OpenSandbox 基座",
-      endpoint: {
-        label: "服务地址",
-        placeholder: "https://sandbox.example.com",
-        required: "请输入 OpenSandbox 服务地址",
-        invalid: "请输入合法的 http(s) 地址",
-      },
-      credential: {
-        label: "连接凭证",
-        placeholder: "访问令牌 / API Key",
-        hint: "凭证仅以后端 Secret 引用形式保存，不会再次明文展示。",
-        required: "请输入连接凭证",
-      },
-      storage: {
-        label: "默认执行存储位置",
-        placeholder: "s3://argus-sandbox/default",
-        required: "请输入默认执行存储位置",
-      },
-      test: {
-        button: "测试连接",
-        success: "连接成功",
-        failure: "连接失败，请检查服务地址",
-      },
-    },
     review: {
       intro:
         "请核对以下信息。提交为单事务操作：任一环节失败将整体回滚；成功后 Setup Token 立即失效，本向导永久关闭。",
       tokenMasked: "已验证（提交时随表单一并校验）",
       masked: "••••••••",
-      notEnabled: "不启用（稍后在平台控制台配置）",
       submit: "确认初始化",
       errorTitle: "初始化失败",
     },
@@ -139,7 +110,7 @@ export const setupEn = {
     badge: "First-time setup",
     title: "Welcome to Argus",
     subtitle:
-      "Complete the one-time initialization: verify the deployment credential, create the super administrator, and optionally connect the OpenSandbox execution foundation. This page closes permanently once finished.",
+      "Complete the one-time initialization by verifying the deployment credential and creating the platform super administrator. This page closes permanently once finished.",
     loading: "Checking platform initialization state…",
     statusError: {
       title: "Unable to fetch platform status",
@@ -168,10 +139,6 @@ export const setupEn = {
       system: {
         title: "System & admin",
         description: "Platform info and super admin",
-      },
-      sandbox: {
-        title: "OpenSandbox",
-        description: "Optional, configurable later",
       },
       review: {
         title: "Confirm & submit",
@@ -239,39 +206,11 @@ export const setupEn = {
         strong: "Strong",
       },
     },
-    sandbox: {
-      intro:
-        "OpenSandbox provides isolated execution environments for agents and automation. This step is optional and can be configured later in the platform console.",
-      enable: "Enable OpenSandbox foundation",
-      endpoint: {
-        label: "Endpoint",
-        placeholder: "https://sandbox.example.com",
-        required: "Enter the OpenSandbox endpoint",
-        invalid: "Enter a valid http(s) URL",
-      },
-      credential: {
-        label: "Connection credential",
-        placeholder: "Access token / API key",
-        hint: "Stored only as a backend Secret reference and never shown in plain text again.",
-        required: "Enter the connection credential",
-      },
-      storage: {
-        label: "Default execution storage",
-        placeholder: "s3://argus-sandbox/default",
-        required: "Enter the default execution storage location",
-      },
-      test: {
-        button: "Test connection",
-        success: "Connection succeeded",
-        failure: "Connection failed; check the endpoint",
-      },
-    },
     review: {
       intro:
         "Review the information below. Submission is a single transaction: any failure rolls everything back; on success the Setup Token is invalidated and this wizard closes permanently.",
       tokenMasked: "Verified (validated again on submit)",
       masked: "••••••••",
-      notEnabled: "Disabled (configure later in the platform console)",
       submit: "Confirm & initialize",
       errorTitle: "Initialization failed",
     },

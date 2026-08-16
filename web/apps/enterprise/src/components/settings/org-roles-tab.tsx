@@ -1,6 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import { useApi } from "@argus/api-client";
 import type { Role } from "@argus/api-client";
 import {
@@ -227,30 +230,47 @@ function RoleDrawer({
   role: Role | null;
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const roleSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, t("settings.common.required")),
+        description: z.string().trim(),
+        permissions: z.array(z.string()),
+      }),
+    [t],
+  );
+  type RoleForm = z.infer<typeof roleSchema>;
+  const {
+    control,
+    register,
+    reset,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<RoleForm>({
+    resolver: zodResolver(roleSchema),
+    defaultValues: { name: "", description: "", permissions: [] },
+  });
 
-  const key = open ? (role?.id ?? "__new__") : null;
-  if (key && loadedFor !== key) {
-    setLoadedFor(key);
-    setName(role?.name ?? "");
-    setDescription(role?.description ?? "");
-    setPermissions(role?.permissions ?? []);
-  }
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      name: role?.name ?? "",
+      description: role?.description ?? "",
+      permissions: role?.permissions ?? [],
+    });
+  }, [open, reset, role]);
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={() =>
+      onSubmit={handleSubmit((values) =>
         onSubmit({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          permissions,
-        })
-      }
+          name: values.name,
+          description: values.description || undefined,
+          permissions: values.permissions,
+        }),
+      )}
       open={open}
       title={
         role
@@ -260,24 +280,23 @@ function RoleDrawer({
       width={640}
     >
       <div className="argus-settings-form">
-        <Field label={t("settings.common.name")}>
-          <Input
-            onChange={(event) => setName(event.target.value)}
-            required
-            value={name}
-          />
+        <Field error={errors.name?.message} label={t("settings.common.name")}>
+          <Input {...register("name")} required />
         </Field>
         <Field label={t("settings.common.description")}>
-          <Input
-            onChange={(event) => setDescription(event.target.value)}
-            value={description}
-          />
+          <Input {...register("description")} />
         </Field>
         <Field
           hint={t("settings.org.rolesTab.permissionHint")}
           label={t("settings.org.rolesTab.permissions")}
         >
-          <PermissionMatrix onChange={setPermissions} value={permissions} />
+          <Controller
+            control={control}
+            name="permissions"
+            render={({ field }) => (
+              <PermissionMatrix onChange={field.onChange} value={field.value} />
+            )}
+          />
         </Field>
       </div>
     </FormDrawer>

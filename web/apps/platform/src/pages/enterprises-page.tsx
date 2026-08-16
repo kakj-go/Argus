@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import { useApi, type Enterprise } from "@argus/api-client";
 import {
   Button,
@@ -17,7 +20,6 @@ import {
   StatusBadge,
   Textarea,
 } from "@argus/ui";
-import { QuotaEditor } from "../components/quota-editor";
 import { formatDateTime } from "../lib/format";
 
 type EnterpriseRow = {
@@ -26,7 +28,6 @@ type EnterpriseRow = {
   code: string;
   timezone: string;
   status: Enterprise["status"];
-  sandboxQuotaProfile: string;
   createdAt: string;
 };
 
@@ -54,46 +55,64 @@ export function EnterprisesPage() {
   const queryClient = useQueryClient();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Enterprise | null>(null);
   const [detail, setDetail] = useState<Enterprise | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     type: LifecycleAction;
     enterprise: EnterpriseRow;
   } | null>(null);
 
-  // 创建表单
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [timezone, setTimezone] = useState(TIMEZONES[0]!);
-  const [quotaProfile, setQuotaProfile] = useState("");
-  const [remark, setRemark] = useState("");
+  const enterpriseSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, t("enterprises.form.required")),
+        code: z
+          .string()
+          .trim()
+          .regex(
+            /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+            t("enterprises.form.codeInvalid"),
+          ),
+        timezone: z.string().min(1, t("enterprises.form.required")),
+        remark: z.string(),
+      }),
+    [t],
+  );
+  type EnterpriseForm = z.infer<typeof enterpriseSchema>;
+  const {
+    control,
+    register,
+    reset,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<EnterpriseForm>({
+    resolver: zodResolver(enterpriseSchema),
+    defaultValues: {
+      name: "",
+      code: "",
+      timezone: TIMEZONES[0]!,
+      remark: "",
+    },
+  });
 
   const enterprises = useQuery({
     queryKey: ["platform", "enterprises"],
     queryFn: () => api.platform.enterprises.list(),
   });
-  const profiles = useQuery({
-    queryKey: ["platform", "profiles"],
-    queryFn: () => api.platform.profiles.list(),
-  });
-
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["platform", "enterprises"] });
 
   const create = useMutation({
-    mutationFn: () =>
+    mutationFn: (input: EnterpriseForm) =>
       api.platform.enterprises.create({
-        name: name.trim(),
-        code: code.trim(),
-        timezone,
-        sandboxQuotaProfile: quotaProfile || undefined,
-        remark: remark.trim() || undefined,
+        name: input.name,
+        code: input.code,
+        timezone: input.timezone,
+        remark: input.remark.trim() || undefined,
       }),
     onSuccess: () => {
       setCreateOpen(false);
-      setName("");
-      setCode("");
-      setQuotaProfile("");
-      setRemark("");
+      reset();
       void invalidate();
     },
   });
@@ -106,6 +125,23 @@ export function EnterprisesPage() {
       void invalidate();
     },
   });
+  const update = useMutation({
+    mutationFn: (input: {
+      id: string;
+      name: string;
+      timezone: string;
+      remark?: string;
+    }) =>
+      api.platform.enterprises.update(input.id, {
+        name: input.name,
+        timezone: input.timezone,
+        remark: input.remark,
+      }),
+    onSuccess: () => {
+      setEditing(null);
+      void invalidate();
+    },
+  });
 
   const rows: EnterpriseRow[] = (enterprises.data?.items ?? []).map((item) => ({
     id: item.id,
@@ -113,7 +149,6 @@ export function EnterprisesPage() {
     code: item.code,
     timezone: item.timezone,
     status: item.status,
-    sandboxQuotaProfile: item.sandboxQuotaProfile ?? "",
     createdAt: item.createdAt,
   }));
 
@@ -123,7 +158,13 @@ export function EnterprisesPage() {
   return (
     <PageShell
       actions={
-        <Button onClick={() => setCreateOpen(true)} variant="primary">
+        <Button
+          onClick={() => {
+            reset();
+            setCreateOpen(true);
+          }}
+          variant="primary"
+        >
           {t("enterprises.create")}
         </Button>
       }
@@ -154,11 +195,6 @@ export function EnterprisesPage() {
               ),
             },
             {
-              key: "sandboxQuotaProfile",
-              header: t("enterprises.table.quotaProfile"),
-              render: (row) => row.sandboxQuotaProfile || t("common.none"),
-            },
-            {
               key: "createdAt",
               header: t("enterprises.table.createdAt"),
               render: (row) => formatDateTime(row.createdAt, i18n.language),
@@ -174,6 +210,13 @@ export function EnterprisesPage() {
                     variant="ghost"
                   >
                     {t("common.detail")}
+                  </Button>
+                  <Button
+                    onClick={() => setEditing(findEnterprise(row.id))}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {t("common.edit")}
                   </Button>
                   {row.status !== "active" && row.status !== "disabled" && (
                     <Button
@@ -221,58 +264,57 @@ export function EnterprisesPage() {
       <FormDrawer
         description={t("enterprises.form.create.description")}
         loading={create.isPending}
-        onOpenChange={setCreateOpen}
-        onSubmit={() => create.mutate()}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) reset();
+        }}
+        onSubmit={handleSubmit((values) => create.mutate(values))}
         open={createOpen}
         submitLabel={t("common.create")}
         title={t("enterprises.form.create.title")}
       >
-        <Field label={t("enterprises.form.name")}>
-          <Input
-            onChange={(event) => setName(event.target.value)}
-            required
-            value={name}
-          />
+        <Field error={errors.name?.message} label={t("enterprises.form.name")}>
+          <Input {...register("name")} required />
         </Field>
         <Field
           hint={t("enterprises.form.codeHint")}
+          error={errors.code?.message}
           label={t("enterprises.form.code")}
         >
-          <Input
-            onChange={(event) => setCode(event.target.value)}
-            pattern="[a-z0-9-]+"
-            required
-            value={code}
-          />
+          <Input {...register("code")} required />
         </Field>
-        <Field label={t("enterprises.form.timezone")}>
-          <Select
-            onValueChange={setTimezone}
-            options={TIMEZONES.map((zone) => ({ value: zone, label: zone }))}
-            value={timezone}
-          />
-        </Field>
-        <Field label={t("enterprises.form.quotaProfile")}>
-          <Select
-            onValueChange={setQuotaProfile}
-            options={[
-              { value: "", label: t("common.none") },
-              ...(profiles.data ?? []).map((profile) => ({
-                value: profile.name,
-                label: profile.name,
-              })),
-            ]}
-            value={quotaProfile}
+        <Field
+          error={errors.timezone?.message}
+          label={t("enterprises.form.timezone")}
+        >
+          <Controller
+            control={control}
+            name="timezone"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                options={TIMEZONES.map((zone) => ({
+                  value: zone,
+                  label: zone,
+                }))}
+                value={field.value}
+              />
+            )}
           />
         </Field>
         <Field label={t("enterprises.form.remark")}>
-          <Textarea
-            onChange={(event) => setRemark(event.target.value)}
-            rows={3}
-            value={remark}
-          />
+          <Textarea {...register("remark")} rows={3} />
         </Field>
       </FormDrawer>
+
+      {editing && (
+        <EnterpriseEditDrawer
+          enterprise={editing}
+          loading={update.isPending}
+          onClose={() => setEditing(null)}
+          onSubmit={(input) => update.mutate({ id: editing.id, ...input })}
+        />
+      )}
 
       {/* 生命周期确认 */}
       <ConfirmDialog
@@ -342,10 +384,6 @@ export function EnterprisesPage() {
                   ),
                 },
                 {
-                  label: t("enterprises.table.quotaProfile"),
-                  value: detail.sandboxQuotaProfile ?? t("common.none"),
-                },
-                {
                   label: t("enterprises.table.createdAt"),
                   value: formatDateTime(detail.createdAt, i18n.language),
                 },
@@ -355,13 +393,88 @@ export function EnterprisesPage() {
                 },
               ]}
             />
-            <section className="argus-drawer-section">
-              <h3>{t("enterprises.quota.title")}</h3>
-              <QuotaEditor enterpriseId={detail.id} />
-            </section>
           </div>
         )}
       </FormDrawer>
     </PageShell>
+  );
+}
+
+function EnterpriseEditDrawer({
+  enterprise,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  enterprise: Enterprise;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (input: {
+    name: string;
+    timezone: string;
+    remark?: string;
+  }) => void;
+}) {
+  const { t } = useTranslation();
+  const schema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, t("enterprises.form.required")),
+        timezone: z.string().min(1, t("enterprises.form.required")),
+        remark: z.string().trim(),
+      }),
+    [t],
+  );
+  type EditForm = z.infer<typeof schema>;
+  const {
+    control,
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<EditForm>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: enterprise.name,
+      timezone: enterprise.timezone,
+      remark: enterprise.remark ?? "",
+    },
+  });
+  return (
+    <FormDrawer
+      loading={loading}
+      onOpenChange={(open) => !open && onClose()}
+      onSubmit={handleSubmit((values) =>
+        onSubmit({
+          name: values.name,
+          timezone: values.timezone,
+          remark: values.remark || undefined,
+        }),
+      )}
+      open
+      title={t("enterprises.form.edit.title")}
+    >
+      <Field error={errors.name?.message} label={t("enterprises.form.name")}>
+        <Input {...register("name")} required />
+      </Field>
+      <Field
+        error={errors.timezone?.message}
+        label={t("enterprises.form.timezone")}
+      >
+        <Controller
+          control={control}
+          name="timezone"
+          render={({ field }) => (
+            <Select
+              onValueChange={field.onChange}
+              options={TIMEZONES.map((zone) => ({ value: zone, label: zone }))}
+              value={field.value}
+            />
+          )}
+        />
+      </Field>
+      <Field label={t("enterprises.form.remark")}>
+        <Textarea {...register("remark")} rows={3} />
+      </Field>
+    </FormDrawer>
   );
 }

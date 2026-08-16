@@ -17,12 +17,7 @@ export const accountZh = {
   "account.password.weak": "新密码强度不足：至少 12 位且包含字母与数字",
   "account.password.required": "请完整填写所有密码字段",
   "account.password.submit": "更新密码",
-  "account.password.success": "密码已更新（mock 环境，仅作演示）",
-  "account.mfa.title": "多因素认证（MFA）",
-  "account.mfa.required.title": "超管强制 MFA",
-  "account.mfa.required.description":
-    "平台超级管理员必须启用 MFA，无法在此关闭。",
-  "account.mfa.toggle": "启用 MFA",
+  "account.password.failed": "密码更新失败，请确认当前密码和密码策略后重试",
   "account.sessions.title": "登录会话",
   "account.sessions.current": "当前会话",
   "account.sessions.device": "设备",
@@ -51,12 +46,8 @@ export const accountEn = {
     "New password is too weak: at least 12 characters with letters and digits",
   "account.password.required": "Please fill in all password fields",
   "account.password.submit": "Update password",
-  "account.password.success": "Password updated (mock environment, demo only)",
-  "account.mfa.title": "Multi-factor authentication (MFA)",
-  "account.mfa.required.title": "MFA is mandatory for super admins",
-  "account.mfa.required.description":
-    "Platform super admins must keep MFA enabled; it cannot be turned off here.",
-  "account.mfa.toggle": "Enable MFA",
+  "account.password.failed":
+    "Password update failed. Check the current password and password policy, then retry.",
   "account.sessions.title": "Sign-in sessions",
   "account.sessions.current": "Current session",
   "account.sessions.device": "Device",

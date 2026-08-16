@@ -92,8 +92,10 @@ import type {
 } from "./provisional";
 import type { TaskEvent, TaskFilter, TaskViewModel } from "./provisional";
 import type {
+  CompletePasswordChangeRequest,
   ConversationEvent,
   EnterpriseUser,
+  PasswordUpdateRequest,
   StreamEventEnvelope,
 } from "./generated/contracts";
 
@@ -107,6 +109,10 @@ export interface ArgusApiClient {
   /** Session lifecycle and enterprise context. */
   auth: {
     login(input: LoginInput): Promise<SessionInfo>;
+    completePasswordChange(
+      input: CompletePasswordChangeRequest,
+    ): Promise<SessionInfo>;
+    changePassword(input: PasswordUpdateRequest): Promise<void>;
     logout(): Promise<void>;
     me(): Promise<SessionInfo>;
   };
@@ -186,7 +192,9 @@ export interface ArgusApiClient {
   kubernetes: {
     listClusters(query?: ListQuery): Promise<Page<K8sCluster>>;
     getCluster(id: string): Promise<K8sCluster>;
-    previewCreateCluster(input: CreateK8sClusterInput): Promise<PendingActionPublic>;
+    previewCreateCluster(
+      input: CreateK8sClusterInput,
+    ): Promise<PendingActionPublic>;
     updateCluster(
       id: string,
       patch: UpdateK8sClusterInput,
@@ -305,7 +313,11 @@ export interface ArgusApiClient {
     }): Promise<Department>;
     updateDepartment(
       id: string,
-      patch: { name?: string; description?: string },
+      patch: {
+        name?: string;
+        description?: string;
+        status?: Department["status"];
+      },
     ): Promise<Department>;
     deleteDepartment(id: string): Promise<void>;
     listRoles(): Promise<Role[]>;
@@ -329,7 +341,9 @@ export interface ArgusApiClient {
       },
     ): Promise<ApprovalPolicy>;
     listServiceAccounts(): Promise<ServiceAccount[]>;
-    createServiceAccount(input: CreateServiceAccountInput): Promise<ServiceAccount>;
+    createServiceAccount(
+      input: CreateServiceAccountInput,
+    ): Promise<ServiceAccount>;
     updateServiceAccount(
       id: string,
       patch: {
@@ -344,6 +358,7 @@ export interface ArgusApiClient {
       serviceAccountId: string,
       input: CreateApiKeyInput,
     ): Promise<CreatedApiKey>;
+    rotateApiKey(id: string): Promise<CreatedApiKey>;
     revokeApiKey(id: string): Promise<void>;
   };
 
@@ -375,7 +390,6 @@ export interface ArgusApiClient {
     admins: {
       list(enterpriseId?: string): Promise<EnterpriseAdmin[]>;
       create(input: CreateEnterpriseAdminInput): Promise<EnterpriseAdmin>;
-      resendInvite(id: string): Promise<EnterpriseAdmin>;
       resetAuth(id: string): Promise<EnterpriseAdmin>;
       disable(id: string): Promise<EnterpriseAdmin>;
     };

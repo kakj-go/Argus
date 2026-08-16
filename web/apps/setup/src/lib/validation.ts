@@ -1,26 +1,5 @@
 import type { SetupSubmission } from "@argus/api-client";
-
-/** 向导表单草稿；提交时映射为 `SetupSubmission`。 */
-export interface SetupDraft {
-  setupToken: string;
-  platformName: string;
-  defaultLocale: "zh-CN" | "en-US";
-  timezone: string;
-  externalUrl: string;
-  admin: {
-    username: string;
-    displayName: string;
-    email: string;
-    password: string;
-    confirmPassword: string;
-  };
-  sandbox: {
-    enabled: boolean;
-    endpoint: string;
-    credential: string;
-    storage: string;
-  };
-}
+import { z } from "zod";
 
 /** 常见时区候选（select 选项）。 */
 export const TIMEZONE_OPTIONS = [
@@ -50,7 +29,6 @@ export function createInitialDraft(): SetupDraft {
       password: "",
       confirmPassword: "",
     },
-    sandbox: { enabled: false, endpoint: "", credential: "", storage: "" },
   };
 }
 
@@ -68,71 +46,65 @@ const USERNAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{2,31}$/;
 
 export type Translator = (key: string) => string;
 
-/** 第 1 步：Setup Token。mock 侧约定任意非空 token 均可通过。 */
-export function validateToken(draft: SetupDraft, t: Translator): string | null {
-  const token = draft.setupToken.trim();
-  if (!token) return t("setup.token.required");
-  if (token.length < 8) return t("setup.token.tooShort");
-  return null;
+export function createSetupSchemas(t: Translator) {
+  const token = z.object({
+    setupToken: z
+      .string()
+      .trim()
+      .min(1, t("setup.token.required"))
+      .min(8, t("setup.token.tooShort")),
+  });
+  const admin = z
+    .object({
+      username: z
+        .string()
+        .trim()
+        .min(1, t("setup.system.username.required"))
+        .regex(USERNAME_PATTERN, t("setup.system.username.invalid")),
+      displayName: z
+        .string()
+        .trim()
+        .min(1, t("setup.system.displayName.required")),
+      email: z
+        .string()
+        .trim()
+        .min(1, t("setup.system.email.required"))
+        .regex(EMAIL_PATTERN, t("setup.system.email.invalid")),
+      password: z
+        .string()
+        .min(1, t("setup.system.password.required"))
+        .min(12, t("setup.system.password.tooShort"))
+        .refine(
+          (value) => /[a-zA-Z]/.test(value) && /\d/.test(value),
+          t("setup.system.password.weak"),
+        ),
+      confirmPassword: z.string(),
+    })
+    .refine((value) => value.confirmPassword === value.password, {
+      path: ["confirmPassword"],
+      message: t("setup.system.confirmPassword.mismatch"),
+    });
+  const system = z.object({
+    platformName: z
+      .string()
+      .trim()
+      .min(1, t("setup.system.platformName.required"))
+      .max(64, t("setup.system.platformName.tooLong")),
+    defaultLocale: z.enum(["zh-CN", "en-US"]),
+    timezone: z.string().min(1),
+    externalUrl: z
+      .string()
+      .trim()
+      .min(1, t("setup.system.externalUrl.required"))
+      .refine(isValidHttpUrl, t("setup.system.externalUrl.invalid")),
+    admin,
+  });
+  return { token, system, setup: token.merge(system) };
 }
 
-/** 第 2 步：系统信息 + 超级管理员。返回字段名 -> 错误信息。 */
-export function validateSystem(
-  draft: SetupDraft,
-  t: Translator,
-): Record<string, string> {
-  const errors: Record<string, string> = {};
-  const name = draft.platformName.trim();
-  if (!name) errors.platformName = t("setup.system.platformName.required");
-  else if (name.length > 64)
-    errors.platformName = t("setup.system.platformName.tooLong");
-
-  if (!draft.externalUrl.trim())
-    errors.externalUrl = t("setup.system.externalUrl.required");
-  else if (!isValidHttpUrl(draft.externalUrl.trim()))
-    errors.externalUrl = t("setup.system.externalUrl.invalid");
-
-  const { admin } = draft;
-  if (!admin.username.trim())
-    errors.username = t("setup.system.username.required");
-  else if (!USERNAME_PATTERN.test(admin.username.trim()))
-    errors.username = t("setup.system.username.invalid");
-
-  if (!admin.displayName.trim())
-    errors.displayName = t("setup.system.displayName.required");
-
-  if (!admin.email.trim()) errors.email = t("setup.system.email.required");
-  else if (!EMAIL_PATTERN.test(admin.email.trim()))
-    errors.email = t("setup.system.email.invalid");
-
-  if (!admin.password) errors.password = t("setup.system.password.required");
-  else if (admin.password.length < 12)
-    errors.password = t("setup.system.password.tooShort");
-  else if (!/[a-zA-Z]/.test(admin.password) || !/\d/.test(admin.password))
-    errors.password = t("setup.system.password.weak");
-
-  if (admin.confirmPassword !== admin.password)
-    errors.confirmPassword = t("setup.system.confirmPassword.mismatch");
-
-  return errors;
-}
-
-/** 第 3 步：OpenSandbox（未启用时恒有效）。 */
-export function validateSandbox(
-  draft: SetupDraft,
-  t: Translator,
-): Record<string, string> {
-  const errors: Record<string, string> = {};
-  if (!draft.sandbox.enabled) return errors;
-  const { endpoint, credential, storage } = draft.sandbox;
-  if (!endpoint.trim()) errors.endpoint = t("setup.sandbox.endpoint.required");
-  else if (!isValidHttpUrl(endpoint.trim()))
-    errors.endpoint = t("setup.sandbox.endpoint.invalid");
-  if (!credential.trim())
-    errors.credential = t("setup.sandbox.credential.required");
-  if (!storage.trim()) errors.storage = t("setup.sandbox.storage.required");
-  return errors;
-}
+export type SetupDraft = z.infer<
+  ReturnType<typeof createSetupSchemas>["setup"]
+>;
 
 /** 密码强度：0=弱 1=中 2=强（仅供强度指示，不代表通过校验）。 */
 export function passwordStrength(password: string): 0 | 1 | 2 {
@@ -162,13 +134,5 @@ export function toSubmission(draft: SetupDraft): SetupSubmission {
       email: draft.admin.email.trim() || undefined,
       password: draft.admin.password,
     },
-    sandbox: draft.sandbox.enabled
-      ? {
-          enabled: true,
-          endpoint: draft.sandbox.endpoint.trim(),
-          credentialRef: draft.sandbox.credential.trim(),
-          defaultStorage: draft.sandbox.storage.trim(),
-        }
-      : { enabled: false },
   };
 }

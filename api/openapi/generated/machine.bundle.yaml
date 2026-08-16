@@ -1,0 +1,505 @@
+openapi: 3.1.0
+info:
+  title: Argus Machine Identity API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/service-accounts:
+    get:
+      operationId: listServiceAccounts
+      summary: listServiceAccounts.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Service accounts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccountPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createServiceAccount
+      summary: createServiceAccount.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceAccountCreate'
+      responses:
+        '201':
+          description: Service account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccount'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/service-accounts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      operationId: updateServiceAccount
+      summary: updateServiceAccount.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceAccountUpdate'
+      responses:
+        '200':
+          description: Updated service account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccount'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/service-accounts/{service_account_id}/api-keys:
+    parameters:
+      - name: service_account_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listApiKeys
+      summary: listApiKeys.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: API keys.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createApiKey
+      summary: createApiKey.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreate'
+      responses:
+        '201':
+          description: API key and one-time secret.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedApiKeySecret'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/api-keys/{id}/rotate:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: rotateApiKey
+      summary: rotateApiKey.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Rotated API key and one-time secret.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedApiKeySecret'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/api-keys/{id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: revokeApiKey
+      summary: revokeApiKey.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '204':
+          description: API key revoked.
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    ServiceAccountCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - allowed_tool_ids
+        - data_scope_ids
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        allowed_tool_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 256
+        data_scope_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    ServiceAccountUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        description:
+          type: string
+          maxLength: 1024
+        allowed_tool_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 256
+        data_scope_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    ServiceAccountPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceAccount'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    ApiKeyCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        expires_at:
+          type: string
+          format: date-time
+    CreatedApiKeySecret:
+      type: object
+      additionalProperties: false
+      required:
+        - api_key
+        - secret
+      properties:
+        api_key:
+          $ref: '#/components/schemas/ApiKey'
+        secret:
+          type: string
+          pattern: ^argus_ak_[A-Za-z0-9_-]{6,32}\.[A-Za-z0-9_-]{32,256}$
+          writeOnly: true
+    ApiKeyPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKey'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    AuthorizationVersion:
+      type: integer
+      format: int64
+      minimum: 1
+    ServiceAccount:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - name
+        - status
+        - authorization_version
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        allowed_tool_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        data_scope_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        authorization_version:
+          $ref: '#/components/schemas/AuthorizationVersion'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    ApiKey:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - service_account_id
+        - name
+        - prefix
+        - status
+        - version
+        - created_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        service_account_id:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        prefix:
+          type: string
+          minLength: 4
+          maxLength: 32
+        status:
+          type: string
+          enum:
+            - active
+            - revoked
+            - expired
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        expires_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

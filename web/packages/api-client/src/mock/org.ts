@@ -20,10 +20,14 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
     async getEnterpriseUser(userId) {
       await ctx.pause();
       const record = db.enterpriseUsers.find(
-          (m) => m.userId === userId && m.enterpriseId === ctx.enterpriseId(),
-        );
+        (m) => m.userId === userId && m.enterpriseId === ctx.enterpriseId(),
+      );
       if (!record) return null;
-      const user = ctx.mustFind(db.users, (entry) => entry.id === userId, "user");
+      const user = ctx.mustFind(
+        db.users,
+        (entry) => entry.id === userId,
+        "user",
+      );
       return {
         id: user.id,
         enterprise_id: record.enterpriseId,
@@ -34,6 +38,7 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
         status: user.status,
         mfa_enabled: user.mfaEnabled,
         authorization_version: 1,
+        version: 1,
         last_login_at: user.lastLoginAt,
         created_at: user.createdAt,
         updated_at: user.createdAt,
@@ -82,7 +87,11 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
     },
     async updateUser(userId, patch) {
       await ctx.pause();
-      const user = ctx.mustFind(db.users, (entry) => entry.id === userId, "user");
+      const user = ctx.mustFind(
+        db.users,
+        (entry) => entry.id === userId,
+        "user",
+      );
       Object.assign(user, patch);
       ctx.audit("org.user.update", {
         resourceType: "user",
@@ -99,14 +108,34 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
         (m) => m.userId === userId && m.enterpriseId === ctx.enterpriseId(),
         "enterpriseUser",
       );
-      Object.assign(enterpriseUser, patch);
+      const user = ctx.mustFind(
+        db.users,
+        (entry) => entry.id === userId,
+        "user",
+      );
+      if (patch.department_id !== undefined) {
+        enterpriseUser.departmentId = patch.department_id;
+      }
+      if (patch.display_name !== undefined) {
+        user.displayName = patch.display_name;
+      }
+      if (patch.email !== undefined) {
+        user.email = patch.email ?? undefined;
+      }
+      if (patch.status !== undefined) {
+        user.status = patch.status;
+        if (patch.status === "disabled" && db.session.userId === userId) {
+          db.session.userId = null;
+          db.session.enterpriseId = null;
+        }
+      }
+      user.version = (user.version ?? 1) + 1;
       ctx.audit("org.enterpriseUser.update", {
         resourceType: "user",
         resourceId: userId,
-        summary: `更新用户部门 ${userId}`,
+        summary: `更新企业用户 ${user.displayName}`,
       });
       ctx.save();
-      const user = ctx.mustFind(db.users, (entry) => entry.id === userId, "user");
       return {
         id: user.id,
         enterprise_id: enterpriseUser.enterpriseId,
@@ -117,6 +146,7 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
         status: user.status,
         mfa_enabled: user.mfaEnabled,
         authorization_version: 1,
+        version: user.version,
         last_login_at: user.lastLoginAt,
         created_at: user.createdAt,
         updated_at: ctx.nowIso(),
@@ -152,7 +182,11 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
     },
     async updateDepartment(id, patch) {
       await ctx.pause();
-      const department = ctx.mustFind(db.departments, (entry) => entry.id === id, "department");
+      const department = ctx.mustFind(
+        db.departments,
+        (entry) => entry.id === id,
+        "department",
+      );
       Object.assign(department, patch);
       department.version += 1;
       department.updated_at = ctx.nowIso();
@@ -166,16 +200,23 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
     },
     async deleteDepartment(id) {
       await ctx.pause();
-      const department = ctx.mustFind(db.departments, (entry) => entry.id === id, "department");
-      if (department.is_default) throw new Error("cannot delete default department");
+      const department = ctx.mustFind(
+        db.departments,
+        (entry) => entry.id === id,
+        "department",
+      );
+      if (department.is_default)
+        throw new Error("cannot disable default department");
       if (db.enterpriseUsers.some((entry) => entry.departmentId === id)) {
-        throw new Error("cannot delete department with members");
+        throw new Error("cannot disable department with members");
       }
-      db.departments = db.departments.filter((entry) => entry.id !== id);
-      ctx.audit("org.department.delete", {
+      department.status = "disabled";
+      department.version += 1;
+      department.updated_at = ctx.nowIso();
+      ctx.audit("org.department.disable", {
         resourceType: "department",
         resourceId: id,
-        summary: `删除部门 ${id}`,
+        summary: `禁用部门 ${department.name}`,
       });
       ctx.save();
     },
@@ -244,32 +285,42 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
       await ctx.pause();
       ctx.mustFind(
         db.roles,
-        (entry) => entry.id === input.role_id && entry.enterprise_id === ctx.enterpriseId(),
+        (entry) =>
+          entry.id === input.role_id &&
+          entry.enterprise_id === ctx.enterpriseId(),
         "role",
       );
       if (input.subject_type === "user") {
         ctx.mustFind(
           db.enterpriseUsers,
-          (m) => m.userId === input.subject_id && m.enterpriseId === ctx.enterpriseId(),
+          (m) =>
+            m.userId === input.subject_id &&
+            m.enterpriseId === ctx.enterpriseId(),
           "enterpriseUser",
         );
       } else if (input.subject_type === "department") {
         ctx.mustFind(
           db.departments,
-          (entry) => entry.id === input.subject_id && entry.enterprise_id === ctx.enterpriseId(),
+          (entry) =>
+            entry.id === input.subject_id &&
+            entry.enterprise_id === ctx.enterpriseId(),
           "department",
         );
       } else {
         ctx.mustFind(
           db.serviceAccounts,
-          (entry) => entry.id === input.subject_id && entry.enterprise_id === ctx.enterpriseId(),
+          (entry) =>
+            entry.id === input.subject_id &&
+            entry.enterprise_id === ctx.enterpriseId(),
           "service account",
         );
       }
       for (const dataScopeId of input.data_scope_ids) {
         ctx.mustFind(
           db.dataScopes,
-          (entry) => entry.id === dataScopeId && entry.enterprise_id === ctx.enterpriseId(),
+          (entry) =>
+            entry.id === dataScopeId &&
+            entry.enterprise_id === ctx.enterpriseId(),
           "data scope",
         );
       }
@@ -300,7 +351,8 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
       await ctx.pause();
       const binding = ctx.mustFind(
         db.roleBindings,
-        (entry) => entry.id === id && entry.enterprise_id === ctx.enterpriseId(),
+        (entry) =>
+          entry.id === id && entry.enterprise_id === ctx.enterpriseId(),
         "role binding",
       );
       Object.assign(binding, patch);
@@ -318,7 +370,8 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
       await ctx.pause();
       const binding = ctx.mustFind(
         db.roleBindings,
-        (entry) => entry.id === id && entry.enterprise_id === ctx.enterpriseId(),
+        (entry) =>
+          entry.id === id && entry.enterprise_id === ctx.enterpriseId(),
         "role binding",
       );
       db.roleBindings = db.roleBindings.filter((entry) => entry.id !== id);
@@ -414,7 +467,9 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
       for (const dataScopeId of input.data_scope_ids ?? []) {
         ctx.mustFind(
           db.dataScopes,
-          (entry) => entry.id === dataScopeId && entry.enterprise_id === ctx.enterpriseId(),
+          (entry) =>
+            entry.id === dataScopeId &&
+            entry.enterprise_id === ctx.enterpriseId(),
           "data scope",
         );
       }
@@ -427,6 +482,7 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
         data_scope_ids: input.data_scope_ids ?? [],
         status: "active" as const,
         authorization_version: 1,
+        version: 1,
         created_at: ctx.nowIso(),
         updated_at: ctx.nowIso(),
       };
@@ -449,7 +505,9 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
       for (const dataScopeId of patch.data_scope_ids ?? []) {
         ctx.mustFind(
           db.dataScopes,
-          (entry) => entry.id === dataScopeId && entry.enterprise_id === ctx.enterpriseId(),
+          (entry) =>
+            entry.id === dataScopeId &&
+            entry.enterprise_id === ctx.enterpriseId(),
           "data scope",
         );
       }
@@ -472,14 +530,16 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
         (entry) => entry.id === serviceAccountId,
         "service account",
       );
-      const secret = `argus_sk_${Math.random().toString(16).slice(2, 18)}`;
+      const prefix = crypto.randomUUID().replaceAll("-", "").slice(0, 8);
+      const secret = `argus_ak_${prefix}.${crypto.randomUUID().replaceAll("-", "")}${crypto.randomUUID().replaceAll("-", "")}`;
       const apiKey = {
         id: nextId(db, "ak"),
         enterprise_id: ctx.enterpriseId(),
         service_account_id: serviceAccountId,
         name: input.name,
-        prefix: secret.slice(0, 12),
+        prefix,
         status: "active" as const,
+        version: 1,
         expires_at: input.expires_at,
         created_at: ctx.nowIso(),
       };
@@ -492,9 +552,41 @@ export function createOrgDomain(ctx: MockContext): ArgusApiClient["org"] {
       ctx.save();
       return { api_key: apiKey, secret };
     },
+    async rotateApiKey(id) {
+      await ctx.pause();
+      const previous = ctx.mustFind(
+        db.apiKeys,
+        (entry) => entry.id === id,
+        "api key",
+      );
+      previous.status = "revoked";
+      previous.version += 1;
+      const prefix = crypto.randomUUID().replaceAll("-", "").slice(0, 8);
+      const secret = `argus_ak_${prefix}.${crypto.randomUUID().replaceAll("-", "")}${crypto.randomUUID().replaceAll("-", "")}`;
+      const apiKey = {
+        ...previous,
+        id: nextId(db, "ak"),
+        prefix,
+        status: "active" as const,
+        version: 1,
+        created_at: ctx.nowIso(),
+      };
+      db.apiKeys.push(apiKey);
+      ctx.audit("org.api_key.rotate", {
+        resourceType: "api_key",
+        resourceId: apiKey.id,
+        summary: `轮换 API Key ${apiKey.name}`,
+      });
+      ctx.save();
+      return { api_key: apiKey, secret };
+    },
     async revokeApiKey(id) {
       await ctx.pause();
-      const key = ctx.mustFind(db.apiKeys, (entry) => entry.id === id, "api key");
+      const key = ctx.mustFind(
+        db.apiKeys,
+        (entry) => entry.id === id,
+        "api key",
+      );
       key.status = "revoked";
       ctx.audit("org.api_key.revoke", {
         resourceType: "api_key",

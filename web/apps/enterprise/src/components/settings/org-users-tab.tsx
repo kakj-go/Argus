@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import {
   useApi,
   type Role,
@@ -9,9 +12,12 @@ import {
 } from "@argus/api-client";
 import type { EnterpriseUser } from "@argus/api-client/contracts";
 import {
+  Alert,
   Badge,
   Button,
   CheckItem,
+  CodeBlock,
+  ConfirmDialog,
   DataTable,
   EmptyState,
   Field,
@@ -143,6 +149,8 @@ export function OrgUsersTab() {
   const departments = useOrgDepartments();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
+  const [created, setCreated] = useState<User | null>(null);
+  const [statusTarget, setStatusTarget] = useState<UserRow | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["org"] });
 
   const invite = useMutation({
@@ -153,8 +161,9 @@ export function OrgUsersTab() {
       role_ids: string[];
       department_id: string;
     }) => api.org.inviteUser(input),
-    onSuccess: () => {
+    onSuccess: (user) => {
       setInviteOpen(false);
+      setCreated(user);
       void invalidate();
     },
   });
@@ -166,6 +175,17 @@ export function OrgUsersTab() {
       }),
     onSuccess: () => {
       setEditing(null);
+      void invalidate();
+    },
+  });
+
+  const toggleStatus = useMutation({
+    mutationFn: (user: UserRow) =>
+      api.org.updateEnterpriseUser(user.id, {
+        status: user.status === "disabled" ? "active" : "disabled",
+      }),
+    onSuccess: () => {
+      setStatusTarget(null);
       void invalidate();
     },
   });
@@ -240,13 +260,24 @@ export function OrgUsersTab() {
               key: "actions",
               header: t("settings.common.actions"),
               render: (row) => (
-                <Button
-                  onClick={() => setEditing(row)}
-                  size="sm"
-                  variant="ghost"
-                >
-                  {t("settings.common.edit")}
-                </Button>
+                <span className="argus-settings-inline-actions">
+                  <Button
+                    onClick={() => setEditing(row)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {t("settings.common.edit")}
+                  </Button>
+                  <Button
+                    onClick={() => setStatusTarget(row)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {row.status === "disabled"
+                      ? t("settings.org.users.enable")
+                      : t("settings.org.users.disable")}
+                  </Button>
+                </span>
               ),
             },
           ]}
@@ -262,6 +293,29 @@ export function OrgUsersTab() {
         open={inviteOpen}
         roles={roles.data ?? []}
       />
+      <FormDrawer
+        footer={
+          <Button onClick={() => setCreated(null)} variant="primary">
+            {t("common.close")}
+          </Button>
+        }
+        onOpenChange={(open) => {
+          if (!open) setCreated(null);
+        }}
+        open={created !== null}
+        title={t("settings.org.users.credentialTitle")}
+      >
+        {created && (
+          <div className="argus-settings-form">
+            <Alert
+              description={t("settings.org.users.credentialDescription")}
+              title={t("settings.org.users.credentialTitle")}
+              tone="warning"
+            />
+            <CodeBlock code={created.temporaryPassword ?? ""} language="text" />
+          </div>
+        )}
+      </FormDrawer>
       <EnterpriseUserDrawer
         departments={departments.data ?? []}
         editing={editing}
@@ -276,6 +330,23 @@ export function OrgUsersTab() {
         }
         open={editing !== null}
         roles={roles.data ?? []}
+      />
+      <ConfirmDialog
+        danger={statusTarget?.status !== "disabled"}
+        description={
+          statusTarget?.status === "disabled"
+            ? t("settings.org.users.enableDescription")
+            : t("settings.org.users.disableDescription")
+        }
+        loading={toggleStatus.isPending}
+        onConfirm={() => statusTarget && toggleStatus.mutate(statusTarget)}
+        onOpenChange={(open) => !open && setStatusTarget(null)}
+        open={statusTarget !== null}
+        title={
+          statusTarget?.status === "disabled"
+            ? t("settings.org.users.enableTitle")
+            : t("settings.org.users.disableTitle")
+        }
       />
     </div>
   );
@@ -305,34 +376,62 @@ function EnterpriseUserDrawer({
   editing?: UserRow | null;
 }) {
   const { t } = useTranslation();
-  const [username, setUsername] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [role_ids, setRoleIds] = useState<string[]>([]);
-  const [departmentId, setDepartmentId] = useState("");
-  const [loadedFor, setLoadedFor] = useState<string | null>(null);
-  const key = open ? (editing?.id ?? "__new__") : null;
-  if (key && loadedFor !== key) {
-    setLoadedFor(key);
-    setUsername(editing?.username ?? "");
-    setDisplayName(editing?.displayName ?? "");
-    setEmail(editing?.email ?? "");
-    setRoleIds(editing?.role_ids ?? []);
-    setDepartmentId(editing?.department_id ?? departments[0]?.id ?? "");
-  }
+  const userSchema = useMemo(
+    () =>
+      z.object({
+        username: z.string().trim().min(3, t("settings.common.required")),
+        display_name: z.string().trim().min(1, t("settings.common.required")),
+        email: z
+          .string()
+          .trim()
+          .refine(
+            (value) => value === "" || z.email().safeParse(value).success,
+            t("settings.common.emailInvalid"),
+          ),
+        role_ids: z.array(z.string()),
+        department_id: z.string().min(1, t("settings.common.required")),
+      }),
+    [t],
+  );
+  type UserForm = z.infer<typeof userSchema>;
+  const {
+    control,
+    register,
+    reset,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<UserForm>({
+    resolver: zodResolver(userSchema),
+    defaultValues: {
+      username: "",
+      display_name: "",
+      email: "",
+      role_ids: [],
+      department_id: "",
+    },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      username: editing?.username ?? "",
+      display_name: editing?.displayName ?? "",
+      email: editing?.email ?? "",
+      role_ids: editing?.role_ids ?? [],
+      department_id: editing?.department_id ?? departments[0]?.id ?? "",
+    });
+  }, [departments, editing, open, reset]);
+
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={() =>
+      onSubmit={handleSubmit((values) =>
         onSubmit({
-          username,
-          display_name: displayName,
-          email: email || undefined,
-          role_ids,
-          department_id: departmentId,
-        })
-      }
+          ...values,
+          email: values.email || undefined,
+        }),
+      )}
       open={open}
       title={
         editing
@@ -343,45 +442,60 @@ function EnterpriseUserDrawer({
       <div className="argus-settings-form">
         {!editing && (
           <>
-            <Field label={t("settings.org.users.username")}>
-              <Input
-                onChange={(event) => setUsername(event.target.value)}
-                required
-                value={username}
-              />
+            <Field
+              error={errors.username?.message}
+              label={t("settings.org.users.username")}
+            >
+              <Input {...register("username")} required />
             </Field>
-            <Field label={t("settings.org.users.displayName")}>
-              <Input
-                onChange={(event) => setDisplayName(event.target.value)}
-                required
-                value={displayName}
-              />
+            <Field
+              error={errors.display_name?.message}
+              label={t("settings.org.users.displayName")}
+            >
+              <Input {...register("display_name")} required />
             </Field>
-            <Field label={t("settings.org.users.email")}>
-              <Input
-                onChange={(event) => setEmail(event.target.value)}
-                type="email"
-                value={email}
-              />
+            <Field
+              error={errors.email?.message}
+              label={t("settings.org.users.email")}
+            >
+              <Input {...register("email")} type="email" />
             </Field>
           </>
         )}
-        <Field label={t("settings.org.users.department")}>
-          <Select
-            onValueChange={setDepartmentId}
-            options={departments.map((department) => ({
-              value: department.id,
-              label: department.name,
-            }))}
-            value={departmentId}
+        <Field
+          error={errors.department_id?.message}
+          label={t("settings.org.users.department")}
+        >
+          <Controller
+            control={control}
+            name="department_id"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                options={departments.map((department) => ({
+                  value: department.id,
+                  label: department.name,
+                }))}
+                value={field.value}
+              />
+            )}
           />
         </Field>
         {!editing && (
           <Field label={t("settings.org.users.roles")}>
-            <CheckList
-              onChange={setRoleIds}
-              options={roles.map((role) => ({ id: role.id, label: role.name }))}
-              value={role_ids}
+            <Controller
+              control={control}
+              name="role_ids"
+              render={({ field }) => (
+                <CheckList
+                  onChange={field.onChange}
+                  options={roles.map((role) => ({
+                    id: role.id,
+                    label: role.name,
+                  }))}
+                  value={field.value}
+                />
+              )}
             />
           </Field>
         )}

@@ -19,6 +19,7 @@
 - [ ] `M4-COMPACT-01` 实现 Token 估算、软/硬阈值、合法 Turn 切点、增量 ContextSnapshot、Source Hash 和 Compaction 计费。
 - [ ] `M4-COMPACT-02` 实现压缩失败、Worker 重启、重复 Source Range 和最后有效 Snapshot 的幂等恢复。
 - [ ] `M4-MODEL-01` 实现 AIModel、revision、健康检查、调用价格快照和部门/用户额度。
+- [ ] `M4-SANDBOX-01` 在 Agent 接入前补齐 OpenSandbox 服务连接、镜像、Profile、配额和活动会话治理 API；继续由 Helm 管理部署，不回填到 Setup 向导。
 - [ ] `M4-TOOL-01` 实现 Tool Registry、权限投影、查询 Tool 和 Tool Result 安全投影。
 - [ ] `M4-TOOL-02` 默认顺序执行 Tool，仅允许显式 `parallel_safe` 的无副作用查询并行；截断/不完整 ToolCall 不执行。
 - [ ] `M4-ACTION-01` 实现 `.preview/.commit` 配对校验、PendingAction 公共/内部存储和私有 Token 分流。
@@ -45,6 +46,7 @@
 - 全链路有稳定状态、错误、审计和恢复语义。
 - 长会话可以在模型上下文限制内持续运行，Compaction 成本可计量，失败可恢复且不静默丢失历史。
 - Automation 使用当前 ServiceAccount 权限且不能消费人工会话票据。
+- Agent/Worker 只能通过已治理的 Sandbox Profile 创建运行环境；real 模式平台 Sandbox 页面不再返回 `CLIENT_OPERATION_UNAVAILABLE`。
 
 ## 不包含
 

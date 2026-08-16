@@ -2,7 +2,7 @@
 
 ## 1. 目标
 
-Argus 第一次启动时没有任何用户和企业。系统通过一次性初始化流程让部署者设置平台超级管理员账号和密码。初始化完成后，平台超级管理员负责创建企业、创建对应企业管理员以及配置平台级 OpenSandbox；企业管理员进入独立企业门户管理本企业。
+Argus 第一次启动时没有任何用户和企业。系统通过一次性初始化流程让部署者设置平台超级管理员账号和密码。初始化完成后，平台超级管理员负责创建企业和对应企业管理员；企业管理员进入独立企业门户管理本企业。OpenSandbox 由 Helm 安装和配置，不进入 Setup 向导；其治理 API 在 M4 Agent/Sandbox 接入前补充。
 
 平台超级管理员不是企业的“万能管理员”，其权限应保持最小化。
 
@@ -12,7 +12,7 @@ Argus 第一次启动时没有任何用户和企业。系统通过一次性初�
 
 1. 企业工作台：企业用户的 Chatbox、会话和模型选择。
 2. 企业管理后台：企业管理员和被授权成员管理本企业模型、组织、资源、交互卡片与审计。
-3. 平台超级管理员门户：平台管理员管理企业生命周期、企业管理员和 SaaS OpenSandbox 基座。
+3. 平台超级管理员门户：M2 管理企业生命周期、企业管理员和平台审计；OpenSandbox 治理在 M4 接入。
 
 企业工作台和企业管理后台共享企业 Session；平台门户使用独立平台 Session/Audience。任一入口发现身份域不匹配时必须拒绝进入并引导到正确门户，不能先渲染错误界面再依赖接口报错。
 
@@ -41,11 +41,7 @@ stateDiagram-v2
 
 如果初始化页面直接暴露在公网，第一个访问者可能抢占超级管理员。因此首次初始化需要一个部署侧生成的一次性 Setup Token。
 
-可选来源：
-
-- 服务首次启动时生成并输出到受保护的控制台。
-- 部署者通过环境变量或启动参数显式提供。
-- 本地单机安装时，仅允许 localhost 完成初始化。
+M2 固定由 `argusctl` 生成 32 字节随机 Token，保存到独立 Kubernetes Secret，并设置 24 小时过期时间。Server 通过只读 Secret Volume 每次重新读取 Token 与过期时间，因此未初始化期间可以轮换而无需重启 Pod。
 
 Setup Token 应具有：
 
@@ -53,9 +49,11 @@ Setup Token 应具有：
 - 短有效期。
 - 单次使用。
 - 只允许调用初始化接口。
-- 日志中只在首次生成时显示一次，后续只记录摘要。
+- 不写应用日志、审计或错误详情；只向部署者调用终端显示一次。
 
-初始化成功后立即销毁 Token，并永久关闭初始化接口。
+初始化成功后 PlatformState 使该 Token 永久失去认证能力并关闭初始化接口；Secret 的后续清理由部署流程负责，Server 不需要写入其只读 Volume。
+
+未初始化时可以执行 `argusctl setup-token rotate` 更新 Secret；初始化完成后该命令必须拒绝执行。
 
 ## 4. 初始化向导
 
@@ -65,13 +63,13 @@ Setup Token 应具有：
 
 - 平台显示名称。
 - 默认语言和时区。
-- 外部访问地址，用于生成邀请链接和回调地址。
+- 外部访问地址，用于门户跳转和后续受信回调地址。
 
 ### 4.2 超级管理员
 
 - 登录名。
 - 显示名称。
-- 邮箱，可选但建议填写。
+- 邮箱。
 - 密码与确认密码。
 
 密码至少要求：
@@ -81,18 +79,7 @@ Setup Token 应具有：
 - 使用 Argon2id 或等价强密码哈希。
 - 密码明文不写日志、不进入审计详情。
 
-### 4.3 基础 OpenSandbox
-
-初始化向导可以只询问：
-
-- 是否启用 OpenSandbox。
-- OpenSandbox 服务地址。
-- 连接凭证。
-- 默认执行存储位置。
-
-镜像、资源和网络策略可以在登录平台门户后继续配置。
-
-### 4.4 初始化提交
+### 4.3 初始化提交
 
 初始化必须在一个数据库事务中完成：
 
@@ -102,29 +89,25 @@ Setup Token 应具有：
 4. 创建平台超级管理员。
 5. 创建平台默认设置和审计根记录。
 6. 将 PlatformState 更新为 `initialized`。
-7. 消费 Setup Token。
+7. 永久关闭 Setup 接口并使 Setup Token 失效。
 
 并发初始化请求只能有一个成功。
 
 ## 5. 超级管理员登录后界面
 
-超级管理员门户建议使用独立路由，例如 `/platform`，菜单严格限制为：
+超级管理员门户使用独立 Audience 和路由，菜单严格限制为：
 
 ```text
 平台管理
 ├── 企业管理
 ├── 企业管理员
-├── OpenSandbox
-│   ├── 服务连接
-│   ├── 镜像
-│   ├── Sandbox Profile
-│   ├── 企业配额
-│   ├── 活动会话
-│   └── 平台用量
+├── 平台审计
 └── 我的账号
 ```
 
-`我的账号` 只用于修改自身密码、MFA 和登录会话，不属于业务管理权限扩张。
+M1 原型中的 Sandbox 页面在 M2 real 模式保持稳定不可用，不得读取 mock；M4 补齐治理 API 后再开放服务连接、镜像、Profile、配额和活动会话。
+
+`我的账号` 在 M2 只用于修改自身密码和撤销 Session，不属于业务管理权限扩张。MFA、恢复码和 Step-up 在 M8 加入。
 
 超级管理员界面不出现：
 
@@ -149,7 +132,6 @@ Setup Token 应具有：
   "code": "example-corp",
   "status": "active",
   "timezone": "Asia/Shanghai",
-  "sandbox_quota_profile": "standard",
   "remark": ""
 }
 ```
@@ -191,24 +173,22 @@ Setup Token 应具有：
   "username": "corp-admin",
   "display_name": "企业管理员",
   "email": "admin@example.com",
-  "activation": "temporary_password"
+  "department_id": "default-department-id"
 }
 ```
 
-支持两种激活方式：
+第一版只支持 24 小时临时密码，首次登录必须修改；不实现激活链接、邮件、SMTP 或重发邀请。临时密码只在创建或重置结果中显示一次，不进入 URL、日志、Query Cache 或 localStorage。
 
-- 一次性激活链接。
-- 临时密码，首次登录必须修改。
+Enterprise 用户名全局大小写不敏感唯一。原因是企业登录只提交 `username + password`，不接受客户端 `enterprise_id`，因此服务端必须在认证前唯一定位企业身份。
 
 初始企业管理员是新的 EnterpriseUser，直接固定绑定目标 `enterprise_id + department_id`，不能复用平台超级管理员身份。`enterprise_admin` 允许其建立企业 IAM、角色、DataScope 和授权，但不自动授予生产远程 Shell、ManagedAccount、Secret 原值或 AI 生产执行权限；需要操作生产资源时由企业管理员建立对应 RoleBinding、DataScope 和 RemoteAccessGrant，并记录审计。
 
 超级管理员可以：
 
 - 创建多名企业管理员。
-- 重发激活邀请。
 - 禁用企业管理员。
-- 重置登录认证。
-- 查看激活和登录状态。
+- 重置为一次性临时密码。
+- 查看临时密码/正常/禁用状态和最近登录时间。
 
 超级管理员不能以企业管理员身份代登录，也不能看到企业管理员后续设置的模型密钥。
 
@@ -266,14 +246,16 @@ API Key 和 ServiceAccount 固定绑定一个 `enterprise_id`、允许 Tool 和 
 
 ### 9.1 认证基线
 
-第一版至少提供本地账号认证，并预留 OIDC/SAML Adapter：
+M2 提供本地账号认证，并预留 OIDC/SAML Adapter：
 
 - 密码使用 Argon2id，登录、修改密码和恢复流程统一限流。
-- 平台超级管理员强制 MFA；企业可对管理员和 critical 操作强制 MFA/Step-up Authentication。
-- 浏览器使用 HttpOnly、Secure、SameSite Cookie 或同等安全 Session；变更请求执行 CSRF 防护。
-- Access Session 短期有效，Refresh/长期 Session 可撤销；用户禁用、密码重置、企业停用时立即写入撤销事实并通过 Redis 快速失效缓存。
+- M2 不实现 MFA，只达到 Evaluation 身份闭环；平台超级管理员 MFA、恢复码和 Step-up 是 M8 Production Profile 的硬阻断。
+- Session 使用 256 位随机 opaque Token，数据库只保存 SHA-256 Hash；空闲超时 30 分钟，绝对有效期 12 小时。
+- Platform 与 Enterprise 使用独立 Host-only Cookie；Production 使用 `Secure + HttpOnly + SameSite=Strict`。所有已认证变更同时执行 Session 绑定 CSRF Token 和 Origin 校验。
+- 用户禁用、密码重置、企业停用时在 PostgreSQL 写入撤销事实并递增相关 AuthorizationVersion；Redis 只传播快速失效通知。
+- Redis 不可用时 Server 保持 degraded：已有 Session 继续由 PostgreSQL 校验，新登录因为限流依赖不可用而 fail closed。
 - WebSocket/SSE/Live Tail 建立、恢复和周期性检查时重新校验 Session、固定企业、DataScope 和 AuthorizationVersion。
-- Service Account/API Key 只显示一次原值，数据库保存哈希，支持到期、轮换、Scope 和最后使用审计。
+- Service Account/API Key 只显示一次原值，数据库保存哈希，支持到期、轮换、撤销、Tool/DataScope Scope 和最后使用审计；Key 固定绑定创建时的 ServiceAccount AuthorizationVersion。
 
 ## 10. 账号恢复
 

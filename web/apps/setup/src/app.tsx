@@ -1,4 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
@@ -14,16 +16,13 @@ import {
   type WizardStep,
 } from "@argus/ui";
 import { StepReview } from "./components/step-review";
-import { StepSandbox } from "./components/step-sandbox";
 import { StepSystem } from "./components/step-system";
 import { StepToken } from "./components/step-token";
 import { InitializedTerminal, SuccessTerminal } from "./components/terminal";
 import {
   createInitialDraft,
+  createSetupSchemas,
   toSubmission,
-  validateSandbox,
-  validateSystem,
-  validateToken,
   type SetupDraft,
 } from "./lib/validation";
 
@@ -43,33 +42,26 @@ export default function App() {
   });
 
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<SetupDraft>(createInitialDraft);
   const [succeeded, setSucceeded] = useState(false);
+  const schemas = useMemo(() => createSetupSchemas(t), [t]);
+  const form = useForm<SetupDraft>({
+    resolver: zodResolver(schemas.setup),
+    defaultValues: createInitialDraft(),
+    mode: "onTouched",
+  });
+  const draft = useWatch({ control: form.control }) as SetupDraft;
 
   const submitMutation = useMutation({
-    mutationFn: () => api.setup.submit(toSubmission(draft)),
+    mutationFn: (input: SetupDraft) => api.setup.submit(toSubmission(input)),
     onSuccess: () => setSucceeded(true),
   });
 
-  const tokenError = validateToken(draft, t);
-  const systemErrors = useMemo(() => validateSystem(draft, t), [draft, t]);
-  const sandboxErrors = useMemo(() => validateSandbox(draft, t), [draft, t]);
-
   const canNext =
     step === 0
-      ? tokenError === null
+      ? schemas.token.safeParse(draft).success
       : step === 1
-        ? Object.keys(systemErrors).length === 0
-        : step === 2
-          ? Object.keys(sandboxErrors).length === 0
-          : !submitMutation.isPending;
-
-  const updateDraft = (patch: Partial<SetupDraft>) =>
-    setDraft((prev) => ({ ...prev, ...patch }));
-  const updateAdmin = (patch: Partial<SetupDraft["admin"]>) =>
-    setDraft((prev) => ({ ...prev, admin: { ...prev.admin, ...patch } }));
-  const updateSandbox = (patch: Partial<SetupDraft["sandbox"]>) =>
-    setDraft((prev) => ({ ...prev, sandbox: { ...prev.sandbox, ...patch } }));
+        ? schemas.system.safeParse(draft).success
+        : !submitMutation.isPending;
 
   const steps: WizardStep[] = [
     {
@@ -81,12 +73,6 @@ export default function App() {
       id: "system",
       title: t("setup.steps.system.title"),
       description: t("setup.steps.system.description"),
-    },
-    {
-      id: "sandbox",
-      title: t("setup.steps.sandbox.title"),
-      description: t("setup.steps.sandbox.description"),
-      optional: true,
     },
     {
       id: "review",
@@ -133,62 +119,37 @@ export default function App() {
     content = (
       <Card className="argus-setup-card">
         <CardContent>
-          <Wizard
-            canNext={canNext}
-            current={step}
-            onBack={() => setStep((prev) => Math.max(0, prev - 1))}
-            onNext={() =>
-              setStep((prev) => Math.min(steps.length - 1, prev + 1))
-            }
-            onSkip={() => {
-              updateSandbox({
-                enabled: false,
-                endpoint: "",
-                credential: "",
-                storage: "",
-              });
-              setStep((prev) => Math.min(steps.length - 1, prev + 1));
-            }}
-            onSubmit={() => submitMutation.mutate()}
-            steps={steps}
-            submitLabel={t("setup.review.submit")}
-            submitting={submitMutation.isPending}
-          >
-            {step === 0 && (
-              <StepToken
-                draft={draft}
-                errors={tokenError ? { setupToken: tokenError } : {}}
-                onChange={updateDraft}
-              />
-            )}
-            {step === 1 && (
-              <StepSystem
-                draft={draft}
-                errors={systemErrors}
-                onAdminChange={updateAdmin}
-                onChange={updateDraft}
-              />
-            )}
-            {step === 2 && (
-              <StepSandbox
-                draft={draft}
-                errors={sandboxErrors}
-                onSandboxChange={updateSandbox}
-              />
-            )}
-            {step === 3 && (
-              <div className="argus-setup-fields">
-                <StepReview draft={draft} />
-                {submitMutation.isError && (
-                  <Alert
-                    description={submitMutation.error.message}
-                    title={t("setup.review.errorTitle")}
-                    tone="danger"
-                  />
-                )}
-              </div>
-            )}
-          </Wizard>
+          <FormProvider {...form}>
+            <Wizard
+              canNext={canNext}
+              current={step}
+              onBack={() => setStep((prev) => Math.max(0, prev - 1))}
+              onNext={() =>
+                setStep((prev) => Math.min(steps.length - 1, prev + 1))
+              }
+              onSubmit={form.handleSubmit((values) =>
+                submitMutation.mutate(values),
+              )}
+              steps={steps}
+              submitLabel={t("setup.review.submit")}
+              submitting={submitMutation.isPending}
+            >
+              {step === 0 && <StepToken />}
+              {step === 1 && <StepSystem />}
+              {step === 2 && (
+                <div className="argus-setup-fields">
+                  <StepReview draft={draft} />
+                  {submitMutation.isError && (
+                    <Alert
+                      description={submitMutation.error.message}
+                      title={t("setup.review.errorTitle")}
+                      tone="danger"
+                    />
+                  )}
+                </div>
+              )}
+            </Wizard>
+          </FormProvider>
         </CardContent>
       </Card>
     );

@@ -1,0 +1,226 @@
+openapi: 3.1.0
+info:
+  title: Argus Audit API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /{audience}/audit-events:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    get:
+      operationId: listAuditEvents
+      summary: listAuditEvents.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^[a-z][a-z0-9_.]+$
+      responses:
+        '200':
+          description: Audit events for the authenticated domain.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEventPage'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - domain
+        - actor_type
+        - actor_id
+        - action
+        - result
+        - details
+        - previous_hash
+        - event_hash
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain:
+          type: string
+          enum:
+            - platform
+            - enterprise
+        enterprise_id:
+          type: string
+          format: uuid
+        actor_type:
+          type: string
+          enum:
+            - platform_user
+            - enterprise_user
+            - service_account
+            - system
+        actor_id:
+          type: string
+          minLength: 1
+        action:
+          type: string
+          pattern: ^[a-z][a-z0-9_.]+$
+        resource_type:
+          type: string
+          minLength: 1
+          maxLength: 128
+        resource_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        result:
+          type: string
+          enum:
+            - success
+            - failure
+            - denied
+        details:
+          type: object
+          additionalProperties: true
+        previous_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        event_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        created_at:
+          type: string
+          format: date-time
+    AuditEventPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+  parameters:
+    Audience:
+      name: audience
+      in: path
+      required: true
+      schema:
+        type: string
+        enum:
+          - platform
+          - enterprise
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

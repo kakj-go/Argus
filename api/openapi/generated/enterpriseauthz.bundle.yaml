@@ -1,0 +1,873 @@
+openapi: 3.1.0
+info:
+  title: Argus Enterprise Authorization API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/permissions:
+    get:
+      operationId: listPermissions
+      summary: listPermissions.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Registered permissions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/roles:
+    get:
+      operationId: listRoles
+      summary: listRoles.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Roles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolePage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createRole
+      summary: createRole.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreate'
+      responses:
+        '201':
+          description: Role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/roles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      operationId: updateRole
+      summary: updateRole.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpdate'
+      responses:
+        '200':
+          description: Updated role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: disableRole
+      summary: disableRole.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '204':
+          description: Role disabled.
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/role-bindings:
+    get:
+      operationId: listRoleBindings
+      summary: listRoleBindings.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Role bindings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleBindingPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createRoleBinding
+      summary: createRoleBinding.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleBindingCreate'
+      responses:
+        '201':
+          description: Role binding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleBinding'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/role-bindings/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      operationId: updateRoleBinding
+      summary: updateRoleBinding.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleBindingUpdate'
+      responses:
+        '200':
+          description: Updated binding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleBinding'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: disableRoleBinding
+      summary: disableRoleBinding.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '204':
+          description: Binding disabled.
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/data-scopes:
+    get:
+      operationId: listDataScopes
+      summary: listDataScopes.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Data scopes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataScopePage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createDataScope
+      summary: createDataScope.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataScopeCreate'
+      responses:
+        '201':
+          description: Data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataScope'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/data-scopes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      operationId: updateDataScope
+      summary: updateDataScope.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataScopeUpdate'
+      responses:
+        '200':
+          description: Updated data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataScope'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: disableDataScope
+      summary: disableDataScope.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '204':
+          description: Data scope disabled.
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    PermissionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RoleCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - permissions
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Permission'
+    RoleUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Permission'
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    RolePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RoleBindingCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - subject_type
+        - subject_id
+        - role_id
+        - data_scope_ids
+      properties:
+        subject_type:
+          type: string
+          enum:
+            - user
+            - department
+            - service_account
+        subject_id:
+          type: string
+          format: uuid
+        role_id:
+          type: string
+          format: uuid
+        data_scope_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+    RoleBindingUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - valid_from
+        - valid_until
+        - expected_version
+      properties:
+        data_scope_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        valid_from:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        valid_until:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    RoleBindingPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleBinding'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    DataScopeCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - resource_types
+        - explicit_resource_ids
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        resource_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - host
+              - kubernetes_cluster
+        explicit_resource_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        label_selector:
+          $ref: '#/components/schemas/LabelSelector'
+    DataScopeUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - resource_types
+        - explicit_resource_ids
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        resource_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - host
+              - kubernetes_cluster
+        explicit_resource_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        label_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    DataScopePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataScope'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    Permission:
+      type: string
+      pattern: ^[a-z][a-z0-9_.]+$
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    Role:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - name
+        - builtin
+        - permissions
+        - status
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        builtin:
+          type: boolean
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Permission'
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    RoleBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - subject_type
+        - subject_id
+        - role_id
+        - data_scope_ids
+        - status
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        subject_type:
+          type: string
+          enum:
+            - user
+            - department
+            - service_account
+        subject_id:
+          type: string
+          minLength: 1
+        role_id:
+          type: string
+          minLength: 1
+        data_scope_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    UserLabelKey:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+    SystemLabelKey:
+      type: string
+      maxLength: 72
+      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+      readOnly: true
+    LabelValue:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
+    LabelRequirement:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+            - values
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              const: eq
+            values:
+              type: array
+              minItems: 1
+              maxItems: 1
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/LabelValue'
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+            - values
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              const: in
+            values:
+              type: array
+              minItems: 1
+              maxItems: 32
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/LabelValue'
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              enum:
+                - exists
+                - not_exists
+    LabelSelector:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - requirements
+      properties:
+        schema_version:
+          const: argus.label_selector/v1
+        requirements:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/LabelRequirement'
+    DataScope:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - name
+        - resource_types
+        - explicit_resource_ids
+        - status
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        resource_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - host
+              - kubernetes_cluster
+        explicit_resource_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        label_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

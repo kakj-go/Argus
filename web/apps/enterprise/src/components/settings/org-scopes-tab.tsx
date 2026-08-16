@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import {
   useApi,
   type DataScope,
@@ -39,7 +42,6 @@ type ScopeRow = {
 };
 
 type RequirementDraft = {
-  id: number;
   key: string;
   operator: RequirementOperator;
   values: string;
@@ -47,13 +49,11 @@ type RequirementDraft = {
 
 const RESOURCE_TYPES: ResourceType[] = ["host", "kubernetes_cluster"];
 const OPERATORS: RequirementOperator[] = ["eq", "in", "exists", "not_exists"];
-let nextRequirementId = 1;
-
+const LABEL_VALUE_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$/;
 function createRequirementDraft(
   requirement?: LabelRequirement,
 ): RequirementDraft {
   return {
-    id: nextRequirementId++,
     key: requirement?.key ?? "",
     operator: requirement?.operator ?? "eq",
     values:
@@ -284,52 +284,128 @@ function ScopeDrawer({
   scope: DataScope | null;
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [resourceTypes, setResourceTypes] = useState<ResourceType[]>([]);
-  const [resourceIds, setResourceIds] = useState("");
-  const [requirements, setRequirements] = useState<RequirementDraft[]>([]);
-  const [status, setStatus] = useState<DataScope["status"]>("active");
+  const scopeSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, t("settings.common.required")),
+        description: z.string().trim(),
+        resource_types: z
+          .array(z.enum(RESOURCE_TYPES))
+          .min(1, t("settings.org.scopesTab.resourceTypeRequired")),
+        resource_ids: z.string(),
+        requirements: z
+          .array(
+            z
+              .object({
+                key: z
+                  .string()
+                  .trim()
+                  .regex(
+                    /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/,
+                    t("settings.org.scopesTab.labelKeyInvalid"),
+                  ),
+                operator: z.enum(OPERATORS),
+                values: z.string(),
+              })
+              .superRefine((value, context) => {
+                if (value.operator !== "eq" && value.operator !== "in") return;
+                const values = parseList(value.values);
+                if (
+                  values.length === 0 ||
+                  (value.operator === "eq" && values.length !== 1) ||
+                  values.length > 32 ||
+                  values.some((entry) => !LABEL_VALUE_PATTERN.test(entry))
+                ) {
+                  context.addIssue({
+                    code: "custom",
+                    path: ["values"],
+                    message: t("settings.org.scopesTab.labelValuesInvalid"),
+                  });
+                }
+              }),
+          )
+          .max(16)
+          .superRefine((requirements, context) => {
+            const keys = new Set<string>();
+            let valueCount = 0;
+            requirements.forEach((requirement, index) => {
+              if (keys.has(requirement.key))
+                context.addIssue({
+                  code: "custom",
+                  path: [index, "key"],
+                  message: t("settings.org.scopesTab.labelKeyDuplicate"),
+                });
+              keys.add(requirement.key);
+              valueCount += parseList(requirement.values).length;
+            });
+            if (valueCount > 128)
+              context.addIssue({
+                code: "custom",
+                message: t("settings.org.scopesTab.labelValuesTooMany"),
+              });
+          }),
+        status: z.enum(["active", "disabled"]),
+      }),
+    [t],
+  );
+  type ScopeForm = z.infer<typeof scopeSchema>;
+  const {
+    control,
+    register,
+    reset,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ScopeForm>({
+    resolver: zodResolver(scopeSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      resource_types: [],
+      resource_ids: "",
+      requirements: [],
+      status: "active",
+    },
+  });
+  const {
+    fields: requirements,
+    append,
+    remove,
+  } = useFieldArray({
+    control,
+    name: "requirements",
+  });
+  const requirementValues = useWatch({ control, name: "requirements" });
 
   useEffect(() => {
     if (!open) return;
-    setName(scope?.name ?? "");
-    setDescription(scope?.description ?? "");
-    setResourceTypes(scope?.resource_types ?? []);
-    setResourceIds((scope?.explicit_resource_ids ?? []).join("\n"));
-    setRequirements(
-      (scope?.label_selector?.requirements ?? []).map(createRequirementDraft),
-    );
-    setStatus(scope?.status ?? "active");
-  }, [open, scope]);
-
-  const updateRequirement = (
-    id: number,
-    patch: Partial<Omit<RequirementDraft, "id">>,
-  ) => {
-    setRequirements((current) =>
-      current.map((requirement) =>
-        requirement.id === id ? { ...requirement, ...patch } : requirement,
+    reset({
+      name: scope?.name ?? "",
+      description: scope?.description ?? "",
+      resource_types: scope?.resource_types ?? [],
+      resource_ids: (scope?.explicit_resource_ids ?? []).join("\n"),
+      requirements: (scope?.label_selector?.requirements ?? []).map(
+        createRequirementDraft,
       ),
-    );
-  };
+      status: scope?.status ?? "active",
+    });
+  }, [open, reset, scope]);
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={() => {
-        const normalizedRequirements = requirements
+      onSubmit={handleSubmit((values) => {
+        const normalizedRequirements = values.requirements
           .map(toRequirement)
           .filter(
             (requirement): requirement is LabelRequirement =>
               requirement !== null,
           );
         onSubmit({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          resource_types: resourceTypes,
-          explicit_resource_ids: parseList(resourceIds),
+          name: values.name,
+          description: values.description || undefined,
+          resource_types: values.resource_types,
+          explicit_resource_ids: parseList(values.resource_ids),
           label_selector:
             normalizedRequirements.length > 0
               ? {
@@ -337,9 +413,9 @@ function ScopeDrawer({
                   requirements: normalizedRequirements,
                 }
               : undefined,
-          status,
+          status: values.status,
         });
-      }}
+      })}
       open={open}
       title={
         scope
@@ -348,121 +424,102 @@ function ScopeDrawer({
       }
     >
       <div className="argus-settings-form">
-        <Field label={t("settings.common.name")}>
-          <Input
-            onChange={(event) => setName(event.target.value)}
-            required
-            value={name}
-          />
+        <Field error={errors.name?.message} label={t("settings.common.name")}>
+          <Input {...register("name")} required />
         </Field>
         <Field label={t("settings.common.description")}>
-          <Textarea
-            onChange={(event) => setDescription(event.target.value)}
-            rows={2}
-            value={description}
-          />
+          <Textarea {...register("description")} rows={2} />
         </Field>
-        <Field label={t("settings.org.scopesTab.resourceTypes")}>
-          <div className="argus-settings-check-list">
-            {RESOURCE_TYPES.map((resourceType) => (
-              <button
-                className="argus-settings-check-option"
-                key={resourceType}
-                onClick={() =>
-                  setResourceTypes((current) =>
-                    current.includes(resourceType)
-                      ? current.filter((type) => type !== resourceType)
-                      : [...current, resourceType],
-                  )
-                }
-                type="button"
-              >
-                <CheckItem checked={resourceTypes.includes(resourceType)}>
-                  {t(`settings.org.scopesTab.resourceType.${resourceType}`)}
-                </CheckItem>
-              </button>
-            ))}
-          </div>
+        <Field
+          error={errors.resource_types?.message}
+          label={t("settings.org.scopesTab.resourceTypes")}
+        >
+          <Controller
+            control={control}
+            name="resource_types"
+            render={({ field }) => (
+              <div className="argus-settings-check-list">
+                {RESOURCE_TYPES.map((resourceType) => (
+                  <button
+                    className="argus-settings-check-option"
+                    key={resourceType}
+                    onClick={() =>
+                      field.onChange(
+                        field.value.includes(resourceType)
+                          ? field.value.filter((type) => type !== resourceType)
+                          : [...field.value, resourceType],
+                      )
+                    }
+                    type="button"
+                  >
+                    <CheckItem checked={field.value.includes(resourceType)}>
+                      {t(`settings.org.scopesTab.resourceType.${resourceType}`)}
+                    </CheckItem>
+                  </button>
+                ))}
+              </div>
+            )}
+          />
         </Field>
         <Field
           hint={t("settings.org.scopesTab.resourceIdsHint")}
           label={t("settings.org.scopesTab.resourceIds")}
         >
-          <Textarea
-            onChange={(event) => setResourceIds(event.target.value)}
-            rows={3}
-            value={resourceIds}
-          />
+          <Textarea {...register("resource_ids")} rows={3} />
         </Field>
         <Field
           hint={t("settings.org.scopesTab.labelSelectorHint")}
           label={t("settings.org.scopesTab.labelSelector")}
         >
           <div className="argus-settings-selector-list">
-            {requirements.map((requirement) => (
+            {requirements.map((requirement, index) => (
               <div className="argus-settings-selector-row" key={requirement.id}>
                 <Input
+                  {...register(`requirements.${index}.key`)}
                   aria-label={t("settings.org.scopesTab.labelKey")}
                   maxLength={63}
-                  onChange={(event) =>
-                    updateRequirement(requirement.id, {
-                      key: event.target.value,
-                    })
-                  }
-                  pattern="[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*"
                   placeholder={t("settings.org.scopesTab.labelKey")}
-                  value={requirement.key}
                 />
-                <Select
-                  aria-label={t("settings.org.scopesTab.operator")}
-                  onValueChange={(operator) =>
-                    updateRequirement(requirement.id, {
-                      operator: operator as RequirementOperator,
-                    })
-                  }
-                  options={OPERATORS.map((operator) => ({
-                    value: operator,
-                    label: operator,
-                  }))}
-                  value={requirement.operator}
+                <Controller
+                  control={control}
+                  name={`requirements.${index}.operator`}
+                  render={({ field }) => (
+                    <Select
+                      aria-label={t("settings.org.scopesTab.operator")}
+                      onValueChange={field.onChange}
+                      options={OPERATORS.map((operator) => ({
+                        value: operator,
+                        label: operator,
+                      }))}
+                      value={field.value}
+                    />
+                  )}
                 />
-                {requirement.operator === "eq" ||
-                requirement.operator === "in" ? (
+                {requirementValues[index]?.operator === "eq" ||
+                requirementValues[index]?.operator === "in" ? (
                   <Input
+                    {...register(`requirements.${index}.values`)}
                     aria-label={t("settings.org.scopesTab.labelValues")}
-                    onChange={(event) =>
-                      updateRequirement(requirement.id, {
-                        values: event.target.value,
-                      })
-                    }
                     placeholder={t("settings.org.scopesTab.labelValues")}
-                    required
-                    value={requirement.values}
                   />
                 ) : (
                   <span aria-hidden="true" />
                 )}
-                <Button
-                  onClick={() =>
-                    setRequirements((current) =>
-                      current.filter((item) => item.id !== requirement.id),
-                    )
-                  }
-                  size="sm"
-                  variant="ghost"
-                >
+                <Button onClick={() => remove(index)} size="sm" variant="ghost">
                   {t("settings.common.delete")}
                 </Button>
+                {(errors.requirements?.[index]?.key?.message ||
+                  errors.requirements?.[index]?.values?.message) && (
+                  <small className="argus-field__error" role="alert">
+                    {errors.requirements[index]?.key?.message ??
+                      errors.requirements[index]?.values?.message}
+                  </small>
+                )}
               </div>
             ))}
             <Button
               disabled={requirements.length >= 16}
-              onClick={() =>
-                setRequirements((current) => [
-                  ...current,
-                  createRequirementDraft(),
-                ])
-              }
+              onClick={() => append(createRequirementDraft())}
               size="sm"
               variant="ghost"
             >
@@ -470,14 +527,25 @@ function ScopeDrawer({
             </Button>
           </div>
         </Field>
+        {errors.requirements?.root?.message && (
+          <p className="argus-field__error" role="alert">
+            {errors.requirements.root.message}
+          </p>
+        )}
         <Field label={t("settings.common.status")}>
-          <Select
-            onValueChange={(value) => setStatus(value as DataScope["status"])}
-            options={[
-              { value: "active", label: t("settings.common.active") },
-              { value: "disabled", label: t("settings.common.disabled") },
-            ]}
-            value={status}
+          <Controller
+            control={control}
+            name="status"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                options={[
+                  { value: "active", label: t("settings.common.active") },
+                  { value: "disabled", label: t("settings.common.disabled") },
+                ]}
+                value={field.value}
+              />
+            )}
           />
         </Field>
       </div>

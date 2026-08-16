@@ -107,8 +107,8 @@ M1 Runtime 对 Card 脚本暴露的唯一浏览器对象是 `window.argusCard`�
 | 内部 RPC | gRPC + protobuf | 使用 Buf 管理 lint、生成和 breaking change；Connector 使用双向流 |
 | MCP | 官方 Go MCP SDK + Argus Tool Gateway | SDK 只处理协议；权限、私有 Token 分流和 Tool 投影由 Argus 实现 |
 | Agent Harness | Go 小内核，语义参考 Pi agent-core | Provider-neutral Message/Event、可插拔 ContextAssembler、顺序优先的 Tool Loop；不引入第二套 Workflow Runtime |
-| PostgreSQL | `pgx` + `sqlc` | 使用显式 SQL 实现事务、条件更新、Lease、Fence Token 和 Outbox，不使用重 ORM |
-| PostgreSQL Migration | Goose | Migration 以 Job 运行并通过 Lease 保证单一所有者 |
+| PostgreSQL | `pgx` + `sqlc` | 使用显式 SQL 实现事务、条件更新、Lease、Fence Token 和 Outbox，不使用重 ORM；查询与生成文件按领域拆分并遵守 2000 行上限 |
+| PostgreSQL Migration | Goose | Migration 以独立 Job 运行并持有 PostgreSQL advisory lock，普通 Server 启动不修改 Schema |
 | Redis | `go-redis` | 只用于缓存、通知、限流和短期协调 |
 | Kafka | `franz-go` | Ingest Producer、必要时的最小 Writer 和管理工具共用 |
 | ClickHouse | `clickhouse-go/v2` | 只由 Telemetry Query、Schema Migration 和受控 Writer 使用 |
@@ -188,9 +188,11 @@ Agent Loop、ContextAssembler、Compactor 和 Provider Adapter 保持独立接�
 - 本地密码使用 Argon2id。
 - 浏览器使用 HttpOnly、Secure、SameSite Cookie，所有变更请求执行 CSRF 防护。
 - Session 和撤销事实保存在 PostgreSQL，Redis 只保存热缓存和快速失效通知。
+- Redis 初始连接失败时 Server 可以 degraded 启动并保留自动重连客户端；`/readyz` 只以 PostgreSQL 为必要条件。Redis 不可用期间已有 Session 继续由 PostgreSQL 校验，新登录 fail closed。
 - PlatformUser 与 EnterpriseUser 使用不同身份域和 Audience；EnterpriseUser 固定一个企业，不实现 Membership 或企业切换。
 - 第一版企业级 RoleBinding、DataScope、RemoteAccessGrant、ManagedAccount、AuthorizationVersion 和类型化 Policy 在 Go 领域服务中实现；标签选择器使用独立的版本化白名单语法，受限 Policy 条件可以使用 CEL-Go，二者都不接受用户 SQL。
 - API Key 和 ServiceAccount 凭证只显示一次，数据库只保存哈希，并固定企业、Tool/DataScope 和 AuthorizationVersion。
+- M2 真实写表单统一使用 React Hook Form + Zod，DTO 继续直接消费生成的 `snake_case` 契约；Zod 只改善交互，服务端仍执行权威校验。
 - 业务对象只保存 `secret_ref`。Secret Store 使用 Envelope Encryption，并预留外部 Vault/OpenBao/云 KMS Adapter；第一版不因此引入集群外依赖。
 
 ## 5. 测试与质量门禁

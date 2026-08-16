@@ -20,3 +20,30 @@ codes:
   CONTEXT_INPUT_TOO_LARGE: {http_status: 422, message_key: errors.agent.context_input_too_large, retryable: false}
   CONTEXT_COMPACTION_FAILED: {http_status: 503, message_key: errors.agent.context_compaction_failed, retryable: true}
   CONTRACT_VERSION_UNSUPPORTED: {http_status: 400, message_key: errors.common.contract_version_unsupported, retryable: false}
+  RESOURCE_NOT_FOUND: {http_status: 404, message_key: errors.common.resource_not_found, retryable: false}
+  VERSION_CONFLICT: {http_status: 409, message_key: errors.common.version_conflict, retryable: true}
+  SETUP_ALREADY_INITIALIZED: {http_status: 409, message_key: errors.setup.already_initialized, retryable: false}
+  SETUP_TOKEN_INVALID: {http_status: 403, message_key: errors.setup.token_invalid, retryable: false}
+  SETUP_TOKEN_EXPIRED: {http_status: 403, message_key: errors.setup.token_expired, retryable: false}
+  SETUP_TOKEN_UNAVAILABLE: {http_status: 503, message_key: errors.setup.token_unavailable, retryable: true}
+  INVALID_CREDENTIALS: {http_status: 401, message_key: errors.auth.invalid_credentials, retryable: false}
+  PASSWORD_WEAK: {http_status: 422, message_key: errors.auth.password_weak, retryable: false}
+  PASSWORD_CHANGE_REQUIRED: {http_status: 403, message_key: errors.auth.password_change_required, retryable: false}
+  TEMPORARY_CREDENTIAL_EXPIRED: {http_status: 410, message_key: errors.auth.temporary_credential_expired, retryable: false}
+  CSRF_TOKEN_MISSING: {http_status: 403, message_key: errors.auth.csrf_token_missing, retryable: false}
+  CSRF_TOKEN_INVALID: {http_status: 403, message_key: errors.auth.csrf_token_invalid, retryable: false}
+  ORIGIN_NOT_ALLOWED: {http_status: 403, message_key: errors.auth.origin_not_allowed, retryable: false}
+  LOGIN_RATE_LIMITED: {http_status: 429, message_key: errors.auth.login_rate_limited, retryable: true}
+  LOGIN_DEPENDENCY_UNAVAILABLE: {http_status: 503, message_key: errors.auth.login_dependency_unavailable, retryable: true}
+  SESSION_EXPIRED: {http_status: 401, message_key: errors.auth.session_expired, retryable: false}
+  SESSION_REVOKED: {http_status: 401, message_key: errors.auth.session_revoked, retryable: false}
+  SESSION_AUDIENCE_MISMATCH: {http_status: 403, message_key: errors.auth.session_audience_mismatch, retryable: false}
+  ENTERPRISE_SUSPENDED: {http_status: 403, message_key: errors.enterprise.suspended, retryable: false}
+  ENTERPRISE_DISABLED: {http_status: 403, message_key: errors.enterprise.disabled, retryable: false}
+  DEFAULT_DEPARTMENT_IMMUTABLE: {http_status: 409, message_key: errors.department.default_immutable, retryable: false}
+  DEPARTMENT_NOT_EMPTY: {http_status: 409, message_key: errors.department.not_empty, retryable: false}
+  BUILTIN_ROLE_IMMUTABLE: {http_status: 409, message_key: errors.role.builtin_immutable, retryable: false}
+  CROSS_ENTERPRISE_REFERENCE: {http_status: 404, message_key: errors.auth.cross_enterprise_reference, retryable: false}
+  API_KEY_REVOKED: {http_status: 401, message_key: errors.api_key.revoked, retryable: false}
+  API_KEY_EXPIRED: {http_status: 401, message_key: errors.api_key.expired, retryable: false}
+  IDEMPOTENCY_RESULT_EXPIRED: {http_status: 409, message_key: errors.common.idempotency_result_expired, retryable: false}

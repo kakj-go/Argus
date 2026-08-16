@@ -11,6 +11,64 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /setup/status:
+    $ref: ./paths/m2.yaml#/setup_status
+  /setup/initialize:
+    $ref: ./paths/m2.yaml#/setup_initialize
+  /{audience}/auth/login:
+    $ref: ./paths/m2.yaml#/auth_login
+  /{audience}/auth/session:
+    $ref: ./paths/m2.yaml#/auth_session
+  /{audience}/auth/complete-password-change:
+    $ref: ./paths/m2.yaml#/auth_complete_password_change
+  /{audience}/account/password:
+    $ref: ./paths/m2.yaml#/account_password
+  /platform/enterprises:
+    $ref: ./paths/m2.yaml#/platform_enterprises
+  /platform/enterprises/{id}:
+    $ref: ./paths/m2.yaml#/platform_enterprise
+  /platform/enterprises/{id}/{state_action}:
+    $ref: ./paths/m2.yaml#/platform_enterprise_state
+  /platform/enterprise-admins:
+    $ref: ./paths/m2.yaml#/platform_enterprise_admins
+  /platform/enterprise-admins/{id}/reset-password:
+    $ref: ./paths/m2.yaml#/platform_enterprise_admin_reset
+  /platform/enterprise-admins/{id}/disable:
+    $ref: ./paths/m2.yaml#/platform_enterprise_admin_disable
+  /enterprise/users:
+    $ref: ./paths/m2.yaml#/enterprise_users
+  /enterprise/users/{id}:
+    $ref: ./paths/m2.yaml#/enterprise_user
+  /enterprise/departments:
+    $ref: ./paths/m2.yaml#/enterprise_departments
+  /enterprise/departments/{id}:
+    $ref: ./paths/m2.yaml#/enterprise_department
+  /enterprise/permissions:
+    $ref: ./paths/m2.yaml#/enterprise_permissions
+  /enterprise/roles:
+    $ref: ./paths/m2.yaml#/enterprise_roles
+  /enterprise/roles/{id}:
+    $ref: ./paths/m2.yaml#/enterprise_role
+  /enterprise/role-bindings:
+    $ref: ./paths/m2.yaml#/enterprise_role_bindings
+  /enterprise/role-bindings/{id}:
+    $ref: ./paths/m2.yaml#/enterprise_role_binding
+  /enterprise/data-scopes:
+    $ref: ./paths/m2.yaml#/enterprise_data_scopes
+  /enterprise/data-scopes/{id}:
+    $ref: ./paths/m2.yaml#/enterprise_data_scope
+  /enterprise/service-accounts:
+    $ref: ./paths/m2.yaml#/enterprise_service_accounts
+  /enterprise/service-accounts/{id}:
+    $ref: ./paths/m2.yaml#/enterprise_service_account
+  /enterprise/service-accounts/{service_account_id}/api-keys:
+    $ref: ./paths/m2.yaml#/enterprise_api_keys
+  /enterprise/api-keys/{id}/rotate:
+    $ref: ./paths/m2.yaml#/enterprise_api_key_rotate
+  /enterprise/api-keys/{id}/revoke:
+    $ref: ./paths/m2.yaml#/enterprise_api_key_revoke
+  /{audience}/audit-events:
+    $ref: ./paths/m2.yaml#/audit_events
   /conversations/{conversation_id}/events:
     get:
       operationId: streamConversationEvents
@@ -143,11 +201,93 @@ components:
       $ref: ../schemas/telemetry/query.schema.json
     TrustedTelemetryIdentity:
       $ref: ../schemas/telemetry/query.schema.json#/$defs/TrustedTelemetryIdentity
+    PlatformState:
+      $ref: ./components/m2.yaml#/components/schemas/PlatformState
+    SetupStatus:
+      $ref: ./components/m2.yaml#/components/schemas/SetupStatus
+    SetupInitializeRequest:
+      $ref: ./components/m2.yaml#/components/schemas/SetupInitializeRequest
+    SetupInitializeResult:
+      $ref: ./components/m2.yaml#/components/schemas/SetupInitializeResult
+    LoginRequest:
+      $ref: ./components/m2.yaml#/components/schemas/LoginRequest
+    PasswordChangeChallenge:
+      $ref: ./components/m2.yaml#/components/schemas/PasswordChangeChallenge
+    AuthenticatedSession:
+      $ref: ./components/m2.yaml#/components/schemas/AuthenticatedSession
+    LoginResult:
+      $ref: ./components/m2.yaml#/components/schemas/LoginResult
+    CompletePasswordChangeRequest:
+      $ref: ./components/m2.yaml#/components/schemas/CompletePasswordChangeRequest
+    PasswordUpdateRequest:
+      $ref: ./components/m2.yaml#/components/schemas/PasswordUpdateRequest
+    EnterpriseCreate:
+      $ref: ./components/m2.yaml#/components/schemas/EnterpriseCreate
+    EnterpriseUpdate:
+      $ref: ./components/m2.yaml#/components/schemas/EnterpriseUpdate
+    EnterprisePage:
+      $ref: ./components/m2.yaml#/components/schemas/EnterprisePage
+    EnterpriseAdminCreate:
+      $ref: ./components/m2.yaml#/components/schemas/EnterpriseAdminCreate
+    EnterpriseUserCreate:
+      $ref: ./components/m2.yaml#/components/schemas/EnterpriseUserCreate
+    EnterpriseUserUpdate:
+      $ref: ./components/m2.yaml#/components/schemas/EnterpriseUserUpdate
+    CreatedUserCredential:
+      $ref: ./components/m2.yaml#/components/schemas/CreatedUserCredential
+    EnterpriseUserPage:
+      $ref: ./components/m2.yaml#/components/schemas/EnterpriseUserPage
+    DepartmentCreate:
+      $ref: ./components/m2.yaml#/components/schemas/DepartmentCreate
+    DepartmentUpdate:
+      $ref: ./components/m2.yaml#/components/schemas/DepartmentUpdate
+    DepartmentPage:
+      $ref: ./components/m2.yaml#/components/schemas/DepartmentPage
+    ServiceAccountCreate:
+      $ref: ./components/m2.yaml#/components/schemas/ServiceAccountCreate
+    ServiceAccountUpdate:
+      $ref: ./components/m2.yaml#/components/schemas/ServiceAccountUpdate
+    ServiceAccountPage:
+      $ref: ./components/m2.yaml#/components/schemas/ServiceAccountPage
+    ApiKeyCreate:
+      $ref: ./components/m2.yaml#/components/schemas/ApiKeyCreate
+    CreatedApiKeySecret:
+      $ref: ./components/m2.yaml#/components/schemas/CreatedApiKeySecret
+    ApiKeyPage:
+      $ref: ./components/m2.yaml#/components/schemas/ApiKeyPage
+    RoleCreate:
+      $ref: ./components/m2.yaml#/components/schemas/RoleCreate
+    RoleUpdate:
+      $ref: ./components/m2.yaml#/components/schemas/RoleUpdate
+    RolePage:
+      $ref: ./components/m2.yaml#/components/schemas/RolePage
+    RoleBindingCreate:
+      $ref: ./components/m2.yaml#/components/schemas/RoleBindingCreate
+    RoleBindingUpdate:
+      $ref: ./components/m2.yaml#/components/schemas/RoleBindingUpdate
+    RoleBindingPage:
+      $ref: ./components/m2.yaml#/components/schemas/RoleBindingPage
+    DataScopeCreate:
+      $ref: ./components/m2.yaml#/components/schemas/DataScopeCreate
+    DataScopeUpdate:
+      $ref: ./components/m2.yaml#/components/schemas/DataScopeUpdate
+    DataScopePage:
+      $ref: ./components/m2.yaml#/components/schemas/DataScopePage
+    PermissionPage:
+      $ref: ./components/m2.yaml#/components/schemas/PermissionPage
+    AuditEvent:
+      $ref: ./components/m2.yaml#/components/schemas/AuditEvent
+    AuditEventPage:
+      $ref: ./components/m2.yaml#/components/schemas/AuditEventPage
   securitySchemes:
     sessionCookie:
       type: apiKey
       in: cookie
       name: argus_session
+    setupToken:
+      type: apiKey
+      in: header
+      name: X-Argus-Setup-Token
   parameters:
     RequestId:
       name: X-Request-ID

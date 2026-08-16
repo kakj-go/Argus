@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import {
   useApi,
   type CreateRoleBindingInput,
@@ -253,51 +256,97 @@ function BindingDrawer({
     queryKey: ["org", "data-scopes"],
     queryFn: () => api.org.listDataScopes(),
   });
-  const [subject_type, setSubjectType] = useState<RoleBindingSubjectType>(
-    binding?.subject_type ?? "user",
+  const bindingSchema = useMemo(
+    () =>
+      z
+        .object({
+          subject_type: z.enum(["user", "department", "service_account"]),
+          subject_id: z.string().min(1, t("settings.common.required")),
+          role_id: z.string().min(1, t("settings.common.required")),
+          data_scope_ids: z.array(z.string()),
+          valid_from: z.string(),
+          valid_until: z.string(),
+          active: z.boolean(),
+        })
+        .refine(
+          (values) =>
+            !values.valid_from ||
+            !values.valid_until ||
+            values.valid_from <= values.valid_until,
+          {
+            path: ["valid_until"],
+            message: t("settings.org.bindingsTab.dateRangeInvalid"),
+          },
+        ),
+    [t],
   );
-  const [subject_id, setSubjectId] = useState(binding?.subject_id ?? "");
-  const [role_id, setRoleId] = useState(binding?.role_id ?? "");
-  const [data_scope_ids, setDataScopeIds] = useState(
-    binding?.data_scope_ids ?? [],
-  );
-  const [valid_from, setValidFrom] = useState(toDateInput(binding?.valid_from));
-  const [valid_until, setValidUntil] = useState(
-    toDateInput(binding?.valid_until),
-  );
-  const [active, setActive] = useState(binding?.status !== "disabled");
+  type BindingForm = z.infer<typeof bindingSchema>;
+  const {
+    control,
+    setValue,
+    watch,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<BindingForm>({
+    resolver: zodResolver(bindingSchema),
+    defaultValues: {
+      subject_type: binding?.subject_type ?? "user",
+      subject_id: binding?.subject_id ?? "",
+      role_id: binding?.role_id ?? "",
+      data_scope_ids: binding?.data_scope_ids ?? [],
+      valid_from: toDateInput(binding?.valid_from),
+      valid_until: toDateInput(binding?.valid_until),
+      active: binding?.status !== "disabled",
+    },
+  });
+  const subject_type = watch("subject_type") as RoleBindingSubjectType;
 
-  const subjectOptions =
-    subject_type === "user"
-      ? (users.data ?? []).map((subject) => ({
-          value: subject.id,
-          label: `${subject.displayName} (@${subject.username})`,
-        }))
-      : subject_type === "department"
-        ? (departments.data ?? []).map((subject) => ({
+  const subjectOptions = useMemo(
+    () =>
+      subject_type === "user"
+        ? (users.data ?? []).map((subject) => ({
             value: subject.id,
-            label: subject.name,
+            label: `${subject.displayName} (@${subject.username})`,
           }))
-        : (serviceAccounts.data ?? []).map((subject) => ({
-            value: subject.id,
-            label: subject.name,
-          }));
+        : subject_type === "department"
+          ? (departments.data ?? []).map((subject) => ({
+              value: subject.id,
+              label: subject.name,
+            }))
+          : (serviceAccounts.data ?? []).map((subject) => ({
+              value: subject.id,
+              label: subject.name,
+            })),
+    [departments.data, serviceAccounts.data, subject_type, users.data],
+  );
+
+  useEffect(() => {
+    if (!binding && subjectOptions[0])
+      setValue("subject_id", subjectOptions[0].value, {
+        shouldValidate: true,
+      });
+  }, [binding, setValue, subjectOptions]);
+
+  useEffect(() => {
+    if (!binding && roles.data?.[0])
+      setValue("role_id", roles.data[0].id, { shouldValidate: true });
+  }, [binding, roles.data, setValue]);
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={(open) => !open && onClose()}
-      onSubmit={() =>
+      onSubmit={handleSubmit((values) =>
         onSubmit({
-          subject_type,
-          subject_id: subject_id || subjectOptions[0]?.value || "",
-          role_id: role_id || (roles.data ?? [])[0]?.id || "",
-          data_scope_ids,
-          valid_from: fromDateInput(valid_from),
-          valid_until: fromDateInput(valid_until, true),
-          status: active ? "active" : "disabled",
-        })
-      }
+          subject_type: values.subject_type,
+          subject_id: values.subject_id,
+          role_id: values.role_id,
+          data_scope_ids: values.data_scope_ids,
+          valid_from: fromDateInput(values.valid_from),
+          valid_until: fromDateInput(values.valid_until, true),
+          status: values.active ? "active" : "disabled",
+        }),
+      )}
       open
       title={
         binding
@@ -312,82 +361,123 @@ function BindingDrawer({
           </p>
         )}
         <Field label={t("settings.org.bindingsTab.subject_type")}>
-          <Select
-            disabled={Boolean(binding)}
-            onValueChange={(value) => {
-              setSubjectType(value as RoleBindingSubjectType);
-              setSubjectId("");
-            }}
-            options={[
-              {
-                value: "user",
-                label: t("settings.org.bindingsTab.subjectTypes.user"),
-              },
-              {
-                value: "department",
-                label: t("settings.org.bindingsTab.subjectTypes.department"),
-              },
-              {
-                value: "service_account",
-                label: t(
-                  "settings.org.bindingsTab.subjectTypes.serviceAccount",
-                ),
-              },
-            ]}
-            value={subject_type}
+          <Controller
+            control={control}
+            name="subject_type"
+            render={({ field }) => (
+              <Select
+                disabled={Boolean(binding)}
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  setValue("subject_id", "", { shouldValidate: true });
+                }}
+                options={[
+                  {
+                    value: "user",
+                    label: t("settings.org.bindingsTab.subjectTypes.user"),
+                  },
+                  {
+                    value: "department",
+                    label: t(
+                      "settings.org.bindingsTab.subjectTypes.department",
+                    ),
+                  },
+                  {
+                    value: "service_account",
+                    label: t(
+                      "settings.org.bindingsTab.subjectTypes.serviceAccount",
+                    ),
+                  },
+                ]}
+                value={field.value}
+              />
+            )}
           />
         </Field>
-        <Field label={t("settings.org.bindingsTab.subject")}>
-          <Select
-            disabled={Boolean(binding)}
-            onValueChange={setSubjectId}
-            options={subjectOptions}
-            value={subject_id || subjectOptions[0]?.value || ""}
+        <Field
+          error={errors.subject_id?.message}
+          label={t("settings.org.bindingsTab.subject")}
+        >
+          <Controller
+            control={control}
+            name="subject_id"
+            render={({ field }) => (
+              <Select
+                disabled={Boolean(binding)}
+                onValueChange={field.onChange}
+                options={subjectOptions}
+                value={field.value}
+              />
+            )}
           />
         </Field>
-        <Field label={t("settings.org.bindingsTab.role")}>
-          <Select
-            disabled={Boolean(binding)}
-            onValueChange={setRoleId}
-            options={(roles.data ?? []).map((role) => ({
-              value: role.id,
-              label: role.name,
-            }))}
-            value={role_id || (roles.data ?? [])[0]?.id || ""}
+        <Field
+          error={errors.role_id?.message}
+          label={t("settings.org.bindingsTab.role")}
+        >
+          <Controller
+            control={control}
+            name="role_id"
+            render={({ field }) => (
+              <Select
+                disabled={Boolean(binding)}
+                onValueChange={field.onChange}
+                options={(roles.data ?? []).map((role) => ({
+                  value: role.id,
+                  label: role.name,
+                }))}
+                value={field.value}
+              />
+            )}
           />
         </Field>
         <Field label={t("settings.org.tabs.scopes")}>
-          <CheckList
-            onChange={setDataScopeIds}
-            options={(dataScopes.data ?? []).map((scope) => ({
-              id: scope.id,
-              label: scope.name,
-            }))}
-            value={data_scope_ids}
+          <Controller
+            control={control}
+            name="data_scope_ids"
+            render={({ field }) => (
+              <CheckList
+                onChange={field.onChange}
+                options={(dataScopes.data ?? []).map((scope) => ({
+                  id: scope.id,
+                  label: scope.name,
+                }))}
+                value={field.value}
+              />
+            )}
           />
         </Field>
         <Field label={t("settings.org.bindingsTab.valid_from")}>
-          <Input
-            onChange={(event) => setValidFrom(event.target.value)}
-            type="date"
-            value={valid_from}
+          <Controller
+            control={control}
+            name="valid_from"
+            render={({ field }) => <Input {...field} type="date" />}
           />
         </Field>
-        <Field label={t("settings.org.bindingsTab.valid_until")}>
-          <Input
-            onChange={(event) => setValidUntil(event.target.value)}
-            type="date"
-            value={valid_until}
+        <Field
+          error={errors.valid_until?.message}
+          label={t("settings.org.bindingsTab.valid_until")}
+        >
+          <Controller
+            control={control}
+            name="valid_until"
+            render={({ field }) => <Input {...field} type="date" />}
           />
         </Field>
-        <Switch
-          checked={active}
-          label={
-            active
-              ? t("settings.common.enabled")
-              : t("settings.common.disabled")
-          }
-          onChange={setActive}
+        <Controller
+          control={control}
+          name="active"
+          render={({ field }) => (
+            <Switch
+              checked={field.value}
+              label={
+                field.value
+                  ? t("settings.common.enabled")
+                  : t("settings.common.disabled")
+              }
+              onChange={field.onChange}
+            />
+          )}
         />
       </div>
     </FormDrawer>

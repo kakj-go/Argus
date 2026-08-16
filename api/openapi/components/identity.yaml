@@ -3,18 +3,22 @@ components:
     Enterprise:
       type: object
       additionalProperties: false
-      required: [id, name, status, default_locale, created_at, updated_at]
+      required: [id, name, code, status, timezone, default_locale, version, created_at, updated_at]
       properties:
         id: {type: string, minLength: 1}
         name: {type: string, minLength: 1, maxLength: 128}
+        code: {type: string, pattern: "^[a-z][a-z0-9-]{1,62}$"}
         status: {type: string, enum: [active, suspended, disabled]}
+        timezone: {type: string, minLength: 1, maxLength: 128}
         default_locale: {type: string, enum: [zh-CN, en-US]}
+        remark: {type: string, maxLength: 2048}
+        version: {type: integer, format: int64, minimum: 1}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     PlatformUser:
       type: object
       additionalProperties: false
-      required: [id, username, display_name, role, status, mfa_enabled, created_at]
+      required: [id, username, display_name, role, status, mfa_enabled, version, created_at]
       properties:
         id: {type: string, minLength: 1}
         username: {type: string, minLength: 1, maxLength: 128}
@@ -23,11 +27,12 @@ components:
         role: {type: string, const: platform_super_admin}
         status: {type: string, enum: [active, disabled]}
         mfa_enabled: {type: boolean}
+        version: {type: integer, format: int64, minimum: 1}
         created_at: {type: string, format: date-time}
     EnterpriseUser:
       type: object
       additionalProperties: false
-      required: [id, enterprise_id, department_id, username, display_name, status, mfa_enabled, authorization_version, created_at, updated_at]
+      required: [id, enterprise_id, department_id, username, display_name, status, mfa_enabled, authorization_version, version, created_at, updated_at]
       properties:
         id: {type: string, minLength: 1}
         enterprise_id: {type: string, minLength: 1}
@@ -38,6 +43,7 @@ components:
         status: {type: string, enum: [active, invited, disabled]}
         mfa_enabled: {type: boolean}
         authorization_version: {$ref: "./authorization.yaml#/components/schemas/AuthorizationVersion"}
+        version: {type: integer, format: int64, minimum: 1}
         last_login_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -84,7 +90,7 @@ components:
     ServiceAccount:
       type: object
       additionalProperties: false
-      required: [id, enterprise_id, name, status, authorization_version, created_at, updated_at]
+      required: [id, enterprise_id, name, status, authorization_version, version, created_at, updated_at]
       properties:
         id: {type: string, minLength: 1}
         enterprise_id: {type: string, minLength: 1}
@@ -94,12 +100,13 @@ components:
         allowed_tool_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
         data_scope_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
         authorization_version: {$ref: "./authorization.yaml#/components/schemas/AuthorizationVersion"}
+        version: {type: integer, format: int64, minimum: 1}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ApiKey:
       type: object
       additionalProperties: false
-      required: [id, enterprise_id, service_account_id, name, prefix, status, created_at]
+      required: [id, enterprise_id, service_account_id, name, prefix, status, version, created_at]
       properties:
         id: {type: string, minLength: 1}
         enterprise_id: {type: string, minLength: 1}
@@ -107,6 +114,7 @@ components:
         name: {type: string, minLength: 1, maxLength: 128}
         prefix: {type: string, minLength: 4, maxLength: 32}
         status: {type: string, enum: [active, revoked, expired]}
+        version: {type: integer, format: int64, minimum: 1}
         expires_at: {type: string, format: date-time}
         last_used_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}

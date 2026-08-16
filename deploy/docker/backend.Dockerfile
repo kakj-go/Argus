@@ -12,9 +12,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+COPY migrations ./migrations
 
 RUN mkdir -p /out && \
-    for name in argus-server argus-worker argus-connector-gateway argus-telemetry argus-connector argusctl; do \
+    for name in argus-server argus-worker argus-connector-gateway argus-telemetry argus-connector argusctl argus-migrate; do \
       CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
         -trimpath \
         -ldflags "-s -w -X github.com/kakj-go/Argus/internal/buildinfo.Version=$VERSION -X github.com/kakj-go/Argus/internal/buildinfo.Commit=$COMMIT -X github.com/kakj-go/Argus/internal/buildinfo.Date=$BUILD_DATE" \
@@ -23,5 +24,6 @@ RUN mkdir -p /out && \
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/ /usr/local/bin/
+COPY --from=build /src/migrations/ /usr/local/share/argus/migrations/
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/argus-server"]

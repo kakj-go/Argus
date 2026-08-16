@@ -1,0 +1,486 @@
+setup_status:
+  get:
+    operationId: getSetupStatus
+    summary: getSetupStatus.
+    security: []
+    responses:
+      "200":
+        description: Current initialization state.
+        content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/SetupStatus"}}}
+      default: {$ref: "#/components/responses/Error"}
+setup_initialize:
+  post:
+    operationId: initializePlatform
+    summary: initializePlatform.
+    security: [{setupToken: []}]
+    parameters:
+      - {$ref: "#/components/parameters/IdempotencyKey"}
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/SetupInitializeRequest"}}}
+    responses:
+      "201":
+        description: Platform initialized.
+        content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/SetupInitializeResult"}}}
+      default: {$ref: "#/components/responses/Error"}
+auth_login:
+  parameters:
+    - {$ref: "#/components/parameters/Audience"}
+  post:
+    operationId: login
+    summary: login.
+    security: []
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/LoginRequest"}}}
+    responses:
+      "200":
+        description: Authenticated session or required password-change challenge.
+        content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/LoginResult"}}}
+      default: {$ref: "#/components/responses/Error"}
+auth_session:
+  parameters:
+    - {$ref: "#/components/parameters/Audience"}
+  get:
+    operationId: getAuthenticatedSession
+    summary: getAuthenticatedSession.
+    responses:
+      "200":
+        description: Current authenticated session.
+        content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/AuthenticatedSession"}}}
+      default: {$ref: "#/components/responses/Error"}
+  delete:
+    operationId: logout
+    summary: logout.
+    parameters:
+      - {$ref: "#/components/parameters/CsrfToken"}
+    responses:
+      "204": {description: Session revoked.}
+      default: {$ref: "#/components/responses/Error"}
+auth_complete_password_change:
+  parameters:
+    - {$ref: "#/components/parameters/Audience"}
+  post:
+    operationId: completePasswordChange
+    summary: completePasswordChange.
+    security: []
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/CompletePasswordChangeRequest"}}}
+    responses:
+      "200":
+        description: Password changed and session issued.
+        content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/AuthenticatedSession"}}}
+      default: {$ref: "#/components/responses/Error"}
+account_password:
+  parameters:
+    - {$ref: "#/components/parameters/Audience"}
+  put:
+    operationId: updateOwnPassword
+    summary: updateOwnPassword.
+    parameters:
+      - {$ref: "#/components/parameters/CsrfToken"}
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/PasswordUpdateRequest"}}}
+    responses:
+      "204": {description: Password changed and other sessions revoked.}
+      default: {$ref: "#/components/responses/Error"}
+platform_enterprises:
+  get:
+    operationId: listEnterprises
+    summary: listEnterprises.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200":
+        description: Enterprise page.
+        content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/EnterprisePage"}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createEnterprise
+    summary: createEnterprise.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/EnterpriseCreate"}}}
+    responses:
+      "201":
+        description: Enterprise created with default department, roles and empty scope.
+        content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/Enterprise"}}}
+      default: {$ref: "#/components/responses/Error"}
+platform_enterprise:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getEnterprise
+    summary: getEnterprise.
+    responses:
+      "200": {description: Enterprise., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/Enterprise"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  put:
+    operationId: updateEnterprise
+    summary: updateEnterprise.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/EnterpriseUpdate"}}}
+    responses:
+      "200": {description: Updated enterprise., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/Enterprise"}}}}
+      default: {$ref: "#/components/responses/Error"}
+platform_enterprise_state:
+  parameters:
+    - {$ref: "#/components/parameters/ResourceId"}
+    - name: state_action
+      in: path
+      required: true
+      schema: {type: string, enum: [suspend, activate, disable]}
+  post:
+    operationId: changeEnterpriseState
+    summary: changeEnterpriseState.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "200": {description: Enterprise state changed., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/Enterprise"}}}}
+      default: {$ref: "#/components/responses/Error"}
+platform_enterprise_admins:
+  get:
+    operationId: listEnterpriseAdmins
+    summary: listEnterpriseAdmins.
+    parameters:
+      - name: enterprise_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+      - {$ref: "#/components/parameters/Cursor"}
+      - {$ref: "#/components/parameters/Limit"}
+    responses:
+      "200": {description: Enterprise administrators., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/EnterpriseUserPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createEnterpriseAdmin
+    summary: createEnterpriseAdmin.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/EnterpriseAdminCreate"}}}
+    responses:
+      "201": {description: Administrator and one-time temporary password., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/CreatedUserCredential"}}}}
+      default: {$ref: "#/components/responses/Error"}
+platform_enterprise_admin_reset:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: resetEnterpriseAdminPassword
+    summary: resetEnterpriseAdminPassword.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    responses:
+      "200": {description: New one-time temporary password., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/CreatedUserCredential"}}}}
+      default: {$ref: "#/components/responses/Error"}
+platform_enterprise_admin_disable:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: disableEnterpriseAdmin
+    summary: disableEnterpriseAdmin.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "200": {description: Disabled administrator., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/EnterpriseUser"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_users:
+  get:
+    operationId: listEnterpriseUsers
+    summary: listEnterpriseUsers.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Enterprise users., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/EnterpriseUserPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createEnterpriseUser
+    summary: createEnterpriseUser.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/EnterpriseUserCreate"}}}
+    responses:
+      "201": {description: User and one-time temporary password., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/CreatedUserCredential"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_user:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getEnterpriseUser
+    summary: getEnterpriseUser.
+    responses:
+      "200": {description: Enterprise user., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/EnterpriseUser"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  put:
+    operationId: updateEnterpriseUser
+    summary: updateEnterpriseUser.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/EnterpriseUserUpdate"}}}
+    responses:
+      "200": {description: Updated user., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/EnterpriseUser"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_departments:
+  get:
+    operationId: listDepartments
+    summary: listDepartments.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Departments., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/DepartmentPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createDepartment
+    summary: createDepartment.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/DepartmentCreate"}}}
+    responses:
+      "201": {description: Department., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/Department"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_department:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  put:
+    operationId: updateDepartment
+    summary: updateDepartment.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/DepartmentUpdate"}}}
+    responses:
+      "200": {description: Updated department., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/Department"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  delete:
+    operationId: disableDepartment
+    summary: disableDepartment.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "204": {description: Department disabled.}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_permissions:
+  get:
+    operationId: listPermissions
+    summary: listPermissions.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Registered permissions., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/PermissionPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_roles:
+  get:
+    operationId: listRoles
+    summary: listRoles.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Roles., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/RolePage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createRole
+    summary: createRole.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/RoleCreate"}}}}
+    responses:
+      "201": {description: Role., content: {application/json: {schema: {$ref: "../components/authorization.yaml#/components/schemas/Role"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_role:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  put:
+    operationId: updateRole
+    summary: updateRole.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/RoleUpdate"}}}}
+    responses:
+      "200": {description: Updated role., content: {application/json: {schema: {$ref: "../components/authorization.yaml#/components/schemas/Role"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  delete:
+    operationId: disableRole
+    summary: disableRole.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "204": {description: Role disabled.}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_role_bindings:
+  get:
+    operationId: listRoleBindings
+    summary: listRoleBindings.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Role bindings., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/RoleBindingPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createRoleBinding
+    summary: createRoleBinding.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/RoleBindingCreate"}}}}
+    responses:
+      "201": {description: Role binding., content: {application/json: {schema: {$ref: "../components/authorization.yaml#/components/schemas/RoleBinding"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_role_binding:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  put:
+    operationId: updateRoleBinding
+    summary: updateRoleBinding.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/RoleBindingUpdate"}}}}
+    responses:
+      "200": {description: Updated binding., content: {application/json: {schema: {$ref: "../components/authorization.yaml#/components/schemas/RoleBinding"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  delete:
+    operationId: disableRoleBinding
+    summary: disableRoleBinding.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "204": {description: Binding disabled.}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_data_scopes:
+  get:
+    operationId: listDataScopes
+    summary: listDataScopes.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Data scopes., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/DataScopePage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createDataScope
+    summary: createDataScope.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/DataScopeCreate"}}}}
+    responses:
+      "201": {description: Data scope., content: {application/json: {schema: {$ref: "../components/authorization.yaml#/components/schemas/DataScope"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_data_scope:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  put:
+    operationId: updateDataScope
+    summary: updateDataScope.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/DataScopeUpdate"}}}}
+    responses:
+      "200": {description: Updated data scope., content: {application/json: {schema: {$ref: "../components/authorization.yaml#/components/schemas/DataScope"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  delete:
+    operationId: disableDataScope
+    summary: disableDataScope.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "204": {description: Data scope disabled.}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_service_accounts:
+  get:
+    operationId: listServiceAccounts
+    summary: listServiceAccounts.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Service accounts., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/ServiceAccountPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createServiceAccount
+    summary: createServiceAccount.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/ServiceAccountCreate"}}}}
+    responses:
+      "201": {description: Service account., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/ServiceAccount"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_service_account:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  put:
+    operationId: updateServiceAccount
+    summary: updateServiceAccount.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/ServiceAccountUpdate"}}}}
+    responses:
+      "200": {description: Updated service account., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/ServiceAccount"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_api_keys:
+  parameters:
+    - name: service_account_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  get:
+    operationId: listApiKeys
+    summary: listApiKeys.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: API keys., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/ApiKeyPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createApiKey
+    summary: createApiKey.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/ApiKeyCreate"}}}}
+    responses:
+      "201": {description: API key and one-time secret., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/CreatedApiKeySecret"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_api_key_rotate:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: rotateApiKey
+    summary: rotateApiKey.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "200": {description: Rotated API key and one-time secret., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/CreatedApiKeySecret"}}}}
+      default: {$ref: "#/components/responses/Error"}
+enterprise_api_key_revoke:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: revokeApiKey
+    summary: revokeApiKey.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "204": {description: API key revoked.}
+      default: {$ref: "#/components/responses/Error"}
+audit_events:
+  parameters:
+    - {$ref: "#/components/parameters/Audience"}
+  get:
+    operationId: listAuditEvents
+    summary: listAuditEvents.
+    parameters:
+      - {$ref: "#/components/parameters/Cursor"}
+      - {$ref: "#/components/parameters/Limit"}
+      - name: action
+        in: query
+        required: false
+        schema: {type: string, pattern: "^[a-z][a-z0-9_.]+$"}
+    responses:
+      "200": {description: Audit events for the authenticated domain., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/AuditEventPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+components:
+  parameters:
+    Audience:
+      name: audience
+      in: path
+      required: true
+      schema: {type: string, enum: [platform, enterprise]}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: "../components/common.yaml#/components/schemas/IdempotencyKey"}
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: {type: string, minLength: 32, maxLength: 256}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema: {type: integer, format: int64, minimum: 1}
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content: {application/json: {schema: {$ref: "../components/common.yaml#/components/schemas/ApiError"}}}

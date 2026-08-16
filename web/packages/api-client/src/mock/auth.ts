@@ -7,7 +7,9 @@ export function createAuthDomain(ctx: MockContext): ArgusApiClient["auth"] {
   const { db } = ctx;
 
   function sessionInfo(user: User): SessionInfo {
-    const enterpriseUser = db.enterpriseUsers.find((entry) => entry.userId === user.id);
+    const enterpriseUser = db.enterpriseUsers.find(
+      (entry) => entry.userId === user.id,
+    );
     const now = ctx.nowIso();
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
     if (user.platformRole) {
@@ -29,6 +31,7 @@ export function createAuthDomain(ctx: MockContext): ArgusApiClient["auth"] {
           role: "platform_super_admin",
           status: user.status === "disabled" ? "disabled" : "active",
           mfa_enabled: user.mfaEnabled,
+          version: 1,
           created_at: user.createdAt,
         },
         permissions: ["*"],
@@ -36,14 +39,22 @@ export function createAuthDomain(ctx: MockContext): ArgusApiClient["auth"] {
     }
     if (!enterpriseUser) throw new Error("enterprise user required");
     const roleIds = db.roleBindings
-      .filter((binding) => binding.status === "active" && (
-        (binding.subject_type === "user" && binding.subject_id === user.id) ||
-        (binding.subject_type === "department" && binding.subject_id === enterpriseUser.departmentId)
-      ))
+      .filter(
+        (binding) =>
+          binding.status === "active" &&
+          ((binding.subject_type === "user" &&
+            binding.subject_id === user.id) ||
+            (binding.subject_type === "department" &&
+              binding.subject_id === enterpriseUser.departmentId)),
+      )
       .map((binding) => binding.role_id);
-    const permissions = [...new Set(db.roles
-      .filter((role) => roleIds.includes(role.id))
-      .flatMap((role) => role.permissions))];
+    const permissions = [
+      ...new Set(
+        db.roles
+          .filter((role) => roleIds.includes(role.id))
+          .flatMap((role) => role.permissions),
+      ),
+    ];
     return {
       session: {
         id: `session-${user.id}`,
@@ -67,6 +78,7 @@ export function createAuthDomain(ctx: MockContext): ArgusApiClient["auth"] {
         status: user.status,
         mfa_enabled: user.mfaEnabled,
         authorization_version: 1,
+        version: 1,
         last_login_at: user.lastLoginAt,
         created_at: user.createdAt,
         updated_at: now,
@@ -87,7 +99,9 @@ export function createAuthDomain(ctx: MockContext): ArgusApiClient["auth"] {
         throw new Error("invalid credentials");
       }
       db.session.userId = user.id;
-      const enterpriseUser = db.enterpriseUsers.find((m) => m.userId === user.id);
+      const enterpriseUser = db.enterpriseUsers.find(
+        (m) => m.userId === user.id,
+      );
       db.session.enterpriseId = enterpriseUser?.enterpriseId ?? null;
       user.lastLoginAt = ctx.nowIso();
       ctx.audit("auth.login", {
@@ -97,6 +111,36 @@ export function createAuthDomain(ctx: MockContext): ArgusApiClient["auth"] {
       });
       ctx.save();
       return sessionInfo(user);
+    },
+    async completePasswordChange(input) {
+      await ctx.pause();
+      const user = db.users.find(
+        (entry) => db.credentials[entry.id] === input.temporary_password,
+      );
+      if (!user) throw new Error("invalid password change challenge");
+      db.credentials[user.id] = input.new_password;
+      db.session.userId = user.id;
+      const enterpriseUser = db.enterpriseUsers.find(
+        (entry) => entry.userId === user.id,
+      );
+      db.session.enterpriseId = enterpriseUser?.enterpriseId ?? null;
+      ctx.save();
+      return sessionInfo(user);
+    },
+    async changePassword(input) {
+      await ctx.pause();
+      const user = db.users.find((entry) => entry.id === db.session.userId);
+      if (!user || db.credentials[user.id] !== input.current_password) {
+        throw new Error("invalid credentials");
+      }
+      db.credentials[user.id] = input.new_password;
+      db.session.userId = null;
+      db.session.enterpriseId = null;
+      ctx.audit("auth.password_change", {
+        summary: `${user.displayName} 修改密码`,
+        platform: Boolean(user.platformRole),
+      });
+      ctx.save();
     },
     async logout() {
       await ctx.pause();

@@ -1,0 +1,609 @@
+openapi: 3.1.0
+info:
+  title: Argus Setup and Authentication API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /setup/status:
+    get:
+      operationId: getSetupStatus
+      summary: getSetupStatus.
+      security: []
+      responses:
+        '200':
+          description: Current initialization state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatus'
+        default:
+          $ref: '#/components/responses/Error'
+  /setup/initialize:
+    post:
+      operationId: initializePlatform
+      summary: initializePlatform.
+      security:
+        - setupToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupInitializeRequest'
+      responses:
+        '201':
+          description: Platform initialized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupInitializeResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /{audience}/auth/login:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    post:
+      operationId: login
+      summary: login.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated session or required password-change challenge.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /{audience}/auth/session:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    get:
+      operationId: getAuthenticatedSession
+      summary: getAuthenticatedSession.
+      responses:
+        '200':
+          description: Current authenticated session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticatedSession'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: logout
+      summary: logout.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Session revoked.
+        default:
+          $ref: '#/components/responses/Error'
+  /{audience}/auth/complete-password-change:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    post:
+      operationId: completePasswordChange
+      summary: completePasswordChange.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompletePasswordChangeRequest'
+      responses:
+        '200':
+          description: Password changed and session issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticatedSession'
+        default:
+          $ref: '#/components/responses/Error'
+  /{audience}/account/password:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    put:
+      operationId: updateOwnPassword
+      summary: updateOwnPassword.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordUpdateRequest'
+      responses:
+        '204':
+          description: Password changed and other sessions revoked.
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+    setupToken:
+      type: apiKey
+      in: header
+      name: X-Argus-Setup-Token
+  schemas:
+    PlatformState:
+      type: string
+      enum:
+        - uninitialized
+        - initializing
+        - initialized
+    SetupStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+      properties:
+        state:
+          $ref: '#/components/schemas/PlatformState'
+        platform_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+    SetupInitializeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - platform_name
+        - default_locale
+        - timezone
+        - external_url
+        - super_admin
+      properties:
+        platform_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        default_locale:
+          $ref: '#/components/schemas/Locale'
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 128
+        external_url:
+          type: string
+          format: uri
+        super_admin:
+          $ref: '#/components/schemas/SetupSuperAdminInput'
+    SetupInitializeResult:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - platform_user_id
+      properties:
+        state:
+          type: string
+          const: initialized
+        platform_user_id:
+          type: string
+          format: uuid
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 128
+        password:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          writeOnly: true
+    PasswordChangeChallenge:
+      type: object
+      additionalProperties: false
+      required:
+        - challenge_id
+        - audience
+        - expires_at
+      properties:
+        challenge_id:
+          type: string
+          minLength: 32
+          maxLength: 256
+          writeOnly: true
+        audience:
+          type: string
+          enum:
+            - platform
+            - enterprise
+        expires_at:
+          type: string
+          format: date-time
+    AuthenticatedSession:
+      type: object
+      additionalProperties: false
+      required:
+        - session
+        - user
+        - permissions
+        - csrf_token
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/PlatformUser'
+            - $ref: '#/components/schemas/EnterpriseUser'
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Permission'
+        csrf_token:
+          type: string
+          minLength: 32
+          maxLength: 256
+          writeOnly: true
+    LoginResult:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - authenticated_session
+          properties:
+            status:
+              type: string
+              const: authenticated
+            authenticated_session:
+              $ref: '#/components/schemas/AuthenticatedSession'
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - password_change_challenge
+          properties:
+            status:
+              type: string
+              const: password_change_required
+            password_change_challenge:
+              $ref: '#/components/schemas/PasswordChangeChallenge'
+    CompletePasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - challenge_id
+        - temporary_password
+        - new_password
+      properties:
+        challenge_id:
+          type: string
+          minLength: 32
+          maxLength: 256
+          writeOnly: true
+        temporary_password:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          writeOnly: true
+        new_password:
+          type: string
+          minLength: 12
+          maxLength: 1024
+          writeOnly: true
+    PasswordUpdateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - current_password
+        - new_password
+        - expected_version
+      properties:
+        current_password:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          writeOnly: true
+        new_password:
+          type: string
+          minLength: 12
+          maxLength: 1024
+          writeOnly: true
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    Locale:
+      type: string
+      enum:
+        - zh-CN
+        - en-US
+    SetupSuperAdminInput:
+      type: object
+      additionalProperties: false
+      required:
+        - username
+        - display_name
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 12
+          maxLength: 1024
+          writeOnly: true
+    AuthorizationVersion:
+      type: integer
+      format: int64
+      minimum: 1
+    Session:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - audience
+        - user_id
+        - locale
+        - issued_at
+        - expires_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        audience:
+          type: string
+          enum:
+            - platform
+            - enterprise
+        user_id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        department_id:
+          type: string
+          minLength: 1
+        authorization_version:
+          $ref: '#/components/schemas/AuthorizationVersion'
+        locale:
+          type: string
+          enum:
+            - zh-CN
+            - en-US
+        csrf_required:
+          type: boolean
+          default: true
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+      oneOf:
+        - properties:
+            audience:
+              const: platform
+          not:
+            anyOf:
+              - required:
+                  - enterprise_id
+              - required:
+                  - department_id
+              - required:
+                  - authorization_version
+        - properties:
+            audience:
+              const: enterprise
+          required:
+            - enterprise_id
+            - department_id
+            - authorization_version
+    PlatformUser:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - username
+        - display_name
+        - role
+        - status
+        - mfa_enabled
+        - version
+        - created_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        username:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          const: platform_super_admin
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        mfa_enabled:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+    EnterpriseUser:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - department_id
+        - username
+        - display_name
+        - status
+        - mfa_enabled
+        - authorization_version
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        department_id:
+          type: string
+          minLength: 1
+        username:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum:
+            - active
+            - invited
+            - disabled
+        mfa_enabled:
+          type: boolean
+        authorization_version:
+          $ref: '#/components/schemas/AuthorizationVersion'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        last_login_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Permission:
+      type: string
+      pattern: ^[a-z][a-z0-9_.]+$
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    Audience:
+      name: audience
+      in: path
+      required: true
+      schema:
+        type: string
+        enum:
+          - platform
+          - enterprise
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256

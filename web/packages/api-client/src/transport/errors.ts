@@ -1,4 +1,7 @@
-import type { ApiError as ApiErrorBody } from "../generated/contracts";
+import type {
+  ApiError as ApiErrorBody,
+  PasswordChangeChallenge,
+} from "../generated/contracts";
 
 export class ApiError extends Error {
   readonly code: string;
@@ -37,6 +40,15 @@ export class ClientOperationUnavailableError extends Error {
   constructor(operation: string) {
     super(`Operation is not available in the real adapter: ${operation}`);
     this.name = "ClientOperationUnavailableError";
+  }
+}
+
+export class PasswordChangeRequiredError extends Error {
+  readonly code = "PASSWORD_CHANGE_REQUIRED";
+
+  constructor(readonly challenge: PasswordChangeChallenge) {
+    super("A password change is required before the session can be created");
+    this.name = "PasswordChangeRequiredError";
   }
 }
 

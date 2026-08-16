@@ -64,6 +64,103 @@ describe("auth", () => {
     await client.auth.logout();
     await expect(client.auth.me()).rejects.toThrow("unauthenticated");
   });
+
+  it("changes the password and revokes the current session", async () => {
+    const client = makeClient();
+    await login(client, "root");
+    await client.auth.changePassword({
+      current_password: "123456",
+      new_password: "N7!qP4@vL9#sT2$x",
+      expected_version: 1,
+    });
+    await expect(client.auth.me()).rejects.toThrow("unauthenticated");
+    await expect(
+      client.auth.login({ username: "root", password: "123456" }),
+    ).rejects.toThrow("invalid credentials");
+    await expect(
+      client.auth.login({
+        username: "root",
+        password: "N7!qP4@vL9#sT2$x",
+      }),
+    ).resolves.toMatchObject({ session: { audience: "enterprise" } });
+  });
+});
+
+describe("machine credentials", () => {
+  it("creates, rotates, and revokes API keys with contract-shaped secrets", async () => {
+    const client = makeClient();
+    await login(client, "root");
+    const created = await client.org.createApiKey("sa-ci", {
+      name: "automation",
+    });
+    expect(created.secret).toMatch(
+      /^argus_ak_[A-Za-z0-9_-]{6,32}\.[A-Za-z0-9_-]{32,256}$/,
+    );
+
+    const rotated = await client.org.rotateApiKey(created.api_key.id);
+    expect(rotated.secret).not.toBe(created.secret);
+    expect(
+      (await client.org.listApiKeys("sa-ci")).find(
+        (key) => key.id === created.api_key.id,
+      )?.status,
+    ).toBe("revoked");
+
+    await client.org.revokeApiKey(rotated.api_key.id);
+    expect(
+      (await client.org.listApiKeys("sa-ci")).find(
+        (key) => key.id === rotated.api_key.id,
+      )?.status,
+    ).toBe("revoked");
+  });
+});
+
+describe("enterprise users", () => {
+  it("updates department and enforces disabled login state", async () => {
+    const client = makeClient();
+    await login(client, "root");
+
+    const moved = await client.org.updateEnterpriseUser("u-lina", {
+      department_id: "dept-sre",
+      status: "disabled",
+    });
+    expect(moved.department_id).toBe("dept-sre");
+    expect(moved.status).toBe("disabled");
+
+    await client.auth.logout();
+    await expect(login(client, "lina")).rejects.toThrow("invalid credentials");
+
+    await login(client, "root");
+    const enabled = await client.org.updateEnterpriseUser("u-lina", {
+      status: "active",
+    });
+    expect(enabled.status).toBe("active");
+    await client.auth.logout();
+    await expect(login(client, "lina")).resolves.toMatchObject({
+      session: { department_id: "dept-sre" },
+    });
+  });
+
+  it("soft-disables and restores an empty department", async () => {
+    const client = makeClient();
+    await login(client, "root");
+    const department = await client.org.createDepartment({
+      name: "Temporary",
+    });
+
+    await client.org.deleteDepartment(department.id);
+    expect(
+      (await client.org.listDepartments()).find(
+        (entry) => entry.id === department.id,
+      )?.status,
+    ).toBe("disabled");
+
+    await client.org.updateDepartment(department.id, { status: "active" });
+    expect(
+      (await client.org.listDepartments()).find(
+        (entry) => entry.id === department.id,
+      )?.status,
+    ).toBe("active");
+  });
 });
 
 describe("hosts CRUD", () => {
@@ -305,9 +402,11 @@ describe("conversations", () => {
     const completed = agentEvents.find(
       (event) => event.event_type === "message_completed",
     );
-    const completedMessage = (completed?.payload as {
-      message?: { role?: string; tool_calls?: unknown[]; cards?: unknown[] };
-    }).message;
+    const completedMessage = (
+      completed?.payload as {
+        message?: { role?: string; tool_calls?: unknown[]; cards?: unknown[] };
+      }
+    ).message;
     expect(completedMessage?.role).toBe("assistant");
     expect(completedMessage?.tool_calls).toHaveLength(3);
     expect(completedMessage?.cards).toHaveLength(1);
@@ -408,7 +507,10 @@ describe("AI model governance", () => {
     }
     const storedEvents = await client.conversations.listEvents(conversation.id);
     const assistant = storedEvents
-      .map((event) => (event.payload as { message?: Record<string, unknown> }).message)
+      .map(
+        (event) =>
+          (event.payload as { message?: Record<string, unknown> }).message,
+      )
       .find((message) => message?.role === "assistant");
     expect(assistant?.model_id).toBe("model-qwen32b");
     expect(assistant?.model_revision).toBe(6);
@@ -516,12 +618,11 @@ describe("platform", () => {
       enterpriseId: created.id,
       username: "initech-admin",
       displayName: "Initech 管理员",
-      activation: "invite_link",
     });
-    expect(admin.inviteStatus).toBe("pending");
-    expect((await client.platform.admins.disable(admin.id)).inviteStatus).toBe(
-      "disabled",
-    );
+    expect(admin.credentialStatus).toBe("temporary_password");
+    expect(
+      (await client.platform.admins.disable(admin.id)).credentialStatus,
+    ).toBe("disabled");
 
     const audits = await client.platform.audit.list({
       action: "platform.enterprise.create",
@@ -553,7 +654,6 @@ describe("setup", () => {
         displayName: "超级管理员",
         password: "a-strong-password",
       },
-      sandbox: { enabled: false },
     });
     expect(result.success).toBe(true);
     expect((await client.setup.status()).state).toBe("initialized");
@@ -570,7 +670,6 @@ describe("setup", () => {
           displayName: "x",
           password: "another-password",
         },
-        sandbox: { enabled: false },
       }),
     ).rejects.toThrow("already initialized");
   });

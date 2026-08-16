@@ -859,6 +859,23 @@ func (catalog fixtureCatalog) sample(t *testing.T, raw any, documentID string, m
 		}
 		return cloneJSON(t, values[index])
 	}
+	if schemas, ok := node["allOf"].([]any); ok {
+		result := map[string]any{}
+		for _, schema := range schemas {
+			part := catalog.sample(t, schema, documentID, mode, stack)
+			object, ok := part.(map[string]any)
+			if !ok {
+				continue
+			}
+			for key, value := range object {
+				result[key] = value
+			}
+		}
+		for key, value := range catalog.sampleObject(t, node, documentID, mode, stack) {
+			result[key] = value
+		}
+		return result
+	}
 	typeName := schemaType(node)
 	if typeName == "" {
 		for _, union := range []string{"oneOf", "anyOf"} {
@@ -873,36 +890,7 @@ func (catalog fixtureCatalog) sample(t *testing.T, raw any, documentID string, m
 	}
 	switch typeName {
 	case "object":
-		result := map[string]any{}
-		properties, _ := node["properties"].(map[string]any)
-		required := valueSet(node["required"])
-		names := make([]string, 0, len(properties))
-		for name := range properties {
-			if required[name] || mode == fixtureBoundary {
-				names = append(names, name)
-			}
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			result[name] = catalog.sample(t, properties[name], documentID, mode, stack)
-		}
-		minimum := int(numberOr(node["minProperties"], 0))
-		if mode == fixtureBoundary && minimum == 0 && len(properties) == 0 {
-			minimum = 1
-		}
-		additional, additionalSchema := node["additionalProperties"].(map[string]any)
-		for len(result) < minimum || (mode == fixtureBoundary && additionalSchema && len(result) == 0) {
-			name := fmt.Sprintf("field_%d", len(result)+1)
-			result[name] = catalog.sample(t, additional, documentID, mode, stack)
-		}
-		if result["execution_mode"] == "parallel_safe" {
-			result["risk"] = "read"
-		}
-		if toolName, ok := result["tool_name"].(string); ok && strings.HasSuffix(toolName, ".commit") {
-			result["agent_visibility"] = "hidden"
-			result["execution_mode"] = "sequential"
-		}
-		return result
+		return catalog.sampleObject(t, node, documentID, mode, stack)
 	case "array":
 		count := int(numberOr(node["minItems"], 0))
 		if mode == fixtureBoundary && count == 0 {
@@ -942,6 +930,40 @@ func (catalog fixtureCatalog) sample(t *testing.T, raw any, documentID string, m
 		}
 		return map[string]any{}
 	}
+}
+
+func (catalog fixtureCatalog) sampleObject(t *testing.T, node map[string]any, documentID string, mode fixtureMode, stack map[string]bool) map[string]any {
+	t.Helper()
+	result := map[string]any{}
+	properties, _ := node["properties"].(map[string]any)
+	required := valueSet(node["required"])
+	names := make([]string, 0, len(properties))
+	for name := range properties {
+		if required[name] || mode == fixtureBoundary {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		result[name] = catalog.sample(t, properties[name], documentID, mode, stack)
+	}
+	minimum := int(numberOr(node["minProperties"], 0))
+	if mode == fixtureBoundary && minimum == 0 && len(properties) == 0 {
+		minimum = 1
+	}
+	additional, additionalSchema := node["additionalProperties"].(map[string]any)
+	for len(result) < minimum || (mode == fixtureBoundary && additionalSchema && len(result) == 0) {
+		name := fmt.Sprintf("field_%d", len(result)+1)
+		result[name] = catalog.sample(t, additional, documentID, mode, stack)
+	}
+	if result["execution_mode"] == "parallel_safe" {
+		result["risk"] = "read"
+	}
+	if toolName, ok := result["tool_name"].(string); ok && strings.HasSuffix(toolName, ".commit") {
+		result["agent_visibility"] = "hidden"
+		result["execution_mode"] = "sequential"
+	}
+	return result
 }
 
 func (catalog fixtureCatalog) Invalid(t *testing.T, tc fixtureCase, normal any) any {
@@ -1060,6 +1082,10 @@ func schemaString(node map[string]any, mode fixtureMode) string {
 			return "2026-08-16T00:00:00Z"
 		case "email":
 			return "user@example.com"
+		case "uuid":
+			return "0198b2b4-6dc0-7a2f-8d36-9f8ff244db18"
+		case "uri", "url":
+			return "https://argus.example.com"
 		}
 	}
 	pattern, _ := node["pattern"].(string)
@@ -1079,6 +1105,9 @@ func schemaString(node map[string]any, mode fixtureMode) string {
 		{"^[a-z0-9]", "production"},
 		{"^\\$", "$.items"},
 		{"^[A-Za-z0-9", "request_00000001"},
+		{"^[a-f0-9]{64}$", strings.Repeat("a", 64)},
+		{"^argus_ak_", "argus_ak_ABC123.secret_abcdefghijklmnopqrstuvwxyz012345"},
+		{"^[a-z][a-z0-9-]{1,62}$", "example"},
 	}
 	for _, sample := range samples {
 		if strings.Contains(pattern, sample.contains) {

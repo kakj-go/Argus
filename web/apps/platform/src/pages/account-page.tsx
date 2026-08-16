@@ -1,5 +1,9 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
+import { useApi } from "@argus/api-client";
 import { usePlatformAuthStore } from "@argus/auth";
 import {
   Alert,
@@ -13,7 +17,6 @@ import {
   Input,
   KeyValueGrid,
   PageShell,
-  Switch,
 } from "@argus/ui";
 import { formatDateTime } from "../lib/format";
 
@@ -25,62 +28,62 @@ type LoginSessionRow = {
   current: boolean;
 };
 
-/** 新密码强度：≥12 位且同时包含字母与数字。 */
-function passwordStrong(value: string): boolean {
-  return value.length >= 12 && /[a-zA-Z]/.test(value) && /\d/.test(value);
-}
-
-/** 我的账号：账号信息、修改密码（前端强度校验）、MFA、登录会话。 */
+/** 我的账号：账号信息、真实改密和当前登录会话。MFA 在 M8 接入。 */
 export function AccountPage() {
   const { t, i18n } = useTranslation();
+  const api = useApi();
   const session = usePlatformAuthStore((state) => state.session);
-
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [nextPassword, setNextPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordDone, setPasswordDone] = useState(false);
-  const [mfaEnabled, setMfaEnabled] = useState(
-    session?.user.mfa_enabled ?? true,
+  const clearAuth = usePlatformAuthStore((state) => state.clear);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const passwordSchema = useMemo(
+    () =>
+      z
+        .object({
+          currentPassword: z.string().min(1, t("account.password.required")),
+          nextPassword: z
+            .string()
+            .min(12, t("account.password.weak"))
+            .regex(/[a-zA-Z]/, t("account.password.weak"))
+            .regex(/\d/, t("account.password.weak")),
+          confirmPassword: z.string().min(1, t("account.password.required")),
+        })
+        .refine((value) => value.nextPassword === value.confirmPassword, {
+          message: t("account.password.mismatch"),
+          path: ["confirmPassword"],
+        }),
+    [t],
   );
-  const [mfaBlocked, setMfaBlocked] = useState(false);
+  type PasswordForm = z.infer<typeof passwordSchema>;
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<PasswordForm>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: {
+      currentPassword: "",
+      nextPassword: "",
+      confirmPassword: "",
+    },
+  });
 
   if (!session) return null;
   const { user } = session;
 
-  const handlePasswordSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setPasswordError(null);
-    setPasswordDone(false);
-    if (!currentPassword || !nextPassword || !confirmPassword) {
-      setPasswordError(t("account.password.required"));
-      return;
+  const handlePasswordSubmit = handleSubmit(async (values) => {
+    setSubmitError(null);
+    try {
+      await api.auth.changePassword({
+        current_password: values.currentPassword,
+        new_password: values.nextPassword,
+        expected_version: user.version,
+      });
+      clearAuth();
+      window.location.assign("/login");
+    } catch {
+      setSubmitError(t("account.password.failed"));
     }
-    if (!passwordStrong(nextPassword)) {
-      setPasswordError(t("account.password.weak"));
-      return;
-    }
-    if (nextPassword !== confirmPassword) {
-      setPasswordError(t("account.password.mismatch"));
-      return;
-    }
-    // mock 环境无改密 API，仅演示前端校验与反馈
-    setCurrentPassword("");
-    setNextPassword("");
-    setConfirmPassword("");
-    setPasswordDone(true);
-  };
-
-  const handleMfaToggle = (checked: boolean) => {
-    if (!checked) {
-      // 超管强制 MFA：拒绝关闭并提示
-      setMfaBlocked(true);
-      setMfaEnabled(true);
-      return;
-    }
-    setMfaBlocked(false);
-    setMfaEnabled(true);
-  };
+  });
 
   const sessionRows: LoginSessionRow[] = [
     {
@@ -143,80 +146,48 @@ export function AccountPage() {
               className="argus-account-password-form"
               onSubmit={handlePasswordSubmit}
             >
-              {passwordError && (
+              {submitError && (
                 <Alert
-                  description={passwordError}
+                  description={submitError}
                   title={t("account.password.title")}
                   tone="danger"
                 />
               )}
-              {passwordDone && (
-                <Alert
-                  description={t("account.password.success")}
-                  title={t("account.password.title")}
-                  tone="success"
-                />
-              )}
-              <Field label={t("account.password.current")}>
+              <Field
+                error={errors.currentPassword?.message}
+                label={t("account.password.current")}
+              >
                 <Input
                   autoComplete="current-password"
-                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  {...register("currentPassword")}
                   type="password"
-                  value={currentPassword}
                 />
               </Field>
               <Field
+                error={errors.nextPassword?.message}
                 hint={t("account.password.rule")}
                 label={t("account.password.next")}
               >
                 <Input
                   autoComplete="new-password"
-                  onChange={(event) => setNextPassword(event.target.value)}
+                  {...register("nextPassword")}
                   type="password"
-                  value={nextPassword}
                 />
               </Field>
-              <Field label={t("account.password.confirm")}>
+              <Field
+                error={errors.confirmPassword?.message}
+                label={t("account.password.confirm")}
+              >
                 <Input
                   autoComplete="new-password"
-                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  {...register("confirmPassword")}
                   type="password"
-                  value={confirmPassword}
                 />
               </Field>
-              <Button type="submit" variant="primary">
+              <Button disabled={isSubmitting} type="submit" variant="primary">
                 {t("account.password.submit")}
               </Button>
             </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader title={t("account.mfa.title")} />
-          <CardContent>
-            <div className="argus-platform-stack">
-              <Alert
-                description={t("account.mfa.required.description")}
-                title={t("account.mfa.required.title")}
-                tone="info"
-              />
-              {mfaBlocked && (
-                <Alert
-                  description={t("account.mfa.required.description")}
-                  title={t("account.mfa.required.title")}
-                  tone="warning"
-                />
-              )}
-              <label className="argus-switch-row">
-                <Switch
-                  checked={mfaEnabled}
-                  label={t("account.mfa.toggle")}
-                  onChange={handleMfaToggle}
-                />
-                <span>{t("account.mfa.toggle")}</span>
-                <StatusText enabled={mfaEnabled} />
-              </label>
-            </div>
           </CardContent>
         </Card>
 
@@ -260,14 +231,5 @@ export function AccountPage() {
         </Card>
       </div>
     </PageShell>
-  );
-}
-
-function StatusText({ enabled }: { enabled: boolean }) {
-  const { t } = useTranslation();
-  return (
-    <Badge tone={enabled ? "success" : "neutral"}>
-      {t(enabled ? "common.enabled" : "common.disabled")}
-    </Badge>
   );
 }

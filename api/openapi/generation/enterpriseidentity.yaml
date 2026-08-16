@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info: {title: Argus Enterprise Identity API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/users: {$ref: ../argus.yaml#/paths/~1enterprise~1users}
+  "/enterprise/users/{id}":
+    $ref: "../argus.yaml#/paths/~1enterprise~1users~1{id}"
+  /enterprise/departments: {$ref: ../argus.yaml#/paths/~1enterprise~1departments}
+  "/enterprise/departments/{id}":
+    $ref: "../argus.yaml#/paths/~1enterprise~1departments~1{id}"
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    EnterpriseUserCreate: {$ref: ../components/m2.yaml#/components/schemas/EnterpriseUserCreate}
+    EnterpriseUserUpdate: {$ref: ../components/m2.yaml#/components/schemas/EnterpriseUserUpdate}
+    CreatedUserCredential: {$ref: ../components/m2.yaml#/components/schemas/CreatedUserCredential}
+    EnterpriseUserPage: {$ref: ../components/m2.yaml#/components/schemas/EnterpriseUserPage}
+    DepartmentCreate: {$ref: ../components/m2.yaml#/components/schemas/DepartmentCreate}
+    DepartmentUpdate: {$ref: ../components/m2.yaml#/components/schemas/DepartmentUpdate}
+    DepartmentPage: {$ref: ../components/m2.yaml#/components/schemas/DepartmentPage}

@@ -1,0 +1,13 @@
+openapi: 3.1.0
+info: {title: Argus Audit API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  "/{audience}/audit-events":
+    $ref: "../argus.yaml#/paths/~1{audience}~1audit-events"
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    AuditEvent: {$ref: ../components/m2.yaml#/components/schemas/AuditEvent}
+    AuditEventPage: {$ref: ../components/m2.yaml#/components/schemas/AuditEventPage}

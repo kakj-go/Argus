@@ -96,12 +96,12 @@ PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。
 - Enterprise、PlatformUser、EnterpriseUser、Department、Role、Permission、RoleBinding、DataScope 和 AuthorizationVersion。
 - EnterpriseUser 直接绑定唯一 `enterprise_id + department_id`，不提供 Membership、企业切换、Project 或通用 Group。
 - 企业级功能权限、显式资源/标签选择范围和统一授权入口。
-- Secret Vault 和审计日志。
-- 平台级 OpenSandbox 镜像、Profile、配额和活动会话管理。
+- ServiceAccount/APIKey 和平台/企业分域审计日志；Secret Vault 在资源执行阶段接入。
+- OpenSandbox 由 Helm 安装；平台级镜像、Profile、配额和活动会话治理 API 作为 Agent/Sandbox 接入前置在 M4 完成。
 - Connector 一次性注册、mTLS、心跳和在线状态；注册同时创建/激活堡垒机 Host 和稳定 Bastion Scope。
 - 管理后台基础框架。
 
-完成标准：首次启动能够安全创建唯一的平台超级管理员；超级管理员能够创建企业、默认部门和初始企业管理员但不能访问企业业务数据；平台身份不能成为企业身份，企业用户不能切换到其他企业；企业管理员能够建立 RoleBinding 和 DataScope，不同企业之间资源、密钥和审计完全隔离。
+完成标准：首次启动能够通过短期 Setup Token 安全创建唯一的平台超级管理员；超级管理员能够创建企业、默认部门和临时密码初始管理员但不能访问企业业务数据；平台身份不能成为企业身份，企业用户不能切换到其他企业；企业管理员能够建立 RoleBinding、DataScope、ServiceAccount 和 APIKey，不同企业之间身份、资源范围、密钥和审计完全隔离。该阶段只达到 Evaluation 身份闭环，平台超级管理员 MFA 仍是 Production 硬阻断。
 
 ## 6. 第二阶段：资源管理
 

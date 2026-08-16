@@ -66,7 +66,7 @@ export function DashboardPage() {
     ["requested", "starting", "running", "idle"].includes(item.status),
   ).length;
   const pendingInvites = (admins.data ?? []).filter(
-    (item) => item.inviteStatus === "pending",
+    (item) => item.credentialStatus === "temporary_password",
   ).length;
   const pendingImages = (images.data ?? []).filter(
     (item) =>

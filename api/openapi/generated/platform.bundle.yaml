@@ -1,0 +1,559 @@
+openapi: 3.1.0
+info:
+  title: Argus Platform Administration API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /platform/enterprises:
+    get:
+      operationId: listEnterprises
+      summary: listEnterprises.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Enterprise page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnterprisePage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createEnterprise
+      summary: createEnterprise.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnterpriseCreate'
+      responses:
+        '201':
+          description: Enterprise created with default department, roles and empty scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enterprise'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/enterprises/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: getEnterprise
+      summary: getEnterprise.
+      responses:
+        '200':
+          description: Enterprise.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enterprise'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      operationId: updateEnterprise
+      summary: updateEnterprise.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnterpriseUpdate'
+      responses:
+        '200':
+          description: Updated enterprise.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enterprise'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/enterprises/{id}/{state_action}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - name: state_action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - suspend
+            - activate
+            - disable
+    post:
+      operationId: changeEnterpriseState
+      summary: changeEnterpriseState.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Enterprise state changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enterprise'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/enterprise-admins:
+    get:
+      operationId: listEnterpriseAdmins
+      summary: listEnterpriseAdmins.
+      parameters:
+        - name: enterprise_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Enterprise administrators.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnterpriseUserPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createEnterpriseAdmin
+      summary: createEnterpriseAdmin.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnterpriseAdminCreate'
+      responses:
+        '201':
+          description: Administrator and one-time temporary password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedUserCredential'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/enterprise-admins/{id}/reset-password:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: resetEnterpriseAdminPassword
+      summary: resetEnterpriseAdminPassword.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: New one-time temporary password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedUserCredential'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/enterprise-admins/{id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: disableEnterpriseAdmin
+      summary: disableEnterpriseAdmin.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Disabled administrator.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnterpriseUser'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    EnterpriseCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - code
+        - timezone
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        code:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{1,62}$
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 128
+        default_locale:
+          $ref: '#/components/schemas/Locale'
+        remark:
+          type: string
+          maxLength: 2048
+    EnterpriseUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 128
+        default_locale:
+          $ref: '#/components/schemas/Locale'
+        remark:
+          type: string
+          maxLength: 2048
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    EnterprisePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Enterprise'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    EnterpriseAdminCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - enterprise_id
+        - username
+        - display_name
+      properties:
+        enterprise_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+          minLength: 3
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        email:
+          type: string
+          format: email
+    CreatedUserCredential:
+      type: object
+      additionalProperties: false
+      required:
+        - user
+        - temporary_password
+        - expires_at
+      properties:
+        user:
+          $ref: '#/components/schemas/EnterpriseUser'
+        temporary_password:
+          type: string
+          minLength: 24
+          writeOnly: true
+        expires_at:
+          type: string
+          format: date-time
+    EnterpriseUserPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnterpriseUser'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    Enterprise:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - code
+        - status
+        - timezone
+        - default_locale
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        code:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{1,62}$
+        status:
+          type: string
+          enum:
+            - active
+            - suspended
+            - disabled
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 128
+        default_locale:
+          type: string
+          enum:
+            - zh-CN
+            - en-US
+        remark:
+          type: string
+          maxLength: 2048
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    Locale:
+      type: string
+      enum:
+        - zh-CN
+        - en-US
+    AuthorizationVersion:
+      type: integer
+      format: int64
+      minimum: 1
+    EnterpriseUser:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - department_id
+        - username
+        - display_name
+        - status
+        - mfa_enabled
+        - authorization_version
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        department_id:
+          type: string
+          minLength: 1
+        username:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum:
+            - active
+            - invited
+            - disabled
+        mfa_enabled:
+          type: boolean
+        authorization_version:
+          $ref: '#/components/schemas/AuthorizationVersion'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        last_login_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

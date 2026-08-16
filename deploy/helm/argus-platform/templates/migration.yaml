@@ -17,28 +17,12 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: {{ .Values.images.postgresql }}
-          imagePullPolicy: IfNotPresent
+          image: {{ .Values.images.backend }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["/usr/local/bin/argus-migrate"]
+          args: ["up"]
+          envFrom:
+            - secretRef:
+                name: argus-runtime-secrets
           env:
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: argus-data-credentials
-                  key: postgresql-password
-          command: ["sh", "-ec"]
-          args:
-            - |
-              until pg_isready -h argus-postgresql -U argus -d argus; do sleep 2; done
-              psql -v ON_ERROR_STOP=1 -h argus-postgresql -U argus -d argus <<'SQL'
-              CREATE TABLE IF NOT EXISTS argus_schema_migrations (
-                version text PRIMARY KEY,
-                applied_at timestamptz NOT NULL DEFAULT now()
-              );
-              CREATE TABLE IF NOT EXISTS argus_installation_checks (
-                id text PRIMARY KEY,
-                value text NOT NULL,
-                created_at timestamptz NOT NULL DEFAULT now()
-              );
-              INSERT INTO argus_schema_migrations(version) VALUES ('0001_evaluation_baseline')
-              ON CONFLICT (version) DO NOTHING;
-              SQL
+            - {name: ARGUS_MIGRATIONS_DIR, value: /usr/local/share/argus/migrations/postgresql}

@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { KeyValueGrid, type KeyValueItem } from "@argus/ui";
 import type { SetupDraft } from "../lib/validation";
 
-/** 第 4 步：确认提交。摘要回顾全部填写内容，密码与凭证掩码展示。 */
+/** 最后一步：确认提交。摘要不展示密码原值。 */
 export function StepReview({ draft }: { draft: SetupDraft }) {
   const { t } = useTranslation();
 
@@ -34,25 +34,7 @@ export function StepReview({ draft }: { draft: SetupDraft }) {
       label: t("setup.system.password.label"),
       value: t("setup.review.masked"),
     },
-    {
-      label: t("setup.sandbox.enable"),
-      value: draft.sandbox.enabled
-        ? draft.sandbox.endpoint.trim()
-        : t("setup.review.notEnabled"),
-    },
   ];
-  if (draft.sandbox.enabled) {
-    items.push(
-      {
-        label: t("setup.sandbox.credential.label"),
-        value: t("setup.review.masked"),
-      },
-      {
-        label: t("setup.sandbox.storage.label"),
-        value: draft.sandbox.storage.trim(),
-      },
-    );
-  }
 
   return (
     <div className="argus-setup-fields">

@@ -160,7 +160,7 @@ export function createPlatformDomain(
           username: input.username,
           displayName: input.displayName,
           email: input.email,
-          inviteStatus: "pending" as const,
+          credentialStatus: "temporary_password" as const,
           createdAt: ctx.nowIso(),
         };
         db.enterpriseAdmins.push(admin);
@@ -173,23 +173,6 @@ export function createPlatformDomain(
         ctx.save();
         return admin;
       },
-      async resendInvite(id) {
-        await platformPause();
-        const admin = ctx.mustFind(
-          db.enterpriseAdmins,
-          (entry) => entry.id === id,
-          "enterprise admin",
-        );
-        admin.inviteStatus = "pending";
-        ctx.audit("platform.enterprise_admin.resend_invite", {
-          platform: true,
-          resourceType: "enterprise_admin",
-          resourceId: id,
-          summary: `重发激活邀请 ${admin.username}`,
-        });
-        ctx.save();
-        return admin;
-      },
       async resetAuth(id) {
         await platformPause();
         const admin = ctx.mustFind(
@@ -197,7 +180,7 @@ export function createPlatformDomain(
           (entry) => entry.id === id,
           "enterprise admin",
         );
-        admin.inviteStatus = "pending";
+        admin.credentialStatus = "temporary_password";
         ctx.audit("platform.enterprise_admin.reset_auth", {
           platform: true,
           resourceType: "enterprise_admin",
@@ -214,7 +197,7 @@ export function createPlatformDomain(
           (entry) => entry.id === id,
           "enterprise admin",
         );
-        admin.inviteStatus = "disabled";
+        admin.credentialStatus = "disabled";
         ctx.audit("platform.enterprise_admin.disable", {
           platform: true,
           resourceType: "enterprise_admin",
