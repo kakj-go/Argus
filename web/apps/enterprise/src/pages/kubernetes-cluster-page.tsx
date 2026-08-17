@@ -20,6 +20,8 @@ import { connectionStatusTone } from "../components/kubernetes/status";
 import { WorkloadExplorer } from "../components/kubernetes/workload-explorer";
 import "../styles/kubernetes.css";
 
+const realMode = import.meta.env.VITE_API_MODE === "real";
+
 /** Kubernetes 集群详情：资源查询 + Collector 安装/管理。 */
 export function KubernetesClusterPage() {
   const { t } = useTranslation();
@@ -35,7 +37,7 @@ export function KubernetesClusterPage() {
   const collectorQuery = useQuery({
     queryKey: ["kubernetes", "collector", id],
     queryFn: () => api.kubernetes.getCollector(id),
-    enabled: id.length > 0,
+    enabled: id.length > 0 && !realMode,
   });
 
   const cluster = clusterQuery.data;
@@ -76,17 +78,17 @@ export function KubernetesClusterPage() {
         { label: t("shell.nav.kubernetes"), href: "/kubernetes" },
         { label: cluster.name },
       ]}
-      description={cluster.apiServer}
+      description={cluster.api_server}
       title={
         <span className="argus-k8s-cluster-card__head">
           {cluster.name}
           <Badge tone="accent">
             {t(`kubernetes.environment.${cluster.environment}`)}
           </Badge>
-          <StatusBadge tone={connectionStatusTone(cluster.connectionStatus)}>
-            {t(`kubernetes.status.${cluster.connectionStatus}`)}
+          <StatusBadge tone={connectionStatusTone(cluster.connection_status)}>
+            {t(`kubernetes.status.${cluster.connection_status}`)}
           </StatusBadge>
-          <Badge tone="neutral">{cluster.version}</Badge>
+          <Badge tone="neutral">{cluster.kubernetes_version}</Badge>
         </span>
       }
     >
@@ -95,14 +97,14 @@ export function KubernetesClusterPage() {
           <TabsTrigger value="resources">
             {t("kubernetes.detail.resourcesTab")}
           </TabsTrigger>
-          <TabsTrigger value="collector">
+          {!realMode && <TabsTrigger value="collector">
             {t("kubernetes.detail.collectorTab")}
-          </TabsTrigger>
+          </TabsTrigger>}
         </TabsList>
         <TabsContent value="resources">
           <WorkloadExplorer cluster={cluster} />
         </TabsContent>
-        <TabsContent value="collector">
+        {!realMode && <TabsContent value="collector">
           <div id="otlp-collector">
             {collectorQuery.isLoading ? (
               <Spinner label={t("common.loading")} />
@@ -122,7 +124,7 @@ export function KubernetesClusterPage() {
               </div>
             )}
           </div>
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </PageShell>
   );

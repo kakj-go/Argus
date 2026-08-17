@@ -221,6 +221,7 @@ const listEffectiveServiceAccountPermissions = `-- name: ListEffectiveServiceAcc
 SELECT DISTINCT rp.permission_id
 FROM role_bindings rb
 JOIN role_permissions rp ON rp.role_id = rb.role_id
+JOIN roles r ON r.id = rb.role_id AND r.enterprise_id = rb.enterprise_id AND r.status = 'active'
 WHERE rb.enterprise_id = $1
   AND rb.status = 'active'
   AND (rb.valid_from IS NULL OR rb.valid_from <= now())
@@ -259,6 +260,7 @@ const listEffectiveUserPermissions = `-- name: ListEffectiveUserPermissions :man
 SELECT DISTINCT rp.permission_id
 FROM role_bindings rb
 JOIN role_permissions rp ON rp.role_id = rb.role_id
+JOIN roles r ON r.id = rb.role_id AND r.enterprise_id = rb.enterprise_id AND r.status = 'active'
 WHERE rb.enterprise_id = $1
   AND rb.status = 'active'
   AND (rb.valid_from IS NULL OR rb.valid_from <= now())

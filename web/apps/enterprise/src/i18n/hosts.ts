@@ -71,6 +71,7 @@ export const hostsZh = {
       title: "独立主机",
       description: "不经过堡垒机的公网主机，由 Argus Direct Executor 直连。",
       egressHint: "直连主机需在防火墙放行 Argus 固定出口 IP：{{ip}}",
+      egressNotConfigured: "尚未配置",
       directExecutor: "Direct Executor",
     },
     row: {
@@ -113,7 +114,7 @@ export const hostsZh = {
       namePlaceholder: "如：上海机房堡垒机-02",
       environment: "环境",
       labels: "标签",
-      tagsHint: "每行一个，格式 key=value",
+      labelsHint: "每行一个，格式 key=value",
       submit: "创建并生成令牌",
       save: "保存",
       commandTitle: "堡垒机安装/更新命令",
@@ -158,6 +159,15 @@ export const hostsZh = {
     hostForm: {
       editTitle: "编辑主机 · {{name}}",
       submit: "保存",
+      connectionMode: "连接方式",
+      bastionScope: "目标 Bastion Scope",
+      account: "连接测试账户",
+      accountSelect: "路径不变时无需选择",
+      accountHint:
+        "修改地址、端口或连接路径时，将使用该 Managed Account 重新验证连接。",
+      accountRequired: "修改连接路径前请选择可用的 Managed Account。",
+      pathRequired: "请填写有效地址、端口和目标 Bastion Scope。",
+      testFailed: "新连接路径验证失败，请修正后重试。",
     },
     wizard: {
       title: "添加普通主机",
@@ -190,10 +200,11 @@ export const hostsZh = {
       secretNone: "不选择",
       environment: "环境",
       labels: "标签",
-      tagsHint: "每行一个，格式 key=value",
+      labelsHint: "每行一个，格式 key=value",
       publicAddressInvalid:
         "直连模式要求公网地址：不支持内网、环回或链路本地地址。",
       egressNote: "直连主机需放行 Argus 固定出口 IP：{{ip}}",
+      egressNotConfigured: "尚未配置",
       runTest: "开始测试",
       testing: "测试中…",
       testPassed: "测试通过，可生成预览",
@@ -280,6 +291,7 @@ export const hostsZh = {
       rotateTitle: "轮换接入服务证书",
       rotateDesc: "签发新证书并在短窗口内完成重叠轮换，旧证书随即吊销。",
       rotated: "证书已轮换",
+      uninstall: "卸载 Connector",
       collectorNotInstalled: "未安装",
       collectorNotInstalledDesc: "安装后可采集主机指标、日志并上报 Argus。",
       installCollector: "安装 OTLP 收集器",
@@ -426,6 +438,7 @@ export const hostsEn = {
       description:
         "Public hosts reached directly by the Argus Direct Executor, without a bastion.",
       egressHint: "Direct hosts must allow the Argus static egress IP: {{ip}}",
+      egressNotConfigured: "not configured",
       directExecutor: "Direct Executor",
     },
     row: {
@@ -469,7 +482,7 @@ export const hostsEn = {
       namePlaceholder: "e.g. Shanghai DC-02",
       environment: "Environment",
       labels: "Labels",
-      tagsHint: "One per line, key=value",
+      labelsHint: "One per line, key=value",
       submit: "Create & generate token",
       save: "Save",
       commandTitle: "Bastion install/update command",
@@ -514,6 +527,16 @@ export const hostsEn = {
     hostForm: {
       editTitle: "Edit host · {{name}}",
       submit: "Save",
+      connectionMode: "Connection mode",
+      bastionScope: "Target Bastion Scope",
+      account: "Connection-test account",
+      accountSelect: "Not required when the path is unchanged",
+      accountHint:
+        "Changing the address, port, or route revalidates connectivity with this Managed Account.",
+      accountRequired:
+        "Select an active Managed Account before changing the connection path.",
+      pathRequired: "Enter a valid address, port, and target Bastion Scope.",
+      testFailed: "The new connection path could not be validated.",
     },
     wizard: {
       title: "Add Host",
@@ -546,10 +569,11 @@ export const hostsEn = {
       secretNone: "None",
       environment: "Environment",
       labels: "Labels",
-      tagsHint: "One per line, key=value",
+      labelsHint: "One per line, key=value",
       publicAddressInvalid:
         "Direct mode requires a public address: private, loopback and link-local targets are not allowed.",
       egressNote: "Direct hosts must allow the Argus static egress IP: {{ip}}",
+      egressNotConfigured: "not configured",
       runTest: "Run test",
       testing: "Testing…",
       testPassed: "Test passed; ready to preview",
@@ -638,6 +662,7 @@ export const hostsEn = {
       rotateDesc:
         "Issues a new certificate with a short overlapping rotation window; the old one is revoked right after.",
       rotated: "Certificate rotated",
+      uninstall: "Uninstall Connector",
       collectorNotInstalled: "Not installed",
       collectorNotInstalledDesc:
         "Install to collect host metrics and logs into Argus.",

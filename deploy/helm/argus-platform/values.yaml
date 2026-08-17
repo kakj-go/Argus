@@ -15,6 +15,17 @@ runtime:
   redisPassword: ""
   idempotencyEncryptionKey: ""
   cursorSigningKey: ""
+  pendingActionEncryptionKey: ""
+  secretKEKKeyring: {}
+  connectorEnrollmentURL: http://localhost:8080
+  connectorGatewayAddress: grpcs://localhost:9443
+  connectorIssuerName: argus-connector-ca
+  connectorIssuerGeneration: 1
+  directAdvertisedEgress: []
+  directVerificationUrl: ""
+  directDeniedCidrs: []
+  directExecutorEndpoint: ""
+  directExecutorServerName: ""
   allowedOrigins:
     - http://localhost:4173
     - http://localhost:4174
@@ -30,3 +41,7 @@ production:
     platform: platform.argus.example.com
     setup: setup.argus.example.com
     cards: cards.argus.example.com
+    connector: connector.argus.example.com
+  connectorService:
+    type: LoadBalancer
+    annotations: {}

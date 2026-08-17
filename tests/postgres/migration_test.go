@@ -16,7 +16,7 @@ import (
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
-func TestM2Migrations(t *testing.T) {
+func TestMigrations(t *testing.T) {
 	databaseURL := os.Getenv("ARGUS_TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("ARGUS_TEST_DATABASE_URL is not configured")
@@ -58,6 +58,7 @@ func TestM2Migrations(t *testing.T) {
 	defer database.Close()
 	assertConstraint(t, database, `INSERT INTO enterprise_users (id, enterprise_id, department_id, username, display_name) VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'invalid-user', 'Invalid')`)
 	assertConstraint(t, database, `INSERT INTO api_keys (id, enterprise_id, service_account_id, name, prefix, secret_hash, authorization_version) VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'invalid', 'prefix1', decode(repeat('00', 32), 'hex'), 1)`)
+	assertConnectorAuditActor(t, database)
 	testIdempotency(t, ctx, databaseURL, database)
 
 	if err := arguspostgres.RunMigrations(ctx, databaseURL, directory, arguspostgres.MigrationDown); err != nil {
@@ -65,6 +66,28 @@ func TestM2Migrations(t *testing.T) {
 	}
 	if err := arguspostgres.RunMigrations(ctx, databaseURL, directory, arguspostgres.MigrationUp); err != nil {
 		t.Fatalf("up after down: %v", err)
+	}
+}
+
+func assertConnectorAuditActor(t *testing.T, database *sql.DB) {
+	t.Helper()
+	tx, err := database.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for index, actorType := range []string{"connector", "direct_executor"} {
+		eventHash := bytes.Repeat([]byte{byte(index + 1)}, 32)
+		_, err = tx.Exec(`INSERT INTO audit_events (
+			id, domain, enterprise_id, actor_type, actor_id, action, resource_type,
+			resource_id, result, details, previous_hash, event_hash
+		) VALUES (
+			gen_random_uuid(), 'enterprise', gen_random_uuid(), $1, gen_random_uuid()::text,
+			'connector.enroll', 'connector', gen_random_uuid()::text, 'success', '{}', $2, $3
+		)`, actorType, make([]byte, 32), eventHash)
+		if err != nil {
+			t.Fatalf("%s audit actor must be accepted after M3 migration: %v", actorType, err)
+		}
 	}
 }
 

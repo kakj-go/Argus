@@ -1,0 +1,907 @@
+openapi: 3.1.0
+info:
+  title: Argus Kubernetes API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/kubernetes-clusters:
+    get:
+      operationId: listKubernetesClusters
+      summary: List DataScope-filtered Kubernetes clusters.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Cluster page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KubernetesClusterPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/kubernetes-clusters/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: getKubernetesCluster
+      summary: Get a DataScope-filtered Kubernetes cluster.
+      responses:
+        '200':
+          description: Kubernetes cluster.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KubernetesCluster'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/kubernetes-clusters/actions/preview-create:
+    post:
+      operationId: previewCreateKubernetesCluster
+      summary: Freeze a Kubernetes cluster creation plan.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KubernetesPreviewCreate'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/kubernetes-clusters/{id}/actions/preview-update:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: previewUpdateKubernetesCluster
+      summary: Freeze a Kubernetes cluster update.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KubernetesPreviewUpdate'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/kubernetes-clusters/{id}/actions/preview-delete:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: previewDeleteKubernetesCluster
+      summary: Freeze a Kubernetes cluster logical deletion.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourcePreviewDelete'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/kubernetes-clusters/connection-tests:
+    post:
+      operationId: createKubernetesConnectionTest
+      summary: Start a bounded Kubernetes connection test.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KubernetesConnectionTestCreate'
+      responses:
+        '202':
+          description: Connection Test.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTest'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/kubernetes-clusters/{id}/resources:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: listKubernetesResources
+      summary: List bounded Kubernetes resources after cluster and Namespace DataScope checks.
+      parameters:
+        - name: resource_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - namespace
+              - node
+              - pod
+              - deployment
+              - statefulset
+              - daemonset
+              - service
+        - name: namespace
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 253
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 256
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Kubernetes resource page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KubernetesResourcePage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/kubernetes-clusters/{id}/pod-logs:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: getKubernetesPodLogs
+      summary: Read at most one MiB of Pod logs.
+      parameters:
+        - name: namespace
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 253
+        - name: pod
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 253
+        - name: container
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 253
+        - name: tail_lines
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 500
+      responses:
+        '200':
+          description: Bounded Pod logs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PodLogs'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    KubernetesCluster:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - name
+        - api_server
+        - connection_mode
+        - environment
+        - labels
+        - labels_version
+        - resource_version
+        - connection_status
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        api_server:
+          type: string
+          format: uri
+          maxLength: 2048
+        connection_mode:
+          $ref: '#/components/schemas/KubernetesConnectionMode'
+        bastion_scope_id:
+          type: string
+          format: uuid
+        connector_id:
+          type: string
+          format: uuid
+        credential_id:
+          type: string
+          format: uuid
+        default_namespace:
+          type: string
+          maxLength: 253
+        environment:
+          $ref: '#/components/schemas/Environment'
+        labels:
+          $ref: '#/components/schemas/Labels'
+        labels_version:
+          type: integer
+          format: int64
+          minimum: 1
+        resource_version:
+          type: integer
+          format: int64
+          minimum: 1
+        connection_status:
+          type: string
+          enum:
+            - pending_connector
+            - connected
+            - degraded
+            - disconnected
+        kubernetes_version:
+          type: string
+          maxLength: 128
+        node_count:
+          type: integer
+          minimum: 0
+        ready_node_count:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+            - deleted
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    KubernetesClusterPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KubernetesCluster'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    KubernetesPreviewCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - api_server
+        - connection_mode
+        - environment
+        - labels
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        api_server:
+          type: string
+          format: uri
+          maxLength: 2048
+        connection_mode:
+          $ref: '#/components/schemas/KubernetesConnectionMode'
+        bastion_scope_id:
+          type: string
+          format: uuid
+        credential_id:
+          type: string
+          format: uuid
+        default_namespace:
+          type: string
+          maxLength: 253
+        environment:
+          $ref: '#/components/schemas/Environment'
+        labels:
+          $ref: '#/components/schemas/UserLabels'
+        connection_test_id:
+          type: string
+          format: uuid
+    KubernetesPreviewUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        api_server:
+          type: string
+          format: uri
+          maxLength: 2048
+        connection_mode:
+          $ref: '#/components/schemas/KubernetesConnectionMode'
+        bastion_scope_id:
+          type: string
+          format: uuid
+        credential_id:
+          type: string
+          format: uuid
+        default_namespace:
+          type: string
+          maxLength: 253
+        environment:
+          $ref: '#/components/schemas/Environment'
+        labels:
+          $ref: '#/components/schemas/UserLabels'
+        connection_test_id:
+          type: string
+          format: uuid
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    KubernetesResource:
+      type: object
+      additionalProperties: false
+      required:
+        - cluster_id
+        - resource_type
+        - name
+        - labels
+        - summary
+      properties:
+        cluster_id:
+          type: string
+          format: uuid
+        resource_type:
+          type: string
+          enum:
+            - namespace
+            - node
+            - pod
+            - deployment
+            - statefulset
+            - daemonset
+            - service
+        namespace:
+          type: string
+          maxLength: 253
+        name:
+          type: string
+          minLength: 1
+          maxLength: 253
+        labels:
+          $ref: '#/components/schemas/Labels'
+        summary:
+          type: object
+          additionalProperties: true
+    KubernetesResourcePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KubernetesResource'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    PodLogs:
+      type: object
+      additionalProperties: false
+      required:
+        - cluster_id
+        - namespace
+        - pod
+        - content
+        - truncated
+        - bytes
+      properties:
+        cluster_id:
+          type: string
+          format: uuid
+        namespace:
+          type: string
+        pod:
+          type: string
+        container:
+          type: string
+        content:
+          type: string
+          maxLength: 1048576
+        truncated:
+          type: boolean
+        bytes:
+          type: integer
+          minimum: 0
+          maximum: 1048576
+    ConnectionTest:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - target_type
+        - path
+        - status
+        - checks
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        target_type:
+          type: string
+          enum:
+            - host
+            - kubernetes_cluster
+        resource_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          enum:
+            - connector
+            - direct
+            - in_cluster
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - succeeded
+            - failed
+            - result_unknown
+            - expired
+        checks:
+          type: array
+          maxItems: 32
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - name
+              - status
+            properties:
+              name:
+                type: string
+                minLength: 1
+                maxLength: 128
+              status:
+                type: string
+                enum:
+                  - passed
+                  - failed
+                  - skipped
+              detail:
+                type: string
+                maxLength: 1024
+        latency_ms:
+          type: integer
+          minimum: 0
+        resolved_ips:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items:
+            type: string
+        host_key_fingerprint:
+          type: string
+          maxLength: 512
+        remote_version:
+          type: string
+          maxLength: 128
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    KubernetesConnectionMode:
+      type: string
+      enum:
+        - via_bastion
+        - direct
+        - in_cluster
+    Environment:
+      type: string
+      enum:
+        - development
+        - staging
+        - production
+    UserLabelKey:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+    SystemLabelKey:
+      type: string
+      maxLength: 72
+      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+      readOnly: true
+    LabelValue:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
+    Labels:
+      type: object
+      maxProperties: 64
+      propertyNames:
+        anyOf:
+          - $ref: '#/components/schemas/UserLabelKey'
+          - $ref: '#/components/schemas/SystemLabelKey'
+      additionalProperties:
+        $ref: '#/components/schemas/LabelValue'
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    UserLabels:
+      type: object
+      maxProperties: 64
+      propertyNames:
+        $ref: '#/components/schemas/UserLabelKey'
+      additionalProperties:
+        $ref: '#/components/schemas/LabelValue'
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    pending-action-public.schema:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      $id: https://argus.io/schemas/v1/action/pending-action-public.schema.json
+      title: PendingActionPublic
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - action_ref
+        - title
+        - summary
+        - risk
+        - preview
+        - diff
+        - status
+        - available_actions
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        schema_version:
+          const: argus.pending_action/v1
+        action_ref:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        risk:
+          enum:
+            - read
+            - write
+            - dangerous
+            - critical
+        preview:
+          $ref: '#/components/schemas/PublicJsonObject'
+        diff:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - kind
+              - text
+            properties:
+              kind:
+                enum:
+                  - add
+                  - remove
+                  - change
+                  - note
+              text:
+                type: string
+                maxLength: 2048
+        status:
+          enum:
+            - prepared
+            - awaiting_confirmation
+            - awaiting_approval
+            - ready
+            - executing
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+            - expired
+            - rejected
+            - invalidated
+        available_actions:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - confirm
+              - cancel
+              - approve
+              - reject
+        approval:
+          type: object
+          additionalProperties: false
+          required:
+            - required
+            - minimum_approvers
+            - approved_count
+            - separation_of_duty
+          properties:
+            required:
+              type: boolean
+            policy_ref:
+              type: string
+            minimum_approvers:
+              type: integer
+              minimum: 0
+            approved_count:
+              type: integer
+              minimum: 0
+            separation_of_duty:
+              type: boolean
+        execution_ref:
+          type: string
+          minLength: 1
+        result_summary:
+          type: string
+          maxLength: 4096
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ResourcePreviewDelete:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    KubernetesConnectionTestCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - api_server
+        - connection_mode
+      properties:
+        api_server:
+          type: string
+          format: uri
+          maxLength: 2048
+        connection_mode:
+          type: string
+          enum:
+            - via_bastion
+            - direct
+        bastion_scope_id:
+          type: string
+          format: uuid
+        credential_id:
+          type: string
+          format: uuid
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

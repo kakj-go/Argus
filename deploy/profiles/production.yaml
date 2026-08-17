@@ -23,6 +23,7 @@ spec:
     enterpriseHost: argus.example.com
     platformHost: platform.argus.example.com
     setupHost: setup.argus.example.com
+    connectorHost: connector.argus.example.com
   openSandbox:
     runtimeClassName: ""
     allowSharedRuntime: false

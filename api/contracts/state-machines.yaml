@@ -13,7 +13,7 @@ machines:
     terminal: [succeeded, failed, cancelled, expired, rejected, invalidated]
     transitions:
       prepared: [awaiting_confirmation]
-      awaiting_confirmation: [awaiting_approval, ready, cancelled, expired, invalidated]
+      awaiting_confirmation: [awaiting_approval, ready, executing, cancelled, expired, invalidated]
       awaiting_approval: [ready, rejected, cancelled, expired, invalidated]
       ready: [executing, cancelled, expired, invalidated]
       executing: [succeeded, failed, result_unknown]
@@ -77,3 +77,71 @@ machines:
       active: [suspended, disabled]
       suspended: [active, disabled]
       disabled: []
+  secret:
+    initial: active
+    terminal: []
+    transitions:
+      active: [disabled]
+      disabled: [active]
+  connector_certificate:
+    initial: active
+    terminal: [revoked, expired]
+    transitions:
+      active: [overlap, revoked, expired]
+      overlap: [revoked, expired]
+      revoked: []
+      expired: []
+  connector_enrollment_token:
+    initial: active
+    terminal: [consumed, revoked, expired]
+    transitions:
+      active: [consumed, revoked, expired]
+      consumed: []
+      revoked: []
+      expired: []
+  connector:
+    initial: pending
+    terminal: [uninstalled, revoked]
+    transitions:
+      pending: [online, offline, revoked]
+      online: [suspected_offline, draining, uninstalled, revoked]
+      suspected_offline: [online, offline, uninstalled, revoked]
+      offline: [online, uninstalled, revoked]
+      draining: [offline, uninstalled, revoked]
+      uninstalled: []
+      revoked: []
+  connector_command:
+    initial: queued
+    terminal: [succeeded, failed, timed_out, expired]
+    transitions:
+      queued: [dispatched, delivery_unknown, expired]
+      dispatched: [acknowledged, delivery_unknown, timed_out]
+      acknowledged: [running, failed, timed_out, result_unknown]
+      running: [succeeded, failed, timed_out, result_unknown]
+      delivery_unknown: [acknowledged, running, succeeded, failed, result_unknown]
+      result_unknown: [succeeded, failed]
+      succeeded: []
+      failed: []
+      timed_out: []
+      expired: []
+  connection_test:
+    initial: queued
+    terminal: [succeeded, failed, result_unknown, expired]
+    transitions:
+      queued: [running, failed, expired]
+      running: [succeeded, failed, result_unknown, expired]
+      succeeded: []
+      failed: []
+      result_unknown: []
+      expired: []
+  bastion_scope:
+    initial: pending
+    terminal: [deleted]
+    transitions:
+      pending: [active, offline, deleted]
+      active: [suspected_offline, offline, uninstalling]
+      suspected_offline: [active, offline, uninstalling]
+      offline: [active, uninstalling, uninstalled, deleted]
+      uninstalling: [uninstalled, offline]
+      uninstalled: [deleted]
+      deleted: []

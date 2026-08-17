@@ -187,14 +187,14 @@ export interface components {
         DataScopeCreate: {
             name: string;
             description?: string;
-            resource_types: ("host" | "kubernetes_cluster")[];
+            resource_types: ("host" | "kubernetes_cluster" | "kubernetes_namespace")[];
             explicit_resource_ids: string[];
             label_selector?: components["schemas"]["LabelSelector"];
         };
         DataScopeUpdate: {
             name: string;
             description?: string;
-            resource_types: ("host" | "kubernetes_cluster")[];
+            resource_types: ("host" | "kubernetes_cluster" | "kubernetes_namespace")[];
             explicit_resource_ids: string[];
             label_selector?: components["schemas"]["LabelSelector"];
             /** @enum {string} */
@@ -295,7 +295,7 @@ export interface components {
             enterprise_id: string;
             name: string;
             description?: string;
-            resource_types: ("host" | "kubernetes_cluster")[];
+            resource_types: ("host" | "kubernetes_cluster" | "kubernetes_namespace")[];
             explicit_resource_ids: string[];
             label_selector?: components["schemas"]["LabelSelector"];
             /** @enum {string} */

@@ -12,11 +12,17 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/kakj-go/Argus/internal/buildinfo"
+	actionapi "github.com/kakj-go/Argus/internal/gen/openapi/actionapi"
 	auditapi "github.com/kakj-go/Argus/internal/gen/openapi/audit"
+	connectionapi "github.com/kakj-go/Argus/internal/gen/openapi/connectionapi"
+	connectorapi "github.com/kakj-go/Argus/internal/gen/openapi/connectorapi"
 	authzapi "github.com/kakj-go/Argus/internal/gen/openapi/enterpriseauthz"
 	enterpriseapi "github.com/kakj-go/Argus/internal/gen/openapi/enterpriseidentity"
+	hostapi "github.com/kakj-go/Argus/internal/gen/openapi/hostapi"
+	kubernetesapi "github.com/kakj-go/Argus/internal/gen/openapi/kubernetesapi"
 	machineapi "github.com/kakj-go/Argus/internal/gen/openapi/machine"
 	platformapi "github.com/kakj-go/Argus/internal/gen/openapi/platform"
+	secretapi "github.com/kakj-go/Argus/internal/gen/openapi/secretapi"
 	setupapi "github.com/kakj-go/Argus/internal/gen/openapi/setup"
 )
 
@@ -43,6 +49,12 @@ type RouterOptions struct {
 	EnterpriseAuthorization *EnterpriseAuthorizationHandler
 	Machine                 *MachineHandler
 	Audit                   *AuditHandler
+	Secret                  *SecretHandler
+	Host                    *HostHandler
+	Kubernetes              *KubernetesHandler
+	Connection              *ConnectionHandler
+	ResourceAction          *ResourceActionHandler
+	Connector               *ConnectorHandler
 	AllowedOrigins          []string
 }
 
@@ -93,6 +105,30 @@ func NewRouterWithOptions(options RouterOptions) http.Handler {
 		strict := auditapi.NewStrictHandler(*options.Audit, []auditapi.StrictMiddlewareFunc{auditRequestContext})
 		auditapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
 	}
+	if options.Secret != nil {
+		strict := secretapi.NewStrictHandler(*options.Secret, []secretapi.StrictMiddlewareFunc{secretRequestContext})
+		secretapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.Host != nil {
+		strict := hostapi.NewStrictHandler(*options.Host, []hostapi.StrictMiddlewareFunc{hostRequestContext})
+		hostapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.Kubernetes != nil {
+		strict := kubernetesapi.NewStrictHandler(*options.Kubernetes, []kubernetesapi.StrictMiddlewareFunc{kubernetesRequestContext})
+		kubernetesapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.Connection != nil {
+		strict := connectionapi.NewStrictHandler(*options.Connection, []connectionapi.StrictMiddlewareFunc{connectionRequestContext})
+		connectionapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.ResourceAction != nil {
+		strict := actionapi.NewStrictHandler(*options.ResourceAction, []actionapi.StrictMiddlewareFunc{actionRequestContext})
+		actionapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.Connector != nil {
+		strict := connectorapi.NewStrictHandler(*options.Connector, []connectorapi.StrictMiddlewareFunc{connectorRequestContext})
+		connectorapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
 	return router
 }
 
@@ -115,7 +151,7 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			}
 			if request.Method == http.MethodOptions {
 				writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-				writer.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Content-Type, Idempotency-Key, X-Argus-Setup-Token, X-CSRF-Token, X-Request-ID")
+				writer.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Content-Type, Idempotency-Key, X-Argus-Enrollment-Token, X-Argus-Setup-Token, X-CSRF-Token, X-Request-ID")
 				writer.WriteHeader(http.StatusNoContent)
 				return
 			}
@@ -143,6 +179,42 @@ func machineRequestContext(next machineapi.StrictHandlerFunc, _ string) machinea
 }
 
 func auditRequestContext(next auditapi.StrictHandlerFunc, _ string) auditapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func secretRequestContext(next secretapi.StrictHandlerFunc, _ string) secretapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func hostRequestContext(next hostapi.StrictHandlerFunc, _ string) hostapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func kubernetesRequestContext(next kubernetesapi.StrictHandlerFunc, _ string) kubernetesapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func connectionRequestContext(next connectionapi.StrictHandlerFunc, _ string) connectionapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func actionRequestContext(next actionapi.StrictHandlerFunc, _ string) actionapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func connectorRequestContext(next connectorapi.StrictHandlerFunc, _ string) connectorapi.StrictHandlerFunc {
 	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
 		return next(WithRequestContext(ctx, writer, request), writer, request, value)
 	}

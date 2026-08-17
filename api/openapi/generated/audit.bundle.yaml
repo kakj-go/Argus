@@ -73,6 +73,8 @@ components:
             - platform_user
             - enterprise_user
             - service_account
+            - connector
+            - direct_executor
             - system
         actor_id:
           type: string

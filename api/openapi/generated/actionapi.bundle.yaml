@@ -1,0 +1,428 @@
+openapi: 3.1.0
+info:
+  title: Argus Resource Action API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/pending-actions:
+    get:
+      operationId: listPendingActions
+      summary: List resource-management Pending Actions.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Pending Action page.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - items
+                  - page
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/pending-action-public.schema'
+                  page:
+                    $ref: '#/components/schemas/CursorPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/pending-actions/{action_ref}:
+    parameters:
+      - name: action_ref
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    get:
+      operationId: getPendingAction
+      summary: Get a public Pending Action.
+      responses:
+        '200':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/pending-actions/{action_ref}/confirm:
+    parameters:
+      - name: action_ref
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    post:
+      operationId: confirmPendingAction
+      summary: Confirm and synchronously commit a resource Pending Action.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Committed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmPendingActionResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/pending-actions/{action_ref}/cancel:
+    parameters:
+      - name: action_ref
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    post:
+      operationId: cancelPendingAction
+      summary: Cancel a resource Pending Action.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Cancelled Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    ConfirmPendingActionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - pending_action
+      properties:
+        pending_action:
+          $ref: '#/components/schemas/pending-action-public.schema'
+        resource_ref:
+          $ref: '#/components/schemas/ResourceRef'
+        enrollment:
+          $ref: '#/components/schemas/EnrollmentResult'
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    pending-action-public.schema:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      $id: https://argus.io/schemas/v1/action/pending-action-public.schema.json
+      title: PendingActionPublic
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - action_ref
+        - title
+        - summary
+        - risk
+        - preview
+        - diff
+        - status
+        - available_actions
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        schema_version:
+          const: argus.pending_action/v1
+        action_ref:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        risk:
+          enum:
+            - read
+            - write
+            - dangerous
+            - critical
+        preview:
+          $ref: '#/components/schemas/PublicJsonObject'
+        diff:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - kind
+              - text
+            properties:
+              kind:
+                enum:
+                  - add
+                  - remove
+                  - change
+                  - note
+              text:
+                type: string
+                maxLength: 2048
+        status:
+          enum:
+            - prepared
+            - awaiting_confirmation
+            - awaiting_approval
+            - ready
+            - executing
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+            - expired
+            - rejected
+            - invalidated
+        available_actions:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - confirm
+              - cancel
+              - approve
+              - reject
+        approval:
+          type: object
+          additionalProperties: false
+          required:
+            - required
+            - minimum_approvers
+            - approved_count
+            - separation_of_duty
+          properties:
+            required:
+              type: boolean
+            policy_ref:
+              type: string
+            minimum_approvers:
+              type: integer
+              minimum: 0
+            approved_count:
+              type: integer
+              minimum: 0
+            separation_of_duty:
+              type: boolean
+        execution_ref:
+          type: string
+          minLength: 1
+        result_summary:
+          type: string
+          maxLength: 4096
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    ResourceRef:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_type
+        - resource_id
+        - version
+      properties:
+        resource_type:
+          type: string
+          enum:
+            - secret
+            - credential
+            - managed_account
+            - host
+            - kubernetes_cluster
+            - bastion_scope
+            - connector
+            - telemetry_query
+            - artifact
+        resource_id:
+          type: string
+          minLength: 1
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    EnrollmentResult:
+      type: object
+      additionalProperties: false
+      required:
+        - enrollment_id
+        - install_command
+        - expires_at
+      properties:
+        enrollment_id:
+          type: string
+          format: uuid
+        install_command:
+          type: string
+          minLength: 1
+          maxLength: 8192
+          writeOnly: true
+        expires_at:
+          type: string
+          format: date-time
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

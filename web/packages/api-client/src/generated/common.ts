@@ -31,7 +31,7 @@ export interface components {
         };
         ResourceRef: {
             /** @enum {string} */
-            resource_type: "host" | "kubernetes_cluster" | "connector" | "managed_account" | "telemetry_query" | "artifact";
+            resource_type: "secret" | "credential" | "managed_account" | "host" | "kubernetes_cluster" | "bastion_scope" | "connector" | "telemetry_query" | "artifact";
             resource_id: string;
             /** Format: int64 */
             version: number;

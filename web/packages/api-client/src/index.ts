@@ -1,6 +1,36 @@
 export * from "./types";
-export type { ArgusApiClient } from "./client";
-export type { CompletePasswordChangeRequest } from "./generated/contracts";
+export type {
+  ArgusApiClient,
+  CursorListQuery,
+  HostListFilter,
+  KubernetesPodLogsQuery,
+  KubernetesResourceQuery,
+} from "./client";
+export type {
+  BastionScope,
+  BastionScopePage,
+  BastionPreviewCreate,
+  CompletePasswordChangeRequest,
+  ConnectionTest,
+  Connector,
+  ConnectorPage,
+  EnvironmentContract,
+  Host,
+  HostConnectionTestCreate,
+  HostPage,
+  HostPreviewCreate,
+  HostPreviewUpdate,
+  KubernetesCluster,
+  KubernetesClusterPage,
+  KubernetesConnectionTestCreate,
+  KubernetesPreviewCreate,
+  KubernetesPreviewUpdate,
+  KubernetesResource,
+  KubernetesResourcePage,
+  PodLogs,
+  ResourcePreviewDelete,
+  ResourcePreviewUpdate,
+} from "./generated/contracts";
 export { createMockApiClient } from "./mock";
 export type { MockApiClient, MockOptions } from "./mock";
 export { createRealAdapter } from "./adapters/real";

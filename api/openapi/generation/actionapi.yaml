@@ -1,0 +1,14 @@
+openapi: 3.1.0
+info: {title: Argus Resource Action API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/pending-actions: {$ref: ../argus.yaml#/paths/~1enterprise~1pending-actions}
+  "/enterprise/pending-actions/{action_ref}": {$ref: "../argus.yaml#/paths/~1enterprise~1pending-actions~1{action_ref}"}
+  "/enterprise/pending-actions/{action_ref}/confirm": {$ref: "../argus.yaml#/paths/~1enterprise~1pending-actions~1{action_ref}~1confirm"}
+  "/enterprise/pending-actions/{action_ref}/cancel": {$ref: "../argus.yaml#/paths/~1enterprise~1pending-actions~1{action_ref}~1cancel"}
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    ConfirmPendingActionResult: {$ref: ../components/m3.yaml#/components/schemas/ConfirmPendingActionResult}

@@ -13,10 +13,12 @@ ARG VITE_API_MODE=real
 ARG VITE_API_BASE_URL=https://api.argus.invalid
 ARG VITE_CARD_ORIGIN=https://cards.argus.invalid
 ARG VITE_PLATFORM_URL=https://platform.argus.invalid
+ARG VITE_DIRECT_EGRESS_ADDRESSES=
 RUN VITE_API_MODE=$VITE_API_MODE \
     VITE_API_BASE_URL=$VITE_API_BASE_URL \
     VITE_CARD_ORIGIN=$VITE_CARD_ORIGIN \
     VITE_PLATFORM_URL=$VITE_PLATFORM_URL \
+    VITE_DIRECT_EGRESS_ADDRESSES=$VITE_DIRECT_EGRESS_ADDRESSES \
     pnpm --filter @argus/setup build && \
     pnpm --filter @argus/platform build && \
     pnpm --filter @argus/enterprise build && \

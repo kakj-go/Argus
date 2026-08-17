@@ -152,6 +152,14 @@ UPDATE enterprise_users SET last_login_at = now(), updated_at = now() WHERE id =
 UPDATE enterprise_users SET authorization_version = authorization_version + 1, updated_at = now()
 WHERE id = $1 AND enterprise_id = $2 RETURNING authorization_version;
 
+-- name: BumpServiceAccountAuthorizationVersion :one
+UPDATE service_accounts SET authorization_version = authorization_version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 RETURNING authorization_version;
+
+-- name: BumpAuthorizationVersionRecord :exec
+UPDATE authorization_versions SET version = version + 1, updated_at = now()
+WHERE enterprise_id = $1 AND subject_type = $2 AND subject_id = $3;
+
 -- name: InitializeAuthorizationVersion :exec
 INSERT INTO authorization_versions (enterprise_id, subject_type, subject_id, version)
 VALUES ($1, $2, $3, 1) ON CONFLICT DO NOTHING;
@@ -174,4 +182,3 @@ UPDATE outbox_events SET published_at = now(), last_error = NULL WHERE id = $1;
 
 -- name: RetryOutboxEvent :exec
 UPDATE outbox_events SET claimed_at = NULL, available_at = $2, last_error = $3 WHERE id = $1;
-

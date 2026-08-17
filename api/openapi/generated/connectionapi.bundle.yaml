@@ -1,0 +1,179 @@
+openapi: 3.1.0
+info:
+  title: Argus Connection Test API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/connection-tests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: getConnectionTest
+      summary: Get a connection test result.
+      responses:
+        '200':
+          description: Connection Test.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTest'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    ConnectionTest:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - target_type
+        - path
+        - status
+        - checks
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        target_type:
+          type: string
+          enum:
+            - host
+            - kubernetes_cluster
+        resource_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          enum:
+            - connector
+            - direct
+            - in_cluster
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - succeeded
+            - failed
+            - result_unknown
+            - expired
+        checks:
+          type: array
+          maxItems: 32
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - name
+              - status
+            properties:
+              name:
+                type: string
+                minLength: 1
+                maxLength: 128
+              status:
+                type: string
+                enum:
+                  - passed
+                  - failed
+                  - skipped
+              detail:
+                type: string
+                maxLength: 1024
+        latency_ms:
+          type: integer
+          minimum: 0
+        resolved_ips:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items:
+            type: string
+        host_key_fingerprint:
+          type: string
+          maxLength: 512
+        remote_version:
+          type: string
+          maxLength: 128
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

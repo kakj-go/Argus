@@ -1,0 +1,20 @@
+openapi: 3.1.0
+info: {title: Argus Host API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/hosts: {$ref: ../argus.yaml#/paths/~1enterprise~1hosts}
+  "/enterprise/hosts/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}"}
+  /enterprise/hosts/actions/preview-create: {$ref: ../argus.yaml#/paths/~1enterprise~1hosts~1actions~1preview-create}
+  "/enterprise/hosts/{id}/actions/preview-update": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1actions~1preview-update"}
+  "/enterprise/hosts/{id}/actions/preview-delete": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1actions~1preview-delete"}
+  /enterprise/hosts/connection-tests: {$ref: ../argus.yaml#/paths/~1enterprise~1hosts~1connection-tests}
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    Host: {$ref: ../components/m3.yaml#/components/schemas/Host}
+    HostPage: {$ref: ../components/m3.yaml#/components/schemas/HostPage}
+    HostPreviewCreate: {$ref: ../components/m3.yaml#/components/schemas/HostPreviewCreate}
+    HostPreviewUpdate: {$ref: ../components/m3.yaml#/components/schemas/HostPreviewUpdate}
+    ConnectionTest: {$ref: ../components/m3.yaml#/components/schemas/ConnectionTest}

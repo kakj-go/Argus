@@ -1,6 +1,6 @@
 # 服务组件与 Kubernetes 一键部署
 
-> 本文描述第一版目标部署架构。仓库已经具备可安装、可验证和可清理的 Evaluation 基座；前端仍使用 mock API，后端仍是运行角色骨架。实际完成度见[当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)，PostgreSQL 环境决策见[PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)。
+> 本文描述第一版目标部署架构。仓库已经具备可安装、可验证和可清理的 Evaluation 基座；M2 身份/IAM 与 M3 资源/Connector 页面均已接入 real API，Agent、Remote Access、Card 服务端治理和 Telemetry 仍按后续里程碑推进。实际完成度见[当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)，PostgreSQL 环境决策见[PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)。
 
 ## 1. 目标
 
@@ -31,42 +31,42 @@ cmd/
 
 部署为七类工作负载；Direct Executor 复用 `argus-worker` 程序，但使用独立 Deployment、队列、ServiceAccount、网络策略和固定公网出口：
 
-| 工作负载 | 类型 | 扩缩容依据 |
-| --- | --- | --- |
-| `argus-server` | Deployment | HTTP 并发、延迟、CPU |
-| `argus-worker` | Deployment | Run/Task 队列长度、模型并发 |
-| `argus-direct-executor` | Deployment (`argus-worker --pool=direct-executor`) | 公网 SSH/WinRM 任务、远程会话并发、出口连接数 |
-| `argus-connector-gateway` | Deployment | 在线 Connector 数、远程会话数、连接数、带宽 |
-| `argus-telemetry-ingest` | Deployment | OTLP 请求速率、Kafka Producer 延迟、CPU |
-| `argus-telemetry-query` | Deployment | 查询并发、延迟、ClickHouse 压力 |
-| `otel-clickhouse-writer` | Deployment | Kafka Lag、ClickHouse 插入延迟 |
+| 工作负载                  | 类型                                               | 扩缩容依据                                    |
+| ------------------------- | -------------------------------------------------- | --------------------------------------------- |
+| `argus-server`            | Deployment                                         | HTTP 并发、延迟、CPU                          |
+| `argus-worker`            | Deployment                                         | Run/Task 队列长度、模型并发                   |
+| `argus-direct-executor`   | Deployment (`argus-worker --pool=direct-executor`) | 公网 SSH/WinRM 任务、远程会话并发、出口连接数 |
+| `argus-connector-gateway` | Deployment                                         | 在线 Connector 数、远程会话数、连接数、带宽   |
+| `argus-telemetry-ingest`  | Deployment                                         | OTLP 请求速率、Kafka Producer 延迟、CPU       |
+| `argus-telemetry-query`   | Deployment                                         | 查询并发、延迟、ClickHouse 压力               |
+| `otel-clickhouse-writer`  | Deployment                                         | Kafka Lag、ClickHouse 插入延迟                |
 
 `argus-telemetry-ingest` 与 `argus-telemetry-query` 使用相同镜像、不同启动参数。它们必须拥有不同的 Service、ServiceAccount、NetworkPolicy、PodDisruptionBudget、HPA 和数据库凭证。
 
 七类工作负载都支持横向扩展，但扩展条件不同：
 
-| 工作负载 | 横向扩展方式 | 必要条件 |
-| --- | --- | --- |
-| `argus-server` | 任意副本处理 HTTP/Card Action | Session、Run、Pending Action、Token 和 Card Instance 不保存在 Pod 本地 |
-| `argus-worker` | PostgreSQL Task Lease 分工 | Fence Token、幂等、外部副作用对账 |
-| `argus-direct-executor` | 公网连接任务与人工会话分工 | 固定出口、SSRF 防护、Host Key、短期 Credential/Session Ticket、无 Pod 本地唯一状态 |
-| `argus-connector-gateway` | Connector/远程会话连接分布和跨 Gateway 内部转发 | Redis Session Registry、connection_epoch、短期票据、录像外置、Drain |
-| `argus-telemetry-ingest` | 负载均衡分发 OTLP | Kafka ACK、分布式配额、凭证快速失效 |
-| `argus-telemetry-query` | 任意副本查询 | 无状态 Cursor、Enterprise/授权 Resource 条件强制注入、字段脱敏和查询预算 |
-| `otel-clickhouse-writer` | Kafka Consumer Group | Partition 数、Rebalance 和 Offset 门禁 |
+| 工作负载                  | 横向扩展方式                                    | 必要条件                                                                           |
+| ------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `argus-server`            | 任意副本处理 HTTP/Card Action                   | Session、Run、Pending Action、Token 和 Card Instance 不保存在 Pod 本地             |
+| `argus-worker`            | PostgreSQL Task Lease 分工                      | Fence Token、幂等、外部副作用对账                                                  |
+| `argus-direct-executor`   | 公网连接任务与人工会话分工                      | 固定出口、SSRF 防护、Host Key、短期 Credential/Session Ticket、无 Pod 本地唯一状态 |
+| `argus-connector-gateway` | Connector/远程会话连接分布和跨 Gateway 内部转发 | PostgreSQL 命令队列、Redis Registry/Pub/Sub、connection_epoch、短期票据、录像外置、Drain |
+| `argus-telemetry-ingest`  | 负载均衡分发 OTLP                               | Kafka ACK、分布式配额、凭证快速失效                                                |
+| `argus-telemetry-query`   | 任意副本查询                                    | 无状态 Cursor、Enterprise/授权 Resource 条件强制注入、字段脱敏和查询预算           |
+| `otel-clickhouse-writer`  | Kafka Consumer Group                            | Partition 数、Rebalance 和 Offset 门禁                                             |
 
 具体状态所有权和扩缩容失败场景见[运行时状态、Redis 与横向扩展](./11-runtime-state-and-horizontal-scaling.md)。Migration、Bootstrap 和 DLQ 重放不是普通横向扩展工作负载，必须使用 Job/Lease 保证单一所有者。
 
 ### 2.2 Kubernetes 内置平台依赖
 
-| 组件 | 用途 | 第一版安装方式 |
-| --- | --- | --- |
-| PostgreSQL | 控制面元数据、RBAC、会话、Run、Pending Action、审计索引 | Kubernetes 内置；Evaluation 低副本，Production 使用持久卷和高可用拓扑，具体 Operator 选型形成 ADR |
-| Redis | 短期缓存、分布式锁、限流和轻量任务协调；不可保存唯一业务状态 | Kubernetes 内置，按 Profile 配置持久化和高可用 |
-| MinIO | Connector/Collector 安装包、远程会话录像、Sandbox Artifact、附件、导出物和集群内备份目标 | Kubernetes 内置的 S3 兼容 Artifact Store |
-| OpenSandbox | 不可信代码、附件解析、临时分析和 交互卡片 构建 | Kubernetes 内置，使用独立 Namespace 和隔离 Runtime |
-| Kafka | 遥测持久缓冲和写入解耦 | Strimzi Kafka Operator + KRaft |
-| ClickHouse | Metrics、Logs、Traces 存储 | Altinity ClickHouse Operator + ClickHouseInstallation + Keeper |
+| 组件        | 用途                                                                                     | 第一版安装方式                                                                                    |
+| ----------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| PostgreSQL  | 控制面元数据、RBAC、会话、Run、Pending Action、审计索引                                  | Kubernetes 内置；Evaluation 低副本，Production 使用持久卷和高可用拓扑，具体 Operator 选型形成 ADR |
+| Redis       | 短期缓存、分布式锁、限流和轻量任务协调；不可保存唯一业务状态                             | Kubernetes 内置，按 Profile 配置持久化和高可用                                                    |
+| MinIO       | Connector/Collector 安装包、远程会话录像、Sandbox Artifact、附件、导出物和集群内备份目标 | Kubernetes 内置的 S3 兼容 Artifact Store                                                          |
+| OpenSandbox | 不可信代码、附件解析、临时分析和 交互卡片 构建                                           | Kubernetes 内置，使用独立 Namespace 和隔离 Runtime                                                |
+| Kafka       | 遥测持久缓冲和写入解耦                                                                   | Strimzi Kafka Operator + KRaft                                                                    |
+| ClickHouse  | Metrics、Logs、Traces 存储                                                               | Altinity ClickHouse Operator + ClickHouseInstallation + Keeper                                    |
 
 第一版不提供外部 PostgreSQL、Redis、Artifact Store、OpenSandbox、Kafka 或 ClickHouse 模式。Evaluation 与 Production 使用相同的组件和协议边界，差异只体现在副本、容量、持久化、拓扑分布和隔离等级。外部托管中间件接入作为后续能力，不能进入第一版配置 Schema、发布矩阵或 E2E 分支。
 
@@ -110,6 +110,7 @@ flowchart TB
 
 - Connector 仅连接 `argus-connector-gateway`，承载控制、Artifact 和独立的 Remote Session Stream，不发送遥测数据。
 - Direct Executor 只从固定出口访问经 DNS/IP 双重校验的公网 SSH/WinRM 目标，NetworkPolicy/出口防火墙拒绝集群、私网、云元数据和平台内部地址。
+- `argus-server` 通过独立内部 CA 的 mTLS gRPC 向 Direct Executor 发送持久任务派发提示；PostgreSQL 队列是权威事实并负责断连恢复，RPC 不携带任意目标参数。
 - Remote Access 入口只接受 `argus-server` 签发的短期一次性会话票据；录像写 Artifact Store，不能依赖 Gateway Pod 本地磁盘。
 - Collector 仅连接 `argus-telemetry-ingest`，不接收远程控制命令。
 - `argus-telemetry-query` 只持有 ClickHouse 只读账号。
@@ -266,7 +267,7 @@ spec:
 - Ingress/Gateway API、DNS 和证书方案。
 - 节点 CPU、内存、可调度 Pod 数和磁盘容量。
 - Pod Security、NetworkPolicy 和 LoadBalancer 能力。
-- 集群中是否已有 Altinity/Strimzi Operator 及其兼容版本。
+- 集群中是否已有 cert-manager、Altinity/Strimzi Operator 及其兼容版本；兼容实例复用，缺失实例按版本锁安装。
 - 镜像仓库以及显式配置的集群外备份目标连通性。
 - Direct Executor 固定 NAT/Egress Gateway、声明出口地址与实际出口一致性，以及对私网、云元数据和平台内部地址的拒绝策略。
 - CRD 冲突、命名空间配额和所需 ClusterRole 权限。
@@ -276,6 +277,8 @@ spec:
 ### 7.2 Foundation
 
 创建 Namespace、ServiceAccount、RBAC、NetworkPolicy、ResourceQuota、LimitRange、证书和镜像拉取 Secret。默认网络策略全部拒绝，再逐条允许必要调用方向。
+
+Connector PKI 的 Server Enrollment 与 Gateway Rotation 共用 namespaced CA Issuer，但使用独立 ServiceAccount。Gateway 只获得创建、读取和观察 CertificateRequest 所需的最小权限；Issuer、Namespace 或 generation 缺失时启动失败。兼容 cert-manager 的判定固定为同 major/minor 且 patch 不低于版本锁基线，避免以字符串完全相等误拒绝兼容补丁版本。
 
 ### 7.3 Operator 与 CRD
 
@@ -374,13 +377,13 @@ Writer 的 Kafka Receiver 配置 `message_marking.after: true`、`on_error: fals
 
 建议使用独立入口：
 
-| 入口 | 后端 | 协议 | 用途 |
-| --- | --- | --- | --- |
-| `argus.example.com` | `argus-server`/Web | HTTPS/WSS | 用户、API、Card Host |
-| `connector.argus.example.com` | `argus-connector-gateway` | TLS 长连接 | Connector 控制链路 |
-| `remote.argus.example.com` | `argus-connector-gateway` | HTTPS/WSS | 经短期票据授权的人工 SSH Web Terminal；与 Connector 入口分端口和限流 |
-| `otlp.argus.example.com:4317` | `argus-telemetry-ingest` | OTLP/gRPC TLS | 遥测推送 |
-| `otlp-http.argus.example.com:4318` | `argus-telemetry-ingest` | OTLP/HTTP TLS | 遥测推送 |
+| 入口                               | 后端                      | 协议          | 用途                                                                 |
+| ---------------------------------- | ------------------------- | ------------- | -------------------------------------------------------------------- |
+| `argus.example.com`                | `argus-server`/Web        | HTTPS/WSS     | 用户、API、Card Host                                                 |
+| `connector.argus.example.com`      | `argus-connector-gateway` | TLS 长连接    | Connector 控制链路                                                   |
+| `remote.argus.example.com`         | `argus-connector-gateway` | HTTPS/WSS     | 经短期票据授权的人工 SSH Web Terminal；与 Connector 入口分端口和限流 |
+| `otlp.argus.example.com:4317`      | `argus-telemetry-ingest`  | OTLP/gRPC TLS | 遥测推送                                                             |
+| `otlp-http.argus.example.com:4318` | `argus-telemetry-ingest`  | OTLP/HTTP TLS | 遥测推送                                                             |
 
 `argus-direct-executor`、`argus-telemetry-query`、PostgreSQL、Redis、Kafka、ClickHouse、OpenSandbox Backend 和 Writer 都只暴露集群内 Service。即使部署在同一集群，也不能用一个 Ingress 路由混合 Connector、Remote Access 与 OTLP 流量；`remote.argus.example.com` 可以与 Connector Gateway 使用相同程序，但必须使用独立 Listener、证书策略、限流和 HPA 指标。
 

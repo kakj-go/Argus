@@ -2,17 +2,19 @@
 
 本目录把[端到端实现计划](../15-end-to-end-implementation-plan.md)拆成可执行里程碑。任务 ID 应保留到 Issue、PR、测试名称或变更说明中，便于追踪交付状态。
 
-| 里程碑 | 文件 | 主要交付 |
-| --- | --- | --- |
-| M0（已完成） | [契约与文档](./M0-contract-and-documentation.md) | 身份、labels/DataScope、API、PendingAction、Card、Agent/Stream/Telemetry 契约与生成门禁 |
-| M1 | [前端基础](./M1-frontend-foundation.md) | real/mock Adapter、UI/样式/i18n/认证/Card 前端整改 |
-| M2 | [初始化、身份与授权](./M2-bootstrap-identity-rbac.md) | Setup、平台/企业身份、Department、RoleBinding/DataScope、Session、审计 |
-| M3 | [资源与 Connector](./M3-resource-and-connector.md) | Host/Kubernetes labels、Secret/Credential、Bastion Scope、Connector、Direct Executor |
-| M4 | [执行、Agent 与 Tool](./M4-action-agent-workflow.md) | Outbox/Lease/Fence、单 Agent Loop、上下文投影/压缩、Preview/Commit、Approval、Execution |
-| M5 | [交互卡片](./M5-interactive-card.md) | Manifest、CSP、MessagePort、RenderPlan、Binding、发布门禁 |
-| M6 | [远程访问](./M6-remote-access.md) | Grant、Ticket、SSH/WinRM、录像、终止与撤权 |
-| M7 | [遥测](./M7-telemetry.md) | Collector、Ingest、Kafka、ClickHouse、Query 和统一权限裁剪 |
-| M8 | [Production 就绪](./M8-production-readiness.md) | HA、备份恢复、供应链、容量、故障演练、完整 E2E |
+| 里程碑       | 文件                                                  | 主要交付                                                                                |
+| ------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| M0（已完成） | [契约与文档](./M0-contract-and-documentation.md)      | 身份、labels/DataScope、API、PendingAction、Card、Agent/Stream/Telemetry 契约与生成门禁 |
+| M1（已完成） | [前端基础](./M1-frontend-foundation.md)               | real/mock Adapter、UI/样式/i18n/认证/Card 前端整改                                      |
+| M2（已完成） | [初始化、身份与授权](./M2-bootstrap-identity-rbac.md) | Setup、平台/企业身份、Department、RoleBinding/DataScope、Session、审计                  |
+| M3（已完成） | [资源与 Connector](./M3-resource-and-connector.md)    | Host/Kubernetes labels、Secret/Credential、Bastion Scope、Connector、Direct Executor    |
+| M4           | [执行、Agent 与 Tool](./M4-action-agent-workflow.md)  | Outbox/Lease/Fence、单 Agent Loop、上下文投影/压缩、Preview/Commit、Approval、Execution |
+| M5           | [交互卡片](./M5-interactive-card.md)                  | Manifest、CSP、MessagePort、RenderPlan、Binding、发布门禁                               |
+| M6           | [远程访问](./M6-remote-access.md)                     | Grant、Ticket、SSH/WinRM、录像、终止与撤权                                              |
+| M7           | [遥测](./M7-telemetry.md)                             | Collector、Ingest、Kafka、ClickHouse、Query 和统一权限裁剪                              |
+| M8           | [Production 就绪](./M8-production-readiness.md)       | HA、备份恢复、供应链、容量、故障演练、完整 E2E                                          |
+
+截至 2026-08-17，M0-M3 已完成。M3 最终 `make e2e-m3-k8s` 成功运行号为 `20260817060430-49810`，脱敏诊断保存在本地 `artifacts/m3-e2e/20260817060430-49810`，清理后临时 Namespace、PVC 和 Lease 均为零残留。
 
 ## 状态规则
 

@@ -28,6 +28,9 @@ spec:
         app.kubernetes.io/name: {{ $item.name }}
         app.kubernetes.io/part-of: argus
     spec:
+      {{- if or (eq $item.name "argus-server") (eq $item.name "argus-connector-gateway") }}
+      serviceAccountName: {{ $item.name }}
+      {{- end }}
       {{- if eq $root.Values.profile "production" }}
       topologySpreadConstraints:
         - maxSkew: 1
@@ -43,7 +46,7 @@ spec:
             matchLabels:
               app.kubernetes.io/name: {{ $item.name }}
       {{- end }}
-      terminationGracePeriodSeconds: 15
+      terminationGracePeriodSeconds: {{ if eq $item.name "argus-connector-gateway" }}45{{ else }}15{{ end }}
       securityContext:
         runAsNonRoot: true
         seccompProfile: {type: RuntimeDefault}
@@ -58,13 +61,40 @@ spec:
           envFrom:
             - configMapRef:
                 name: argus-runtime-config
-          {{- if eq $item.name "argus-server" }}
             - secretRef:
                 name: argus-runtime-secrets
+          {{- if or (eq $item.name "argus-server") (eq $item.name "argus-direct-executor") (eq $item.name "argus-connector-gateway") }}
           volumeMounts:
+            - name: secret-kek
+              mountPath: /var/run/secrets/argus/secret-kek
+              readOnly: true
+          {{- if eq $item.name "argus-server" }}
             - name: setup-token
               mountPath: /var/run/secrets/argus/setup
               readOnly: true
+            - name: direct-executor-client
+              mountPath: /var/run/secrets/argus/direct-executor-client
+              readOnly: true
+            - name: direct-executor-ca
+              mountPath: /var/run/secrets/argus/direct-executor-ca
+              readOnly: true
+          {{- end }}
+          {{- if eq $item.name "argus-direct-executor" }}
+            - name: direct-executor-tls
+              mountPath: /var/run/secrets/argus/direct-executor
+              readOnly: true
+            - name: direct-executor-ca
+              mountPath: /var/run/secrets/argus/direct-executor-ca
+              readOnly: true
+          {{- end }}
+          {{- if eq $item.name "argus-connector-gateway" }}
+            - name: connector-gateway-tls
+              mountPath: /var/run/secrets/argus/connector-gateway
+              readOnly: true
+            - name: connector-ca
+              mountPath: /var/run/secrets/argus/connector-ca
+              readOnly: true
+          {{- end }}
           {{- end }}
           {{- if ne $item.name "argus-server" }}
           env:
@@ -72,6 +102,12 @@ spec:
           {{- end }}
           ports:
             - {name: health, containerPort: {{ $item.healthPort }}}
+          {{- if eq $item.name "argus-connector-gateway" }}
+            - {name: connector, containerPort: 9443}
+          {{- end }}
+          {{- if eq $item.name "argus-direct-executor" }}
+            - {name: direct-rpc, containerPort: 9444}
+          {{- end }}
           readinessProbe:
             httpGet: {path: /readyz, port: health}
             initialDelaySeconds: 2
@@ -83,14 +119,47 @@ spec:
           resources:
             requests: {cpu: 25m, memory: 64Mi}
             limits: {cpu: 500m, memory: 256Mi}
-      {{- if eq $item.name "argus-server" }}
+      {{- if or (eq $item.name "argus-server") (eq $item.name "argus-direct-executor") (eq $item.name "argus-connector-gateway") }}
       volumes:
+        - name: secret-kek
+          secret:
+            secretName: argus-secret-kek
+      {{- if eq $item.name "argus-server" }}
         - name: setup-token
           secret:
             secretName: {{ required "setupTokenSecretName is required" $root.Values.setupTokenSecretName }}
             items:
               - {key: setup-token, path: token}
               - {key: setup-token-expires-at, path: expires-at}
+        - name: direct-executor-client
+          secret:
+            secretName: argus-server-direct-executor-client-tls
+        - name: direct-executor-ca
+          secret:
+            secretName: argus-direct-executor-root-ca
+            items:
+              - {key: ca.crt, path: ca.crt}
+      {{- end }}
+      {{- if eq $item.name "argus-direct-executor" }}
+        - name: direct-executor-tls
+          secret:
+            secretName: argus-direct-executor-tls
+        - name: direct-executor-ca
+          secret:
+            secretName: argus-direct-executor-root-ca
+            items:
+              - {key: ca.crt, path: ca.crt}
+      {{- end }}
+      {{- if eq $item.name "argus-connector-gateway" }}
+        - name: connector-gateway-tls
+          secret:
+            secretName: argus-connector-gateway-tls
+        - name: connector-ca
+          secret:
+            secretName: argus-connector-root-ca
+            items:
+              - {key: ca.crt, path: ca.crt}
+      {{- end }}
       {{- end }}
 {{- end }}
 ---
@@ -107,12 +176,31 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: argus-connector-gateway
+  name: argus-direct-executor
   namespace: {{ .Values.namespaces.system }}
 spec:
+  selector: {app.kubernetes.io/name: argus-direct-executor}
+  ports:
+    - {name: direct-rpc, port: 9444, targetPort: direct-rpc}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-connector-gateway
+  namespace: {{ .Values.namespaces.system }}
+  {{- if eq .Values.profile "production" }}
+  annotations:
+    {{- toYaml .Values.production.connectorService.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ if eq .Values.profile "production" }}{{ .Values.production.connectorService.type }}{{ else }}ClusterIP{{ end }}
+  {{- if and (eq .Values.profile "production") (or (eq .Values.production.connectorService.type "LoadBalancer") (eq .Values.production.connectorService.type "NodePort")) }}
+  externalTrafficPolicy: Local
+  {{- end }}
   selector: {app.kubernetes.io/name: argus-connector-gateway}
   ports:
     - {name: health, port: 8081, targetPort: health}
+    - {name: connector, port: 9443, targetPort: connector}
 ---
 apiVersion: v1
 kind: Service

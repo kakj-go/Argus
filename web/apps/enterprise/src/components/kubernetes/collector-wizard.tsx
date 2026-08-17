@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useApi,
-  type K8sCluster,
+  type KubernetesCluster,
   type PendingActionPublic,
 } from "@argus/api-client";
 import {
@@ -59,7 +59,7 @@ export function CollectorWizard({
   cluster,
   onInstalled,
 }: {
-  cluster: K8sCluster;
+  cluster: KubernetesCluster;
   onInstalled?: () => void;
 }) {
   const { t } = useTranslation();
@@ -154,7 +154,7 @@ export function CollectorWizard({
     return rows;
   }, [bindings, claimsQuery.data, t]);
 
-  const unboundCount = Math.max(0, cluster.nodeCount - bindings.length);
+  const unboundCount = Math.max(0, (cluster.node_count ?? 0) - bindings.length);
 
   const bindingColumns: Column<BindingRow>[] = [
     { key: "node", header: t("kubernetes.table.node") },

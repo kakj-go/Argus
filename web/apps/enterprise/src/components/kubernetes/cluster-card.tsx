@@ -1,11 +1,6 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import {
-  useApi,
-  type ConnectionTestResult,
-  type K8sCluster,
-} from "@argus/api-client";
+import { useApi, type KubernetesCluster } from "@argus/api-client";
 import { Badge, Button, Card, CardContent, StatusBadge } from "@argus/ui";
 import {
   bindingCoverage,
@@ -22,31 +17,25 @@ export function ClusterCard({
   onInstallCollector,
   onOpenCollector,
 }: {
-  cluster: K8sCluster;
+  cluster: KubernetesCluster;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  onInstallCollector: () => void;
-  onOpenCollector: () => void;
+  onInstallCollector?: () => void;
+  onOpenCollector?: () => void;
 }) {
   const { t } = useTranslation();
   const api = useApi();
-  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(
-    null,
-  );
 
   const collectorQuery = useQuery({
     queryKey: ["kubernetes", "collector", cluster.id],
     queryFn: () => api.kubernetes.getCollector(cluster.id),
+    enabled: Boolean(onInstallCollector || onOpenCollector),
   });
   const bindingsQuery = useQuery({
     queryKey: ["kubernetes", "nodeBindings", cluster.id],
     queryFn: () => api.kubernetes.listNodeBindings(cluster.id),
-  });
-
-  const test = useMutation({
-    mutationFn: () => api.kubernetes.testClusterConnection(cluster.id),
-    onSuccess: setTestResult,
+    enabled: Boolean(onInstallCollector || onOpenCollector),
   });
 
   const collectorStatus = collectorQuery.data?.status ?? "not_installed";
@@ -60,105 +49,66 @@ export function ClusterCard({
           <Badge tone="accent">
             {t(`kubernetes.environment.${cluster.environment}`)}
           </Badge>
-          <StatusBadge tone={connectionStatusTone(cluster.connectionStatus)}>
-            {t(`kubernetes.status.${cluster.connectionStatus}`)}
+          <StatusBadge tone={connectionStatusTone(cluster.connection_status)}>
+            {t(`kubernetes.status.${cluster.connection_status}`)}
           </StatusBadge>
         </div>
         <div className="argus-k8s-cluster-card__server">
-          {cluster.apiServer}
+          {cluster.api_server}
         </div>
         <dl className="argus-k8s-kv">
           <div className="argus-k8s-kv__item">
             <dt>{t("kubernetes.card.version")}</dt>
-            <dd>{cluster.version}</dd>
+            <dd>{cluster.kubernetes_version}</dd>
           </div>
           <div className="argus-k8s-kv__item">
             <dt>{t("kubernetes.card.nodes")}</dt>
             <dd>
-              {cluster.readyNodeCount}/{cluster.nodeCount}
+              {cluster.ready_node_count}/{cluster.node_count}
             </dd>
           </div>
           <div className="argus-k8s-kv__item">
-            <dt>{t("kubernetes.card.connectionMode")}</dt>
-            <dd>{t(`kubernetes.mode.${cluster.connectionMode}`)}</dd>
+            <dt>{t("kubernetes.card.connection_mode")}</dt>
+            <dd>{t(`kubernetes.mode.${cluster.connection_mode}`)}</dd>
           </div>
-          <div className="argus-k8s-kv__item">
-            <dt>{t("kubernetes.card.collector")}</dt>
-            <dd>
-              <button
-                aria-label={t(
-                  collectorStatus === "not_installed"
-                    ? "kubernetes.card.installCollector"
-                    : "kubernetes.card.openCollector",
-                  { name: cluster.name },
-                )}
-                className="argus-k8s-collector-action"
-                onClick={
-                  collectorStatus === "not_installed"
-                    ? onInstallCollector
-                    : onOpenCollector
-                }
-                type="button"
-              >
-                <StatusBadge tone={collectorStatusTone(collectorStatus)}>
-                  {t(`kubernetes.collectorStatus.${collectorStatus}`)}
-                </StatusBadge>
-              </button>
-            </dd>
-          </div>
-          <div className="argus-k8s-kv__item">
-            <dt>{t("kubernetes.card.bindingCoverage")}</dt>
-            <dd>
-              {coverage.verified}/{coverage.total} ({coverage.percent}%)
-            </dd>
-          </div>
-        </dl>
-        {testResult && (
-          <div className="argus-k8s-test-result">
-            <div className="argus-k8s-test-result__summary">
-              <StatusBadge tone={testResult.success ? "success" : "danger"}>
-                {testResult.success
-                  ? t("kubernetes.card.testSuccess")
-                  : t("kubernetes.card.testFailed")}
-              </StatusBadge>
-              {testResult.success && (
-                <span>
-                  {t("kubernetes.card.latency")}: {testResult.latencyMs} ms
-                </span>
-              )}
-            </div>
-            <ul className="argus-k8s-test-result__checks">
-              {testResult.checks.map((check) => (
-                <li key={check.name}>
-                  <StatusBadge
-                    tone={
-                      check.status === "passed"
-                        ? "success"
-                        : check.status === "failed"
-                          ? "danger"
-                          : "neutral"
+          {(onInstallCollector || onOpenCollector) && (
+            <>
+              <div className="argus-k8s-kv__item">
+                <dt>{t("kubernetes.card.collector")}</dt>
+                <dd>
+                  <button
+                    aria-label={t(
+                      collectorStatus === "not_installed"
+                        ? "kubernetes.card.installCollector"
+                        : "kubernetes.card.openCollector",
+                      { name: cluster.name },
+                    )}
+                    className="argus-k8s-collector-action"
+                    onClick={
+                      collectorStatus === "not_installed"
+                        ? onInstallCollector
+                        : onOpenCollector
                     }
+                    type="button"
                   >
-                    {check.name}
-                  </StatusBadge>
-                  {check.detail && <code>{check.detail}</code>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+                    <StatusBadge tone={collectorStatusTone(collectorStatus)}>
+                      {t(`kubernetes.collectorStatus.${collectorStatus}`)}
+                    </StatusBadge>
+                  </button>
+                </dd>
+              </div>
+              <div className="argus-k8s-kv__item">
+                <dt>{t("kubernetes.card.bindingCoverage")}</dt>
+                <dd>
+                  {coverage.verified}/{coverage.total} ({coverage.percent}%)
+                </dd>
+              </div>
+            </>
+          )}
+        </dl>
         <div className="argus-k8s-card-actions">
           <Button onClick={onOpen} size="sm" variant="primary">
             {t("kubernetes.card.open")}
-          </Button>
-          <Button
-            loading={test.isPending}
-            onClick={() => test.mutate()}
-            size="sm"
-          >
-            {test.isPending
-              ? t("kubernetes.card.testing")
-              : t("kubernetes.card.test")}
           </Button>
           <Button onClick={onEdit} size="sm">
             {t("kubernetes.card.edit")}

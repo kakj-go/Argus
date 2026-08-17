@@ -1,4 +1,5 @@
 import type {
+  ConfirmPendingActionResult,
   Execution,
   PendingActionPublic,
 } from "../generated/contracts";
@@ -21,7 +22,6 @@ export interface PendingActionFilter {
   query?: string;
 }
 
-export interface ConfirmActionResult {
-  pending_action: PendingActionPublic;
+export type ConfirmActionResult = ConfirmPendingActionResult & {
   execution?: Execution;
-}
+};

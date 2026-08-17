@@ -17,33 +17,33 @@ Argus 同时连接模型、不可信用户输入、生成代码、基础设施�
 
 ## 2. 主要威胁与控制
 
-| 威胁 | 控制 |
-| --- | --- |
-| 跨企业数据访问 | enterprise_id 强制过滤、统一授权中心、服务端检查 |
-| 借标签或直接资源 ID 越权 | 企业归属复核、受限标签选择器、DataScope、Query Service 强制 Resource Filter、统一 Tool/Card 数据裁剪 |
-| 平台管理员借空企业上下文读取企业数据 | 平台/企业身份类型互斥、不同 Audience 和 API 域、平台账号不能加入企业 |
-| Prompt injection 诱导越权 Tool | Tool allowlist、策略中心、风险分级、模型与 Action Executor 权限隔离 |
-| AI 绕过确认直接提交 | 模型只看到 action_ref；`_meta.argus__token` 仅进入服务端 Pending Action Store；Commit Tool 不暴露给模型 |
-| 确认后修改参数 | Token 绑定预览参数哈希；commit 从服务端恢复参数 |
-| Token 重放 | 短期、一次性、jti、幂等和消费状态 |
-| 凭证泄漏给模型 | Secret 表单、SecretRef、上下文投影和日志脱敏 |
-| 恶意 交互卡片 | 静态扫描、独立来源 iframe、CSP、Bridge 白名单、资源限制 |
-| 卡片伪造 Tool 数据来源 | 使用 tool_call_id + path，服务端解析，禁止受限 Slot 使用 literal |
-| Connector 被冒用 | 一次性注册、mTLS、证书轮换、设备吊销和本地策略 |
-| Direct Executor 被用于 SSRF/内网扫描 | 固定出口、协议/端口白名单、DNS 前后校验、私网/元数据/内部地址拒绝和独立 Worker Pool |
-| 远程会话票据泄漏或被 AI 使用 | 一次性短期票据绑定用户/浏览器/企业/Host/ManagedAccount/动作/DataScope/授权版本；AI、Card、Automation、Sandbox 不可获取；MFA/JIT/审批、录像与强制终止 |
-| 功能权限被误当作 root/任意账号访问 | RoleBinding 只授予功能能力；DataScope 和 RemoteAccessGrant 独立限定 Host、ManagedAccount、协议、动作和有效期 |
-| 交互式 Shell 绕过 Tool 两阶段确认 | 明确划分人工堡垒会话与 AI Tool；人工会话使用独立权限、理由、审批、时长、剪贴板/文件策略、录像和命令审计 |
-| 平台自动化借人工终端执行未审计命令 | RemoteAccessSession 与 Execution/ConnectorCommand 使用不同票据、API、队列和审计；安装配置只执行不可变计划和版本化模板，禁止向人工终端注入命令 |
-| Sandbox 横向访问生产环境 | 默认断网或受限出网，生产访问必须通过受控 Tool 和 Connector |
-| 用户双击或网络重试 | 幂等键、Action Binding 状态机、按钮即时禁用 |
-| Leaf Collector 伪造其他主机身份 | Leaf 独立凭证或 mTLS，Edge Gateway 根据认证结果写入可信资源 ID |
-| Edge Gateway 单点或磁盘打满 | Leaf/Gateway 持久队列、容量限制、积压告警和后续双 Gateway |
-| 遥测高基数和摄入成本失控 | Attribute 限制、Series 配额、日志大小限制、企业速率与日用量限制 |
-| Kafka 重试造成遥测重复 | 明确至少一次语义、事件 ID/Offset 策略和查询去重方案 |
-| Host Collector 与 DaemonSet 重复采集 | 可信 KubernetesNodeHostBinding、Profile 展开为 CollectionClaim、同一 Claim 单主所有者、迁移重叠过期和配置提交前冲突检测 |
-| 权限撤销后旧票据或 Pending Action 继续生效 | AuthorizationVersion、Commit/连接时重新鉴权、活动会话终止、Outbox 驱动缓存和订阅失效 |
-| 单管理员企业伪造双人审批 | 禁止同一主体自批；只有 Policy 明确允许时使用 Step-up MFA、理由、短时票据和高优先级审计的 Break Glass |
+| 威胁                                       | 控制                                                                                                                                                 |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 跨企业数据访问                             | enterprise_id 强制过滤、统一授权中心、服务端检查                                                                                                     |
+| 借标签或直接资源 ID 越权                   | 企业归属复核、受限标签选择器、DataScope、Query Service 强制 Resource Filter、统一 Tool/Card 数据裁剪                                                 |
+| 平台管理员借空企业上下文读取企业数据       | 平台/企业身份类型互斥、不同 Audience 和 API 域、平台账号不能加入企业                                                                                 |
+| Prompt injection 诱导越权 Tool             | Tool allowlist、策略中心、风险分级、模型与 Action Executor 权限隔离                                                                                  |
+| AI 绕过确认直接提交                        | 模型只看到 action_ref；`_meta.argus__token` 仅进入服务端 Pending Action Store；Commit Tool 不暴露给模型                                              |
+| 确认后修改参数                             | Token 绑定预览参数哈希；commit 从服务端恢复参数                                                                                                      |
+| Token 重放                                 | 短期、一次性、jti、幂等和消费状态                                                                                                                    |
+| 凭证泄漏给模型                             | Secret 表单、SecretRef、上下文投影和日志脱敏                                                                                                         |
+| 恶意 交互卡片                              | 静态扫描、独立来源 iframe、CSP、Bridge 白名单、资源限制                                                                                              |
+| 卡片伪造 Tool 数据来源                     | 使用 tool_call_id + path，服务端解析，禁止受限 Slot 使用 literal                                                                                     |
+| Connector 被冒用                           | 一次性注册、mTLS、证书轮换、设备吊销和本地策略                                                                                                       |
+| Direct Executor 被用于 SSRF/内网扫描       | 固定出口、协议/端口白名单、DNS 前后校验、私网/元数据/内部地址拒绝和独立 Worker Pool                                                                  |
+| 远程会话票据泄漏或被 AI 使用               | 一次性短期票据绑定用户/浏览器/企业/Host/ManagedAccount/动作/DataScope/授权版本；AI、Card、Automation、Sandbox 不可获取；MFA/JIT/审批、录像与强制终止 |
+| 功能权限被误当作 root/任意账号访问         | RoleBinding 只授予功能能力；DataScope 和 RemoteAccessGrant 独立限定 Host、ManagedAccount、协议、动作和有效期                                         |
+| 交互式 Shell 绕过 Tool 两阶段确认          | 明确划分人工堡垒会话与 AI Tool；人工会话使用独立权限、理由、审批、时长、剪贴板/文件策略、录像和命令审计                                              |
+| 平台自动化借人工终端执行未审计命令         | RemoteAccessSession 与 Execution/ConnectorCommand 使用不同票据、API、队列和审计；安装配置只执行不可变计划和版本化模板，禁止向人工终端注入命令        |
+| Sandbox 横向访问生产环境                   | 默认断网或受限出网，生产访问必须通过受控 Tool 和 Connector                                                                                           |
+| 用户双击或网络重试                         | 幂等键、Action Binding 状态机、按钮即时禁用                                                                                                          |
+| Leaf Collector 伪造其他主机身份            | Leaf 独立凭证或 mTLS，Edge Gateway 根据认证结果写入可信资源 ID                                                                                       |
+| Edge Gateway 单点或磁盘打满                | Leaf/Gateway 持久队列、容量限制、积压告警和后续双 Gateway                                                                                            |
+| 遥测高基数和摄入成本失控                   | Attribute 限制、Series 配额、日志大小限制、企业速率与日用量限制                                                                                      |
+| Kafka 重试造成遥测重复                     | 明确至少一次语义、事件 ID/Offset 策略和查询去重方案                                                                                                  |
+| Host Collector 与 DaemonSet 重复采集       | 可信 KubernetesNodeHostBinding、Profile 展开为 CollectionClaim、同一 Claim 单主所有者、迁移重叠过期和配置提交前冲突检测                              |
+| 权限撤销后旧票据或 Pending Action 继续生效 | AuthorizationVersion、Commit/连接时重新鉴权、活动会话终止、Outbox 驱动缓存和订阅失效                                                                 |
+| 单管理员企业伪造双人审批                   | 禁止同一主体自批；只有 Policy 明确允许时使用 Step-up MFA、理由、短时票据和高优先级审计的 Break Glass                                                 |
 
 ## 3. Pending Action 状态机
 
@@ -103,22 +103,24 @@ PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。
 
 完成标准：首次启动能够通过短期 Setup Token 安全创建唯一的平台超级管理员；超级管理员能够创建企业、默认部门和临时密码初始管理员但不能访问企业业务数据；平台身份不能成为企业身份，企业用户不能切换到其他企业；企业管理员能够建立 RoleBinding、DataScope、ServiceAccount 和 APIKey，不同企业之间身份、资源范围、密钥和审计完全隔离。该阶段只达到 Evaluation 身份闭环，平台超级管理员 MFA 仍是 Production 硬阻断。
 
-## 6. 第二阶段：资源管理
+## 6. 第二阶段：资源管理基座（M3）
 
 - Host/KubernetesCluster CRUD 和用户自定义 `labels`，以及标签筛选、分组和授权敏感变更 Preview/Commit。
 - 主机 `connector_local`、`via_bastion`、公网 `direct_ssh/direct_winrm` 连接模式。
 - 受控 Direct Executor：固定出口、SSRF 防护、Host Key 校验和独立执行池。
-- 所有受管 Host 的统一命令行入口：SSH/Connector 本机 PTY 与 WinRM PowerShell Runspace；RemoteAccessSession、短期票据、MFA/JIT/审批、录像和审计；RDP/SFTP 延后。
-- ManagedAccount、RemoteAccessGrant 和 AccessLease；远程访问明确限定显式 Host 或 Host 标签选择结果、目标账号、协议、动作和有效期，文件传输等能力默认关闭。
-- 人工命令行与 Collector 自动化任务共享底层连接适配器但分离票据、状态机、队列和审计，自动化任务使用结构化 Preview/Execution/回滚流程。
+- Secret、Credential、ManagedAccount 和绑定操作/资源/接收者的短期 Credential Lease；不提供原值读取权限。
 - 主机卡片按 Bastion Scope 分组，公网 Direct Host 独立显示。
 - Kubernetes 集群 CRUD、kubeconfig Secret 化和连接测试。
-- Pod、Deployment、Service、Node 和日志读取。
-- 主机详情安装/升级/修复/卸载 Collector，采集能力草稿和配置 Revision。
-- Bastion Scope 成员 Direct/Bastion Gateway 推送规则，以及独立主机 Direct/Standalone Gateway 推送规则。
+- Namespace、Node、Pod、Deployment、StatefulSet、DaemonSet、Service 和有界日志读取。
+- Connector 一次性注册、CSR/mTLS、证书轮换/吊销、心跳、Gateway Registry、Drain 和类型化命令。
+- 资源专用 PendingAction/Plan/Token 与 Preview/Confirm；M4 在其上增加 Approval、Execution、Agent 和 Tool。
 - 管理后台和领域服务打通。
 
-完成标准：不使用 AI 也能通过管理后台完成带标签的堡垒机安装、内网/公网主机接入、SSH 远程登录、Collector 安装与推送配置及 Kubernetes 接入；Resource Operator 不能因拥有功能角色而使用 DataScope 或 Grant 之外的 Host/ManagedAccount，所有 Secret 不回显，所有连接路径和远程会话可审计。
+完成标准：不使用 AI 也能通过管理后台完成 Secret/ManagedAccount、带标签的堡垒机安装、内网/公网主机和 Kubernetes 接入；Resource Operator 不能使用 DataScope 之外的资源，所有 Secret 不回显，所有接入路径、确认和连接测试可审计。
+
+M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证了 Connector 注册竞争/证书轮换、双 Gateway 路由、Bastion Replacement、Direct SSRF 边界、Kubernetes 三种接入、DataScope 撤权、Secret 轮换、Redis 清空和 Server/Gateway 重启恢复；M3 Namespace、PVC 与 Lease 均已清理。
+
+人工 SSH/WinRM 会话、RemoteAccessGrant、AccessLease、短期会话票据、MFA/JIT、录像和终止属于 M6。Collector 安装、CollectionClaim、Telemetry Route 与 OTLP 链路属于 M7。M3 ConnectorCommand 明确禁止任意 Shell、文件写入、Remote Access Frame 和 Collector 命令。
 
 ## 7. 第三阶段：Chatbox 与 MCP
 
@@ -147,9 +149,9 @@ PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。
 
 完成标准：同一 Tool Result 可以被不同 交互卡片 展示，一张 交互卡片 可以组合多个 Tool Result；用户点击 Action Slot 可在不经过模型的情况下安全调用第二阶段 Tool。
 
-## 9. 第五阶段：OpenTelemetry 监控链路
+## 9. 第五阶段：OpenTelemetry 监控链路（M7）
 
-- 在第二阶段 Collector 安装与路由基座上完成完整遥测存储和查询链路。
+- 在 M3 资源、Connector 和 Credential Broker 以及 M4 Execution 基座上，实现 Collector 安装、路由、存储和查询链路；M3 不预先实现 Collector 命令。
 - 第一批只实现独立主机 `direct_argus` 与 Bastion Scope 的 `bastion_gateway`；Standalone Edge Gateway/Telemetry Group 延后到基础链路稳定后。
 - Kubernetes DaemonSet + Gateway Deployment。
 - KubernetesNodeHostBinding、CollectionClaim 和 Host Collector/DaemonSet 冲突检测；默认允许进程共存但禁止同一物理资源同一 Claim 长期重复采集。

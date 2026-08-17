@@ -143,6 +143,9 @@ func (service Service) Login(ctx context.Context, audience, username, password, 
 	if verifyErr != nil || !valid {
 		return LoginResult{}, ErrInvalidCredentials
 	}
+	if err := service.clearLoginLimit(ctx, audience, username, ip); err != nil {
+		return LoginResult{}, err
+	}
 	if credential.Temporary {
 		if !credential.ExpiresAt.Valid || !service.now().Before(credential.ExpiresAt.Time) {
 			return LoginResult{}, ErrTemporaryExpired
@@ -382,8 +385,13 @@ func (service Service) loadPrincipal(ctx context.Context, session db.Session) (P
 	if err != nil {
 		return Principal{}, err
 	}
+	scopes, err := service.Store.Queries.ListEffectiveUserDataScopes(ctx, db.ListEffectiveUserDataScopesParams{EnterpriseID: user.EnterpriseID, UserID: user.ID, DepartmentID: user.DepartmentID})
+	if err != nil {
+		return Principal{}, err
+	}
 	principal.EnterpriseUser = &user
 	principal.Permissions = permissions
+	principal.DataScopeIDs = scopes
 	return principal, nil
 }
 
@@ -429,7 +437,7 @@ func (service Service) checkLoginLimit(ctx context.Context, audience, username, 
 	if service.Redis == nil || service.Redis.Raw == nil {
 		return ErrLoginDependency
 	}
-	key := "argus:login:" + audience + ":" + strings.ToLower(username) + ":" + ip
+	key := loginLimitKey(audience, username, ip)
 	count, err := service.Redis.Raw.Incr(ctx, key).Result()
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrLoginDependency, err)
@@ -443,6 +451,20 @@ func (service Service) checkLoginLimit(ctx context.Context, audience, username, 
 		return ErrLoginRateLimited
 	}
 	return nil
+}
+
+func (service Service) clearLoginLimit(ctx context.Context, audience, username, ip string) error {
+	if service.Redis == nil || service.Redis.Raw == nil {
+		return ErrLoginDependency
+	}
+	if err := service.Redis.Raw.Del(ctx, loginLimitKey(audience, username, ip)).Err(); err != nil {
+		return fmt.Errorf("%w: %v", ErrLoginDependency, err)
+	}
+	return nil
+}
+
+func loginLimitKey(audience, username, ip string) string {
+	return "argus:login:" + audience + ":" + strings.ToLower(username) + ":" + ip
 }
 
 func (service Service) now() time.Time {

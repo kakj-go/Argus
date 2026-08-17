@@ -1,0 +1,11 @@
+openapi: 3.1.0
+info: {title: Argus Connection Test API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  "/enterprise/connection-tests/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1connection-tests~1{id}"}
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    ConnectionTest: {$ref: ../components/m3.yaml#/components/schemas/ConnectionTest}

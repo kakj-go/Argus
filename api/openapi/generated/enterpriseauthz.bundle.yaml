@@ -421,6 +421,7 @@ components:
             enum:
               - host
               - kubernetes_cluster
+              - kubernetes_namespace
         explicit_resource_ids:
           type: array
           uniqueItems: true
@@ -454,6 +455,7 @@ components:
             enum:
               - host
               - kubernetes_cluster
+              - kubernetes_namespace
         explicit_resource_ids:
           type: array
           uniqueItems: true
@@ -794,6 +796,7 @@ components:
             enum:
               - host
               - kubernetes_cluster
+              - kubernetes_namespace
         explicit_resource_ids:
           type: array
           uniqueItems: true

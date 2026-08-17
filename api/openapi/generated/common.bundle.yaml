@@ -100,10 +100,13 @@ components:
         resource_type:
           type: string
           enum:
+            - secret
+            - credential
+            - managed_account
             - host
             - kubernetes_cluster
+            - bastion_scope
             - connector
-            - managed_account
             - telemetry_query
             - artifact
         resource_id:

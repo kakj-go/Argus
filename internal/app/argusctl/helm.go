@@ -23,9 +23,11 @@ import (
 )
 
 const (
-	strimziChartURL  = "https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1.0/strimzi-kafka-operator-helm-3-chart-1.1.0.tgz"
-	altinityChartURL = "https://github.com/Altinity/clickhouse-operator/releases/download/release-0.27.3/altinity-clickhouse-operator-0.27.3.tgz"
-	openSandboxURL   = "https://github.com/opensandbox-group/OpenSandbox/archive/refs/tags/helm/opensandbox/0.2.0.tar.gz"
+	certManagerVersion = "1.20.3"
+	strimziChartURL    = "https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1.0/strimzi-kafka-operator-helm-3-chart-1.1.0.tgz"
+	altinityChartURL   = "https://github.com/Altinity/clickhouse-operator/releases/download/release-0.27.3/altinity-clickhouse-operator-0.27.3.tgz"
+	openSandboxURL     = "https://github.com/opensandbox-group/OpenSandbox/archive/refs/tags/helm/opensandbox/0.2.0.tar.gz"
+	certManagerURL     = "https://charts.jetstack.io/charts/cert-manager-v" + certManagerVersion + ".tgz"
 )
 
 type helmManager struct {

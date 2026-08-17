@@ -1,0 +1,25 @@
+openapi: 3.1.0
+info: {title: Argus Kubernetes API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/kubernetes-clusters: {$ref: ../argus.yaml#/paths/~1enterprise~1kubernetes-clusters}
+  "/enterprise/kubernetes-clusters/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1{id}"}
+  /enterprise/kubernetes-clusters/actions/preview-create: {$ref: ../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1actions~1preview-create}
+  "/enterprise/kubernetes-clusters/{id}/actions/preview-update": {$ref: "../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1{id}~1actions~1preview-update"}
+  "/enterprise/kubernetes-clusters/{id}/actions/preview-delete": {$ref: "../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1{id}~1actions~1preview-delete"}
+  /enterprise/kubernetes-clusters/connection-tests: {$ref: ../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1connection-tests}
+  "/enterprise/kubernetes-clusters/{id}/resources": {$ref: "../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1{id}~1resources"}
+  "/enterprise/kubernetes-clusters/{id}/pod-logs": {$ref: "../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1{id}~1pod-logs"}
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+  schemas:
+    KubernetesCluster: {$ref: ../components/m3.yaml#/components/schemas/KubernetesCluster}
+    KubernetesClusterPage: {$ref: ../components/m3.yaml#/components/schemas/KubernetesClusterPage}
+    KubernetesPreviewCreate: {$ref: ../components/m3.yaml#/components/schemas/KubernetesPreviewCreate}
+    KubernetesPreviewUpdate: {$ref: ../components/m3.yaml#/components/schemas/KubernetesPreviewUpdate}
+    KubernetesResource: {$ref: ../components/m3.yaml#/components/schemas/KubernetesResource}
+    KubernetesResourcePage: {$ref: ../components/m3.yaml#/components/schemas/KubernetesResourcePage}
+    PodLogs: {$ref: ../components/m3.yaml#/components/schemas/PodLogs}
+    ConnectionTest: {$ref: ../components/m3.yaml#/components/schemas/ConnectionTest}

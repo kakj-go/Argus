@@ -27,6 +27,7 @@ import { TasksTab } from "../components/hosts/tasks-tab";
 import { TerminalTab } from "../components/hosts/terminal-tab";
 import {
   collectorTone,
+  collectorStatusOf,
   connectionPathKey,
   environmentTone,
   formatDateTime,
@@ -35,7 +36,10 @@ import {
   scopeOf,
   seededNumber,
   seededSeries,
+  telemetryRouteOf,
 } from "../components/hosts/host-utils";
+
+const realMode = import.meta.env.VITE_API_MODE === "real";
 
 /** 概览 Tab：StatCard 行 + KeyValueGrid + 24h 指标面积图（演示数据按主机 ID 确定性生成）。 */
 function OverviewTab({ host }: { host: Host }) {
@@ -46,8 +50,15 @@ function OverviewTab({ host }: { host: Host }) {
     queryKey: ["bastion-scopes"],
     queryFn: () => api.connectors.listBastionScopes(),
   });
-  const scopes = scopesQuery.data ?? [];
+  const scopes = scopesQuery.data?.items ?? [];
   const scope = scopeOf(host, scopes);
+  const accountsQuery = useQuery({
+    queryKey: ["managed-accounts"],
+    queryFn: () => api.secrets.listManagedAccounts(),
+  });
+  const managedAccounts = (accountsQuery.data ?? []).filter(
+    (account) => account.host_id === host.id && account.status === "active",
+  );
 
   const metrics = useMemo(() => {
     const labels: string[] = [];
@@ -64,13 +75,13 @@ function OverviewTab({ host }: { host: Host }) {
   }, [host.id]);
 
   const path = t(`hosts.path.${connectionPathKey(host)}`, {
-    scope: scope?.name ?? host.bastionScopeId ?? "",
+    scope: scope?.name ?? host.bastion_scope_id ?? "",
     address: `${host.address}:${host.port}`,
   });
 
   return (
     <div className="argus-hosts-stack">
-      <div className="argus-stat-row">
+      {!realMode && <div className="argus-stat-row">
         <StatCard
           detail={t("hosts.overview.metrics24h")}
           icon={<Cpu aria-hidden size={16} />}
@@ -93,11 +104,11 @@ function OverviewTab({ host }: { host: Host }) {
         <StatCard
           icon={<Timer aria-hidden size={16} />}
           label={t("hosts.overview.uptime")}
-          value={formatUptime(host.createdAt)}
+          value={formatUptime(host.created_at)}
         />
-      </div>
+      </div>}
 
-      <Card>
+      {!realMode && <Card>
         <CardHeader title={t("hosts.overview.basicInfo")} />
         <CardContent>
           <KeyValueGrid
@@ -128,33 +139,35 @@ function OverviewTab({ host }: { host: Host }) {
                 ),
               },
               {
-                label: t("hosts.overview.kv.connectionMode"),
-                value: t(`hosts.connectionMode.${host.connectionMode}`),
+                label: t("hosts.overview.kv.connection_mode"),
+                value: t(`hosts.connection_mode.${host.connection_mode}`),
               },
               { label: t("hosts.overview.kv.connectionPath"), value: path },
               {
                 label: t("hosts.overview.kv.credential"),
-                value: host.credentialRef ? (
-                  <span className="argus-mono">{host.credentialRef}</span>
+                value: managedAccounts.length > 0 ? (
+                  <span className="argus-mono">
+                    {managedAccounts.map((account) => account.username).join(", ")}
+                  </span>
                 ) : (
                   "—"
                 ),
               },
               {
                 label: t("hosts.overview.kv.telemetryRoute"),
-                value: host.telemetryRoute ? (
-                  <span className="argus-mono">{host.telemetryRoute}</span>
+                value: telemetryRouteOf(host) ? (
+                  <span className="argus-mono">{telemetryRouteOf(host)}</span>
                 ) : (
                   "—"
                 ),
               },
               {
                 label: t("hosts.overview.kv.lastSeen"),
-                value: formatDateTime(host.lastSeenAt ?? host.updatedAt),
+                value: formatDateTime(host.last_seen_at ?? host.updated_at),
               },
               {
                 label: t("hosts.overview.kv.createdAt"),
-                value: formatDateTime(host.createdAt),
+                value: formatDateTime(host.created_at),
               },
               {
                 label: t("hosts.overview.kv.labels"),
@@ -174,7 +187,7 @@ function OverviewTab({ host }: { host: Host }) {
             ]}
           />
         </CardContent>
-      </Card>
+      </Card>}
 
       <Card>
         <CardHeader title={t("hosts.overview.metrics24h")} />
@@ -215,7 +228,7 @@ export function HostDetailPage() {
   });
 
   const host = hostQuery.data;
-  const scopes = scopesQuery.data ?? [];
+  const scopes = scopesQuery.data?.items ?? [];
   const initialTab =
     typeof window !== "undefined" && window.location.hash === "#otlp-collector"
       ? "components"
@@ -242,14 +255,14 @@ export function HostDetailPage() {
           <>
             {host.name}{" "}
             <StatusBadge
-              pulse={host.connectionStatus === "online"}
-              tone={hostStatusTone(host.connectionStatus)}
+              pulse={host.connection_status === "online"}
+              tone={hostStatusTone(host.connection_status)}
             >
-              {t(`hosts.status.${host.connectionStatus}`)}
+              {t(`hosts.status.${host.connection_status}`)}
             </StatusBadge>{" "}
-            <StatusBadge tone={collectorTone(host.collectorStatus)}>
-              {t(`hosts.collectorStatus.${host.collectorStatus}`)}
-            </StatusBadge>
+            {!realMode && <StatusBadge tone={collectorTone(collectorStatusOf(host))}>
+              {t(`hosts.collectorStatus.${collectorStatusOf(host)}`)}
+            </StatusBadge>}
           </>
         ) : (
           (hostId ?? "")
@@ -270,23 +283,23 @@ export function HostDetailPage() {
             <TabsTrigger value="overview">
               {t("hosts.detail.tabOverview")}
             </TabsTrigger>
-            <TabsTrigger value="terminal">
+            {!realMode && <TabsTrigger value="terminal">
               {t("hosts.detail.tabTerminal")}
-            </TabsTrigger>
-            <TabsTrigger value="components">
+            </TabsTrigger>}
+            {!realMode && <TabsTrigger value="components">
               {t("hosts.detail.tabComponents")}
-            </TabsTrigger>
-            <TabsTrigger value="tasks">
+            </TabsTrigger>}
+            {!realMode && <TabsTrigger value="tasks">
               {t("hosts.detail.tabTasks")}
-            </TabsTrigger>
+            </TabsTrigger>}
           </TabsList>
           <TabsContent value="overview">
             <OverviewTab host={host} />
           </TabsContent>
-          <TabsContent value="terminal">
+          {!realMode && <TabsContent value="terminal">
             <TerminalTab host={host} scopes={scopes} />
-          </TabsContent>
-          <TabsContent value="components">
+          </TabsContent>}
+          {!realMode && <TabsContent value="components">
             <div id="otlp-collector">
               <ComponentsTab
                 host={host}
@@ -294,10 +307,10 @@ export function HostDetailPage() {
                 scopes={scopes}
               />
             </div>
-          </TabsContent>
-          <TabsContent value="tasks">
+          </TabsContent>}
+          {!realMode && <TabsContent value="tasks">
             <TasksTab host={host} />
-          </TabsContent>
+          </TabsContent>}
         </Tabs>
       )}
     </PageShell>

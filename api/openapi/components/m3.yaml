@@ -1,0 +1,478 @@
+components:
+  schemas:
+    Environment:
+      type: string
+      enum: [development, staging, production]
+    SecretType:
+      type: string
+      enum: [ssh_password, ssh_private_key, winrm_password, kubeconfig, api_token, basic_auth]
+    Secret:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, type, status, current_version, reference_count, version, created_by, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        name: {type: string, minLength: 1, maxLength: 128}
+        type: {$ref: "#/components/schemas/SecretType"}
+        description: {type: string, maxLength: 2048}
+        status: {type: string, enum: [active, disabled]}
+        current_version: {type: integer, minimum: 1}
+        reference_count: {type: integer, minimum: 0}
+        last_accessed_at: {type: string, format: date-time}
+        version: {type: integer, format: int64, minimum: 1}
+        created_by: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    SecretCreate:
+      type: object
+      additionalProperties: false
+      required: [name, type, value]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        type: {$ref: "#/components/schemas/SecretType"}
+        description: {type: string, maxLength: 2048}
+        value: {type: string, minLength: 1, maxLength: 1048576, writeOnly: true}
+    SecretUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 2048}
+        status: {type: string, enum: [active, disabled]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    SecretRotate:
+      type: object
+      additionalProperties: false
+      required: [value, expected_version]
+      properties:
+        value: {type: string, minLength: 1, maxLength: 1048576, writeOnly: true}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    SecretPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Secret"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    Credential:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, protocol, secret_id, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        name: {type: string, minLength: 1, maxLength: 128}
+        protocol: {type: string, enum: [ssh, winrm, kubernetes, http]}
+        username: {type: string, maxLength: 256}
+        secret_id: {type: string, format: uuid}
+        status: {type: string, enum: [active, disabled]}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CredentialCreate:
+      type: object
+      additionalProperties: false
+      required: [name, protocol, secret_id]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        protocol: {type: string, enum: [ssh, winrm, kubernetes, http]}
+        username: {type: string, maxLength: 256}
+        secret_id: {type: string, format: uuid}
+    CredentialUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        username: {type: string, maxLength: 256}
+        secret_id: {type: string, format: uuid}
+        status: {type: string, enum: [active, disabled]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    CredentialPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Credential"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    ManagedAccount:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, host_id, username, privilege_level, credential_id, allowed_protocols, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        host_id: {type: string, format: uuid}
+        username: {type: string, minLength: 1, maxLength: 256}
+        privilege_level: {type: string, enum: [standard, sudo, administrator]}
+        credential_id: {type: string, format: uuid}
+        allowed_protocols: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [ssh, winrm]}}
+        status: {type: string, enum: [active, disabled]}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ManagedAccountCreate:
+      type: object
+      additionalProperties: false
+      required: [host_id, username, privilege_level, credential_id, allowed_protocols]
+      properties:
+        host_id: {type: string, format: uuid}
+        username: {type: string, minLength: 1, maxLength: 256}
+        privilege_level: {type: string, enum: [standard, sudo, administrator]}
+        credential_id: {type: string, format: uuid}
+        allowed_protocols: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [ssh, winrm]}}
+    ManagedAccountUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        username: {type: string, minLength: 1, maxLength: 256}
+        privilege_level: {type: string, enum: [standard, sudo, administrator]}
+        credential_id: {type: string, format: uuid}
+        allowed_protocols: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [ssh, winrm]}}
+        status: {type: string, enum: [active, disabled]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    ManagedAccountPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/ManagedAccount"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    HostConnectionMode:
+      type: string
+      enum: [connector_local, via_bastion, direct_ssh, direct_winrm]
+    Host:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, address, port, platform, connection_mode, environment, labels, labels_version, resource_version, connection_status, status, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        name: {type: string, minLength: 1, maxLength: 128}
+        hostname: {type: string, maxLength: 253}
+        address: {type: string, minLength: 1, maxLength: 512}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        platform: {type: string, enum: [linux, windows]}
+        connection_mode: {$ref: "#/components/schemas/HostConnectionMode"}
+        bastion_scope_id: {type: string, format: uuid}
+        connector_id: {type: string, format: uuid}
+        environment: {$ref: "#/components/schemas/Environment"}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/Labels"}
+        labels_version: {type: integer, format: int64, minimum: 1}
+        resource_version: {type: integer, format: int64, minimum: 1}
+        connection_status: {type: string, enum: [online, offline, onboarding, degraded, unknown]}
+        pinned_host_key: {type: string, maxLength: 512}
+        last_seen_at: {type: string, format: date-time}
+        status: {type: string, enum: [active, disabled, deleted]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    HostPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Host"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    HostPreviewCreate:
+      type: object
+      additionalProperties: false
+      required: [name, address, port, platform, connection_mode, credential_id, username, environment, labels, connection_test_id]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        hostname: {type: string, maxLength: 253}
+        address: {type: string, minLength: 1, maxLength: 512}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        platform: {type: string, enum: [linux, windows]}
+        connection_mode: {type: string, enum: [via_bastion, direct_ssh, direct_winrm]}
+        bastion_scope_id: {type: string, format: uuid}
+        credential_id: {type: string, format: uuid}
+        username: {type: string, minLength: 1, maxLength: 256}
+        environment: {$ref: "#/components/schemas/Environment"}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/UserLabels"}
+        connection_test_id: {type: string, format: uuid}
+    ResourcePreviewUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        environment: {$ref: "#/components/schemas/Environment"}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/UserLabels"}
+        connection_test_id: {type: string, format: uuid}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    HostPreviewUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        hostname: {type: string, maxLength: 253}
+        address: {type: string, minLength: 1, maxLength: 512}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        connection_mode: {type: string, enum: [via_bastion, direct_ssh, direct_winrm]}
+        bastion_scope_id: {type: string, format: uuid}
+        environment: {$ref: "#/components/schemas/Environment"}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/UserLabels"}
+        connection_test_id: {type: string, format: uuid}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    ResourcePreviewDelete:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+    ConnectionTest:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, target_type, path, status, checks, expires_at, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        target_type: {type: string, enum: [host, kubernetes_cluster]}
+        resource_id: {type: string, format: uuid}
+        path: {type: string, enum: [connector, direct, in_cluster]}
+        status: {type: string, enum: [queued, running, succeeded, failed, result_unknown, expired]}
+        checks:
+          type: array
+          maxItems: 32
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, status]
+            properties:
+              name: {type: string, minLength: 1, maxLength: 128}
+              status: {type: string, enum: [passed, failed, skipped]}
+              detail: {type: string, maxLength: 1024}
+        latency_ms: {type: integer, minimum: 0}
+        resolved_ips: {type: array, maxItems: 16, uniqueItems: true, items: {type: string}}
+        host_key_fingerprint: {type: string, maxLength: 512}
+        remote_version: {type: string, maxLength: 128}
+        error_code: {type: string, pattern: "^[A-Z][A-Z0-9_]*$"}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    HostConnectionTestCreate:
+      type: object
+      additionalProperties: false
+      required: [address, port, platform, connection_mode, credential_id, username]
+      properties:
+        address: {type: string, minLength: 1, maxLength: 512}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        platform: {type: string, enum: [linux, windows]}
+        connection_mode: {type: string, enum: [via_bastion, direct_ssh, direct_winrm]}
+        bastion_scope_id: {type: string, format: uuid}
+        credential_id: {type: string, format: uuid}
+        username: {type: string, minLength: 1, maxLength: 256}
+    KubernetesConnectionMode:
+      type: string
+      enum: [via_bastion, direct, in_cluster]
+    KubernetesCluster:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, api_server, connection_mode, environment, labels, labels_version, resource_version, connection_status, status, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        name: {type: string, minLength: 1, maxLength: 128}
+        api_server: {type: string, format: uri, maxLength: 2048}
+        connection_mode: {$ref: "#/components/schemas/KubernetesConnectionMode"}
+        bastion_scope_id: {type: string, format: uuid}
+        connector_id: {type: string, format: uuid}
+        credential_id: {type: string, format: uuid}
+        default_namespace: {type: string, maxLength: 253}
+        environment: {$ref: "#/components/schemas/Environment"}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/Labels"}
+        labels_version: {type: integer, format: int64, minimum: 1}
+        resource_version: {type: integer, format: int64, minimum: 1}
+        connection_status: {type: string, enum: [pending_connector, connected, degraded, disconnected]}
+        kubernetes_version: {type: string, maxLength: 128}
+        node_count: {type: integer, minimum: 0}
+        ready_node_count: {type: integer, minimum: 0}
+        status: {type: string, enum: [active, disabled, deleted]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    KubernetesClusterPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/KubernetesCluster"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    KubernetesPreviewCreate:
+      type: object
+      additionalProperties: false
+      required: [name, api_server, connection_mode, environment, labels]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        api_server: {type: string, format: uri, maxLength: 2048}
+        connection_mode: {$ref: "#/components/schemas/KubernetesConnectionMode"}
+        bastion_scope_id: {type: string, format: uuid}
+        credential_id: {type: string, format: uuid}
+        default_namespace: {type: string, maxLength: 253}
+        environment: {$ref: "#/components/schemas/Environment"}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/UserLabels"}
+        connection_test_id: {type: string, format: uuid}
+    KubernetesPreviewUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        api_server: {type: string, format: uri, maxLength: 2048}
+        connection_mode: {$ref: "#/components/schemas/KubernetesConnectionMode"}
+        bastion_scope_id: {type: string, format: uuid}
+        credential_id: {type: string, format: uuid}
+        default_namespace: {type: string, maxLength: 253}
+        environment: {$ref: "#/components/schemas/Environment"}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/UserLabels"}
+        connection_test_id: {type: string, format: uuid}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    KubernetesConnectionTestCreate:
+      type: object
+      additionalProperties: false
+      required: [api_server, connection_mode]
+      properties:
+        api_server: {type: string, format: uri, maxLength: 2048}
+        connection_mode: {type: string, enum: [via_bastion, direct]}
+        bastion_scope_id: {type: string, format: uuid}
+        credential_id: {type: string, format: uuid}
+    KubernetesResource:
+      type: object
+      additionalProperties: false
+      required: [cluster_id, resource_type, name, labels, summary]
+      properties:
+        cluster_id: {type: string, format: uuid}
+        resource_type: {type: string, enum: [namespace, node, pod, deployment, statefulset, daemonset, service]}
+        namespace: {type: string, maxLength: 253}
+        name: {type: string, minLength: 1, maxLength: 253}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/Labels"}
+        summary: {type: object, additionalProperties: true}
+    KubernetesResourcePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/KubernetesResource"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    PodLogs:
+      type: object
+      additionalProperties: false
+      required: [cluster_id, namespace, pod, content, truncated, bytes]
+      properties:
+        cluster_id: {type: string, format: uuid}
+        namespace: {type: string}
+        pod: {type: string}
+        container: {type: string}
+        content: {type: string, maxLength: 1048576}
+        truncated: {type: boolean}
+        bytes: {type: integer, minimum: 0, maximum: 1048576}
+    ConnectorRole:
+      type: string
+      enum: [bastion, kubernetes]
+    Connector:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, role, name, status, capabilities, connection_epoch, certificate_expires_at, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        role: {$ref: "#/components/schemas/ConnectorRole"}
+        name: {type: string, minLength: 1, maxLength: 128}
+        host_id: {type: string, format: uuid}
+        bastion_scope_id: {type: string, format: uuid}
+        kubernetes_cluster_id: {type: string, format: uuid}
+        software_version: {type: string, maxLength: 128}
+        status: {type: string, enum: [pending, online, suspected_offline, offline, draining, uninstalled, revoked]}
+        capabilities: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, minLength: 2, pattern: "^[a-z][a-z0-9_.-]+$"}}
+        connection_epoch: {type: integer, format: int64, minimum: 0}
+        certificate_expires_at: {type: string, format: date-time}
+        connected_at: {type: string, format: date-time}
+        last_heartbeat_at: {type: string, format: date-time}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ConnectorPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Connector"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    BastionScope:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, environment, labels, status, fencing_generation, member_count, resource_version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        name: {type: string, minLength: 1, maxLength: 128}
+        environment: {$ref: "#/components/schemas/Environment"}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/Labels"}
+        status: {type: string, enum: [pending, active, suspected_offline, offline, uninstalling, uninstalled, deleted]}
+        connector_host_id: {type: string, format: uuid}
+        active_connector_id: {type: string, format: uuid}
+        fencing_generation: {type: integer, format: int64, minimum: 1}
+        member_count: {type: integer, minimum: 0}
+        resource_version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    BastionScopePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/BastionScope"}}
+        page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
+    BastionPreviewCreate:
+      type: object
+      additionalProperties: false
+      required: [name, environment, labels]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        environment: {$ref: "#/components/schemas/Environment"}
+        labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/UserLabels"}
+    EnrollmentResult:
+      type: object
+      additionalProperties: false
+      required: [enrollment_id, install_command, expires_at]
+      properties:
+        enrollment_id: {type: string, format: uuid}
+        install_command: {type: string, minLength: 1, maxLength: 8192, writeOnly: true}
+        expires_at: {type: string, format: date-time}
+    ConnectorEnrollRequest:
+      type: object
+      additionalProperties: false
+      required: [csr_pem, device_fingerprint, instance_id, name, software_version, capabilities]
+      properties:
+        csr_pem: {type: string, minLength: 1, maxLength: 32768, writeOnly: true}
+        device_fingerprint: {type: string, minLength: 32, maxLength: 256}
+        instance_id: {type: string, minLength: 1, maxLength: 128}
+        name: {type: string, minLength: 1, maxLength: 128}
+        software_version: {type: string, minLength: 1, maxLength: 128}
+        capabilities: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, minLength: 2, pattern: "^[a-z][a-z0-9_.-]+$"}}
+    ConnectorEnrollResult:
+      type: object
+      additionalProperties: false
+      required: [connector_id, role, certificate_pem, ca_bundle_pem, gateway_endpoint, certificate_expires_at, result]
+      properties:
+        connector_id: {type: string, format: uuid}
+        role: {$ref: "#/components/schemas/ConnectorRole"}
+        host_id: {type: string, format: uuid}
+        bastion_scope_id: {type: string, format: uuid}
+        kubernetes_cluster_id: {type: string, format: uuid}
+        certificate_pem: {type: string, writeOnly: true}
+        ca_bundle_pem: {type: string}
+        gateway_endpoint: {type: string, minLength: 1, maxLength: 2048}
+        certificate_expires_at: {type: string, format: date-time}
+        result: {type: string, enum: [registered, idempotent_retry]}
+    ConfirmPendingActionResult:
+      type: object
+      additionalProperties: false
+      required: [pending_action]
+      properties:
+        pending_action: {$ref: "../../schemas/action/pending-action-public.schema.json"}
+        resource_ref: {$ref: "./common.yaml#/components/schemas/ResourceRef"}
+        enrollment: {$ref: "#/components/schemas/EnrollmentResult"}

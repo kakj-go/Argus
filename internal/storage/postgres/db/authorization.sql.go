@@ -330,6 +330,50 @@ func (q *Queries) ListDataScopes(ctx context.Context, enterpriseID uuid.UUID) ([
 	return items, nil
 }
 
+const listEffectiveUserDataScopes = `-- name: ListEffectiveUserDataScopes :many
+SELECT DISTINCT rbs.data_scope_id
+FROM role_bindings rb
+JOIN role_binding_data_scopes rbs
+  ON rbs.role_binding_id = rb.id AND rbs.enterprise_id = rb.enterprise_id
+JOIN roles r
+  ON r.id = rb.role_id AND r.enterprise_id = rb.enterprise_id AND r.status = 'active'
+JOIN data_scopes ds
+  ON ds.id = rbs.data_scope_id AND ds.enterprise_id = rb.enterprise_id AND ds.status = 'active'
+WHERE rb.enterprise_id = $1
+  AND rb.status = 'active'
+  AND (rb.valid_from IS NULL OR rb.valid_from <= now())
+  AND (rb.valid_until IS NULL OR rb.valid_until > now())
+  AND ((rb.subject_type = 'user' AND rb.subject_id = $2)
+    OR (rb.subject_type = 'department' AND rb.subject_id = $3))
+ORDER BY rbs.data_scope_id
+`
+
+type ListEffectiveUserDataScopesParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	UserID       uuid.UUID `json:"user_id"`
+	DepartmentID uuid.UUID `json:"department_id"`
+}
+
+func (q *Queries) ListEffectiveUserDataScopes(ctx context.Context, arg ListEffectiveUserDataScopesParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEffectiveUserDataScopes, arg.EnterpriseID, arg.UserID, arg.DepartmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var data_scope_id uuid.UUID
+		if err := rows.Scan(&data_scope_id); err != nil {
+			return nil, err
+		}
+		items = append(items, data_scope_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPermissions = `-- name: ListPermissions :many
 SELECT id FROM permissions ORDER BY id
 `
@@ -463,6 +507,53 @@ func (q *Queries) ListRoles(ctx context.Context, enterpriseID uuid.UUID) ([]Role
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubjectsForDataScope = `-- name: ListSubjectsForDataScope :many
+SELECT DISTINCT subject_type, subject_id FROM (
+  SELECT 'user'::text AS subject_type, rb.subject_id
+  FROM role_bindings rb JOIN role_binding_data_scopes rbs ON rbs.role_binding_id = rb.id
+  WHERE rbs.enterprise_id = $1 AND rbs.data_scope_id = $2 AND rb.subject_type = 'user' AND rb.status = 'active'
+  UNION ALL
+  SELECT 'user'::text, eu.id
+  FROM role_bindings rb JOIN role_binding_data_scopes rbs ON rbs.role_binding_id = rb.id
+  JOIN enterprise_users eu ON eu.department_id = rb.subject_id AND eu.enterprise_id = rb.enterprise_id
+  WHERE rbs.enterprise_id = $1 AND rbs.data_scope_id = $2 AND rb.subject_type = 'department' AND rb.status = 'active' AND eu.status = 'active'
+  UNION ALL
+  SELECT 'service_account'::text, sad.service_account_id
+  FROM service_account_data_scopes sad JOIN service_accounts sa ON sa.id = sad.service_account_id
+  WHERE sad.enterprise_id = $1 AND sad.data_scope_id = $2 AND sa.status = 'active'
+) affected ORDER BY subject_type, subject_id
+`
+
+type ListSubjectsForDataScopeParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	DataScopeID  uuid.UUID `json:"data_scope_id"`
+}
+
+type ListSubjectsForDataScopeRow struct {
+	SubjectType string    `json:"subject_type"`
+	SubjectID   uuid.UUID `json:"subject_id"`
+}
+
+func (q *Queries) ListSubjectsForDataScope(ctx context.Context, arg ListSubjectsForDataScopeParams) ([]ListSubjectsForDataScopeRow, error) {
+	rows, err := q.db.Query(ctx, listSubjectsForDataScope, arg.EnterpriseID, arg.DataScopeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSubjectsForDataScopeRow{}
+	for rows.Next() {
+		var i ListSubjectsForDataScopeRow
+		if err := rows.Scan(&i.SubjectType, &i.SubjectID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

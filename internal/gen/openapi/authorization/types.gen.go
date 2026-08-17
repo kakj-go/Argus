@@ -60,8 +60,9 @@ func (e AuthorizationDecisionObligations) Valid() bool {
 
 // Defines values for DataScopeResourceTypes.
 const (
-	Host              DataScopeResourceTypes = "host"
-	KubernetesCluster DataScopeResourceTypes = "kubernetes_cluster"
+	Host                DataScopeResourceTypes = "host"
+	KubernetesCluster   DataScopeResourceTypes = "kubernetes_cluster"
+	KubernetesNamespace DataScopeResourceTypes = "kubernetes_namespace"
 )
 
 // Valid indicates whether the value is a known member of the DataScopeResourceTypes enum.
@@ -70,6 +71,8 @@ func (e DataScopeResourceTypes) Valid() bool {
 	case Host:
 		return true
 	case KubernetesCluster:
+		return true
+	case KubernetesNamespace:
 		return true
 	default:
 		return false

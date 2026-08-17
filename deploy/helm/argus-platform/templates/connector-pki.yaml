@@ -1,0 +1,103 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: argus-connector-selfsigned
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-connector-root-ca
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  isCA: true
+  commonName: argus-connector-root-ca
+  secretName: argus-connector-root-ca
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: argus-connector-selfsigned
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Values.runtime.connectorIssuerName }}
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  ca:
+    secretName: argus-connector-root-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-connector-gateway
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  secretName: argus-connector-gateway-tls
+  duration: 2160h
+  renewBefore: 360h
+  dnsNames:
+    - argus-connector-gateway
+    - argus-connector-gateway.{{ .Values.namespaces.system }}.svc
+    {{- if eq .Values.profile "production" }}
+    - {{ .Values.production.hosts.connector }}
+    {{- else }}
+    - localhost
+  ipAddresses:
+    - 127.0.0.1
+    - ::1
+    {{- end }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: {{ .Values.runtime.connectorIssuerName }}
+    kind: Issuer
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argus-server
+  namespace: {{ .Values.namespaces.system }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argus-connector-gateway
+  namespace: {{ .Values.namespaces.system }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argus-connector-certificate-issuer
+  namespace: {{ .Values.namespaces.system }}
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificaterequests"]
+    verbs: ["create", "get", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argus-connector-certificate-issuer
+  namespace: {{ .Values.namespaces.system }}
+subjects:
+  - kind: ServiceAccount
+    name: argus-server
+    namespace: {{ .Values.namespaces.system }}
+  - kind: ServiceAccount
+    name: argus-connector-gateway
+    namespace: {{ .Values.namespaces.system }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argus-connector-certificate-issuer

@@ -49,7 +49,9 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await page.goto("/login");
       await expectAppearance();
       await page.locator('input[autocomplete="username"]').fill("root");
-      await page.locator('input[autocomplete="current-password"]').fill("123456");
+      await page
+        .locator('input[autocomplete="current-password"]')
+        .fill("123456");
       await page.locator('form button[type="submit"]').click();
       await expect(page).not.toHaveURL(/\/login/);
       await expectAppearance();
@@ -61,7 +63,9 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await page.goto("http://127.0.0.1:4174/login");
       await expectAppearance();
       await page.locator('input[autocomplete="username"]').fill("admin");
-      await page.locator('input[autocomplete="current-password"]').fill("123456");
+      await page
+        .locator('input[autocomplete="current-password"]')
+        .fill("123456");
       await page.locator('form button[type="submit"]').click();
       await expect(page).toHaveURL("http://127.0.0.1:4174/");
       await expectAppearance();
@@ -118,7 +122,9 @@ test("card runtime executes a cross-origin bridge and enforces CSP", async ({
       "http://127.0.0.1:4176/?parent_origin=" +
       encodeURIComponent(window.location.origin);
     document.body.append(iframe);
-    await new Promise<void>((resolve) => iframe.addEventListener("load", () => resolve(), { once: true }));
+    await new Promise<void>((resolve) =>
+      iframe.addEventListener("load", () => resolve(), { once: true }),
+    );
     const channel = new MessageChannel();
     const nonce = "nonce-1234567890";
     let hostSequence = 1;
@@ -130,7 +136,10 @@ test("card runtime executes a cross-origin bridge and enforces CSP", async ({
           payload: Record<string, unknown>;
         };
         messages.push(message);
-        if (message.type === "query.invoke" || message.type === "action.invoke") {
+        if (
+          message.type === "query.invoke" ||
+          message.type === "action.invoke"
+        ) {
           hostSequence += 1;
           channel.port1.postMessage({
             bridge_version: "argus.card_bridge/v1",
@@ -206,19 +215,24 @@ test("card runtime executes a cross-origin bridge and enforces CSP", async ({
   const card = page.frameLocator("#bridge-card");
   const handshakeMessages = await page.evaluate(
     () =>
-      (window as typeof window & { __cardMessages?: Array<{ type?: string; payload?: unknown }> })
-        .__cardMessages ?? [],
+      (
+        window as typeof window & {
+          __cardMessages?: Array<{ type?: string; payload?: unknown }>;
+        }
+      ).__cardMessages ?? [],
   );
-  expect(handshakeMessages.find((message) => message.type === "bridge.error"))
-    .toBeUndefined();
+  expect(
+    handshakeMessages.find((message) => message.type === "bridge.error"),
+  ).toBeUndefined();
   await card.getByRole("button", { name: "Query" }).click();
   await expect(card.locator("#result")).toHaveText("query-ok");
   await card.getByRole("button", { name: "Action" }).click();
   await expect(card.locator("#result")).toHaveText("action-ok");
   await expect(card.locator("#network")).toHaveText("blocked");
   await page.evaluate(() => {
-    (window as typeof window & { __sendCardContext?: () => void })
-      .__sendCardContext?.();
+    (
+      window as typeof window & { __sendCardContext?: () => void }
+    ).__sendCardContext?.();
   });
   await expect(card.locator("html")).toHaveAttribute("lang", "en-US");
   await expect(card.locator("html")).toHaveAttribute(
@@ -227,12 +241,17 @@ test("card runtime executes a cross-origin bridge and enforces CSP", async ({
   );
   const messages = await page.evaluate(
     () =>
-      (window as typeof window & { __cardMessages?: Array<{ payload?: unknown }> })
-        .__cardMessages ?? [],
+      (
+        window as typeof window & {
+          __cardMessages?: Array<{ payload?: unknown }>;
+        }
+      ).__cardMessages ?? [],
   );
-  expect(messages.some((message) =>
-    JSON.stringify(message.payload).includes("params"),
-  )).toBe(false);
+  expect(
+    messages.some((message) =>
+      JSON.stringify(message.payload).includes("params"),
+    ),
+  ).toBe(false);
 });
 
 test("card runtime rejects a wrong parent origin and entrypoint hash", async ({
@@ -282,10 +301,15 @@ test("card runtime rejects a wrong parent origin and entrypoint hash", async ({
       },
     });
 
-    const wrongOrigin = await makeFrame("wrong-origin-card", "https://evil.example.test");
+    const wrongOrigin = await makeFrame(
+      "wrong-origin-card",
+      "https://evil.example.test",
+    );
     const ignoredChannel = new MessageChannel();
     let originMessage = false;
-    ignoredChannel.port1.onmessage = () => { originMessage = true; };
+    ignoredChannel.port1.onmessage = () => {
+      originMessage = true;
+    };
     ignoredChannel.port1.start();
     wrongOrigin.contentWindow!.postMessage(
       hello(`sha256:${"0".repeat(64)}`),
@@ -294,7 +318,10 @@ test("card runtime rejects a wrong parent origin and entrypoint hash", async ({
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    const wrongHash = await makeFrame("wrong-hash-card", window.location.origin);
+    const wrongHash = await makeFrame(
+      "wrong-hash-card",
+      window.location.origin,
+    );
     const hashChannel = new MessageChannel();
     const hashError = await new Promise<string | null>((resolve) => {
       const timer = setTimeout(() => resolve(null), 1000);
@@ -452,6 +479,9 @@ test("add host wizard walks three steps to the confirm card", async ({
   // 第 2 步：填写主机信息（经堡垒机允许内网地址）。
   await drawer.getByLabel("主机名").fill("web-e2e-01");
   await drawer.getByLabel("地址").fill("10.0.1.5");
+  await drawer.getByLabel("登录账号").fill("argus");
+  await drawer.getByLabel("登录凭据或密钥").click();
+  await page.getByRole("option", { name: "prod-ssh-key" }).click();
   await drawer.getByRole("button", { name: "下一步" }).click();
 
   // 第 3 步：模拟连接测试（前端约 900ms 后返回成功）后生成预览。
@@ -528,7 +558,7 @@ test("ai settings: test and create a model in one step", async ({ page }) => {
   await expect(row.getByText("健康")).toBeVisible();
 });
 
-test("host and bastion collector statuses provide quick actions", async ({
+test("host and bastion collector statuses expose contract-backed actions", async ({
   page,
 }) => {
   await login(page);
@@ -556,13 +586,7 @@ test("host and bastion collector statuses provide quick actions", async ({
   ).toHaveAttribute("href", "/hosts/host-gw-sh-01");
   await expect(scopeHeader.getByText("堡垒机", { exact: true })).toBeVisible();
   await expect(scopeHeader.getByText("监控中", { exact: true })).toBeVisible();
-  await expect(
-    scopeHeader.getByRole("button", { name: "连接测试" }),
-  ).toBeVisible();
   await expect(scopeHeader.getByRole("button", { name: "编辑" })).toBeVisible();
-  await expect(
-    scopeHeader.getByRole("button", { name: "卸载堡垒机" }),
-  ).toBeVisible();
   await expect(scopeHeader.getByRole("button", { name: "删除" })).toHaveCount(
     0,
   );
@@ -580,7 +604,7 @@ test("host and bastion collector statuses provide quick actions", async ({
   );
 });
 
-test("Bastion uninstall gates replacement and deletion while members remain", async ({
+test("online Bastion gates replacement and deletion while members remain", async ({
   page,
 }) => {
   await login(page);
@@ -612,106 +636,59 @@ test("Bastion uninstall gates replacement and deletion while members remain", as
 
   await drawer.getByLabel("名称").fill("上海核心堡垒机-E2E");
   await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  await drawer.getByRole("button", { name: "确认执行" }).click();
   await expect(drawer).not.toBeVisible();
 
   const updatedScope = page
     .locator(".argus-scope-card")
     .filter({ hasText: "上海核心堡垒机-E2E" })
     .first();
-  await updatedScope
-    .locator(".argus-scope-card__head")
-    .getByRole("button", { name: "卸载堡垒机" })
-    .click();
-
-  const uninstallDialog = page.getByRole("dialog", {
-    name: /卸载堡垒机.*上海核心堡垒机-E2E/,
-  });
-  await expect(uninstallDialog.locator(".argus-code code")).toContainText(
-    "--token uninstall_",
-  );
+  await expect(updatedScope.getByText("成员 3")).toBeVisible();
   await expect(
-    uninstallDialog.getByText("Scope 和成员主机不会删除"),
-  ).toBeVisible();
-  await uninstallDialog
-    .getByRole("button", { name: /模拟执行卸载命令/ })
-    .click();
-  await expect(
-    uninstallDialog.getByText("卸载完成", { exact: true }),
-  ).toBeVisible();
-  await uninstallDialog
-    .locator(".argus-dialog__footer")
-    .getByRole("button", { name: "关闭", exact: true })
-    .click();
-
-  await expect(updatedScope.getByText("堡垒机已卸载")).toBeVisible();
-  await updatedScope
-    .locator(".argus-scope-card__head")
-    .getByRole("button", { name: "删除堡垒机" })
-    .click();
-  const deleteDialog = page.getByRole("dialog", {
-    name: /删除堡垒机.*上海核心堡垒机-E2E/,
-  });
-  await expect(deleteDialog.getByText(/仍有 3 台成员主机/)).toBeVisible();
-  await expect(
-    deleteDialog.getByRole("button", { name: "确认删除" }),
-  ).toBeDisabled();
-  await deleteDialog.getByRole("button", { name: "取消" }).click();
+    updatedScope
+      .locator(".argus-scope-card__head")
+      .getByRole("button", { name: "删除堡垒机" }),
+  ).toHaveCount(0);
 
   await updatedScope
     .locator(".argus-scope-card__head")
     .getByRole("button", { name: "编辑" })
     .click();
-  const reinstallDrawer = page.getByRole("dialog", {
+  const onlineDrawer = page.getByRole("dialog", {
     name: /编辑堡垒机.*上海核心堡垒机-E2E/,
   });
-  await reinstallDrawer.getByRole("button", { name: "生成新命令" }).click();
-  await expect(reinstallDrawer.locator(".argus-code code")).toContainText(
-    "--token enroll_",
-  );
+  await expect(onlineDrawer.getByText("当前堡垒机仍在线")).toBeVisible();
+  await expect(
+    onlineDrawer.getByRole("button", { name: "生成新命令" }),
+  ).toHaveCount(0);
 });
 
-test("an empty uninstalled Bastion Scope can be deleted", async ({ page }) => {
+test("new Bastion shows one-time enrollment and can register", async ({
+  page,
+}) => {
   await login(page);
   await page.goto("/hosts");
   await page.getByRole("button", { name: "添加堡垒机" }).click();
 
   const addDrawer = page.getByRole("dialog", { name: "添加堡垒机" });
-  await addDrawer.getByLabel("名称").fill("可删除堡垒机-E2E");
+  await addDrawer.getByLabel("名称").fill("新堡垒机-E2E");
   await addDrawer.getByRole("button", { name: "创建并生成令牌" }).click();
+  await addDrawer.getByRole("button", { name: "确认执行" }).click();
+  await expect(addDrawer.locator(".argus-code code")).toContainText(
+    "--token enroll_",
+  );
+  await addDrawer.getByRole("button", { name: "关闭" }).click();
 
   const pendingScope = page
     .locator(".argus-scope-card")
-    .filter({ hasText: "可删除堡垒机-E2E" })
+    .filter({ hasText: "新堡垒机-E2E" })
     .first();
+  await expect(pendingScope.getByText("等待堡垒机注册")).toBeVisible();
   await pendingScope.getByRole("button", { name: /模拟堡垒机上线/ }).click();
+  await expect(pendingScope.getByText("堡垒机在线")).toBeVisible();
   await expect(
-    pendingScope.getByRole("button", { name: "卸载堡垒机" }),
-  ).toBeVisible();
-  await pendingScope.getByRole("button", { name: "卸载堡垒机" }).click();
-
-  const uninstallDialog = page.getByRole("dialog", {
-    name: /卸载堡垒机.*可删除堡垒机-E2E/,
-  });
-  await uninstallDialog
-    .getByRole("button", { name: /模拟执行卸载命令/ })
-    .click();
-  await uninstallDialog
-    .locator(".argus-dialog__footer")
-    .getByRole("button", { name: "关闭", exact: true })
-    .click();
-
-  await pendingScope
-    .locator(".argus-scope-card__head")
-    .getByRole("button", { name: "删除堡垒机", exact: true })
-    .click();
-  const deleteDialog = page.getByRole("dialog", {
-    name: /删除堡垒机.*可删除堡垒机-E2E/,
-  });
-  await expect(deleteDialog.getByText("确认永久删除")).toBeVisible();
-  await deleteDialog
-    .getByRole("button", { name: "确认删除", exact: true })
-    .click();
-  await expect(pendingScope).toHaveCount(0);
+    pendingScope.getByRole("button", { name: /模拟堡垒机上线/ }),
+  ).toHaveCount(0);
 });
 
 test("kubernetes collector statuses install or open monitoring directly", async ({
@@ -845,7 +822,9 @@ test("org bindings tab: grant, reflect on users tab, and revoke", async ({
   ).toHaveCount(0);
 });
 
-test("org data scopes persist structured label requirements", async ({ page }) => {
+test("org data scopes persist structured label requirements", async ({
+  page,
+}) => {
   await login(page);
   await page.goto("/settings/org");
   await page.getByRole("tab", { name: "数据权限" }).click();

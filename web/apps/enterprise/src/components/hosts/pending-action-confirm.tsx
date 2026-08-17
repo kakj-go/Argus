@@ -20,7 +20,7 @@ function diffLinesOf(action: PendingActionPublic) {
 }
 
 /**
- * Pending Action 确认卡：渲染 preview/diff，确认走 approvals.confirm。
+ * Pending Action 确认卡：渲染 preview/diff，确认和取消都提交服务端状态。
  * confirm 后若无 task 返回，说明进入 awaiting_approval。
  */
 export function PendingActionConfirm({
@@ -45,11 +45,27 @@ export function PendingActionConfirm({
       const result = await api.approvals.confirm(action.action_ref);
       setStatus("success");
       setResultMessage(
-        result.execution
-          ? t("hosts.preview.submitted")
-          : t("hosts.preview.awaitingApproval"),
+        result.pending_action.status === "succeeded"
+          ? result.pending_action.result_summary
+          : result.execution
+            ? t("hosts.preview.submitted")
+            : t("hosts.preview.awaitingApproval"),
       );
       onDone?.(result);
+    } catch {
+      setStatus("failed");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const cancel = async () => {
+    if (confirming) return;
+    setConfirming(true);
+    try {
+      await api.approvals.cancel(action.action_ref);
+      setStatus("cancelled");
+      onCancel?.();
     } catch {
       setStatus("failed");
     } finally {
@@ -63,7 +79,7 @@ export function PendingActionConfirm({
       confirming={confirming}
       diff={diffLinesOf(action)}
       expiresAt={action.expires_at}
-      onCancel={onCancel}
+      onCancel={() => void cancel()}
       onConfirm={() => void confirm()}
       resultMessage={resultMessage}
       risk={action.risk}

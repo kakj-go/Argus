@@ -1,7 +1,5 @@
 import type { ArgusApiClient } from "../client";
 import type {
-  ConnectorRegistrationResult,
-  ConnectorUninstallResult,
   ListQuery,
   Page,
   User,
@@ -32,6 +30,10 @@ import {
   type MockDb,
 } from "./store";
 import { createTasksDomain } from "./tasks";
+import type {
+  ConnectorRegistrationResult,
+  ConnectorUninstallResult,
+} from "./resource-models";
 
 export interface MockOptions {
   /** Fixed latency in ms; defaults to a random 150-400ms per call. */

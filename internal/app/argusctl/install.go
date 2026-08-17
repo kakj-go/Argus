@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilversion "k8s.io/apimachinery/pkg/util/version"
 )
 
 func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
@@ -39,6 +41,9 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 		return err
 	}
 	if err := clients.setStage(ctx, cfg, "foundation", "complete", "namespaces and baseline policies installed"); err != nil {
+		return err
+	}
+	if err := ensureCertManager(ctx, clients, helm); err != nil {
 		return err
 	}
 
@@ -162,6 +167,14 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err != nil {
 		return err
 	}
+	pendingActionKey, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, setupSecret, "pending-action-encryption-key", 32)
+	if err != nil {
+		return err
+	}
+	secretKEK, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, setupSecret, "secret-kek-v1", 32)
+	if err != nil {
+		return err
+	}
 	platformChart, err := loadLocalChart(root, "argus-platform")
 	if err != nil {
 		return err
@@ -169,7 +182,7 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err := clients.setStage(ctx, cfg, "platform", "running", "installing migrations and platform roles"); err != nil {
 		return err
 	}
-	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-platform", cfg.Spec.Namespaces.System, platformChart, platformValues(cfg, credentials, setupSecret, idempotencyKey, cursorSigningKey)); err != nil {
+	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-platform", cfg.Spec.Namespaces.System, platformChart, platformValues(cfg, credentials, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK)); err != nil {
 		return err
 	}
 	if err := waitForPlatform(ctx, clients, cfg); err != nil {
@@ -229,7 +242,7 @@ func dataValues(cfg *InstallConfig, secrets map[string]string) map[string]any {
 	}
 }
 
-func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecret, idempotencyKey, cursorSigningKey string) map[string]any {
+func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK string) map[string]any {
 	allowedOrigins := []any{"http://localhost:4173", "http://localhost:4174", "http://localhost:4175"}
 	secureCookies := false
 	if cfg.Spec.Profile == "production" {
@@ -240,14 +253,93 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		}
 		secureCookies = true
 	}
+	connectorEnrollmentURL := "http://localhost:8080"
+	connectorGatewayAddress := "grpcs://localhost:9443"
+	if cfg.Spec.Profile == "production" {
+		connectorEnrollmentURL = "https://" + cfg.Spec.Exposure.EnterpriseHost
+		connectorGatewayAddress = "grpcs://" + cfg.Spec.Exposure.ConnectorHost + ":9443"
+	}
 	return map[string]any{
 		"releaseId": cfg.Spec.ReleaseID, "namespaces": namespacesValues(cfg), "replicas": 1, "setupTokenSecretName": setupSecret,
 		"images": map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
 		"runtime": map[string]any{
 			"postgresqlPassword": credentials["postgresql-password"], "redisPassword": credentials["redis-password"],
-			"idempotencyEncryptionKey": idempotencyKey, "cursorSigningKey": cursorSigningKey, "allowedOrigins": allowedOrigins, "secureCookies": secureCookies,
+			"idempotencyEncryptionKey": idempotencyKey, "cursorSigningKey": cursorSigningKey,
+			"pendingActionEncryptionKey": pendingActionKey,
+			"secretKEKKeyring": map[string]any{
+				"current_version": 1,
+				"keys":            map[string]any{"1": secretKEK},
+			},
+			"connectorEnrollmentURL":  connectorEnrollmentURL,
+			"connectorGatewayAddress": connectorGatewayAddress,
+			"allowedOrigins":          allowedOrigins, "secureCookies": secureCookies,
 		},
+		"production": map[string]any{"hosts": map[string]any{"enterprise": cfg.Spec.Exposure.EnterpriseHost,
+			"platform": cfg.Spec.Exposure.PlatformHost, "setup": cfg.Spec.Exposure.SetupHost, "connector": cfg.Spec.Exposure.ConnectorHost}},
 	}
+}
+
+func ensureCertManager(ctx context.Context, clients *kubeClients, helm helmManager) error {
+	if _, err := clients.typed.Discovery().ServerResourcesForGroupVersion("cert-manager.io/v1"); err == nil {
+		deployment, getErr := clients.typed.AppsV1().Deployments("cert-manager").Get(ctx, "cert-manager", metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("cert-manager API exists but controller deployment cannot be inspected: %w", getErr)
+		}
+		version := certManagerDeploymentVersion(deployment)
+		if !certManagerVersionCompatible(version, certManagerVersion) {
+			return fmt.Errorf("existing cert-manager version %q is incompatible with locked version %s", version, certManagerVersion)
+		}
+		return nil
+	}
+	chart, err := helm.loadRemoteChart(ctx, "cert-manager-v"+certManagerVersion, certManagerURL)
+	if err != nil {
+		return err
+	}
+	if _, err := clients.typed.CoreV1().Namespaces().Get(ctx, "cert-manager", metav1.GetOptions{}); err != nil {
+		_, createErr := clients.typed.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cert-manager"}}, metav1.CreateOptions{})
+		if createErr != nil {
+			return fmt.Errorf("create cert-manager namespace: %w", createErr)
+		}
+	}
+	if err := helm.installOrUpgrade(ctx, "cert-manager", "cert-manager", chart, map[string]any{"crds": map[string]any{"enabled": true}}); err != nil {
+		return err
+	}
+	return waitForDeployment(ctx, clients, "cert-manager", "cert-manager", 10*time.Minute)
+}
+
+func certManagerDeploymentVersion(deployment *appsv1.Deployment) string {
+	if deployment == nil {
+		return ""
+	}
+	for _, key := range []string{"app.kubernetes.io/version", "helm.sh/chart"} {
+		if value := deployment.Labels[key]; value != "" {
+			if key == "helm.sh/chart" {
+				value = strings.TrimPrefix(value, "cert-manager-")
+			}
+			return strings.TrimPrefix(value, "v")
+		}
+	}
+	for _, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name != "cert-manager-controller" && container.Name != "cert-manager" {
+			continue
+		}
+		if index := strings.LastIndex(container.Image, ":"); index >= 0 && index+1 < len(container.Image) {
+			return strings.TrimPrefix(container.Image[index+1:], "v")
+		}
+	}
+	return ""
+}
+
+func certManagerVersionCompatible(actual, locked string) bool {
+	actualVersion, err := utilversion.ParseSemantic(strings.TrimPrefix(actual, "v"))
+	if err != nil {
+		return false
+	}
+	lockedVersion, err := utilversion.ParseSemantic(strings.TrimPrefix(locked, "v"))
+	if err != nil {
+		return false
+	}
+	return actualVersion.Major() == lockedVersion.Major() && actualVersion.Minor() == lockedVersion.Minor() && actualVersion.AtLeast(lockedVersion)
 }
 
 func sandboxValues(cfg *InstallConfig, apiKey string) map[string]any {

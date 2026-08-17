@@ -1,6 +1,5 @@
 import type {
   InteractiveCard,
-  Host,
   PendingActionPublic,
   ModelUsagePoint,
 } from "../types";
@@ -8,6 +7,7 @@ import type { TaskViewModel } from "../provisional";
 import { calculateModelAmount } from "../types";
 import { createOrgSeed } from "./seed-org";
 import type { MockDb } from "./store";
+import type { MockHost } from "./resource-models";
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -25,8 +25,8 @@ export function createSeedDb(now: number = Date.now()): MockDb {
   const ago = (offsetMs: number) => iso(-offsetMs);
 
   const host = (
-    partial: Partial<Host> & Pick<Host, "id" | "name" | "address">,
-  ): Host => ({
+    partial: Partial<MockHost> & Pick<MockHost, "id" | "name" | "address">,
+  ): MockHost => ({
     enterpriseId: "ent-acme",
     hostname: partial.name ?? "",
     port: 22,
@@ -41,7 +41,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     ...partial,
   });
 
-  const hosts: Host[] = [
+  const hosts: MockHost[] = [
     // Bastion Scope: 上海机房堡垒机-01
     host({
       id: "host-gw-sh-01",
@@ -680,66 +680,84 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     secrets: [
       {
         id: "sec-ssh-prod",
-        enterpriseId: "ent-acme",
+        enterprise_id: "ent-acme",
         name: "prod-ssh-key",
         type: "ssh_private_key",
         description: "生产主机统一 SSH 私钥",
-        referenceCount: 5,
-        lastAccessedAt: ago(10 * MINUTE),
-        createdBy: "u-chenxi",
-        createdAt: ago(100 * DAY),
-        updatedAt: ago(30 * DAY),
+        status: "active",
+        current_version: 2,
+        reference_count: 5,
+        last_accessed_at: ago(10 * MINUTE),
+        created_by: "u-chenxi",
+        version: 2,
+        created_at: ago(100 * DAY),
+        updated_at: ago(30 * DAY),
       },
       {
         id: "sec-winrm-01",
-        enterpriseId: "ent-acme",
+        enterprise_id: "ent-acme",
         name: "winrm-ad-account",
         type: "winrm_password",
-        referenceCount: 1,
-        createdBy: "u-wanglei",
-        createdAt: ago(90 * DAY),
-        updatedAt: ago(90 * DAY),
+        status: "active",
+        current_version: 1,
+        reference_count: 1,
+        created_by: "u-wanglei",
+        version: 1,
+        created_at: ago(90 * DAY),
+        updated_at: ago(90 * DAY),
       },
       {
         id: "sec-kube-prod",
-        enterpriseId: "ent-acme",
+        enterprise_id: "ent-acme",
         name: "k8s-prod-east-kubeconfig",
         type: "kubeconfig",
-        referenceCount: 1,
-        createdBy: "u-chenxi",
-        createdAt: ago(88 * DAY),
-        updatedAt: ago(88 * DAY),
+        status: "active",
+        current_version: 1,
+        reference_count: 1,
+        created_by: "u-chenxi",
+        version: 1,
+        created_at: ago(88 * DAY),
+        updated_at: ago(88 * DAY),
       },
       {
         id: "sec-kube-staging",
-        enterpriseId: "ent-acme",
+        enterprise_id: "ent-acme",
         name: "k8s-staging-kubeconfig",
         type: "kubeconfig",
-        referenceCount: 1,
-        createdBy: "u-chenxi",
-        createdAt: ago(70 * DAY),
-        updatedAt: ago(70 * DAY),
+        status: "active",
+        current_version: 1,
+        reference_count: 1,
+        created_by: "u-chenxi",
+        version: 1,
+        created_at: ago(70 * DAY),
+        updated_at: ago(70 * DAY),
       },
       {
         id: "sec-llm-01",
-        enterpriseId: "ent-acme",
+        enterprise_id: "ent-acme",
         name: "llm-gateway-key",
         type: "api_token",
-        referenceCount: 1,
-        lastAccessedAt: ago(MINUTE),
-        createdBy: "u-chenxi",
-        createdAt: ago(85 * DAY),
-        updatedAt: ago(14 * DAY),
+        status: "active",
+        current_version: 3,
+        reference_count: 1,
+        last_accessed_at: ago(MINUTE),
+        created_by: "u-chenxi",
+        version: 3,
+        created_at: ago(85 * DAY),
+        updated_at: ago(14 * DAY),
       },
       {
         id: "sec-g-ssh",
-        enterpriseId: "ent-globex",
+        enterprise_id: "ent-globex",
         name: "globex-ssh-key",
         type: "ssh_private_key",
-        referenceCount: 2,
-        createdBy: "u-gadmin",
-        createdAt: ago(70 * DAY),
-        updatedAt: ago(70 * DAY),
+        status: "active",
+        current_version: 1,
+        reference_count: 2,
+        created_by: "u-gadmin",
+        version: 1,
+        created_at: ago(70 * DAY),
+        updated_at: ago(70 * DAY),
       },
     ],
     hosts,

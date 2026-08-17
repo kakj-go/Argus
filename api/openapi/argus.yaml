@@ -69,6 +69,80 @@ paths:
     $ref: ./paths/m2.yaml#/enterprise_api_key_revoke
   /{audience}/audit-events:
     $ref: ./paths/m2.yaml#/audit_events
+  /enterprise/secrets:
+    $ref: ./paths/m3.yaml#/secret_collection
+  /enterprise/secrets/{id}:
+    $ref: ./paths/m3.yaml#/secret_item
+  /enterprise/secrets/{id}/rotate:
+    $ref: ./paths/m3.yaml#/secret_rotate
+  /enterprise/credentials:
+    $ref: ./paths/m3.yaml#/credential_collection
+  /enterprise/credentials/{id}:
+    $ref: ./paths/m3.yaml#/credential_item
+  /enterprise/managed-accounts:
+    $ref: ./paths/m3.yaml#/managed_account_collection
+  /enterprise/managed-accounts/{id}:
+    $ref: ./paths/m3.yaml#/managed_account_item
+  /enterprise/hosts:
+    $ref: ./paths/m3.yaml#/host_collection
+  /enterprise/hosts/{id}:
+    $ref: ./paths/m3.yaml#/host_item
+  /enterprise/hosts/actions/preview-create:
+    $ref: ./paths/m3.yaml#/host_preview_create
+  /enterprise/hosts/{id}/actions/preview-update:
+    $ref: ./paths/m3.yaml#/host_preview_update
+  /enterprise/hosts/{id}/actions/preview-delete:
+    $ref: ./paths/m3.yaml#/host_preview_delete
+  /enterprise/hosts/connection-tests:
+    $ref: ./paths/m3.yaml#/host_connection_tests
+  /enterprise/connection-tests/{id}:
+    $ref: ./paths/m3.yaml#/connection_test_item
+  /enterprise/kubernetes-clusters:
+    $ref: ./paths/m3.yaml#/kubernetes_collection
+  /enterprise/kubernetes-clusters/{id}:
+    $ref: ./paths/m3.yaml#/kubernetes_item
+  /enterprise/kubernetes-clusters/actions/preview-create:
+    $ref: ./paths/m3.yaml#/kubernetes_preview_create
+  /enterprise/kubernetes-clusters/{id}/actions/preview-update:
+    $ref: ./paths/m3.yaml#/kubernetes_preview_update
+  /enterprise/kubernetes-clusters/{id}/actions/preview-delete:
+    $ref: ./paths/m3.yaml#/kubernetes_preview_delete
+  /enterprise/kubernetes-clusters/connection-tests:
+    $ref: ./paths/m3.yaml#/kubernetes_connection_tests
+  /enterprise/kubernetes-clusters/{id}/resources:
+    $ref: ./paths/m3.yaml#/kubernetes_resources
+  /enterprise/kubernetes-clusters/{id}/pod-logs:
+    $ref: ./paths/m3.yaml#/kubernetes_pod_logs
+  /enterprise/pending-actions:
+    $ref: ./paths/m3.yaml#/pending_action_collection
+  /enterprise/pending-actions/{action_ref}:
+    $ref: ./paths/m3.yaml#/pending_action_item
+  /enterprise/pending-actions/{action_ref}/confirm:
+    $ref: ./paths/m3.yaml#/pending_action_confirm
+  /enterprise/pending-actions/{action_ref}/cancel:
+    $ref: ./paths/m3.yaml#/pending_action_cancel
+  /enterprise/bastion-scopes:
+    $ref: ./paths/m3.yaml#/bastion_collection
+  /enterprise/bastion-scopes/{id}:
+    $ref: ./paths/m3.yaml#/bastion_item
+  /enterprise/bastion-scopes/actions/preview-create:
+    $ref: ./paths/m3.yaml#/bastion_preview_create
+  /enterprise/bastion-scopes/{id}/actions/preview-update:
+    $ref: ./paths/m3.yaml#/bastion_preview_update
+  /enterprise/bastion-scopes/{id}/actions/preview-delete:
+    $ref: ./paths/m3.yaml#/bastion_preview_delete
+  /enterprise/bastion-scopes/{id}/actions/preview-replacement:
+    $ref: ./paths/m3.yaml#/bastion_replacement
+  /enterprise/connectors:
+    $ref: ./paths/m3.yaml#/connector_collection
+  /enterprise/connectors/{id}:
+    $ref: ./paths/m3.yaml#/connector_item
+  /enterprise/connectors/{id}/rotate-certificate:
+    $ref: ./paths/m3.yaml#/connector_rotate
+  /enterprise/connectors/{id}/actions/preview-uninstall:
+    $ref: ./paths/m3.yaml#/connector_preview_uninstall
+  /connectors/enroll:
+    $ref: ./paths/m3.yaml#/connector_enroll
   /conversations/{conversation_id}/events:
     get:
       operationId: streamConversationEvents
@@ -279,6 +353,22 @@ components:
       $ref: ./components/m2.yaml#/components/schemas/AuditEvent
     AuditEventPage:
       $ref: ./components/m2.yaml#/components/schemas/AuditEventPage
+    Secret:
+      $ref: ./components/m3.yaml#/components/schemas/Secret
+    Credential:
+      $ref: ./components/m3.yaml#/components/schemas/Credential
+    ManagedAccount:
+      $ref: ./components/m3.yaml#/components/schemas/ManagedAccount
+    Host:
+      $ref: ./components/m3.yaml#/components/schemas/Host
+    KubernetesCluster:
+      $ref: ./components/m3.yaml#/components/schemas/KubernetesCluster
+    ConnectionTest:
+      $ref: ./components/m3.yaml#/components/schemas/ConnectionTest
+    BastionScope:
+      $ref: ./components/m3.yaml#/components/schemas/BastionScope
+    Connector:
+      $ref: ./components/m3.yaml#/components/schemas/Connector
   securitySchemes:
     sessionCookie:
       type: apiKey
@@ -288,6 +378,10 @@ components:
       type: apiKey
       in: header
       name: X-Argus-Setup-Token
+    connectorEnrollmentToken:
+      type: apiKey
+      in: header
+      name: X-Argus-Enrollment-Token
   parameters:
     RequestId:
       name: X-Request-ID

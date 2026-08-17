@@ -13,8 +13,9 @@ import (
 
 // Defines values for DataScopeResourceTypes.
 const (
-	DataScopeResourceTypesHost              DataScopeResourceTypes = "host"
-	DataScopeResourceTypesKubernetesCluster DataScopeResourceTypes = "kubernetes_cluster"
+	DataScopeResourceTypesHost                DataScopeResourceTypes = "host"
+	DataScopeResourceTypesKubernetesCluster   DataScopeResourceTypes = "kubernetes_cluster"
+	DataScopeResourceTypesKubernetesNamespace DataScopeResourceTypes = "kubernetes_namespace"
 )
 
 // Valid indicates whether the value is a known member of the DataScopeResourceTypes enum.
@@ -23,6 +24,8 @@ func (e DataScopeResourceTypes) Valid() bool {
 	case DataScopeResourceTypesHost:
 		return true
 	case DataScopeResourceTypesKubernetesCluster:
+		return true
+	case DataScopeResourceTypesKubernetesNamespace:
 		return true
 	default:
 		return false
@@ -49,8 +52,9 @@ func (e DataScopeStatus) Valid() bool {
 
 // Defines values for DataScopeCreateResourceTypes.
 const (
-	DataScopeCreateResourceTypesHost              DataScopeCreateResourceTypes = "host"
-	DataScopeCreateResourceTypesKubernetesCluster DataScopeCreateResourceTypes = "kubernetes_cluster"
+	DataScopeCreateResourceTypesHost                DataScopeCreateResourceTypes = "host"
+	DataScopeCreateResourceTypesKubernetesCluster   DataScopeCreateResourceTypes = "kubernetes_cluster"
+	DataScopeCreateResourceTypesKubernetesNamespace DataScopeCreateResourceTypes = "kubernetes_namespace"
 )
 
 // Valid indicates whether the value is a known member of the DataScopeCreateResourceTypes enum.
@@ -60,6 +64,8 @@ func (e DataScopeCreateResourceTypes) Valid() bool {
 		return true
 	case DataScopeCreateResourceTypesKubernetesCluster:
 		return true
+	case DataScopeCreateResourceTypesKubernetesNamespace:
+		return true
 	default:
 		return false
 	}
@@ -67,8 +73,9 @@ func (e DataScopeCreateResourceTypes) Valid() bool {
 
 // Defines values for DataScopeUpdateResourceTypes.
 const (
-	DataScopeUpdateResourceTypesHost              DataScopeUpdateResourceTypes = "host"
-	DataScopeUpdateResourceTypesKubernetesCluster DataScopeUpdateResourceTypes = "kubernetes_cluster"
+	DataScopeUpdateResourceTypesHost                DataScopeUpdateResourceTypes = "host"
+	DataScopeUpdateResourceTypesKubernetesCluster   DataScopeUpdateResourceTypes = "kubernetes_cluster"
+	DataScopeUpdateResourceTypesKubernetesNamespace DataScopeUpdateResourceTypes = "kubernetes_namespace"
 )
 
 // Valid indicates whether the value is a known member of the DataScopeUpdateResourceTypes enum.
@@ -77,6 +84,8 @@ func (e DataScopeUpdateResourceTypes) Valid() bool {
 	case DataScopeUpdateResourceTypesHost:
 		return true
 	case DataScopeUpdateResourceTypesKubernetesCluster:
+		return true
+	case DataScopeUpdateResourceTypesKubernetesNamespace:
 		return true
 	default:
 		return false

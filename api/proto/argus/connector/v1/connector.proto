@@ -5,6 +5,7 @@ package argus.connector.v1;
 option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1;connectorv1";
 
 import "argus/common/v1/common.proto";
+import "argus/connector/v1/commands.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -20,6 +21,9 @@ message ConnectRequest {
     CommandResult command_result = 4;
     ClientAcknowledge acknowledge = 5;
     RemoteAccessData remote_access_data = 6;
+    CredentialLeaseRequest credential_lease_request = 7;
+    CommandReconcileResult command_reconcile_result = 8;
+    CertificateRotationRequest certificate_rotation_request = 9;
   }
 }
 
@@ -33,6 +37,9 @@ message ConnectResponse {
     RemoteAccessData remote_access_data = 6;
     RemoteAccessClose remote_access_close = 7;
     argus.common.v1.StreamClose close = 8;
+    CredentialLeaseGrant credential_lease_grant = 9;
+    CommandReconcileRequest command_reconcile_request = 10;
+    CertificateRotationGrant certificate_rotation_grant = 11;
   }
 }
 
@@ -53,6 +60,7 @@ message ConnectorWelcome {
   uint32 max_message_bytes = 5;
   uint32 max_inflight_commands = 6;
   bytes server_nonce = 7;
+  bool certificate_rotation_requested = 8;
 }
 
 message ConnectorHeartbeat {
@@ -60,25 +68,6 @@ message ConnectorHeartbeat {
   google.protobuf.Timestamp sent_at = 2;
   uint32 active_commands = 3;
   uint32 active_remote_access_streams = 4;
-}
-
-message ConnectorCommand {
-  string command_id = 1;
-  uint64 connection_epoch = 2;
-  string command_type = 3;
-  bytes payload = 4;
-  string payload_hash = 5;
-  google.protobuf.Timestamp expires_at = 6;
-  string idempotency_key = 7;
-}
-
-message CommandResult {
-  string command_id = 1;
-  uint64 connection_epoch = 2;
-  string status = 3;
-  bytes result = 4;
-  string result_hash = 5;
-  argus.common.v1.ErrorStatus error = 6;
 }
 
 message ClientAcknowledge {

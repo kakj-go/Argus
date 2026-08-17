@@ -57,7 +57,7 @@ func (service EnterpriseService) CreateEnterprise(ctx context.Context, actorID s
 			return db.Enterprise{}, err
 		}
 		for permission, description := range authorization.PermissionRegistry {
-			if err := queries.UpsertPermission(ctx, db.UpsertPermissionParams{ID: permission, Description: description, RegistryVersion: 1}); err != nil {
+			if err := queries.UpsertPermission(ctx, db.UpsertPermissionParams{ID: permission, Description: description, RegistryVersion: authorization.PermissionRegistryVersion}); err != nil {
 				return db.Enterprise{}, err
 			}
 		}

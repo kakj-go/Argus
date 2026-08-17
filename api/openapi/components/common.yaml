@@ -84,6 +84,6 @@ components:
       properties:
         resource_type:
           type: string
-          enum: [host, kubernetes_cluster, connector, managed_account, telemetry_query, artifact]
+          enum: [secret, credential, managed_account, host, kubernetes_cluster, bastion_scope, connector, telemetry_query, artifact]
         resource_id: {type: string, minLength: 1}
         version: {type: integer, format: int64, minimum: 1}

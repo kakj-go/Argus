@@ -3,6 +3,7 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -58,4 +59,93 @@ func (client *Client) PublishOutbox(ctx context.Context, eventID, topic, aggrega
 		return fmt.Errorf("publish outbox event: %w", err)
 	}
 	return nil
+}
+
+type ConnectorRegistryEntry struct {
+	GatewayInstanceID string `json:"gateway_instance_id"`
+	ConnectionEpoch   int64  `json:"connection_epoch"`
+}
+
+type ConnectorDispatch struct {
+	ConnectorID     string `json:"connector_id"`
+	ConnectionEpoch int64  `json:"connection_epoch"`
+}
+
+func (client *Client) SetConnectorRegistry(ctx context.Context, connectorID string, entry ConnectorRegistryEntry, ttl time.Duration) error {
+	if client == nil || client.Raw == nil {
+		return errors.New("connector registry: Redis client is unavailable")
+	}
+	value, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	return client.Raw.Set(ctx, "argus:connector:registry:"+connectorID, value, ttl).Err()
+}
+
+func (client *Client) DeleteConnectorRegistry(ctx context.Context, connectorID string) error {
+	if client == nil || client.Raw == nil {
+		return nil
+	}
+	return client.Raw.Del(ctx, "argus:connector:registry:"+connectorID).Err()
+}
+
+func (client *Client) GetConnectorRegistry(ctx context.Context, connectorID string) (ConnectorRegistryEntry, error) {
+	if client == nil || client.Raw == nil {
+		return ConnectorRegistryEntry{}, errors.New("connector registry: Redis client is unavailable")
+	}
+	value, err := client.Raw.Get(ctx, "argus:connector:registry:"+connectorID).Bytes()
+	if err != nil {
+		return ConnectorRegistryEntry{}, err
+	}
+	var entry ConnectorRegistryEntry
+	if err := json.Unmarshal(value, &entry); err != nil || entry.GatewayInstanceID == "" || entry.ConnectionEpoch < 1 {
+		return ConnectorRegistryEntry{}, errors.New("connector registry: invalid entry")
+	}
+	return entry, nil
+}
+
+func (client *Client) PublishConnectorDispatch(ctx context.Context, gatewayInstanceID string, dispatch ConnectorDispatch) error {
+	if client == nil || client.Raw == nil {
+		return errors.New("connector dispatch: Redis client is unavailable")
+	}
+	value, err := json.Marshal(dispatch)
+	if err != nil {
+		return err
+	}
+	return client.Raw.Publish(ctx, "argus:connector:dispatch:"+gatewayInstanceID, value).Err()
+}
+
+func (client *Client) SubscribeConnectorDispatch(ctx context.Context, gatewayInstanceID string) (<-chan ConnectorDispatch, func() error, error) {
+	if client == nil || client.Raw == nil {
+		return nil, nil, errors.New("connector dispatch: Redis client is unavailable")
+	}
+	pubsub := client.Raw.Subscribe(ctx, "argus:connector:dispatch:"+gatewayInstanceID)
+	if _, err := pubsub.Receive(ctx); err != nil {
+		_ = pubsub.Close()
+		return nil, nil, err
+	}
+	output := make(chan ConnectorDispatch, 64)
+	go func() {
+		defer close(output)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case message, ok := <-pubsub.Channel():
+				if !ok {
+					return
+				}
+				var dispatch ConnectorDispatch
+				if json.Unmarshal([]byte(message.Payload), &dispatch) != nil || dispatch.ConnectorID == "" || dispatch.ConnectionEpoch < 1 {
+					continue
+				}
+				select {
+				case output <- dispatch:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	return output, pubsub.Close, nil
 }

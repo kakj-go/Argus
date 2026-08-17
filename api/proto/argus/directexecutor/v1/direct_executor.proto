@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package argus.directexecutor.v1;
+
+option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/directexecutor/v1;directexecutorv1";
+
+// DirectExecutorService is an internal mTLS boundary. PostgreSQL remains the
+// source of truth; callers only send the durable connection-test identifier.
+service DirectExecutorService {
+  rpc DispatchConnectionTest(DispatchConnectionTestRequest) returns (DispatchConnectionTestResponse);
+}
+
+message DispatchConnectionTestRequest {
+  string connection_test_id = 1;
+}
+
+message DispatchConnectionTestResponse {
+  DispatchStatus status = 1;
+}
+
+enum DispatchStatus {
+  DISPATCH_STATUS_UNSPECIFIED = 0;
+  DISPATCH_STATUS_ACCEPTED = 1;
+  DISPATCH_STATUS_ALREADY_HANDLED = 2;
+}

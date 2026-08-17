@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+package argus.connector.v1;
+
+option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1;connectorv1";
+
+import "argus/common/v1/common.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+message ConnectorCommand {
+  string command_id = 1;
+  uint64 connection_epoch = 2;
+  string command_type = 3;
+  bytes payload = 4 [deprecated = true];
+  string payload_hash = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  string idempotency_key = 7;
+  google.protobuf.Any typed_payload = 8;
+  string payload_schema_version = 9;
+  string operation_ref = 10;
+  string credential_lease_id = 11;
+}
+
+message CommandResult {
+  string command_id = 1;
+  uint64 connection_epoch = 2;
+  string status = 3;
+  bytes result = 4 [deprecated = true];
+  string result_hash = 5;
+  argus.common.v1.ErrorStatus error = 6;
+  google.protobuf.Any typed_result = 7;
+  string result_schema_version = 8;
+}
+
+message HostConnectionProbe {
+  string address = 1;
+  uint32 port = 2;
+  string protocol = 3;
+  string expected_host_key_fingerprint = 4;
+  string username = 5;
+}
+
+message HostConnectionProbeResult {
+  repeated string resolved_ips = 1;
+  string host_key_fingerprint = 2;
+  string platform = 3;
+  string remote_version = 4;
+  uint64 latency_millis = 5;
+}
+
+message KubernetesConnectionProbe {
+  string api_server = 1;
+  string default_namespace = 2;
+}
+
+message KubernetesConnectionProbeResult {
+  string server_version = 1;
+  uint32 node_count = 2;
+  uint32 ready_node_count = 3;
+  repeated string namespaces = 4;
+}
+
+message KubernetesResourceQuery {
+  string cluster_id = 1;
+  string resource_type = 2;
+  string namespace = 3;
+  string name = 4;
+  string label_selector = 5;
+  uint32 limit = 6;
+  string continue_token = 7;
+  uint32 max_result_bytes = 8;
+}
+
+message KubernetesResourceQueryResult {
+  repeated bytes resources_json = 1;
+  string continue_token = 2;
+  bool truncated = 3;
+}
+
+message KubernetesPodLogsQuery {
+  string cluster_id = 1;
+  string namespace = 2;
+  string pod = 3;
+  string container = 4;
+  uint32 tail_lines = 5;
+  uint32 max_result_bytes = 6;
+}
+
+message KubernetesPodLogsResult {
+  bytes content = 1;
+  bool truncated = 2;
+}
+
+message ConnectorUninstall {
+  string connector_id = 1;
+  string bastion_scope_id = 2;
+  uint64 expected_connection_epoch = 3;
+  uint64 fencing_generation = 4;
+}
+
+message ConnectorUninstallResult {
+  bool identity_removed = 1;
+  bool service_stopped = 2;
+}
+
+message CertificateRotationRequest {
+  uint64 connection_epoch = 1;
+  bytes csr_pem = 2;
+}
+
+message CertificateRotationGrant {
+  uint64 connection_epoch = 1;
+  bytes certificate_pem = 2;
+  bytes ca_bundle_pem = 3;
+  google.protobuf.Timestamp not_after = 4;
+}
+
+message CredentialLeaseRequest {
+  string lease_id = 1;
+  string command_id = 2;
+  uint64 connection_epoch = 3;
+  bytes recipient_nonce = 4;
+}
+
+message CredentialLeaseGrant {
+  string lease_id = 1;
+  string command_id = 2;
+  uint64 connection_epoch = 3;
+  bytes credential_payload = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  bytes recipient_nonce = 6;
+}
+
+message CommandReconcileRequest {
+  repeated string command_ids = 1;
+  uint64 connection_epoch = 2;
+}
+
+message CommandReconcileResult {
+  repeated ReconciledCommand commands = 1;
+  uint64 connection_epoch = 2;
+}
+
+message ReconciledCommand {
+  string command_id = 1;
+  string status = 2;
+  string result_hash = 3;
+  argus.common.v1.ErrorStatus error = 4;
+}

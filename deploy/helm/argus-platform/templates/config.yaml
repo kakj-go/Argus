@@ -12,6 +12,18 @@ data:
   ARGUS_OPENSANDBOX_HOST: opensandbox-server.{{ .Values.namespaces.sandbox }}.svc
   ARGUS_KAFKA_BROKERS: argus-kafka-kafka-bootstrap.{{ .Values.namespaces.observability }}.svc:9092
   ARGUS_CLICKHOUSE_HOST: argus-clickhouse-client.{{ .Values.namespaces.observability }}.svc
+  ARGUS_CONNECTOR_ENROLLMENT_URL: {{ .Values.runtime.connectorEnrollmentURL | quote }}
+  ARGUS_CONNECTOR_GATEWAY_ADDRESS: {{ .Values.runtime.connectorGatewayAddress | quote }}
+  ARGUS_SYSTEM_NAMESPACE: {{ .Values.namespaces.system | quote }}
+  ARGUS_CONNECTOR_ISSUER_NAME: {{ .Values.runtime.connectorIssuerName | quote }}
+  ARGUS_CONNECTOR_ISSUER_GENERATION: {{ .Values.runtime.connectorIssuerGeneration | quote }}
+  ARGUS_DEPLOYMENT_PROFILE: {{ .Values.profile | quote }}
+  ARGUS_DIRECT_ADVERTISED_EGRESS: {{ join "," .Values.runtime.directAdvertisedEgress | quote }}
+  ARGUS_DIRECT_VERIFICATION_URL: {{ .Values.runtime.directVerificationUrl | quote }}
+  ARGUS_DIRECT_DENIED_CIDRS: {{ join "," .Values.runtime.directDeniedCidrs | quote }}
+  ARGUS_DIRECT_EXECUTOR_ENDPOINT: {{ default (printf "argus-direct-executor.%s.svc:9444" .Values.namespaces.system) .Values.runtime.directExecutorEndpoint | quote }}
+  ARGUS_DIRECT_EXECUTOR_SERVER_NAME: {{ default (printf "argus-direct-executor.%s.svc" .Values.namespaces.system) .Values.runtime.directExecutorServerName | quote }}
+  ARGUS_DIRECT_EXECUTOR_CLIENT_NAME: argus-server
 ---
 apiVersion: v1
 kind: Secret
@@ -27,3 +39,13 @@ stringData:
   ARGUS_REDIS_URL: {{ printf "redis://:%s@argus-redis:6379/0" (required "runtime.redisPassword is required" .Values.runtime.redisPassword) | quote }}
   ARGUS_IDEMPOTENCY_ENCRYPTION_KEY: {{ required "runtime.idempotencyEncryptionKey is required" .Values.runtime.idempotencyEncryptionKey | quote }}
   ARGUS_CURSOR_SIGNING_KEY: {{ required "runtime.cursorSigningKey is required" .Values.runtime.cursorSigningKey | quote }}
+  ARGUS_PENDING_ACTION_ENCRYPTION_KEY: {{ required "runtime.pendingActionEncryptionKey is required" .Values.runtime.pendingActionEncryptionKey | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argus-secret-kek
+  namespace: {{ .Values.namespaces.system }}
+type: Opaque
+stringData:
+  keyring.json: {{ required "runtime.secretKEKKeyring is required" .Values.runtime.secretKEKKeyring | toJson | quote }}

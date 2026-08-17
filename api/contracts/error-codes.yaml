@@ -47,3 +47,25 @@ codes:
   API_KEY_REVOKED: {http_status: 401, message_key: errors.api_key.revoked, retryable: false}
   API_KEY_EXPIRED: {http_status: 401, message_key: errors.api_key.expired, retryable: false}
   IDEMPOTENCY_RESULT_EXPIRED: {http_status: 409, message_key: errors.common.idempotency_result_expired, retryable: false}
+  SECRET_REFERENCED: {http_status: 409, message_key: errors.secret.referenced, retryable: false}
+  CREDENTIAL_UNAVAILABLE: {http_status: 409, message_key: errors.credential.unavailable, retryable: false}
+  CREDENTIAL_VERSION_STALE: {http_status: 409, message_key: errors.credential.version_stale, retryable: false}
+  CREDENTIAL_LEASE_INVALID: {http_status: 409, message_key: errors.credential.lease_invalid, retryable: false}
+  CONNECTION_TEST_REQUIRED: {http_status: 409, message_key: errors.connection_test.required, retryable: false}
+  CONNECTION_TEST_FAILED: {http_status: 422, message_key: errors.connection_test.failed, retryable: false}
+  DIRECT_TARGET_DENIED: {http_status: 403, message_key: errors.direct.target_denied, retryable: false}
+  DIRECT_PLAN_INVALID: {http_status: 422, message_key: errors.direct.plan_invalid, retryable: false}
+  KUBERNETES_QUERY_UNAVAILABLE: {http_status: 503, message_key: errors.kubernetes.query_unavailable, retryable: true}
+  CONNECTOR_ENROLLMENT_INVALID: {http_status: 401, message_key: errors.connector.enrollment_invalid, retryable: false}
+  CONNECTOR_ENROLLMENT_CONFLICT: {http_status: 409, message_key: errors.connector.enrollment_conflict, retryable: false}
+  CONNECTOR_FENCED: {http_status: 409, message_key: errors.connector.fenced, retryable: false}
+  CONNECTOR_COMMAND_STATE_CONFLICT: {http_status: 409, message_key: errors.connector.command_state_conflict, retryable: true}
+  CONNECTOR_PROTOCOL_ERROR: {http_status: 400, message_key: errors.connector.protocol, retryable: false}
+  CONNECTOR_SEQUENCE_INVALID: {http_status: 400, message_key: errors.connector.sequence_invalid, retryable: false}
+  CONNECTOR_FRAME_INVALID: {http_status: 400, message_key: errors.connector.frame_invalid, retryable: false}
+  CONNECTOR_HEARTBEAT_TIMEOUT: {http_status: 408, message_key: errors.connector.heartbeat_timeout, retryable: true}
+  CONNECTOR_GATEWAY_DRAINING: {http_status: 503, message_key: errors.connector.gateway_draining, retryable: true}
+  CONNECTOR_DISCONNECTED: {http_status: 503, message_key: errors.connector.disconnected, retryable: true}
+  CONNECTOR_COMMAND_SCHEMA_INVALID: {http_status: 422, message_key: errors.connector.command_schema_invalid, retryable: false}
+  CONNECTOR_RESULT_NOT_REPLAYABLE: {http_status: 409, message_key: errors.connector.result_not_replayable, retryable: false}
+  CONNECTOR_CERTIFICATE_ROTATION_FAILED: {http_status: 409, message_key: errors.connector.certificate_rotation_failed, retryable: true}

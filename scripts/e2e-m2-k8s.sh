@@ -2,39 +2,43 @@
 set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+PHASE=${ARGUS_E2E_PHASE:-m2}
 KUBE_CONTEXT=${ARGUS_E2E_KUBE_CONTEXT:-$(kubectl config current-context)}
 RUN_ID=${ARGUS_E2E_RUN_ID:-$(date -u +%Y%m%d%H%M%S)-$$}
-RELEASE_ID="m2-${RUN_ID}"
-SYSTEM_NS="argus-m2-system-${RUN_ID}"
-SANDBOX_NS="argus-m2-sandbox-${RUN_ID}"
-OBSERVABILITY_NS="argus-m2-observability-${RUN_ID}"
-LEASE_NAME=argus-m2-e2e-lock
-BACKEND_IMAGE="argus/argus-backend:m2-${RUN_ID}"
-WEB_IMAGE="argus/argus-web:m2-${RUN_ID}"
+RELEASE_ID="${PHASE}-${RUN_ID}"
+SYSTEM_NS="argus-${PHASE}-system-${RUN_ID}"
+SANDBOX_NS="argus-${PHASE}-sandbox-${RUN_ID}"
+OBSERVABILITY_NS="argus-${PHASE}-observability-${RUN_ID}"
+LEASE_NAME="argus-${PHASE}-e2e-lock"
+BACKEND_IMAGE="argus/argus-backend:${PHASE}-${RUN_ID}"
+WEB_IMAGE="argus/argus-web:${PHASE}-${RUN_ID}"
 API_PORT=${ARGUS_E2E_API_PORT:-4180}
 ENTERPRISE_PORT=${ARGUS_E2E_ENTERPRISE_PORT:-4173}
 PLATFORM_PORT=${ARGUS_E2E_PLATFORM_PORT:-4174}
 SETUP_PORT=${ARGUS_E2E_SETUP_PORT:-4175}
 CARD_PORT=${ARGUS_E2E_CARD_PORT:-4176}
+CONNECTOR_GATEWAY_ADDRESS=${ARGUS_E2E_CONNECTOR_GATEWAY_ADDRESS:-grpcs://argus-connector-gateway.${SYSTEM_NS}.svc:9443}
 API_URL="http://127.0.0.1:${API_PORT}/api/v1"
 PLATFORM_ORIGIN="http://127.0.0.1:${PLATFORM_PORT}"
 ENTERPRISE_ORIGIN="http://127.0.0.1:${ENTERPRISE_PORT}"
 SETUP_ORIGIN="http://127.0.0.1:${SETUP_PORT}"
-ARTIFACT_DIR="${ROOT_DIR}/artifacts/m2-e2e/${RUN_ID}"
+ARTIFACT_DIR="${ROOT_DIR}/artifacts/${PHASE}-e2e/${RUN_ID}"
 WORK_DIR=$(mktemp -d)
 PLATFORM_JAR="${WORK_DIR}/platform.cookies"
 ENTERPRISE_JAR="${WORK_DIR}/enterprise.cookies"
+OTHER_ENTERPRISE_JAR="${WORK_DIR}/other-enterprise.cookies"
 PF_PIDS=()
 API_PF_PID=""
 WEB_PF_PID=""
 LEASE_ACQUIRED=false
 NAMESPACES_CREATED=false
 RESPONSE_FILE=""
+LAST_REQUEST_NAME="none"
 
 mkdir -p "$ARTIFACT_DIR"
 
-log() { printf '[m2-e2e] %s\n' "$*"; }
-fail() { printf '[m2-e2e] ERROR: %s\n' "$*" >&2; exit 1; }
+log() { printf '[%s-e2e] %s\n' "$PHASE" "$*"; }
+fail() { printf '[%s-e2e] ERROR: %s\n' "$PHASE" "$*" >&2; exit 1; }
 
 retry() {
   attempts=$1
@@ -66,6 +70,10 @@ diagnostics() {
   } 2>&1 | redact >"${ARTIFACT_DIR}/cluster.txt"
   k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus --all-containers=true --prefix=true --tail=1000 2>&1 \
     | redact >"${ARTIFACT_DIR}/argus.log" || true
+  if [[ "$PHASE" == "m3" ]]; then
+    k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus-m3-e2e --all-containers=true --prefix=true --tail=1000 2>&1 \
+      | redact >"${ARTIFACT_DIR}/m3-workloads.log" || true
+  fi
   k -n "$SYSTEM_NS" logs statefulset/argus-postgresql --tail=300 2>&1 \
     | redact >"${ARTIFACT_DIR}/postgresql.log" || true
   k -n "$SYSTEM_NS" logs statefulset/argus-redis --tail=300 2>&1 \
@@ -76,6 +84,9 @@ cleanup() {
   status=$?
   set +e
   diagnostics
+  if declare -F cleanup_m3 >/dev/null; then
+    cleanup_m3
+  fi
   for pid in "${PF_PIDS[@]:-}"; do
     kill "$pid" >/dev/null 2>&1 || true
     wait "$pid" >/dev/null 2>&1 || true
@@ -98,7 +109,7 @@ cleanup() {
   docker image rm "$BACKEND_IMAGE" "$WEB_IMAGE" >/dev/null 2>&1 || true
   rm -rf "$WORK_DIR"
   if [[ $status -ne 0 ]]; then
-    printf '[m2-e2e] failed; redacted diagnostics: %s\n' "$ARTIFACT_DIR" >&2
+    printf '[%s-e2e] failed after request %s; redacted diagnostics: %s\n' "$PHASE" "$LAST_REQUEST_NAME" "$ARTIFACT_DIR" >&2
   fi
   exit "$status"
 }
@@ -106,7 +117,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 require_commands() {
-  for command in kubectl helm docker jq curl pnpm openssl; do
+  for command in kubectl helm docker jq curl pnpm openssl go; do
     command -v "$command" >/dev/null 2>&1 || fail "required command is missing: ${command}"
   done
   k cluster-info >/dev/null
@@ -139,7 +150,7 @@ EOF
 create_namespaces() {
   for ns in "$SYSTEM_NS" "$SANDBOX_NS" "$OBSERVABILITY_NS"; do
     k create namespace "$ns" >/dev/null
-    k label namespace "$ns" "argus.io/release-id=${RELEASE_ID}" "argus.io/e2e=m2" >/dev/null
+    k label namespace "$ns" "argus.io/release-id=${RELEASE_ID}" "argus.io/e2e=${PHASE}" >/dev/null
   done
   NAMESPACES_CREATED=true
 }
@@ -152,7 +163,8 @@ build_images() {
     --build-arg VITE_API_MODE=real \
     --build-arg "VITE_API_BASE_URL=http://127.0.0.1:${API_PORT}" \
     --build-arg "VITE_CARD_ORIGIN=http://127.0.0.1:${CARD_PORT}" \
-    --build-arg "VITE_PLATFORM_URL=http://127.0.0.1:${PLATFORM_PORT}/login" . >/dev/null
+    --build-arg "VITE_PLATFORM_URL=http://127.0.0.1:${PLATFORM_PORT}/login" \
+    --build-arg "VITE_DIRECT_EGRESS_ADDRESSES=${ARGUS_E2E_DIRECT_EGRESS_DISPLAY:-127.0.0.1}" . >/dev/null
   case "$KUBE_CONTEXT" in
     kind-*) kind load docker-image --name "${KUBE_CONTEXT#kind-}" "$BACKEND_IMAGE" "$WEB_IMAGE" ;;
     minikube) minikube image load "$BACKEND_IMAGE" "$WEB_IMAGE" ;;
@@ -169,6 +181,9 @@ install_dependencies() {
   SETUP_TOKEN=$(openssl rand -base64 32 | tr -d '=+/\n')
   IDEMPOTENCY_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
   CURSOR_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
+  PENDING_ACTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
+  SECRET_KEK=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
+  SECRET_KEK_KEYRING=$(jq -nc --arg key "$SECRET_KEK" '{current_version:1,keys:{"1":$key}}')
   SETUP_EXPIRES=$(date -u -v+24H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%SZ)
 
   k -n "$SYSTEM_NS" create secret generic argus-data-credentials \
@@ -267,6 +282,10 @@ install_argus() {
     --set-string runtime.redisPassword="$REDIS_PASSWORD" \
     --set-string runtime.idempotencyEncryptionKey="$IDEMPOTENCY_KEY" \
     --set-string runtime.cursorSigningKey="$CURSOR_KEY" \
+    --set-string runtime.pendingActionEncryptionKey="$PENDING_ACTION_KEY" \
+    --set-json runtime.secretKEKKeyring="$SECRET_KEK_KEYRING" \
+    --set-string runtime.connectorEnrollmentURL="http://localhost:${API_PORT}" \
+    --set-string runtime.connectorGatewayAddress="$CONNECTOR_GATEWAY_ADDRESS" \
     --set-json "runtime.allowedOrigins=[\"${ENTERPRISE_ORIGIN}\",\"${PLATFORM_ORIGIN}\",\"${SETUP_ORIGIN}\"]" \
     --set-string runtime.secureCookies=false >/dev/null
   k -n "$SYSTEM_NS" get job argus-postgresql-migration -o jsonpath='{.status.succeeded}' | grep -q '^1$'
@@ -297,6 +316,7 @@ start_api_port_forward() {
 request() {
   name=$1 expected=$2 method=$3 path=$4 jar=$5 body=$6
   shift 6
+  LAST_REQUEST_NAME=$name
   RESPONSE_FILE="${WORK_DIR}/${name}.json"
   args=(--noproxy '*' --silent --show-error --connect-timeout 5 --max-time 30 --output "$RESPONSE_FILE" --write-out '%{http_code}' --request "$method")
   if [[ "$jar" != "-" ]]; then
@@ -431,6 +451,18 @@ run_api_flow() {
     "$(jq -nc --arg id "$OTHER_ENTERPRISE_ID" '{enterprise_id:$id,username:"other-admin",display_name:"Other Admin"}')" \
     --header "Origin: ${PLATFORM_ORIGIN}" --header "X-CSRF-Token: ${PLATFORM_CSRF}" --header "Idempotency-Key: other-admin-${RUN_ID}"
   OTHER_USER_ID=$(jq -er '.user.id' "$RESPONSE_FILE")
+  OTHER_TEMPORARY_PASSWORD=$(jq -er '.temporary_password' "$RESPONSE_FILE")
+  OTHER_ENTERPRISE_PASSWORD='V9!mR4@kT7#pL2$x'
+  request other-enterprise-temp-login 200 POST /enterprise/auth/login "$OTHER_ENTERPRISE_JAR" \
+    "$(jq -nc --arg password "$OTHER_TEMPORARY_PASSWORD" '{username:"other-admin",password:$password}')" \
+    --header "Origin: ${ENTERPRISE_ORIGIN}"
+  OTHER_CHALLENGE_ID=$(jq -er '.password_change_challenge.challenge_id' "$RESPONSE_FILE")
+  request other-enterprise-password-change 200 POST /enterprise/auth/complete-password-change "$OTHER_ENTERPRISE_JAR" \
+    "$(jq -nc --arg challenge "$OTHER_CHALLENGE_ID" --arg temporary "$OTHER_TEMPORARY_PASSWORD" --arg password "$OTHER_ENTERPRISE_PASSWORD" \
+      '{challenge_id:$challenge,temporary_password:$temporary,new_password:$password}')" \
+    --header "Origin: ${ENTERPRISE_ORIGIN}"
+  OTHER_ENTERPRISE_CSRF=$(jq -er '.csrf_token' "$RESPONSE_FILE")
+  unset OTHER_TEMPORARY_PASSWORD OTHER_CHALLENGE_ID
   request cross-enterprise-id 404 GET "/enterprise/users/${OTHER_USER_ID}" "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
   request nonexistent-id 404 GET /enterprise/users/00000000-0000-0000-0000-000000000001 "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
 
@@ -455,6 +487,10 @@ run_api_flow() {
   jq -e 'all(.items[]; .domain == "platform" and (.enterprise_id == null))' "$RESPONSE_FILE" >/dev/null
 
   run_real_playwright
+
+  if declare -F run_m3_api_flow >/dev/null; then
+    run_m3_api_flow
+  fi
 
   log "stopping Redis to verify PostgreSQL authority"
   k -n "$SYSTEM_NS" scale statefulset/argus-redis --replicas=0 >/dev/null
@@ -494,7 +530,7 @@ run_api_flow() {
   jq -e '.code == "ENTERPRISE_SUSPENDED" or .code == "SESSION_REVOKED"' "$RESPONSE_FILE" >/dev/null
   request disabled-api-key 403 GET /enterprise/departments - - --header "Authorization: Bearer ${SUSPEND_API_KEY}"
 
-  unset PLATFORM_PASSWORD ENTERPRISE_PASSWORD PLATFORM_CSRF ENTERPRISE_CSRF SUSPEND_API_KEY SETUP_TOKEN POSTGRES_PASSWORD REDIS_PASSWORD IDEMPOTENCY_KEY CURSOR_KEY
+  unset PLATFORM_PASSWORD ENTERPRISE_PASSWORD OTHER_ENTERPRISE_PASSWORD PLATFORM_CSRF ENTERPRISE_CSRF OTHER_ENTERPRISE_CSRF SUSPEND_API_KEY SETUP_TOKEN POSTGRES_PASSWORD REDIS_PASSWORD IDEMPOTENCY_KEY CURSOR_KEY PENDING_ACTION_KEY SECRET_KEK SECRET_KEK_KEYRING
 }
 
 run_real_playwright() {
@@ -514,10 +550,18 @@ main() {
   create_namespaces
   build_images
   install_dependencies
+  if declare -F prepare_m3_dependencies >/dev/null; then
+    prepare_m3_dependencies
+  fi
   install_argus
   start_port_forwards
   run_api_flow
-  log "M2 Kubernetes E2E passed; diagnostics: ${ARTIFACT_DIR}"
+  phase_label=$(printf '%s' "$PHASE" | tr '[:lower:]' '[:upper:]')
+  log "${phase_label} Kubernetes E2E passed; diagnostics: ${ARTIFACT_DIR}"
 }
+
+if [[ "$PHASE" == "m3" ]]; then
+  source "${ROOT_DIR}/scripts/e2e-m3-flow.sh"
+fi
 
 main "$@"

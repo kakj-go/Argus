@@ -10,6 +10,8 @@
 - M3 Connector、ManagedAccount、Credential Broker 和 Direct Executor 完成。
 - M4 Approval、审计和持久化状态机完成。
 
+M3 ConnectorCommand 未包含 Remote Access Frame，M3 Direct Executor 也只执行连接探测和 Kubernetes 读取；本里程碑才增加人工会话 Listener、Ticket、PTY/Runspace 和录像链路。
+
 ## 任务
 
 - [ ] `M6-GRANT-01` 实现 RemoteAccessGrant 的显式 Host ID/标签选择器、ManagedAccount、协议、动作和有效期。

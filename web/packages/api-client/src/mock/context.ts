@@ -1,5 +1,6 @@
 import type {
   AuditOrigin,
+  ConfirmActionResult,
   ListQuery,
   Page,
   PendingActionPublic,
@@ -38,11 +39,7 @@ export interface BaseContext {
   enterpriseId(): string;
   audit(action: string, entry: AuditEntry): void;
   paginate<T>(items: T[], query?: ListQuery): Page<T>;
-  mustFind<T>(
-    items: T[],
-    predicate: (item: T) => boolean,
-    what: string,
-  ): T;
+  mustFind<T>(items: T[], predicate: (item: T) => boolean, what: string): T;
   emitTask(task: TaskViewModel): void;
 }
 
@@ -51,6 +48,9 @@ export interface Engine {
   createPendingAction(input: CreatePendingActionInput): PendingActionPublic;
   getAction(actionRef: string): PendingActionPublic;
   ensureNotExpired(action: PendingActionPublic): void;
+  commitResourceAction(
+    action: PendingActionPublic,
+  ): ConfirmActionResult | undefined;
   startExecution(action: PendingActionPublic): TaskViewModel;
   streamReply(
     conversationId: string,

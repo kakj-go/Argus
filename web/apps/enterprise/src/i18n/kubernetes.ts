@@ -85,6 +85,8 @@ export const kubernetesZh = {
       connectionMode: "接入方式",
       bastionScope: "Bastion Scope",
       environment: "环境",
+      labels: "标签",
+      labelsHint: "每行一个，格式 key=value",
       kubeconfig: "kubeconfig",
       kubeconfigPlaceholder: "粘贴 kubeconfig 内容…",
       kubeconfigHint:
@@ -94,6 +96,11 @@ export const kubernetesZh = {
       submit: "生成预览",
       save: "保存",
       required: "请填写名称、API Server 与 kubeconfig",
+      enrollmentTitle: "一次性集群 Connector 安装命令",
+      enrollmentWarning:
+        "此命令仅在当前窗口显示。关闭后无法恢复，请先复制并在目标 Kubernetes 集群中执行。",
+      enrollmentExpires: "命令过期时间：{{time}}",
+      enrollmentClose: "我已保存，关闭",
     },
     detail: {
       resourcesTab: "资源查询",
@@ -311,6 +318,8 @@ export const kubernetesEn = {
       connectionMode: "Connection mode",
       bastionScope: "Bastion Scope",
       environment: "Environment",
+      labels: "Labels",
+      labelsHint: "One per line, key=value",
       kubeconfig: "kubeconfig",
       kubeconfigPlaceholder: "Paste kubeconfig content…",
       kubeconfigHint:
@@ -320,6 +329,11 @@ export const kubernetesEn = {
       submit: "Generate preview",
       save: "Save",
       required: "Name, API Server and kubeconfig are required",
+      enrollmentTitle: "One-time cluster Connector command",
+      enrollmentWarning:
+        "This command is shown only in this window and cannot be recovered after closing. Copy it and run it in the target Kubernetes cluster first.",
+      enrollmentExpires: "Command expires at {{time}}",
+      enrollmentClose: "I saved it, close",
     },
     detail: {
       resourcesTab: "Resources",

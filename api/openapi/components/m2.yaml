@@ -297,7 +297,7 @@ components:
       properties:
         name: {type: string, minLength: 1, maxLength: 128}
         description: {type: string, maxLength: 1024}
-        resource_types: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [host, kubernetes_cluster]}}
+        resource_types: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [host, kubernetes_cluster, kubernetes_namespace]}}
         explicit_resource_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
         label_selector: {$ref: "../../schemas/labels/labels.schema.json#/$defs/LabelSelector"}
     DataScopeUpdate:
@@ -307,7 +307,7 @@ components:
       properties:
         name: {type: string, minLength: 1, maxLength: 128}
         description: {type: string, maxLength: 1024}
-        resource_types: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [host, kubernetes_cluster]}}
+        resource_types: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [host, kubernetes_cluster, kubernetes_namespace]}}
         explicit_resource_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
         label_selector: {$ref: "../../schemas/labels/labels.schema.json#/$defs/LabelSelector"}
         status: {type: string, enum: [active, disabled]}
@@ -334,7 +334,7 @@ components:
         id: {type: string, format: uuid}
         domain: {type: string, enum: [platform, enterprise]}
         enterprise_id: {type: string, format: uuid}
-        actor_type: {type: string, enum: [platform_user, enterprise_user, service_account, system]}
+        actor_type: {type: string, enum: [platform_user, enterprise_user, service_account, connector, direct_executor, system]}
         actor_id: {type: string, minLength: 1}
         action: {type: string, pattern: "^[a-z][a-z0-9_.]+$"}
         resource_type: {type: string, minLength: 1, maxLength: 128}

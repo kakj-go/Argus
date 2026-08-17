@@ -75,10 +75,13 @@ func (e PartialMetadataReasons) Valid() bool {
 // Defines values for ResourceRefResourceType.
 const (
 	Artifact          ResourceRefResourceType = "artifact"
+	BastionScope      ResourceRefResourceType = "bastion_scope"
 	Connector         ResourceRefResourceType = "connector"
+	Credential        ResourceRefResourceType = "credential"
 	Host              ResourceRefResourceType = "host"
 	KubernetesCluster ResourceRefResourceType = "kubernetes_cluster"
 	ManagedAccount    ResourceRefResourceType = "managed_account"
+	Secret            ResourceRefResourceType = "secret"
 	TelemetryQuery    ResourceRefResourceType = "telemetry_query"
 )
 
@@ -87,13 +90,19 @@ func (e ResourceRefResourceType) Valid() bool {
 	switch e {
 	case Artifact:
 		return true
+	case BastionScope:
+		return true
 	case Connector:
+		return true
+	case Credential:
 		return true
 	case Host:
 		return true
 	case KubernetesCluster:
 		return true
 	case ManagedAccount:
+		return true
+	case Secret:
 		return true
 	case TelemetryQuery:
 		return true

@@ -7,7 +7,7 @@
 ## 前置条件
 
 - M2 授权闭环完成。
-- M3 至少提供 Host/Kubernetes 查询和一个可安全测试的变更能力。
+- M3 已提供 Host/Kubernetes 查询、资源管理专用 PendingAction/Plan/Token 和可恢复的 Connector/Direct 执行基座。
 
 ## 任务
 
@@ -22,7 +22,7 @@
 - [ ] `M4-SANDBOX-01` 在 Agent 接入前补齐 OpenSandbox 服务连接、镜像、Profile、配额和活动会话治理 API；继续由 Helm 管理部署，不回填到 Setup 向导。
 - [ ] `M4-TOOL-01` 实现 Tool Registry、权限投影、查询 Tool 和 Tool Result 安全投影。
 - [ ] `M4-TOOL-02` 默认顺序执行 Tool，仅允许显式 `parallel_safe` 的无副作用查询并行；截断/不完整 ToolCall 不执行。
-- [ ] `M4-ACTION-01` 实现 `.preview/.commit` 配对校验、PendingAction 公共/内部存储和私有 Token 分流。
+- [ ] `M4-ACTION-01` 扩展 M3 PendingAction 公共/内部存储和私有 Token 分流，增加 `.preview/.commit` Tool 配对与通用状态迁移；不得重建或并行维护第二套资源 Action。
 - [ ] `M4-ACTION-02` 实现 UserConfirmation、ApprovalRequest、ActionBinding、Execution 和 Action Executor。
 - [ ] `M4-AUTH-01` 在 Preview、确认、审批、Commit、恢复时重新检查 DataScope、标签/资源版本和 AuthorizationVersion。
 - [ ] `M4-IDEMPOTENCY-01` 实现双击、网络重试、服务重启、过期、取消和 ResultUnknown 对账。

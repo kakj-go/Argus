@@ -3,25 +3,15 @@ import type {
   ApiKey,
   ApprovalPolicy,
   AuditEvent,
-  BastionScope,
   InteractiveCard,
-  CollectionClaim,
-  CollectorInstallState,
-  Connector,
-  ConnectorEnrollmentToken,
-  ConnectorUninstallCommand,
   DataScope,
   Enterprise,
   EnterpriseAdmin,
   EnterpriseSandboxQuota,
   Department,
-  Host,
-  K8sCluster,
-  K8sNodeBinding,
   ModelQuota,
   PendingActionPublic,
   PlatformState,
-  RemoteSession,
   Role,
   RoleBinding,
   SandboxBackend,
@@ -35,12 +25,27 @@ import type {
   Unsubscribe,
   User,
 } from "../types";
-import type { Conversation, TaskViewModel } from "../provisional";
+import type {
+  CollectionClaim,
+  CollectorInstallState,
+  Conversation,
+  K8sNodeBinding,
+  RemoteSession,
+  TaskViewModel,
+} from "../provisional";
 import type { MockChatMessage } from "./chat-types";
 import type {
   MockActionPlanRecord,
   MockEnterpriseUserRecord,
 } from "./internal-types";
+import type {
+  ConnectorEnrollmentToken,
+  ConnectorUninstallCommand,
+  MockBastionScope,
+  MockConnector,
+  MockHost,
+  MockKubernetesCluster,
+} from "./resource-models";
 
 /** Whole in-memory database backing the mock client. */
 export interface MockDb {
@@ -60,13 +65,13 @@ export interface MockDb {
   serviceAccounts: ServiceAccount[];
   apiKeys: ApiKey[];
   secrets: Secret[];
-  hosts: Host[];
-  connectors: Connector[];
-  bastionScopes: BastionScope[];
+  hosts: MockHost[];
+  connectors: MockConnector[];
+  bastionScopes: MockBastionScope[];
   enrollmentTokens: ConnectorEnrollmentToken[];
   uninstallCommands: ConnectorUninstallCommand[];
   remoteSessions: RemoteSession[];
-  clusters: K8sCluster[];
+  clusters: MockKubernetesCluster[];
   nodeBindings: K8sNodeBinding[];
   collectionClaims: CollectionClaim[];
   collectors: CollectorInstallState[];

@@ -5,8 +5,8 @@ import {
   useApi,
   type BastionScope,
   type Host,
-  type RemoteSession,
 } from "@argus/api-client";
+import type { RemoteSession } from "@argus/api-client/provisional";
 import {
   Button,
   Card,
@@ -182,10 +182,10 @@ export function TerminalTab({
     void queryClient.invalidateQueries({ queryKey: ["remote-sessions"] });
   };
 
-  const protocol = host.connectionMode === "direct_winrm" ? "winrm" : "ssh";
+  const protocol = host.connection_mode === "direct_winrm" ? "winrm" : "ssh";
   const scope = scopeOf(host, scopes);
   const path = t(`hosts.path.${connectionPathKey(host)}`, {
-    scope: scope?.name ?? host.bastionScopeId ?? "",
+    scope: scope?.name ?? host.bastion_scope_id ?? "",
     address: `${host.address}:${host.port}`,
   });
 

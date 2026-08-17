@@ -5,11 +5,13 @@ import { Link } from "@tanstack/react-router";
 import {
   useApi,
   type BastionScope,
-  type ConnectionTestResult,
-  type CreateHostInput,
   type Environment,
   type PendingActionPublic,
 } from "@argus/api-client";
+import type {
+  ConnectionTest,
+  HostPreviewCreate,
+} from "@argus/api-client/contracts";
 import {
   Alert,
   Button,
@@ -22,39 +24,17 @@ import {
   Textarea,
   Wizard,
 } from "@argus/ui";
-import { ARGUS_EGRESS_IP, isPublicAddress, parseTags } from "./host-utils";
+import {
+  ARGUS_EGRESS_ADDRESSES,
+  isPublicAddress,
+  parseLabels,
+} from "./host-utils";
 import { PendingActionConfirm } from "./pending-action-confirm";
 
 type Mode = "via_bastion" | "direct";
 type Protocol = "ssh" | "winrm";
 
 const ENVIRONMENTS: Environment[] = ["development", "staging", "production"];
-
-/** 向导内的连接测试为纯前端模拟（待创建的主机尚无 testConnection 目标）。 */
-function simulateTest(input: {
-  mode: Mode;
-  address: string;
-  scopeName?: string;
-}): Promise<ConnectionTestResult> {
-  return new Promise((resolve) => {
-    window.setTimeout(() => {
-      const routeDetail =
-        input.mode === "via_bastion"
-          ? (input.scopeName ?? "bastion")
-          : "direct_executor";
-      resolve({
-        success: true,
-        latencyMs: 120 + Math.round(Math.random() * 120),
-        checks: [
-          { name: "dns_resolve", status: "passed", detail: input.address },
-          { name: "network_route", status: "passed", detail: routeDetail },
-          { name: "host_key", status: "passed" },
-          { name: "authentication", status: "passed" },
-        ],
-      });
-    }, 900);
-  });
-}
 
 export function AddHostWizard({
   open,
@@ -70,6 +50,8 @@ export function AddHostWizard({
 }) {
   const { t } = useTranslation();
   const api = useApi();
+  const egressDisplay =
+    ARGUS_EGRESS_ADDRESSES.join(", ") || t("hosts.wizard.egressNotConfigured");
 
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState<Mode>("via_bastion");
@@ -80,31 +62,28 @@ export function AddHostWizard({
   const [protocol, setProtocol] = useState<Protocol>("ssh");
   const [platform, setPlatform] = useState<"linux" | "windows">("linux");
   const [account, setAccount] = useState("");
-  const [secretId, setSecretId] = useState("");
+  const [credentialId, setCredentialId] = useState("");
   const [environment, setEnvironment] = useState<Environment>("production");
-  const [tagsText, setTagsText] = useState("");
+  const [labelsText, setLabelsText] = useState("");
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(
-    null,
-  );
+  const [testResult, setTestResult] = useState<ConnectionTest | null>(null);
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const secretsQuery = useQuery({
-    queryKey: ["secrets"],
-    queryFn: () => api.secrets.list(),
+  const credentialsQuery = useQuery({
+    queryKey: ["credentials"],
+    queryFn: () => api.secrets.listCredentials(),
     enabled: open,
   });
 
-  const credentialSecrets = useMemo(() => {
-    const items = secretsQuery.data?.items ?? [];
-    const types =
-      protocol === "winrm"
-        ? ["winrm_password"]
-        : ["ssh_password", "ssh_private_key"];
-    return items.filter((secret) => types.includes(secret.type));
-  }, [secretsQuery.data, protocol]);
+  const credentials = useMemo(
+    () =>
+      (credentialsQuery.data ?? []).filter(
+        (credential) => credential.protocol === protocol,
+      ),
+    [credentialsQuery.data, protocol],
+  );
 
   const reset = () => {
     setStep(0);
@@ -116,9 +95,9 @@ export function AddHostWizard({
     setProtocol("ssh");
     setPlatform("linux");
     setAccount("");
-    setSecretId("");
+    setCredentialId("");
     setEnvironment("production");
-    setTagsText("");
+    setLabelsText("");
     setTestResult(null);
     setPendingAction(null);
   };
@@ -132,17 +111,36 @@ export function AddHostWizard({
     address.trim().length > 0 &&
     (mode === "via_bastion" || isPublicAddress(address));
   const step1Valid = mode === "direct" || scopeId.length > 0;
-  const step2Valid = name.trim().length > 0 && addressValid && Number(port) > 0;
+  const step2Valid =
+    name.trim().length > 0 &&
+    addressValid &&
+    Number(port) > 0 &&
+    account.trim().length > 0 &&
+    credentialId.length > 0;
 
   const runTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const scopeName = scopes.find((scope) => scope.id === scopeId)?.name;
-    const result = await simulateTest({
-      mode,
+    const connectionMode =
+      mode === "via_bastion"
+        ? "via_bastion"
+        : protocol === "winrm"
+          ? "direct_winrm"
+          : "direct_ssh";
+    let result = await api.hosts.createConnectionTest({
       address: address.trim(),
-      scopeName,
+      port: Number(port),
+      platform,
+      connection_mode: connectionMode,
+      bastion_scope_id: mode === "via_bastion" ? scopeId : undefined,
+      credential_id: credentialId,
+      username: account.trim(),
     });
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      if (!["queued", "running"].includes(result.status)) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      result = await api.hosts.getConnectionTest(result.id);
+    }
     setTestResult(result);
     setTesting(false);
   };
@@ -151,23 +149,26 @@ export function AddHostWizard({
     if (submitting) return;
     setSubmitting(true);
     try {
-      const input: CreateHostInput = {
+      if (!testResult || testResult.status !== "succeeded") return;
+      const input: HostPreviewCreate = {
         name: name.trim(),
         address: address.trim(),
         port: Number(port),
         platform,
-        connectionMode:
+        connection_mode:
           mode === "via_bastion"
             ? "via_bastion"
             : protocol === "winrm"
               ? "direct_winrm"
               : "direct_ssh",
-        bastionScopeId: mode === "via_bastion" ? scopeId : undefined,
-        credentialRef: secretId || undefined,
+        bastion_scope_id: mode === "via_bastion" ? scopeId : undefined,
+        credential_id: credentialId,
+        username: account.trim(),
         environment,
-        labels: parseTags(tagsText),
+        labels: parseLabels(labelsText),
+        connection_test_id: testResult.id,
       };
-      setPendingAction(await api.hosts.previewCreate(input));
+      setPendingAction(await api.hosts.previewCreateResource(input));
     } finally {
       setSubmitting(false);
     }
@@ -196,7 +197,7 @@ export function AddHostWizard({
               ? step1Valid
               : step === 1
                 ? step2Valid
-                : Boolean(testResult?.success)
+                : testResult?.status === "succeeded"
           }
           current={step}
           onBack={() => setStep((value) => Math.max(0, value - 1))}
@@ -248,7 +249,7 @@ export function AddHostWizard({
                         <small>
                           {t(`hosts.env.${scope.environment}`)} ·{" "}
                           {t("hosts.scope.members", {
-                            count: scope.memberHostIds.length,
+                            count: scope.member_count,
                           })}
                         </small>
                       </span>
@@ -273,7 +274,7 @@ export function AddHostWizard({
               </button>
               {mode === "direct" && (
                 <p className="argus-inline-note">
-                  {t("hosts.wizard.egressNote", { ip: ARGUS_EGRESS_IP })}
+                  {t("hosts.wizard.egressNote", { ip: egressDisplay })}
                 </p>
               )}
             </div>
@@ -310,7 +311,7 @@ export function AddHostWizard({
                       setProtocol(next);
                       setPort(next === "winrm" ? "5986" : "22");
                       setPlatform(next === "winrm" ? "windows" : "linux");
-                      setSecretId("");
+                      setCredentialId("");
                     }}
                     options={[
                       { value: "ssh", label: "SSH" },
@@ -368,17 +369,18 @@ export function AddHostWizard({
               </Field>
               <Field label={t("hosts.wizard.secret")}>
                 <Select
-                  onValueChange={setSecretId}
+                  ariaLabel={t("hosts.wizard.secret")}
+                  onValueChange={setCredentialId}
                   options={[
                     { value: "", label: t("hosts.wizard.secretNone") },
-                    ...credentialSecrets.map((secret) => ({
-                      value: secret.id,
-                      label: `${secret.name}（${secret.type}）`,
+                    ...credentials.map((credential) => ({
+                      value: credential.id,
+                      label: credential.name,
                     })),
                   ]}
-                  value={secretId}
+                  value={credentialId}
                 />
-                {credentialSecrets.length === 0 && (
+                {credentials.length === 0 && (
                   <span className="argus-field__hint">
                     {t("hosts.wizard.secretEmpty")} ·{" "}
                     <Link to="/settings/secrets">
@@ -388,13 +390,13 @@ export function AddHostWizard({
                 )}
               </Field>
               <Field
-                hint={t("hosts.wizard.tagsHint")}
+                hint={t("hosts.wizard.labelsHint")}
                 label={t("hosts.wizard.labels")}
               >
                 <Textarea
-                  onChange={(event) => setTagsText(event.target.value)}
+                  onChange={(event) => setLabelsText(event.target.value)}
                   rows={3}
-                  value={tagsText}
+                  value={labelsText}
                 />
               </Field>
             </>
@@ -435,14 +437,16 @@ export function AddHostWizard({
                 <div className="argus-detail-section">
                   <Alert
                     description={t("hosts.test.latency", {
-                      ms: testResult.latencyMs,
+                      ms: testResult.latency_ms ?? 0,
                     })}
                     title={
-                      testResult.success
+                      testResult.status === "succeeded"
                         ? t("hosts.wizard.testPassed")
                         : t("hosts.wizard.testFailed")
                     }
-                    tone={testResult.success ? "success" : "danger"}
+                    tone={
+                      testResult.status === "succeeded" ? "success" : "danger"
+                    }
                   />
                   {testResult.checks.map((check) => (
                     <CheckItem
@@ -467,7 +471,7 @@ export function AddHostWizard({
                     ? t("hosts.wizard.testing")
                     : t("hosts.wizard.runTest")}
                 </Button>
-                {!testResult?.success && (
+                {testResult?.status !== "succeeded" && (
                   <span className="argus-muted">
                     {t("hosts.wizard.needTest")}
                   </span>

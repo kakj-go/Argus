@@ -12,6 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bumpAuthorizationVersionRecord = `-- name: BumpAuthorizationVersionRecord :exec
+UPDATE authorization_versions SET version = version + 1, updated_at = now()
+WHERE enterprise_id = $1 AND subject_type = $2 AND subject_id = $3
+`
+
+type BumpAuthorizationVersionRecordParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	SubjectType  string    `json:"subject_type"`
+	SubjectID    uuid.UUID `json:"subject_id"`
+}
+
+func (q *Queries) BumpAuthorizationVersionRecord(ctx context.Context, arg BumpAuthorizationVersionRecordParams) error {
+	_, err := q.db.Exec(ctx, bumpAuthorizationVersionRecord, arg.EnterpriseID, arg.SubjectType, arg.SubjectID)
+	return err
+}
+
 const bumpDepartmentUsersAuthorizationVersion = `-- name: BumpDepartmentUsersAuthorizationVersion :many
 UPDATE enterprise_users SET authorization_version = authorization_version + 1, updated_at = now()
 WHERE enterprise_id = $1 AND department_id = $2
@@ -91,6 +107,23 @@ func (q *Queries) BumpEnterpriseUsersAuthorizationVersion(ctx context.Context, e
 		return nil, err
 	}
 	return items, nil
+}
+
+const bumpServiceAccountAuthorizationVersion = `-- name: BumpServiceAccountAuthorizationVersion :one
+UPDATE service_accounts SET authorization_version = authorization_version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 RETURNING authorization_version
+`
+
+type BumpServiceAccountAuthorizationVersionParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) BumpServiceAccountAuthorizationVersion(ctx context.Context, arg BumpServiceAccountAuthorizationVersionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, bumpServiceAccountAuthorizationVersion, arg.ID, arg.EnterpriseID)
+	var authorization_version int64
+	err := row.Scan(&authorization_version)
+	return authorization_version, err
 }
 
 const bumpUserAuthorizationVersion = `-- name: BumpUserAuthorizationVersion :one

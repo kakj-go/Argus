@@ -4,10 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import {
   useApi,
   type BastionScope,
-  type CollectorInstallState,
   type Host,
   type PendingActionPublic,
 } from "@argus/api-client";
+import type { CollectorInstallState } from "@argus/api-client/provisional";
 import {
   Badge,
   Button,
@@ -26,7 +26,14 @@ import {
   type PreviewCommitStatus,
 } from "@argus/ui";
 import { PendingActionConfirm } from "./pending-action-confirm";
-import { collectorTone, formatDateTime, scopeOf } from "./host-utils";
+import {
+  collectorStatusOf,
+  collectorTone,
+  defaultTelemetryRouteOf,
+  formatDateTime,
+  scopeOf,
+  telemetryRouteOf,
+} from "./host-utils";
 
 /** 采集能力开关键（docs/09 §5.1 的 Collection Profile 草稿开关）。 */
 const CAPABILITY_KEYS = [
@@ -88,6 +95,9 @@ function ConnectorCard({
   const { t } = useTranslation();
   const api = useApi();
   const [rotating, setRotating] = useState(false);
+  const [previewingUninstall, setPreviewingUninstall] = useState(false);
+  const [uninstallAction, setUninstallAction] =
+    useState<PendingActionPublic | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [rotateStatus, setRotateStatus] =
     useState<PreviewCommitStatus>("pending");
@@ -97,7 +107,7 @@ function ConnectorCard({
     queryFn: () => api.connectors.list(),
   });
   const connector = (connectorsQuery.data?.items ?? []).find(
-    (entry) => entry.id === host.connectorId || entry.hostId === host.id,
+    (entry) => entry.id === host.connector_id || entry.host_id === host.id,
   );
   if (!connector) return null;
 
@@ -117,20 +127,48 @@ function ConnectorCard({
     }
   };
 
+  const previewUninstall = async () => {
+    if (previewingUninstall) return;
+    setPreviewingUninstall(true);
+    try {
+      setRotating(false);
+      setUninstallAction(
+        await api.connectors.previewUninstallConnector(
+          connector.id,
+          connector.version,
+        ),
+      );
+    } finally {
+      setPreviewingUninstall(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader
         action={
-          !rotating && (
-            <Button
-              onClick={() => {
-                setRotating(true);
-                setRotateStatus("pending");
-              }}
-              variant="secondary"
-            >
-              {t("hosts.components.rotateCert")}
-            </Button>
+          !rotating &&
+          !uninstallAction && (
+            <span className="argus-inline-actions">
+              <Button
+                onClick={() => {
+                  setRotating(true);
+                  setRotateStatus("pending");
+                }}
+                variant="secondary"
+              >
+                {t("hosts.components.rotateCert")}
+              </Button>
+              {connector.status === "online" ? (
+                <Button
+                  loading={previewingUninstall}
+                  onClick={() => void previewUninstall()}
+                  variant="danger"
+                >
+                  {t("hosts.components.uninstall")}
+                </Button>
+              ) : null}
+            </span>
           )
         }
         title={
@@ -161,15 +199,15 @@ function ConnectorCard({
               }),
               value: (
                 <span className="argus-mono">
-                  epoch {connector.connectionEpoch}
+                  epoch {connector.connection_epoch}
                 </span>
               ),
             },
             {
               label: t("hosts.components.certExpires", {
-                time: formatDateTime(connector.certificateExpiresAt),
+                time: formatDateTime(connector.certificate_expires_at),
               }),
-              value: formatDateTime(connector.lastHeartbeatAt),
+              value: formatDateTime(connector.last_heartbeat_at),
             },
           ]}
         />
@@ -186,7 +224,7 @@ function ConnectorCard({
             onConfirm={() => void rotate()}
             resultMessage={
               rotateStatus === "success"
-                ? `${t("hosts.components.rotated")} · ${t("hosts.components.certExpires", { time: formatDateTime(connector.certificateExpiresAt) })}`
+                ? `${t("hosts.components.rotated")} · ${t("hosts.components.certExpires", { time: formatDateTime(connector.certificate_expires_at) })}`
                 : undefined
             }
             risk="write"
@@ -196,6 +234,17 @@ function ConnectorCard({
             <p className="argus-muted">{t("hosts.components.rotateDesc")}</p>
           </PreviewCommitCard>
         )}
+        {uninstallAction ? (
+          <PendingActionConfirm
+            action={uninstallAction}
+            onCancel={() => setUninstallAction(null)}
+            onDone={() => {
+              setUninstallAction(null);
+              void connectorsQuery.refetch();
+              onChanged();
+            }}
+          />
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -228,12 +277,12 @@ export function CollectorInstallWizard({
 
   const scope = scopeOf(host, scopes);
   const gatewayScopes =
-    host.connectionMode === "connector_local"
+    host.connection_mode === "connector_local"
       ? scopes.filter(
           (entry) =>
             entry.status === "active" &&
-            entry.id !== host.bastionScopeId &&
-            Boolean(entry.connectorHostId),
+            entry.id !== host.bastion_scope_id &&
+            Boolean(entry.connector_host_id),
         )
       : scope
         ? [scope]
@@ -352,7 +401,7 @@ export function CollectorInstallWizard({
               </button>
               {gatewayScopes.map((gatewayScope) => {
                 const value =
-                  gatewayScope.defaultTelemetryRoute ?? gatewayScope.name;
+                  defaultTelemetryRouteOf(gatewayScope) ?? gatewayScope.name;
                 return (
                   <button
                     className={`argus-choice ${route === value ? "is-selected" : ""}`}
@@ -438,12 +487,12 @@ function CollectorCard({
 
   const scope = scopeOf(host, scopes);
   const gatewayScopes =
-    host.connectionMode === "connector_local"
+    host.connection_mode === "connector_local"
       ? scopes.filter(
           (entry) =>
             entry.status === "active" &&
-            entry.id !== host.bastionScopeId &&
-            Boolean(entry.connectorHostId),
+            entry.id !== host.bastion_scope_id &&
+            Boolean(entry.connector_host_id),
         )
       : scope
         ? [scope]
@@ -558,10 +607,10 @@ function CollectorCard({
               tone={collectorTone(
                 collector.status === "converged"
                   ? "converged"
-                  : host.collectorStatus,
+                  : collectorStatusOf(host),
               )}
             >
-              {t(`hosts.collectorStatus.${host.collectorStatus}`)}
+              {t(`hosts.collectorStatus.${collectorStatusOf(host)}`)}
             </StatusBadge>
           </>
         }
@@ -651,10 +700,11 @@ function CollectorCard({
             {t("hosts.components.installed.route")}
           </h3>
           <p>
-            {host.telemetryRoute && host.telemetryRoute !== "direct_argus" ? (
+            {telemetryRouteOf(host) &&
+            telemetryRouteOf(host) !== "direct_argus" ? (
               <Badge tone="accent">
                 {t("hosts.components.installed.routeViaGateway", {
-                  route: host.telemetryRoute,
+                  route: telemetryRouteOf(host),
                 })}
               </Badge>
             ) : (
@@ -691,7 +741,8 @@ function CollectorCard({
                     },
                     ...gatewayScopes.map((gatewayScope) => ({
                       value:
-                        gatewayScope.defaultTelemetryRoute ?? gatewayScope.name,
+                        defaultTelemetryRouteOf(gatewayScope) ??
+                        gatewayScope.name,
                       label: t("hosts.components.installed.routeViaGateway", {
                         route: gatewayScope.name,
                       }),
@@ -762,7 +813,7 @@ export function ComponentsTab({
 }) {
   return (
     <div className="argus-hosts-stack">
-      {host.connectionMode === "connector_local" && (
+      {host.connection_mode === "connector_local" && (
         <ConnectorCard host={host} onChanged={onChanged} />
       )}
       <CollectorCard host={host} onChanged={onChanged} scopes={scopes} />

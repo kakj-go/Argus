@@ -15,15 +15,15 @@ export function createApprovalsDomain(
     async list(filter, query) {
       await ctx.pause();
       let items = db.pendingActions.filter(
-        (entry) => db.actionPlans[entry.action_ref]?.enterprise_id === ctx.enterpriseId(),
+        (entry) =>
+          db.actionPlans[entry.action_ref]?.enterprise_id ===
+          ctx.enterpriseId(),
       );
       if (filter?.status?.length) {
         items = items.filter((entry) => filter.status?.includes(entry.status));
       }
       if (filter?.risk?.length) {
-        items = items.filter((entry) =>
-          filter.risk?.includes(entry.risk),
-        );
+        items = items.filter((entry) => filter.risk?.includes(entry.risk));
       }
       if (filter?.query) {
         items = items.filter((entry) =>
@@ -62,6 +62,8 @@ export function createApprovalsDomain(
         ctx.save();
         return { pending_action: action };
       }
+      const committed = ctx.commitResourceAction(action);
+      if (committed) return committed;
       const task = ctx.startExecution(action);
       return {
         pending_action: action,

@@ -39,6 +39,7 @@ type AdminNavSection = {
   groupKey: string;
   items: AdminNavItem[];
 };
+const realMode = import.meta.env.VITE_API_MODE === "real";
 
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
@@ -67,6 +68,7 @@ function useAdminCounts() {
   const approvals = useQuery({
     queryKey: ["approvals", "awaiting_approval"],
     queryFn: () => api.approvals.list({ status: ["awaiting_approval"] }),
+    enabled: !realMode,
   });
   return {
     hosts: hosts.data?.items.length,
@@ -78,7 +80,7 @@ function useAdminCounts() {
 function buildSections(
   counts: ReturnType<typeof useAdminCounts>,
 ): AdminNavSection[] {
-  return [
+  const sections: AdminNavSection[] = [
     {
       groupKey: "shell.groups.resources",
       items: [
@@ -96,7 +98,7 @@ function buildSections(
         },
       ],
     },
-    {
+    ...(!realMode ? [{
       groupKey: "shell.groups.execution",
       items: [
         { key: "shell.nav.tasks", to: "/tasks", icon: History },
@@ -108,17 +110,17 @@ function buildSections(
           alert: (counts.pendingApprovals ?? 0) > 0,
         },
       ],
-    },
+    }] : []),
     {
       groupKey: "shell.groups.settings",
       items: [
         { key: "shell.nav.settingsOrg", to: "/settings/org", icon: Users },
-        { key: "shell.nav.settingsAi", to: "/settings/ai", icon: Bot },
-        {
+        ...(!realMode ? [{ key: "shell.nav.settingsAi", to: "/settings/ai", icon: Bot }] : []),
+        ...(!realMode ? [{
           key: "shell.nav.settingsInteractiveCards",
           to: "/settings/interactive-cards",
           icon: Component,
-        },
+        }] : []),
         {
           key: "shell.nav.settingsSecrets",
           to: "/settings/secrets",
@@ -132,6 +134,7 @@ function buildSections(
       ],
     },
   ];
+  return sections;
 }
 
 function Sidebar() {
@@ -243,10 +246,10 @@ function CommandDialog() {
           <Search size={15} />
           {t("shell.command.findHost")}
         </Link>
-        <Link onClick={() => setCommandOpen(false)} to="/approvals">
+        {!realMode && <Link onClick={() => setCommandOpen(false)} to="/approvals">
           <ShieldCheck size={15} />
           {t("shell.command.approvals")}
-        </Link>
+        </Link>}
       </div>
     </Dialog>
   );
@@ -329,12 +332,12 @@ function MobileNavigation() {
   const items = [
     { key: "shell.nav.conversation", to: "/", icon: House, exact: true },
     { key: "shell.nav.hosts", to: "/hosts", icon: Server, exact: false },
-    {
+    ...(!realMode ? [{
       key: "shell.nav.approvals",
       to: "/approvals",
       icon: ShieldCheck,
       exact: false,
-    },
+    }] : []),
     {
       key: "shell.nav.settings",
       to: "/settings/org",

@@ -1,12 +1,9 @@
 import type {
-  Host,
+  ConfirmActionResult,
   PendingActionPublic,
   RiskLevel,
 } from "../types";
-import type {
-  TaskViewModel,
-  TaskStep,
-} from "../provisional";
+import type { TaskViewModel, TaskStep } from "../provisional";
 import type {
   MockCardInstance as CardInstance,
   MockChatMessage as ChatMessage,
@@ -15,6 +12,24 @@ import type {
 } from "./chat-types";
 import type { BaseContext, Engine } from "./context";
 import { nextId } from "./store";
+import type {
+  ConnectorEnrollmentPurpose,
+  MockBastionScope,
+  MockHost,
+} from "./resource-models";
+
+const IMMEDIATE_RESOURCE_TOOLS = new Set([
+  "host.create",
+  "host.update",
+  "host.delete",
+  "kubernetes.cluster.create",
+  "kubernetes.cluster.update",
+  "kubernetes.cluster.delete",
+  "bastion.scope.create",
+  "bastion.scope.update",
+  "bastion.scope.delete",
+  "bastion.connector.replace",
+]);
 
 const TOOL_RISK: Record<string, RiskLevel> = {
   "host.create": "write",
@@ -27,6 +42,12 @@ const TOOL_RISK: Record<string, RiskLevel> = {
   "telemetry.collector.route": "write",
   "telemetry.collector.upgrade": "write",
   "kubernetes.cluster.create": "write",
+  "kubernetes.cluster.update": "write",
+  "kubernetes.cluster.delete": "dangerous",
+  "bastion.scope.create": "write",
+  "bastion.scope.update": "write",
+  "bastion.scope.delete": "dangerous",
+  "bastion.connector.replace": "dangerous",
   "kubernetes.workload.restart": "dangerous",
   "connector.cert.rotate": "write",
 };
@@ -73,7 +94,8 @@ const TOOL_TASK_TYPE: Record<string, TaskViewModel["type"]> = {
 };
 
 function summarize(tool: string, input_data: Record<string, unknown>): string {
-  const name = input_data["name"] ?? input_data["workload"] ?? input_data["hostId"] ?? "";
+  const name =
+    input_data["name"] ?? input_data["workload"] ?? input_data["hostId"] ?? "";
   return `${tool} ${String(name)}`.trim();
 }
 
@@ -83,7 +105,10 @@ function buildDiff(
 ): PendingActionPublic["diff"] {
   if (tool === "host.create") {
     return [
-      { kind: "add", text: `+ resource.host ${String(input_data["name"] ?? "")}` },
+      {
+        kind: "add",
+        text: `+ resource.host ${String(input_data["name"] ?? "")}`,
+      },
       { kind: "add", text: "+ telemetry.collector v24.1.3" },
       { kind: "note", text: "无端口与防火墙变更" },
     ];
@@ -221,7 +246,39 @@ export function createEngine(ctx: BaseContext): Engine {
     return task;
   }
 
-  function scheduleSteps(task: TaskViewModel, action: PendingActionPublic): void {
+  function commitResourceAction(
+    action: PendingActionPublic,
+  ): ConfirmActionResult | undefined {
+    const plan = db.actionPlans[action.action_ref];
+    if (
+      !plan ||
+      plan.conversation_id ||
+      !IMMEDIATE_RESOURCE_TOOLS.has(plan.tool)
+    ) {
+      return undefined;
+    }
+    action.status = "executing";
+    action.available_actions = [];
+    action.updated_at = ctx.nowIso();
+    const enrollment = applySideEffect(action);
+    action.status = "succeeded";
+    action.result_summary ??= "操作已完成";
+    action.updated_at = ctx.nowIso();
+    ctx.audit(`${plan.tool}.commit`, {
+      resourceType: "pending_action",
+      resourceId: action.action_ref,
+      summary: action.result_summary,
+    });
+    ctx.save();
+    return enrollment
+      ? { pending_action: action, enrollment }
+      : { pending_action: action };
+  }
+
+  function scheduleSteps(
+    task: TaskViewModel,
+    action: PendingActionPublic,
+  ): void {
     let index = 0;
     const runNext = () => {
       const step = task.steps[index];
@@ -268,31 +325,86 @@ export function createEngine(ctx: BaseContext): Engine {
     ctx.emitTask(task);
   }
 
-  function applySideEffect(action: PendingActionPublic): void {
+  function createEnrollment(
+    scope: MockBastionScope,
+    purpose: ConnectorEnrollmentPurpose,
+    createdBy: string,
+  ): NonNullable<ConfirmActionResult["enrollment"]> {
+    for (const existing of db.enrollmentTokens) {
+      if (
+        existing.bastionScopeId === scope.id &&
+        existing.status === "active"
+      ) {
+        existing.status = "revoked";
+        existing.remainingUses = 0;
+      }
+    }
+    const enrollmentId = nextId(db, "enroll");
+    const token = `enroll_${nextId(db, "token")}_${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+    const installCommand = `curl -fsSL https://argus.example/install.sh | sh -s -- --token ${token}`;
+    const enrollment = {
+      id: enrollmentId,
+      enterpriseId: scope.enterpriseId,
+      bastionScopeId: scope.id,
+      purpose,
+      status: "active" as const,
+      token,
+      installCommand,
+      expiresAt,
+      remainingUses: 1,
+      createdBy,
+      createdAt: ctx.nowIso(),
+    };
+    db.enrollmentTokens.push(enrollment);
+    scope.registrationToken = enrollment;
+    return {
+      enrollment_id: enrollmentId,
+      install_command: installCommand,
+      expires_at: expiresAt,
+    };
+  }
+
+  function applySideEffect(
+    action: PendingActionPublic,
+  ): ConfirmActionResult["enrollment"] | undefined {
     const plan = db.actionPlans[action.action_ref];
     if (!plan) throw new Error("pending action plan unavailable");
     const { input_data } = plan;
     if (plan.tool === "host.create") {
-      const host: Host = {
+      const host: MockHost = {
         id: nextId(db, "host"),
         enterpriseId: plan.enterprise_id,
         name: String(input_data["name"] ?? "new-host"),
-        hostname: String(input_data["hostname"] ?? input_data["name"] ?? "new-host"),
+        hostname: String(
+          input_data["hostname"] ?? input_data["name"] ?? "new-host",
+        ),
         address: String(input_data["address"] ?? ""),
         port: Number(input_data["port"] ?? 22),
-        platform: (input_data["platform"] as Host["platform"]) ?? "linux",
+        platform: (input_data["platform"] as MockHost["platform"]) ?? "linux",
         connectionMode:
-          (input_data["connectionMode"] as Host["connectionMode"]) ?? "direct_ssh",
-        bastionScopeId: input_data["bastionScopeId"] as string | undefined,
-        connectorId: input_data["connectorId"] as string | undefined,
-        credentialRef: input_data["credentialRef"] as string | undefined,
+          (input_data["connection_mode"] as MockHost["connectionMode"]) ??
+          (input_data["connectionMode"] as MockHost["connectionMode"]) ??
+          "direct_ssh",
+        bastionScopeId:
+          (input_data["bastion_scope_id"] as string | undefined) ??
+          (input_data["bastionScopeId"] as string | undefined),
+        connectorId: input_data["connector_id"] as string | undefined,
+        credentialRef:
+          (input_data["managed_account_id"] as string | undefined) ??
+          (input_data["credential_id"] as string | undefined) ??
+          (input_data["credentialRef"] as string | undefined),
         environment:
-          (input_data["environment"] as Host["environment"]) ?? "production",
+          (input_data["environment"] as MockHost["environment"]) ??
+          "production",
         labels: (input_data["labels"] as Record<string, string>) ?? {},
         connectionStatus: "online",
         collectorStatus: "installing",
         createdAt: ctx.nowIso(),
         updatedAt: ctx.nowIso(),
+        resourceVersion: 1,
       };
       db.hosts.push(host);
       const scope = db.bastionScopes.find(
@@ -303,6 +415,43 @@ export function createEngine(ctx: BaseContext): Engine {
         scope.updatedAt = ctx.nowIso();
       }
       action.result_summary = `已创建主机 ${host.name}`;
+      return;
+    }
+    if (plan.tool === "host.update") {
+      const host = db.hosts.find(
+        (entry) => entry.id === String(input_data["id"] ?? ""),
+      );
+      if (!host) return;
+      if (input_data["name"] !== undefined)
+        host.name = String(input_data["name"]);
+      if (input_data["hostname"] !== undefined) {
+        host.hostname = String(input_data["hostname"]);
+      }
+      if (input_data["address"] !== undefined) {
+        host.address = String(input_data["address"]);
+      }
+      if (input_data["port"] !== undefined)
+        host.port = Number(input_data["port"]);
+      if (input_data["environment"] !== undefined) {
+        host.environment = input_data["environment"] as MockHost["environment"];
+      }
+      if (input_data["labels"] !== undefined) {
+        host.labels = input_data["labels"] as Record<string, string>;
+      }
+      host.resourceVersion = (host.resourceVersion ?? 1) + 1;
+      host.updatedAt = ctx.nowIso();
+      action.result_summary = `已更新主机 ${host.name}`;
+      return;
+    }
+    if (plan.tool === "host.delete") {
+      const id = String(input_data["id"] ?? "");
+      db.hosts = db.hosts.filter((entry) => entry.id !== id);
+      for (const scope of db.bastionScopes) {
+        scope.memberHostIds = scope.memberHostIds.filter(
+          (hostId) => hostId !== id,
+        );
+      }
+      action.result_summary = `已删除主机 ${id}`;
       return;
     }
     if (plan.tool === "telemetry.host.install") {
@@ -399,23 +548,150 @@ export function createEngine(ctx: BaseContext): Engine {
         id: nextId(db, "k8s"),
         enterpriseId: plan.enterprise_id,
         name: String(input_data["name"] ?? "new-cluster"),
-        apiServer: String(input_data["apiServer"] ?? ""),
+        apiServer: String(
+          input_data["api_server"] ?? input_data["apiServer"] ?? "",
+        ),
         connectionMode:
+          (input_data["connection_mode"] as
+            "via_bastion" | "direct" | "in_cluster") ??
           (input_data["connectionMode"] as
-            "via_bastion" | "direct" | "in_cluster") ?? "direct",
-        bastionScopeId: input_data["bastionScopeId"] as string | undefined,
-        credentialRef: String(input_data["credentialRef"] ?? ""),
+            "via_bastion" | "direct" | "in_cluster") ??
+          "direct",
+        bastionScopeId:
+          (input_data["bastion_scope_id"] as string | undefined) ??
+          (input_data["bastionScopeId"] as string | undefined),
+        credentialRef: String(
+          input_data["credential_id"] ?? input_data["credentialRef"] ?? "",
+        ),
         version: "v1.31.4",
         environment:
-          (input_data["environment"] as "development" | "staging" | "production") ??
-          "production",
+          (input_data["environment"] as
+            "development" | "staging" | "production") ?? "production",
         labels: (input_data["labels"] as Record<string, string>) ?? {},
         connectionStatus: "connected",
         nodeCount: 0,
         readyNodeCount: 0,
         createdAt: ctx.nowIso(),
         updatedAt: ctx.nowIso(),
+        resourceVersion: 1,
       });
+      return;
+    }
+    if (plan.tool === "kubernetes.cluster.update") {
+      const cluster = db.clusters.find(
+        (entry) => entry.id === String(input_data["id"] ?? ""),
+      );
+      if (!cluster) return;
+      if (input_data["name"] !== undefined)
+        cluster.name = String(input_data["name"]);
+      if (input_data["environment"] !== undefined) {
+        cluster.environment = input_data[
+          "environment"
+        ] as typeof cluster.environment;
+      }
+      if (input_data["labels"] !== undefined) {
+        cluster.labels = input_data["labels"] as Record<string, string>;
+      }
+      cluster.resourceVersion = (cluster.resourceVersion ?? 1) + 1;
+      cluster.updatedAt = ctx.nowIso();
+      return;
+    }
+    if (plan.tool === "kubernetes.cluster.delete") {
+      const id = String(input_data["id"] ?? "");
+      db.clusters = db.clusters.filter((entry) => entry.id !== id);
+      db.nodeBindings = db.nodeBindings.filter(
+        (entry) => entry.clusterId !== id,
+      );
+      return;
+    }
+    if (plan.tool === "bastion.scope.create") {
+      const now = ctx.nowIso();
+      const scope: MockBastionScope = {
+        id: nextId(db, "scope"),
+        enterpriseId: plan.enterprise_id,
+        name: String(input_data["name"] ?? "new-bastion"),
+        environment:
+          (input_data["environment"] as
+            "development" | "staging" | "production") ?? "production",
+        labels: (input_data["labels"] as Record<string, string>) ?? {},
+        status: "pending",
+        memberHostIds: [],
+        createdAt: now,
+        updatedAt: now,
+        resourceVersion: 1,
+      };
+      db.bastionScopes.push(scope);
+      const enrollment = createEnrollment(
+        scope,
+        "initial_registration",
+        plan.created_by,
+      );
+      action.result_summary = `已创建堡垒机范围 ${scope.name}`;
+      return enrollment;
+    }
+    if (plan.tool === "bastion.scope.update") {
+      const scope = db.bastionScopes.find(
+        (entry) => entry.id === String(input_data["scope_id"] ?? ""),
+      );
+      if (!scope) return;
+      if (input_data["name"] !== undefined)
+        scope.name = String(input_data["name"]);
+      if (input_data["environment"] !== undefined) {
+        scope.environment = input_data[
+          "environment"
+        ] as typeof scope.environment;
+      }
+      if (input_data["labels"] !== undefined) {
+        scope.labels = input_data["labels"] as Record<string, string>;
+      }
+      scope.resourceVersion = (scope.resourceVersion ?? 1) + 1;
+      scope.updatedAt = ctx.nowIso();
+      return;
+    }
+    if (plan.tool === "bastion.scope.delete") {
+      const id = String(input_data["scope_id"] ?? "");
+      db.bastionScopes = db.bastionScopes.filter((entry) => entry.id !== id);
+      action.result_summary = `已删除堡垒机范围 ${id}`;
+      return;
+    }
+    if (plan.tool === "bastion.connector.replace") {
+      const scope = db.bastionScopes.find(
+        (entry) => entry.id === String(input_data["scope_id"] ?? ""),
+      );
+      if (!scope) return;
+      const previous = db.connectors.find(
+        (entry) => entry.id === scope.activeConnectorId,
+      );
+      if (previous) previous.status = "offline";
+      scope.activeConnectorId = undefined;
+      scope.status = "pending";
+      scope.resourceVersion = (scope.resourceVersion ?? 1) + 1;
+      scope.updatedAt = ctx.nowIso();
+      const enrollment = createEnrollment(
+        scope,
+        "connector_replacement",
+        plan.created_by,
+      );
+      action.result_summary = `已生成堡垒机替换命令 ${scope.name}`;
+      return enrollment;
+    }
+    if (plan.tool === "connector.uninstall") {
+      const connector = db.connectors.find(
+        (entry) => entry.id === String(input_data["connector_id"] ?? ""),
+      );
+      if (!connector) return;
+      connector.status = "uninstalled";
+      connector.lastHeartbeatAt = ctx.nowIso();
+      const scope = db.bastionScopes.find(
+        (entry) => entry.id === connector.bastionScopeId,
+      );
+      if (scope) {
+        scope.status = "uninstalled";
+        scope.activeConnectorId = undefined;
+        scope.resourceVersion = (scope.resourceVersion ?? 1) + 1;
+        scope.updatedAt = ctx.nowIso();
+      }
+      action.result_summary = `已卸载 Connector ${connector.name}`;
       return;
     }
     if (plan.tool === "connector.cert.rotate") {
@@ -577,6 +853,7 @@ export function createEngine(ctx: BaseContext): Engine {
     createPendingAction,
     getAction,
     ensureNotExpired,
+    commitResourceAction,
     startExecution,
     streamReply,
   };

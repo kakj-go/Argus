@@ -1,7 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi, type PendingActionPublic } from "@argus/api-client";
+import {
+  useApi,
+  type ConfirmActionResult,
+  type PendingActionPublic,
+} from "@argus/api-client";
 import { PreviewCommitCard, type PreviewCommitStatus } from "@argus/ui";
 
 function toDiffLines(diff: PendingActionPublic["diff"]) {
@@ -26,7 +30,7 @@ export function PendingActionCard({
   onSettled,
 }: {
   action: PendingActionPublic;
-  onSettled: (confirmed: boolean) => void;
+  onSettled: (confirmed: boolean, result?: ConfirmActionResult) => void;
 }) {
   const { t } = useTranslation();
   const api = useApi();
@@ -41,8 +45,11 @@ export function PendingActionCard({
     [],
   );
 
-  const settle = (confirmed: boolean) => {
-    timerRef.current = window.setTimeout(() => onSettled(confirmed), 1200);
+  const settle = (confirmed: boolean, result?: ConfirmActionResult) => {
+    timerRef.current = window.setTimeout(
+      () => onSettled(confirmed, result),
+      1200,
+    );
   };
 
   const confirm = useMutation({
@@ -54,7 +61,7 @@ export function PendingActionCard({
           ? t("kubernetes.pendingAction.awaitingApproval")
           : t("kubernetes.pendingAction.executed"),
       );
-      settle(true);
+      settle(true, result);
     },
     onError: () => setStatus("failed"),
   });

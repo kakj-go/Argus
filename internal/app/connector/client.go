@@ -1,0 +1,472 @@
+package connector
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/pem"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	connectorcore "github.com/kakj-go/Argus/internal/connector"
+	commonv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/common/v1"
+	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
+)
+
+var errIdentityRotated = errors.New("Connector identity rotated")
+
+type connectorClient struct {
+	store  localStore
+	logger *slog.Logger
+}
+
+type receivedFrame struct {
+	value *connectorv1.ConnectResponse
+	err   error
+}
+
+type outboundFrame struct {
+	value *connectorv1.ConnectRequest
+	stop  bool
+}
+
+type completedCommand struct {
+	command *connectorv1.ConnectorCommand
+	outcome commandOutcome
+}
+
+type pendingLease struct {
+	command *connectorv1.ConnectorCommand
+	nonce   []byte
+}
+
+func (client connectorClient) run(ctx context.Context) error {
+	if err := client.store.ensure(); err != nil {
+		return err
+	}
+	backoff := time.Second
+	for {
+		err := client.runSession(ctx)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if errors.Is(err, errIdentityRotated) {
+			backoff = time.Second
+			continue
+		}
+		client.logger.Warn("Connector session ended; reconnecting", "error", err, "backoff", backoff)
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case <-timer.C:
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
+	}
+}
+
+func (client connectorClient) runSession(ctx context.Context) error {
+	identity, err := client.store.loadIdentity()
+	if err != nil {
+		return fmt.Errorf("load Connector identity: %w", err)
+	}
+	transport, address, err := client.transportCredentials(identity.GatewayEndpoint)
+	if err != nil {
+		return err
+	}
+	connection, err := grpc.NewClient(address, grpc.WithTransportCredentials(transport),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(connectorcore.MaxMessageBytes), grpc.MaxCallSendMsgSize(connectorcore.MaxMessageBytes)))
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+	stream, err := connectorv1.NewConnectorControlServiceClient(connection).Connect(ctx)
+	if err != nil {
+		return err
+	}
+	clientNonce := make([]byte, 32)
+	if _, err := rand.Read(clientNonce); err != nil {
+		return err
+	}
+	if err := stream.Send(&connectorv1.ConnectRequest{Sequence: 1, Frame: &connectorv1.ConnectRequest_Hello{Hello: &connectorv1.ConnectorHello{
+		ProtocolVersion: connectorcore.ProtocolVersion, InstanceId: identity.InstanceID, SoftwareVersion: softwareVersion,
+		Capabilities: identity.Capabilities, ClientNonce: clientNonce}}}); err != nil {
+		return err
+	}
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	welcome := first.GetWelcome()
+	if first.GetSequence() != 1 || welcome == nil || welcome.GetProtocolVersion() != connectorcore.ProtocolVersion ||
+		welcome.GetConnectionEpoch() == 0 || welcome.GetMaxMessageBytes() > connectorcore.MaxMessageBytes || len(welcome.GetServerNonce()) < 16 {
+		return errors.New("Connector welcome is invalid")
+	}
+	if welcome.GetHeartbeatInterval() == nil {
+		return errors.New("Connector heartbeat interval is missing")
+	}
+	heartbeat := welcome.GetHeartbeatInterval().AsDuration()
+	if heartbeat < 5*time.Second || heartbeat > 5*time.Minute {
+		return errors.New("Connector heartbeat interval is invalid")
+	}
+	client.logger.Info("Connector session established", "connector_id", identity.ConnectorID, "connection_epoch", welcome.GetConnectionEpoch())
+	return client.sessionLoop(ctx, stream, identity, welcome, heartbeat)
+}
+
+func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv1.ConnectorControlService_ConnectClient,
+	identity identityState, welcome *connectorv1.ConnectorWelcome, heartbeat time.Duration) error {
+	received := make(chan receivedFrame, 1)
+	go receiveServerFrames(stream, received)
+	outgoing := make(chan outboundFrame, 64)
+	completed := make(chan completedCommand, 32)
+	ticker := time.NewTicker(heartbeat)
+	defer ticker.Stop()
+	results, err := client.store.loadResults()
+	if err != nil {
+		return err
+	}
+	clientSequence, serverSequence := uint64(1), uint64(1)
+	epoch := welcome.GetConnectionEpoch()
+	pending := map[string]pendingLease{}
+	var active atomic.Int32
+	var rotationKey []byte
+	var stopAfterAcknowledgement uint64
+	if welcome.GetCertificateRotationRequested() || certificateNeedsRotation(client.store) {
+		rotationKey, err = client.requestRotation(identity, epoch, outgoing)
+		if err != nil {
+			return err
+		}
+	}
+	send := func(item outboundFrame) error {
+		clientSequence++
+		item.value.Sequence = clientSequence
+		if err := stream.Send(item.value); err != nil {
+			return err
+		}
+		if item.stop {
+			stopAfterAcknowledgement = clientSequence
+		}
+		return nil
+	}
+	for {
+		heartbeatChannel := ticker.C
+		outgoingChannel := (<-chan outboundFrame)(outgoing)
+		if stopAfterAcknowledgement != 0 {
+			heartbeatChannel = nil
+			outgoingChannel = nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-heartbeatChannel:
+			if err := send(outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_Heartbeat{Heartbeat: &connectorv1.ConnectorHeartbeat{
+				ConnectionEpoch: epoch, SentAt: timestamppb.Now(), ActiveCommands: uint32(active.Load())}}}}); err != nil {
+				return err
+			}
+		case item := <-outgoingChannel:
+			if err := send(item); err != nil {
+				return err
+			}
+		case execution := <-completed:
+			active.Add(-1)
+			record := outcomeRecord(execution.command, execution.outcome)
+			if err := client.store.saveResult(record); err != nil {
+				return err
+			}
+			results[execution.command.GetCommandId()] = record
+			outgoing <- outboundFrame{value: commandResultFrame(execution.command, epoch, execution.outcome), stop: execution.outcome.stop}
+		case receivedItem := <-received:
+			if receivedItem.err != nil {
+				return receivedItem.err
+			}
+			message := receivedItem.value
+			if message.GetSequence() != serverSequence+1 || message.GetWelcome() != nil || message.GetRemoteAccessOpen() != nil ||
+				message.GetRemoteAccessData() != nil || message.GetRemoteAccessClose() != nil {
+				return errors.New("Connector server sequence or frame is invalid")
+			}
+			serverSequence = message.GetSequence()
+			switch {
+			case message.GetAcknowledge() != nil:
+				acknowledged := message.GetAcknowledge().GetClientSequence()
+				if acknowledged > clientSequence {
+					return errors.New("Connector acknowledgement is invalid")
+				}
+				if stopSequenceAcknowledged(stopAfterAcknowledgement, acknowledged) {
+					client.removeIdentity()
+					return nil
+				}
+			case message.GetClose() != nil:
+				return fmt.Errorf("Connector stream closed: %s", message.GetClose().GetError().GetCode())
+			case message.GetCommandReconcileRequest() != nil:
+				outgoing <- outboundFrame{value: reconcileFrame(message.GetCommandReconcileRequest(), epoch, results)}
+			case message.GetCredentialLeaseGrant() != nil:
+				grant := message.GetCredentialLeaseGrant()
+				value, ok := pending[grant.GetCommandId()]
+				if !ok || grant.GetConnectionEpoch() != epoch || grant.GetLeaseId() != value.command.GetCredentialLeaseId() ||
+					!strings.EqualFold(hex.EncodeToString(grant.GetRecipientNonce()), hex.EncodeToString(value.nonce)) || grant.GetExpiresAt() == nil || time.Now().After(grant.GetExpiresAt().AsTime()) {
+					return errors.New("Connector credential lease grant is invalid")
+				}
+				delete(pending, grant.GetCommandId())
+				credential := append([]byte(nil), grant.GetCredentialPayload()...)
+				active.Add(1)
+				go executeConnectorCommand(ctx, value.command, credential, completed)
+			case message.GetCertificateRotationGrant() != nil:
+				if len(rotationKey) == 0 {
+					return errors.New("unexpected Connector certificate rotation grant")
+				}
+				if err := client.acceptRotation(identity, message.GetCertificateRotationGrant(), rotationKey); err != nil {
+					return err
+				}
+				return errIdentityRotated
+			case message.GetCommand() != nil:
+				command := message.GetCommand()
+				if command.GetConnectionEpoch() != epoch || command.GetCommandId() == "" || command.GetTypedPayload() == nil {
+					return errors.New("Connector command is invalid")
+				}
+				outgoing <- outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_Acknowledge{Acknowledge: &connectorv1.ClientAcknowledge{ServerSequence: serverSequence}}}}
+				if record, ok := findRecordedResult(results, command); ok {
+					outgoing <- outboundFrame{value: recordedResultFrame(command, epoch, record)}
+					continue
+				}
+				running, err := emptyCommandResult(command.GetCommandType())
+				if err != nil {
+					return err
+				}
+				outgoing <- outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_CommandResult{CommandResult: &connectorv1.CommandResult{
+					CommandId: command.GetCommandId(), ConnectionEpoch: epoch, Status: "running", TypedResult: running,
+					ResultSchemaVersion: "argus.connector_result/v1"}}}}
+				if command.GetCredentialLeaseId() != "" {
+					nonce := make([]byte, 32)
+					if _, err := rand.Read(nonce); err != nil {
+						return err
+					}
+					pending[command.GetCommandId()] = pendingLease{command: command, nonce: nonce}
+					outgoing <- outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_CredentialLeaseRequest{CredentialLeaseRequest: &connectorv1.CredentialLeaseRequest{
+						LeaseId: command.GetCredentialLeaseId(), CommandId: command.GetCommandId(), ConnectionEpoch: epoch, RecipientNonce: nonce}}}}
+				} else {
+					active.Add(1)
+					go executeConnectorCommand(ctx, command, nil, completed)
+				}
+			default:
+				return errors.New("unsupported Connector server frame")
+			}
+		}
+	}
+}
+
+func stopSequenceAcknowledged(stopSequence, acknowledged uint64) bool {
+	return stopSequence != 0 && acknowledged >= stopSequence
+}
+
+func receiveServerFrames(stream connectorv1.ConnectorControlService_ConnectClient, output chan<- receivedFrame) {
+	for {
+		value, err := stream.Recv()
+		output <- receivedFrame{value: value, err: err}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func executeConnectorCommand(ctx context.Context, command *connectorv1.ConnectorCommand, credential []byte, output chan<- completedCommand) {
+	defer clear(credential)
+	outcome := (commandExecutor{}).execute(ctx, command, credential)
+	if outcome.code != "" {
+		slog.Warn("Connector command failed", "command_id", command.GetCommandId(), "command_type", command.GetCommandType(), "error_code", outcome.code, "error", outcome.detail)
+	}
+	output <- completedCommand{command: command, outcome: outcome}
+}
+
+func (client connectorClient) transportCredentials(endpoint string) (credentials.TransportCredentials, string, error) {
+	certificatePEM, keyPEM, caPEM, err := client.store.identityMaterial()
+	if err != nil {
+		return nil, "", err
+	}
+	certificate, err := tls.X509KeyPair(certificatePEM, keyPEM)
+	if err != nil {
+		return nil, "", err
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return nil, "", errors.New("Connector CA bundle is invalid")
+	}
+	parsed, err := parseGatewayEndpoint(endpoint)
+	if err != nil {
+		return nil, "", err
+	}
+	configuration := &tls.Config{MinVersion: tls.VersionTLS13, ServerName: parsed.Hostname(), RootCAs: roots, Certificates: []tls.Certificate{certificate}}
+	return credentials.NewTLS(configuration), parsed.Host, nil
+}
+
+func parseGatewayEndpoint(value string) (*url.URL, error) {
+	if !strings.Contains(value, "://") {
+		value = "grpcs://" + value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "grpcs" || parsed.Hostname() == "" || parsed.Port() == "" || parsed.Path != "" {
+		return nil, errors.New("Connector gateway endpoint must be grpcs://host:port")
+	}
+	return parsed, nil
+}
+
+func emptyCommandResult(commandType string) (*anypb.Any, error) {
+	var value proto.Message
+	switch commandType {
+	case "host_connection_probe":
+		value = &connectorv1.HostConnectionProbeResult{}
+	case "kubernetes_connection_probe":
+		value = &connectorv1.KubernetesConnectionProbeResult{}
+	case "kubernetes_resource_query":
+		value = &connectorv1.KubernetesResourceQueryResult{}
+	case "kubernetes_pod_logs":
+		value = &connectorv1.KubernetesPodLogsResult{}
+	case "connector_uninstall":
+		value = &connectorv1.ConnectorUninstallResult{}
+	default:
+		return nil, errors.New("unsupported Connector command result type")
+	}
+	return anypb.New(value)
+}
+
+func commandResultFrame(command *connectorv1.ConnectorCommand, epoch uint64, outcome commandOutcome) *connectorv1.ConnectRequest {
+	status := "succeeded"
+	errorStatus := (*commonv1.ErrorStatus)(nil)
+	result := outcome.result
+	if outcome.code != "" {
+		status = "failed"
+		errorStatus = &commonv1.ErrorStatus{Code: outcome.code, MessageKey: "errors.connector.command_failed", Retryable: false}
+		result, _ = emptyCommandResult(command.GetCommandType())
+	}
+	encoded, _ := proto.Marshal(result)
+	digest := sha256.Sum256(encoded)
+	return &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_CommandResult{CommandResult: &connectorv1.CommandResult{CommandId: command.GetCommandId(),
+		ConnectionEpoch: epoch, Status: status, ResultHash: hex.EncodeToString(digest[:]), Error: errorStatus,
+		TypedResult: result, ResultSchemaVersion: "argus.connector_result/v1"}}}
+}
+
+func outcomeRecord(command *connectorv1.ConnectorCommand, outcome commandOutcome) commandRecord {
+	status := "succeeded"
+	result := outcome.result
+	if outcome.code != "" {
+		status = "failed"
+		result, _ = emptyCommandResult(command.GetCommandType())
+	}
+	encoded, _ := proto.Marshal(result)
+	return commandRecord{CommandID: command.GetCommandId(), IdempotencyKey: command.GetIdempotencyKey(), Status: status,
+		ResultTypeURL: result.GetTypeUrl(), Result: encoded, ErrorCode: outcome.code}
+}
+
+func findRecordedResult(values map[string]commandRecord, command *connectorv1.ConnectorCommand) (commandRecord, bool) {
+	if value, ok := values[command.GetCommandId()]; ok {
+		return value, true
+	}
+	for _, value := range values {
+		if command.GetIdempotencyKey() != "" && value.IdempotencyKey == command.GetIdempotencyKey() {
+			return value, true
+		}
+	}
+	return commandRecord{}, false
+}
+
+func recordedResultFrame(command *connectorv1.ConnectorCommand, epoch uint64, record commandRecord) *connectorv1.ConnectRequest {
+	var typed anypb.Any
+	if proto.Unmarshal(record.Result, &typed) != nil || typed.TypeUrl == "" {
+		typed.TypeUrl, typed.Value = record.ResultTypeURL, nil
+	}
+	var errorStatus *commonv1.ErrorStatus
+	if record.ErrorCode != "" {
+		errorStatus = &commonv1.ErrorStatus{Code: record.ErrorCode, MessageKey: "errors.connector.command_failed", Retryable: false}
+	}
+	return &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_CommandResult{CommandResult: &connectorv1.CommandResult{CommandId: command.GetCommandId(), ConnectionEpoch: epoch,
+		Status: record.Status, ResultHash: record.ResultHash, Error: errorStatus, TypedResult: &typed, ResultSchemaVersion: "argus.connector_result/v1"}}}
+}
+
+func reconcileFrame(request *connectorv1.CommandReconcileRequest, epoch uint64, values map[string]commandRecord) *connectorv1.ConnectRequest {
+	result := &connectorv1.CommandReconcileResult{ConnectionEpoch: epoch}
+	for _, commandID := range request.GetCommandIds() {
+		if value, ok := values[commandID]; ok {
+			item := &connectorv1.ReconciledCommand{CommandId: commandID, Status: value.Status, ResultHash: value.ResultHash}
+			if value.ErrorCode != "" {
+				item.Error = &commonv1.ErrorStatus{Code: value.ErrorCode, MessageKey: "errors.connector.command_failed", Retryable: false}
+			}
+			result.Commands = append(result.Commands, item)
+		}
+	}
+	return &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_CommandReconcileResult{CommandReconcileResult: result}}
+}
+
+func certificateNeedsRotation(store localStore) bool {
+	certificatePEM, _, _, err := store.identityMaterial()
+	if err != nil {
+		return false
+	}
+	block, _ := pem.Decode(certificatePEM)
+	if block == nil {
+		return false
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false
+	}
+	threshold := certificate.NotBefore.Add(certificate.NotAfter.Sub(certificate.NotBefore) * 2 / 3)
+	return time.Now().After(threshold)
+}
+
+func (client connectorClient) requestRotation(identity identityState, epoch uint64, outgoing chan<- outboundFrame) ([]byte, error) {
+	id, err := uuid.Parse(identity.ConnectorID)
+	if err != nil {
+		return nil, err
+	}
+	key, csr, err := connectorcore.GenerateCSR(id)
+	if err != nil {
+		return nil, err
+	}
+	keyPEM, err := connectorcore.MarshalPrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+	outgoing <- outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_CertificateRotationRequest{CertificateRotationRequest: &connectorv1.CertificateRotationRequest{
+		ConnectionEpoch: epoch, CsrPem: csr}}}}
+	return keyPEM, nil
+}
+
+func (client connectorClient) acceptRotation(identity identityState, grant *connectorv1.CertificateRotationGrant, keyPEM []byte) error {
+	if grant.GetConnectionEpoch() == 0 || len(grant.GetCertificatePem()) == 0 || len(grant.GetCaBundlePem()) == 0 || grant.GetNotAfter() == nil {
+		return errors.New("Connector certificate rotation grant is invalid")
+	}
+	id, err := uuid.Parse(identity.ConnectorID)
+	if err != nil {
+		return err
+	}
+	if err := validateIssuedIdentity(id, keyPEM, grant.GetCertificatePem(), grant.GetCaBundlePem()); err != nil {
+		return err
+	}
+	identity.CertificateExpiresAt = grant.GetNotAfter().AsTime()
+	return client.store.saveIdentity(identity, keyPEM, grant.GetCertificatePem(), grant.GetCaBundlePem())
+}
+
+func (client connectorClient) removeIdentity() {
+	for _, name := range []string{identityFile, keyFile, certFile, caFile, resultsFile} {
+		_ = os.Remove(filepath.Join(client.store.directory, name))
+	}
+}

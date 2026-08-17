@@ -1,0 +1,28 @@
+openapi: 3.1.0
+info: {title: Argus Connector API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/bastion-scopes: {$ref: ../argus.yaml#/paths/~1enterprise~1bastion-scopes}
+  "/enterprise/bastion-scopes/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1bastion-scopes~1{id}"}
+  /enterprise/bastion-scopes/actions/preview-create: {$ref: ../argus.yaml#/paths/~1enterprise~1bastion-scopes~1actions~1preview-create}
+  "/enterprise/bastion-scopes/{id}/actions/preview-update": {$ref: "../argus.yaml#/paths/~1enterprise~1bastion-scopes~1{id}~1actions~1preview-update"}
+  "/enterprise/bastion-scopes/{id}/actions/preview-delete": {$ref: "../argus.yaml#/paths/~1enterprise~1bastion-scopes~1{id}~1actions~1preview-delete"}
+  "/enterprise/bastion-scopes/{id}/actions/preview-replacement": {$ref: "../argus.yaml#/paths/~1enterprise~1bastion-scopes~1{id}~1actions~1preview-replacement"}
+  /enterprise/connectors: {$ref: ../argus.yaml#/paths/~1enterprise~1connectors}
+  "/enterprise/connectors/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1connectors~1{id}"}
+  "/enterprise/connectors/{id}/rotate-certificate": {$ref: "../argus.yaml#/paths/~1enterprise~1connectors~1{id}~1rotate-certificate"}
+  "/enterprise/connectors/{id}/actions/preview-uninstall": {$ref: "../argus.yaml#/paths/~1enterprise~1connectors~1{id}~1actions~1preview-uninstall"}
+  /connectors/enroll: {$ref: ../argus.yaml#/paths/~1connectors~1enroll}
+components:
+  securitySchemes:
+    sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
+    connectorEnrollmentToken: {$ref: ../argus.yaml#/components/securitySchemes/connectorEnrollmentToken}
+  schemas:
+    BastionScope: {$ref: ../components/m3.yaml#/components/schemas/BastionScope}
+    BastionScopePage: {$ref: ../components/m3.yaml#/components/schemas/BastionScopePage}
+    BastionPreviewCreate: {$ref: ../components/m3.yaml#/components/schemas/BastionPreviewCreate}
+    Connector: {$ref: ../components/m3.yaml#/components/schemas/Connector}
+    ConnectorPage: {$ref: ../components/m3.yaml#/components/schemas/ConnectorPage}
+    ConnectorEnrollRequest: {$ref: ../components/m3.yaml#/components/schemas/ConnectorEnrollRequest}
+    ConnectorEnrollResult: {$ref: ../components/m3.yaml#/components/schemas/ConnectorEnrollResult}

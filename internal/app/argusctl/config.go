@@ -67,6 +67,7 @@ type Exposure struct {
 	EnterpriseHost   string `json:"enterpriseHost"`
 	PlatformHost     string `json:"platformHost"`
 	SetupHost        string `json:"setupHost"`
+	ConnectorHost    string `json:"connectorHost"`
 }
 
 type Persistence struct {
@@ -130,6 +131,10 @@ func (c *InstallConfig) Validate() error {
 	}
 	if !contains([]string{"port-forward", "ingress"}, c.Spec.Exposure.Mode) {
 		return fmt.Errorf("unsupported exposure mode %q", c.Spec.Exposure.Mode)
+	}
+	if c.Spec.Profile == "production" && (c.Spec.Exposure.EnterpriseHost == "" || c.Spec.Exposure.PlatformHost == "" ||
+		c.Spec.Exposure.SetupHost == "" || c.Spec.Exposure.ConnectorHost == "") {
+		return fmt.Errorf("production exposure hosts, including connectorHost, are required")
 	}
 	return nil
 }

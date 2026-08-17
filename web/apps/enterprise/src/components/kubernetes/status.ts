@@ -1,10 +1,13 @@
 import type {
-  ClusterConnectionStatus,
+  KubernetesCluster,
+} from "@argus/api-client";
+import type {
   CollectorInstallState,
-  K8sCluster,
   K8sNodeBinding,
   K8sWorkload,
-} from "@argus/api-client";
+} from "@argus/api-client/provisional";
+
+type ClusterConnectionStatus = KubernetesCluster["connection_status"];
 
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 
@@ -45,13 +48,13 @@ export function bindingStatusTone(status: K8sNodeBinding["status"]): Tone {
 
 /** verified 绑定数 / 集群节点数。 */
 export function bindingCoverage(
-  cluster: K8sCluster,
+  cluster: KubernetesCluster,
   bindings: K8sNodeBinding[] | undefined,
 ): { verified: number; total: number; percent: number } {
   const verified = (bindings ?? []).filter(
     (entry) => entry.status === "verified",
   ).length;
-  const total = cluster.nodeCount;
+  const total = cluster.node_count ?? 0;
   const percent = total > 0 ? Math.round((verified / total) * 100) : 0;
   return { verified, total, percent };
 }

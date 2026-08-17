@@ -1,13 +1,21 @@
-import type {
-  BastionScope,
-  CollectorStatus,
-  Environment,
-  Host,
-  HostConnectionStatus,
-} from "@argus/api-client";
+import type { BastionScope, Environment, Host } from "@argus/api-client";
+import type { CollectorStatus } from "@argus/api-client/provisional";
 
-/** Argus Direct Executor 的固定出口 IP（mock 演示值）。 */
-export const ARGUS_EGRESS_IP = "203.0.113.1";
+type HostConnectionStatus = Host["connection_status"];
+type ProvisionalHostTelemetry = {
+  collectorStatus?: CollectorStatus;
+  telemetryRoute?: string;
+};
+type ProvisionalBastionTelemetry = { defaultTelemetryRoute?: string };
+
+/** Direct Executor 对外公布的固定出口地址；mock 使用明确的文档演示地址。 */
+export const ARGUS_EGRESS_ADDRESSES = (
+  import.meta.env.VITE_DIRECT_EGRESS_ADDRESSES ??
+  (import.meta.env.VITE_API_MODE === "mock" ? "203.0.113.1" : "")
+)
+  .split(",")
+  .map((value: string) => value.trim())
+  .filter(Boolean);
 
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 
@@ -52,8 +60,8 @@ export function collectorTone(status: CollectorStatus): Tone {
 export function connectionPathKey(
   host: Host,
 ): "viaBastion" | "connectorLocal" | "direct" {
-  if (host.connectionMode === "via_bastion") return "viaBastion";
-  if (host.connectionMode === "connector_local") return "connectorLocal";
+  if (host.connection_mode === "via_bastion") return "viaBastion";
+  if (host.connection_mode === "connector_local") return "connectorLocal";
   return "direct";
 }
 
@@ -61,11 +69,28 @@ export function scopeOf(
   host: Host,
   scopes: BastionScope[],
 ): BastionScope | undefined {
-  return scopes.find((scope) => scope.id === host.bastionScopeId);
+  return scopes.find((scope) => scope.id === host.bastion_scope_id);
+}
+
+export function collectorStatusOf(host: Host): CollectorStatus {
+  return (
+    (host as Host & ProvisionalHostTelemetry).collectorStatus ?? "not_installed"
+  );
+}
+
+export function telemetryRouteOf(host: Host): string | undefined {
+  return (host as Host & ProvisionalHostTelemetry).telemetryRoute;
+}
+
+export function defaultTelemetryRouteOf(
+  scope: BastionScope | undefined,
+): string | undefined {
+  return (scope as (BastionScope & ProvisionalBastionTelemetry) | undefined)
+    ?.defaultTelemetryRoute;
 }
 
 /** "key=value" 每行一个 的文本 <-> labels 对象。 */
-export function parseTags(text: string): Record<string, string> {
+export function parseLabels(text: string): Record<string, string> {
   const labels: Record<string, string> = {};
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
@@ -77,7 +102,7 @@ export function parseTags(text: string): Record<string, string> {
   return labels;
 }
 
-export function tagsToText(labels: Record<string, string>): string {
+export function labelsToText(labels: Record<string, string>): string {
   return Object.entries(labels)
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");

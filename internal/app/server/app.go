@@ -10,10 +10,15 @@ import (
 
 	"github.com/kakj-go/Argus/internal/authorization"
 	"github.com/kakj-go/Argus/internal/config"
+	connectorservice "github.com/kakj-go/Argus/internal/connector"
+	"github.com/kakj-go/Argus/internal/directexecutor"
 	"github.com/kakj-go/Argus/internal/identity"
+	"github.com/kakj-go/Argus/internal/kubernetesreader"
 	"github.com/kakj-go/Argus/internal/outbox"
 	"github.com/kakj-go/Argus/internal/pagination"
 	"github.com/kakj-go/Argus/internal/platform"
+	"github.com/kakj-go/Argus/internal/resource"
+	secretservice "github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
 	"github.com/kakj-go/Argus/internal/transport/httpapi"
@@ -34,11 +39,29 @@ func (a *App) Run(ctx context.Context) error {
 	if err := a.config.Validate(); err != nil {
 		return err
 	}
+	secretKeyring, err := secretservice.LoadKeyring(a.config.SecretKEKPath)
+	if err != nil {
+		return err
+	}
+	kubernetesClient, err := connectorservice.NewDynamicClient(a.config.KubeconfigPath)
+	if err != nil {
+		return err
+	}
+	deniedCIDRs, err := resource.ParseDeniedCIDRs(a.config.DirectDeniedCIDRs)
+	if err != nil {
+		return err
+	}
 	postgresStore, err := postgres.Open(ctx, a.config.DatabaseURL)
 	if err != nil {
 		return err
 	}
 	defer postgresStore.Close()
+	directDispatcher, err := directexecutor.NewDispatcher(a.config.DirectExecutorEndpoint, a.config.DirectExecutorServerName,
+		a.config.DirectExecutorTLSCert, a.config.DirectExecutorTLSKey, a.config.DirectExecutorCABundle)
+	if err != nil {
+		return err
+	}
+	defer directDispatcher.Close()
 	redisClient, err := redisstore.Open(ctx, a.config.RedisURL)
 	if err != nil {
 		if redisClient == nil {
@@ -59,13 +82,34 @@ func (a *App) Run(ctx context.Context) error {
 	enterpriseAuthorizationHandler := httpapi.EnterpriseAuthorizationHandler{Identity: enterpriseIdentityHandler, Service: authorization.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}}, Cursor: cursorSigner}
 	machineHandler := httpapi.MachineHandler{Identity: enterpriseIdentityHandler, Service: machineService, Cursor: cursorSigner}
 	auditHandler := httpapi.AuditHandler{Auth: setupHandler, Enterprise: enterpriseIdentityHandler, Store: postgresStore, Cursor: cursorSigner}
+	secretDomain := secretservice.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Keyring: secretKeyring}
+	actionDomain := resource.PendingActionService{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Key: a.config.PendingActionKey}
+	connectorDomain := connectorservice.Service{Store: postgresStore, Redis: redisClient, GatewayEndpoint: a.config.ConnectorGatewayAddress,
+		EnrollmentURL: a.config.ConnectorEnrollmentURL,
+		Credentials:   secretDomain,
+		Issuer: connectorservice.CertManagerIssuer{Client: kubernetesClient, Namespace: a.config.SystemNamespace,
+			IssuerName: a.config.ConnectorIssuerName, IssuerGeneration: a.config.ConnectorIssuerGeneration}}
+	bastionDomain := connectorservice.BastionService{Store: postgresStore, Actions: actionDomain, Enrollment: connectorDomain}
+	resourceDomain := resource.Service{Store: postgresStore, Actions: actionDomain, Access: resource.AccessService{Store: postgresStore},
+		Direct: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs}, Commands: connectorDomain, DirectCommands: directDispatcher, Extension: bastionDomain,
+		ClusterEnrollment: connectorDomain,
+		Kubernetes: kubernetesreader.Reader{Store: postgresStore, Secrets: secretDomain, Validator: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs},
+			Notifier: connectorDomain}}
+	secretHandler := httpapi.SecretHandler{Identity: enterpriseIdentityHandler, Service: secretDomain}
+	hostHandler := httpapi.HostHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
+	kubernetesHandler := httpapi.KubernetesHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
+	connectionHandler := httpapi.ConnectionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
+	actionHandler := httpapi.ResourceActionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
+	connectorHandler := httpapi.ConnectorHandler{Identity: enterpriseIdentityHandler, Service: connectorDomain, Bastion: bastionDomain}
 	go (outbox.Relay{Store: postgresStore, Redis: redisClient, Logger: a.logger}).Run(ctx)
 	server := &http.Server{
 		Addr: a.config.Address,
 		Handler: httpapi.NewRouterWithOptions(httpapi.RouterOptions{
 			PostgreSQL: postgresStore, Redis: redisClient, Setup: &setupHandler, Platform: &platformHandler,
 			EnterpriseIdentity: &enterpriseIdentityHandler, EnterpriseAuthorization: &enterpriseAuthorizationHandler,
-			Machine: &machineHandler, Audit: &auditHandler, AllowedOrigins: a.config.AllowedOrigins,
+			Machine: &machineHandler, Audit: &auditHandler, Secret: &secretHandler, Host: &hostHandler, Kubernetes: &kubernetesHandler,
+			Connection: &connectionHandler, ResourceAction: &actionHandler, AllowedOrigins: a.config.AllowedOrigins,
+			Connector: &connectorHandler,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

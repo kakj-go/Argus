@@ -4,26 +4,15 @@ import type {
   ApprovalPolicy,
   AuditEvent,
   AuditFilter,
-  BastionScope,
   InteractiveCard,
   InteractiveCardDemoRender,
   InteractiveCardFilter,
   InteractiveCardValidationResult,
-  CollectionClaim,
-  CollectorInstallState,
   ConfirmActionResult,
   ConnectionTestResult,
-  Connector,
-  ConnectorEnrollmentToken,
-  ConnectorUninstallCommand,
-  CreateBastionScopeInput,
-  CreateBastionScopeResult,
   CreateInteractiveCardInput,
   CreateEnterpriseAdminInput,
   CreateEnterpriseInput,
-  CreateHostInput,
-  CreateK8sClusterInput,
-  CreateRemoteSessionInput,
   CreateApiKeyInput,
   CreateRoleBindingInput,
   CreateRoleInput,
@@ -38,13 +27,7 @@ import type {
   EnterpriseAdmin,
   EnterpriseSandboxQuota,
   Department,
-  Host,
-  HostFilter,
   InviteUserInput,
-  K8sCluster,
-  K8sNodeBinding,
-  K8sWorkload,
-  K8sWorkloadFilter,
   ListQuery,
   LoginInput,
   ModelAvailability,
@@ -55,7 +38,6 @@ import type {
   PendingActionFilter,
   PlatformAuditEvent,
   PreviewActionInput,
-  RemoteSession,
   Role,
   RoleBinding,
   SandboxBackend,
@@ -76,28 +58,83 @@ import type {
   UpdateAIModelInput,
   UpdateInteractiveCardInput,
   UpdateEnterpriseInput,
-  UpdateHostInput,
-  UpdateK8sClusterInput,
   UpdateEnterpriseUserInput,
   UpdateRoleBindingInput,
   UpdateSecretInput,
   UsageRange,
   User,
-  UpdateBastionScopeInput,
 } from "./types";
 import type {
+  CollectionClaim,
+  CollectorInstallState,
   Conversation,
   CreateConversationInput,
+  CreateRemoteSessionInput,
+  K8sNodeBinding,
+  K8sWorkload,
+  K8sWorkloadFilter,
+  RemoteSession,
   SendMessageInput,
 } from "./provisional";
 import type { TaskEvent, TaskFilter, TaskViewModel } from "./provisional";
 import type {
+  BastionPreviewCreate,
+  BastionScope,
+  BastionScopePage,
   CompletePasswordChangeRequest,
+  ConnectionTest,
+  Connector,
+  ConnectorPage,
   ConversationEvent,
+  Credential,
+  CredentialCreate,
+  CredentialUpdate,
   EnterpriseUser,
+  Host,
+  HostConnectionTestCreate,
+  HostPage,
+  HostPreviewCreate,
+  HostPreviewUpdate,
+  KubernetesCluster,
+  KubernetesClusterPage,
+  KubernetesConnectionTestCreate,
+  KubernetesPreviewCreate,
+  KubernetesPreviewUpdate,
+  KubernetesResource,
+  KubernetesResourcePage,
+  ManagedAccount,
+  ManagedAccountCreate,
+  ManagedAccountUpdate,
   PasswordUpdateRequest,
+  PodLogs,
+  ResourcePreviewUpdate,
   StreamEventEnvelope,
 } from "./generated/contracts";
+
+export interface CursorListQuery {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface HostListFilter extends CursorListQuery {
+  query?: string;
+  connection_mode?: Host["connection_mode"];
+  bastion_scope_id?: string;
+  labels?: Record<string, string[]>;
+}
+
+export interface KubernetesResourceQuery extends CursorListQuery {
+  resource_type: KubernetesResource["resource_type"];
+  namespace?: string;
+  query?: string;
+}
+
+export interface KubernetesPodLogsQuery {
+  namespace: string;
+  pod: string;
+  container?: string;
+  tail_lines?: number;
+}
 
 /**
  * Typed client for the Argus control plane. Method groups map one-to-one
@@ -143,13 +180,23 @@ export interface ArgusApiClient {
 
   /** Host inventory, remote sessions and host collector management. */
   hosts: {
-    list(filter?: HostFilter, query?: ListQuery): Promise<Page<Host>>;
+    list(filter?: HostListFilter): Promise<HostPage>;
     get(id: string): Promise<Host>;
-    /** Two-phase creation; confirm via approvals.confirm(actionRef). */
-    previewCreate(input: CreateHostInput): Promise<PendingActionPublic>;
-    update(id: string, patch: UpdateHostInput): Promise<Host>;
-    delete(id: string): Promise<void>;
-    testConnection(id: string): Promise<ConnectionTestResult>;
+    createConnectionTest(
+      input: HostConnectionTestCreate,
+    ): Promise<ConnectionTest>;
+    getConnectionTest(id: string): Promise<ConnectionTest>;
+    previewCreateResource(
+      input: HostPreviewCreate,
+    ): Promise<PendingActionPublic>;
+    previewUpdateResource(
+      id: string,
+      input: HostPreviewUpdate,
+    ): Promise<PendingActionPublic>;
+    previewDeleteResource(
+      id: string,
+      expectedVersion: number,
+    ): Promise<PendingActionPublic>;
     /** Collector install wizard on a host: status -> preview -> confirm. */
     getCollector(hostId: string): Promise<CollectorInstallState | null>;
     previewCollectorInstall(
@@ -168,39 +215,59 @@ export interface ArgusApiClient {
 
   /** Connectors and Bastion Scopes. */
   connectors: {
-    list(query?: ListQuery): Promise<Page<Connector>>;
+    list(query?: CursorListQuery): Promise<ConnectorPage>;
     get(id: string): Promise<Connector>;
-    listBastionScopes(): Promise<BastionScope[]>;
+    listBastionScopes(query?: CursorListQuery): Promise<BastionScopePage>;
     getBastionScope(id: string): Promise<BastionScope>;
-    /** Creates a pending scope plus its one-time enrollment token. */
-    createBastionScope(
-      input: CreateBastionScopeInput,
-    ): Promise<CreateBastionScopeResult>;
-    updateBastionScope(
-      scopeId: string,
-      input: UpdateBastionScopeInput,
-    ): Promise<BastionScope>;
-    regenerateEnrollmentToken(
-      scopeId: string,
-    ): Promise<ConnectorEnrollmentToken>;
-    createUninstallCommand(scopeId: string): Promise<ConnectorUninstallCommand>;
-    deleteBastionScope(scopeId: string): Promise<void>;
     rotateCertificate(connectorId: string): Promise<Connector>;
+    previewCreateBastionScope(
+      input: BastionPreviewCreate,
+    ): Promise<PendingActionPublic>;
+    previewUpdateBastionScope(
+      scopeId: string,
+      input: ResourcePreviewUpdate,
+    ): Promise<PendingActionPublic>;
+    previewDeleteBastionScope(
+      scopeId: string,
+      expectedVersion: number,
+    ): Promise<PendingActionPublic>;
+    previewReplaceBastionConnector(
+      scopeId: string,
+      expectedVersion: number,
+    ): Promise<PendingActionPublic>;
+    previewUninstallConnector(
+      connectorId: string,
+      expectedVersion: number,
+    ): Promise<PendingActionPublic>;
   };
 
   /** Registered Kubernetes clusters, bindings and collection claims. */
   kubernetes: {
-    listClusters(query?: ListQuery): Promise<Page<K8sCluster>>;
-    getCluster(id: string): Promise<K8sCluster>;
-    previewCreateCluster(
-      input: CreateK8sClusterInput,
+    listClusters(query?: CursorListQuery): Promise<KubernetesClusterPage>;
+    getCluster(id: string): Promise<KubernetesCluster>;
+    createConnectionTest(
+      input: KubernetesConnectionTestCreate,
+    ): Promise<ConnectionTest>;
+    getConnectionTest(id: string): Promise<ConnectionTest>;
+    previewCreateResource(
+      input: KubernetesPreviewCreate,
     ): Promise<PendingActionPublic>;
-    updateCluster(
+    previewUpdateResource(
       id: string,
-      patch: UpdateK8sClusterInput,
-    ): Promise<K8sCluster>;
-    deleteCluster(id: string): Promise<void>;
-    testClusterConnection(id: string): Promise<ConnectionTestResult>;
+      input: KubernetesPreviewUpdate,
+    ): Promise<PendingActionPublic>;
+    previewDeleteResource(
+      id: string,
+      expectedVersion: number,
+    ): Promise<PendingActionPublic>;
+    listResources(
+      clusterId: string,
+      query: KubernetesResourceQuery,
+    ): Promise<KubernetesResourcePage>;
+    getPodLogs(
+      clusterId: string,
+      query: KubernetesPodLogsQuery,
+    ): Promise<PodLogs>;
     listWorkloads(
       clusterId: string,
       filter?: K8sWorkloadFilter,
@@ -368,7 +435,17 @@ export interface ArgusApiClient {
     get(id: string): Promise<Secret>;
     create(input: CreateSecretInput): Promise<Secret>;
     update(id: string, patch: UpdateSecretInput): Promise<Secret>;
+    rotate(id: string, value: string, expectedVersion: number): Promise<Secret>;
     delete(id: string): Promise<void>;
+    listCredentials(): Promise<Credential[]>;
+    createCredential(input: CredentialCreate): Promise<Credential>;
+    updateCredential(id: string, input: CredentialUpdate): Promise<Credential>;
+    listManagedAccounts(): Promise<ManagedAccount[]>;
+    createManagedAccount(input: ManagedAccountCreate): Promise<ManagedAccount>;
+    updateManagedAccount(
+      id: string,
+      input: ManagedAccountUpdate,
+    ): Promise<ManagedAccount>;
   };
 
   /** Enterprise audit trail. */

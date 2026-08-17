@@ -16,6 +16,12 @@ Connector 与 Model Agent 不同，也不等同于 OpenTelemetry Collector。Con
 
 Connector 可以使所在主机承担“类似传统堡垒机”的资源访问和审计职责。第一版中文产品文案将这类 Host 统一称为“堡垒机”，英文称为 “Bastion”；只有在进程、证书、心跳和技术诊断信息中显示 Connector，避免把普通 Model Agent、OTLP 收集器或 SaaS Worker 称为代理。
 
+### 1.1 M3 实现边界
+
+M3 已实现 Secret/Credential、Host/Kubernetes、Bastion Scope、Connector 注册/证书/心跳、类型化只读命令、连接测试和资源专用 PendingAction。M3 ConnectorCommand 只允许 Connection Probe、Kubernetes Read、Credential Lease 和 Uninstall；任意 Shell、文件写入、Remote Access Frame、Collector 与 Telemetry 均不属于本阶段。Remote Access 在 M6 实现，Collector/Telemetry 在 M7 实现。
+
+Connector PKI 由 cert-manager 签发。安装器复用同 major/minor 且 patch 不低于版本锁基线的实例，否则安装锁定版本。Server 和 Connector Gateway 都通过独立 ServiceAccount 与最小 CertificateRequest RBAC 使用同一个 namespaced Issuer；Gateway 缺少 Issuer 或权限时必须 fail closed，不能让轮换退化为继续使用旧证书。实例卸载不得删除被其他安装复用的 cert-manager CRD。
+
 堡垒机还可以安装 `argus-otelcol` 并启用 Edge Gateway 模式，从而成为遥测中间机；此时用户看到的是一台同时具备堡垒访问与遥测网关角色的主机，但底层仍是两个独立进程：
 
 ```text
@@ -138,11 +144,13 @@ sequenceDiagram
 
 ### 3.2 主动卸载与离线检测
 
-在线堡垒机提供独立的“卸载堡垒机”操作。点击后生成绑定当前 `connector_id + bastion_scope_id + connection_epoch` 的一次性卸载命令；该命令必须在当前堡垒机机器上执行。卸载程序先使用当前 mTLS 身份向服务端提交卸载请求，收到服务端确认并吊销证书后，再停止服务和清理本地 Connector。不能先删除本地身份再尝试上报，否则服务端无法区分正常卸载与网络故障。
+在线堡垒机提供独立的“卸载堡垒机”操作。点击后由 PendingAction 冻结当前 `connector_id + bastion_scope_id + connection_epoch + fencing generation`，Confirm 后派发类型化 `connector_uninstall` 命令。Connector 必须先上报同时证明 `identity_removed = true` 和 `service_stopped = true` 的成功结果；Gateway 持久化 Connector/Scope 最终状态并 ACK 覆盖该结果序号后，客户端才删除本地身份并退出。不能先删除本地身份再尝试上报，否则服务端无法区分正常卸载与网络故障。
 
 卸载期间 Scope 进入 `uninstalling`，阻止新命令、任务和 Remote Access Session；已有会话按策略排空或终止。服务端确认后 Connector 进入 `uninstalled`，Scope 进入 `uninstalled`，但保留 Scope、根 Host、成员主机、权限和监控配置。此时页面重新提供安装命令，以便快速更换承载同一批成员主机的堡垒机。
 
 Gateway 按心跳维护在线事实。推荐心跳周期 30 秒，连续 3 次未收到心跳进入 `suspected_offline`，持续 5 分钟仍未恢复才在控制面标记为 `offline`；阈值必须可配置。短暂抖动不能直接开放替换。离线状态生成新安装命令等同于管理员确认隔离旧实例，必须执行 fencing 并写入审计。
+
+有效 Connector 重连并取得新的 `connection_epoch` 时，服务端必须在同一恢复路径把对应 Bastion Scope 恢复为 `active`，或把 KubernetesCluster 恢复为 `connected`。Redis Registry 丢失、Gateway Drain 或短暂断连不能让资源状态永久停留在 `suspected_offline`。
 
 ### 3.3 删除 Bastion Scope
 
@@ -150,9 +158,9 @@ Gateway 按心跳维护在线事实。推荐心跳周期 30 秒，连续 3 次�
 
 - `member_host_ids` 为空，所有成员主机已迁移到其他 Scope 或改为其他连接模式。
 - 不存在活动 Remote Access Session、任务或待执行命令。
-- 当前 Connector 已离线、已卸载或已被 fencing，不能仍持有有效证书。
+- 当前 Scope 已 `uninstalled`，或 Connector 已被 fencing 且 Scope 为 `offline`；不能仍有活动 Connector 或有效证书。
 
-如果仍有成员主机，点击删除后弹窗必须列出成员数量并提示“请先将全部主机移出该堡垒机”，确认按钮保持禁用。满足门禁后再次确认才删除 Scope、根堡垒机 Host、历史 Connector 的活动凭据和未消费命令；审计记录和历史会话引用继续保留，不做级联物理删除。
+如果仍有成员主机，点击删除后弹窗必须列出成员数量并提示“请先将全部主机移出该堡垒机”，确认按钮保持禁用。满足门禁后再次确认才逻辑删除 Scope 与根堡垒机 Host，并撤销历史 Connector 的活动凭据和未消费命令；根 Host 保留 `deleted_at` 墓碑，审计记录和历史引用继续保留，不做级联物理删除。
 
 ### 3.4 一次性令牌互斥与幂等
 
@@ -212,7 +220,7 @@ connected_at / last_heartbeat_at
 draining
 ```
 
-PostgreSQL 保存最后连接事实、命令和 RemoteAccessSession，Redis 保存带 TTL 的在线 Registry 和跨 Gateway 路由加速。Redis 清空后 Connector 心跳重建 Registry，不能丢失命令或会话审计事实。
+PostgreSQL 保存最后连接事实、命令和 RemoteAccessSession，Redis 保存带 TTL 的在线 Registry 和跨 Gateway Pub/Sub 派发提示。命令总是先进入 PostgreSQL 权威队列；Pub/Sub 丢失时由 Gateway/Connector 的 PostgreSQL 轮询兜底。Redis 清空后 Connector 心跳重建 Registry，不能丢失命令或会话审计事实。
 
 ### 4.1 Gateway 多副本路由
 
@@ -241,6 +249,7 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> Queued
+    Queued --> Expired: 派发前超过 expires_at
     Queued --> Dispatched
     Dispatched --> Acknowledged
     Acknowledged --> Running
@@ -254,7 +263,9 @@ stateDiagram-v2
     ResultUnknown --> Failed: 对账确认失败
 ```
 
-Command 保存 command_id、execution_id、企业、Connector、连接代次、目标资源、计划哈希、幂等键、有效期、Fence Token 和结果摘要。`DeliveryUnknown`/`ResultUnknown` 不能当作普通失败自动重试，必须先向 Connector 本地幂等日志或目标系统对账。
+Command 保存 command_id、execution_id、企业、Connector、连接代次、目标资源、计划哈希、幂等键、有效期、Fence Token 和结果摘要。`DeliveryUnknown`/`ResultUnknown` 不能当作普通失败自动重试，必须先向 Connector 本地幂等日志或目标系统对账。卸载命令的普通 reconcile 不携带能够证明本地身份和服务均已清理的类型化结果，因此必须保持 `ResultUnknown`，不能仅凭“曾执行过”提升为成功。
+
+后台 sweeper 收敛超过有效期的命令：未派发命令进入 `Expired`，已派发/确认/运行命令进入 `TimedOut`，同时撤销关联 Credential Lease 并让 ConnectionTest 收敛为 `expired/failed`。Gateway 的内存 inflight 槽位必须按同一过期时间释放，不能让超时命令耗尽单连接并发额度。
 
 ## 5. Direct Executor
 
@@ -272,6 +283,8 @@ Direct Executor 必须具备：
 - 所有连接、命令和文件操作审计。
 
 Direct Executor 只解决公网目标管理，不能宣称 SaaS Worker 可以穿透客户内网。若公网主机后来安装 Connector 并注册为堡垒机，它将创建新的 Bastion Scope；原 Host 的身份迁移、Credential 和历史审计必须使用显式预览。
+
+Server 与 Direct Executor 之间使用独立内部 CA 的 mTLS gRPC。Server 只发送绑定 `connection_test_id` 的低延迟派发提示，Executor 从 PostgreSQL 原子 Claim 已冻结计划；PostgreSQL 扫描负责 RPC 丢失和 Pod 重启恢复，因此 Handler 不能把 RPC 当作唯一队列或传入任意目标参数。Direct Kubernetes Reader 同样固定首次解析的公网 IP，每次请求前后重新校验 DNS，并拒绝 HTTP Redirect 和跳过 TLS 校验。
 
 ## 6. 添加和管理主机
 
@@ -326,6 +339,8 @@ labels
 ```
 
 服务端不得仅因为用户未选择堡垒机就接受 RFC1918、环回、链路本地、内部 DNS 或重定向后的私网目标。
+
+ConnectionTest 是独立的异步只读资源。服务端创建时冻结目标地址、Credential/Secret 版本、Connector epoch、DNS/IP、Host Key 或 TLS 摘要和过期时间；Host/Kubernetes Preview 只能引用与当前输入完全匹配且未过期的成功测试。创建后的地址、端口、连接模式、Bastion Scope 或 API Server 等网络路径变化同样必须先创建新测试，纯名称、描述等元数据变化才可复用原路径。Confirm 再次校验冻结计划、操作者、DataScope、资源版本、AuthorizationVersion 和网络身份，不能用一个目标的成功结果提交另一个目标。Secret 轮换、Connector 换代或授权变化会立即使相关测试和 Credential Lease 失效。
 
 ### 6.3 Host 与 Credential 分离
 
@@ -517,6 +532,8 @@ connection_status
 ```
 
 kubeconfig 作为 Secret 处理，模型只获得 context、cluster name 和 server 地址等非敏感摘要。集群接入先测试 API、集群身份、版本和权限，再配置授权 Namespace Scope 并确认写入。
+
+`in_cluster` 确认会返回一次性 Connector 安装命令。Enterprise 前端只在确认结果抽屉中展示并允许复制；关闭抽屉后立即清除，不能写入 URL、localStorage、Query Cache、日志或普通 KubernetesCluster DTO。
 
 第一版管理能力覆盖集群 CRUD、连接测试、Namespace/Node/Pod/Deployment/StatefulSet/DaemonSet/Service 查询和 Pod 日志。变更操作继续使用两阶段确认。
 

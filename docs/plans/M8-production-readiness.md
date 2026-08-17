@@ -17,6 +17,8 @@
 - [ ] `M8-UPGRADE-01` 实现 `argusctl upgrade`、兼容 Schema 顺序、失败回滚和版本矩阵。
 - [ ] `M8-SUPPLY-01` 生成 SBOM、镜像/Chart 签名、漏洞扫描、License 门禁和离线制品清单。
 - [ ] `M8-SECURITY-01` 完成渗透测试、Secret/Token 泄漏扫描、NetworkPolicy 和最小权限审计。
+- [ ] `M8-CRYPTO-01` 接入 Production 外部 KMS/HSM，演练 Secret KEK 与 Connector CA 根轮换、旧证书吊销和恢复。
+- [ ] `M8-EGRESS-01` 在目标生产网络验证 Direct Executor NAT/Egress Gateway、声明出口地址、deny CIDR 和故障时 fail closed。
 - [ ] `M8-IDENTITY-01` 为平台超级管理员实现强制 MFA、恢复码、凭证轮换和账号恢复演练。
 - [ ] `M8-IDENTITY-02` 为 critical 操作实现 Step-up Authentication，并把未配置平台 MFA 设为 Production Profile 安装与发布硬阻断。
 - [ ] `M8-CAPACITY-01` 完成 API、Connector、Remote Access、Kafka、Writer、ClickHouse 和 Query 容量 Benchmark。
@@ -33,6 +35,7 @@
 - 从备份恢复到新 Namespace，业务状态、审计索引、录像引用和遥测查询达到 RPO/RTO。
 - 每种故障均验证无跨企业泄漏、无重复危险执行、无不可恢复唯一状态。
 - 验证平台超级管理员未完成 MFA 时 Production Profile fail closed；恢复码、MFA 重置和 Step-up 均有高优先级平台审计。
+- 验证外部 KMS/HSM 不可用、CA 根轮换和固定出口漂移时 Production 连接路径 fail closed，且不存在回退到集群内明文密钥或任意出口。
 - 长会话压缩后原始 Event、ToolResult 和审计可追溯，恢复上下文不包含已撤销权限或私有 Token。
 - E2E 成功和故意失败两种情况下都清理 Namespace/PVC/Topic/Bucket 并恢复常驻副本。
 

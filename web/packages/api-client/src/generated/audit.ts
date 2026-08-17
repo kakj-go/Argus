@@ -30,7 +30,7 @@ export interface components {
             /** Format: uuid */
             enterprise_id?: string;
             /** @enum {string} */
-            actor_type: "platform_user" | "enterprise_user" | "service_account" | "system";
+            actor_type: "platform_user" | "enterprise_user" | "service_account" | "connector" | "direct_executor" | "system";
             actor_id: string;
             action: string;
             resource_type?: string;

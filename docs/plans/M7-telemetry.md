@@ -6,7 +6,7 @@
 
 ## 前置条件
 
-- M3 资源、Connector、Secret 和安装执行路径完成。
+- M3 资源、Connector 和 Secret/Credential Broker 完成；M3 不提供 Collector 安装或遥测命令。
 - M4 Preview/Commit、Execution 和授权快照完成。
 - M2 DataScope 可解析为授权 Resource IDs。
 
@@ -44,3 +44,4 @@
 
 - 任意 SQL、任意 Collector YAML、Profiles 信号和高级尾采样。
 - 独立 TelemetryGroup 可在 `direct_argus/bastion_gateway` 稳定后延后。
+- M3 real 页面中的 Collector provisional 控件不代表本里程碑已经交付；只有本里程碑 E2E 通过后才可启用真实入口。

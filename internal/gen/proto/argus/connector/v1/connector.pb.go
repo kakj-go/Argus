@@ -34,6 +34,9 @@ type ConnectRequest struct {
 	//	*ConnectRequest_CommandResult
 	//	*ConnectRequest_Acknowledge
 	//	*ConnectRequest_RemoteAccessData
+	//	*ConnectRequest_CredentialLeaseRequest
+	//	*ConnectRequest_CommandReconcileResult
+	//	*ConnectRequest_CertificateRotationRequest
 	Frame         isConnectRequest_Frame `protobuf_oneof:"frame"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -128,6 +131,33 @@ func (x *ConnectRequest) GetRemoteAccessData() *RemoteAccessData {
 	return nil
 }
 
+func (x *ConnectRequest) GetCredentialLeaseRequest() *CredentialLeaseRequest {
+	if x != nil {
+		if x, ok := x.Frame.(*ConnectRequest_CredentialLeaseRequest); ok {
+			return x.CredentialLeaseRequest
+		}
+	}
+	return nil
+}
+
+func (x *ConnectRequest) GetCommandReconcileResult() *CommandReconcileResult {
+	if x != nil {
+		if x, ok := x.Frame.(*ConnectRequest_CommandReconcileResult); ok {
+			return x.CommandReconcileResult
+		}
+	}
+	return nil
+}
+
+func (x *ConnectRequest) GetCertificateRotationRequest() *CertificateRotationRequest {
+	if x != nil {
+		if x, ok := x.Frame.(*ConnectRequest_CertificateRotationRequest); ok {
+			return x.CertificateRotationRequest
+		}
+	}
+	return nil
+}
+
 type isConnectRequest_Frame interface {
 	isConnectRequest_Frame()
 }
@@ -152,6 +182,18 @@ type ConnectRequest_RemoteAccessData struct {
 	RemoteAccessData *RemoteAccessData `protobuf:"bytes,6,opt,name=remote_access_data,json=remoteAccessData,proto3,oneof"`
 }
 
+type ConnectRequest_CredentialLeaseRequest struct {
+	CredentialLeaseRequest *CredentialLeaseRequest `protobuf:"bytes,7,opt,name=credential_lease_request,json=credentialLeaseRequest,proto3,oneof"`
+}
+
+type ConnectRequest_CommandReconcileResult struct {
+	CommandReconcileResult *CommandReconcileResult `protobuf:"bytes,8,opt,name=command_reconcile_result,json=commandReconcileResult,proto3,oneof"`
+}
+
+type ConnectRequest_CertificateRotationRequest struct {
+	CertificateRotationRequest *CertificateRotationRequest `protobuf:"bytes,9,opt,name=certificate_rotation_request,json=certificateRotationRequest,proto3,oneof"`
+}
+
 func (*ConnectRequest_Hello) isConnectRequest_Frame() {}
 
 func (*ConnectRequest_Heartbeat) isConnectRequest_Frame() {}
@@ -161,6 +203,12 @@ func (*ConnectRequest_CommandResult) isConnectRequest_Frame() {}
 func (*ConnectRequest_Acknowledge) isConnectRequest_Frame() {}
 
 func (*ConnectRequest_RemoteAccessData) isConnectRequest_Frame() {}
+
+func (*ConnectRequest_CredentialLeaseRequest) isConnectRequest_Frame() {}
+
+func (*ConnectRequest_CommandReconcileResult) isConnectRequest_Frame() {}
+
+func (*ConnectRequest_CertificateRotationRequest) isConnectRequest_Frame() {}
 
 type ConnectResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -174,6 +222,9 @@ type ConnectResponse struct {
 	//	*ConnectResponse_RemoteAccessData
 	//	*ConnectResponse_RemoteAccessClose
 	//	*ConnectResponse_Close
+	//	*ConnectResponse_CredentialLeaseGrant
+	//	*ConnectResponse_CommandReconcileRequest
+	//	*ConnectResponse_CertificateRotationGrant
 	Frame         isConnectResponse_Frame `protobuf_oneof:"frame"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -286,6 +337,33 @@ func (x *ConnectResponse) GetClose() *v1.StreamClose {
 	return nil
 }
 
+func (x *ConnectResponse) GetCredentialLeaseGrant() *CredentialLeaseGrant {
+	if x != nil {
+		if x, ok := x.Frame.(*ConnectResponse_CredentialLeaseGrant); ok {
+			return x.CredentialLeaseGrant
+		}
+	}
+	return nil
+}
+
+func (x *ConnectResponse) GetCommandReconcileRequest() *CommandReconcileRequest {
+	if x != nil {
+		if x, ok := x.Frame.(*ConnectResponse_CommandReconcileRequest); ok {
+			return x.CommandReconcileRequest
+		}
+	}
+	return nil
+}
+
+func (x *ConnectResponse) GetCertificateRotationGrant() *CertificateRotationGrant {
+	if x != nil {
+		if x, ok := x.Frame.(*ConnectResponse_CertificateRotationGrant); ok {
+			return x.CertificateRotationGrant
+		}
+	}
+	return nil
+}
+
 type isConnectResponse_Frame interface {
 	isConnectResponse_Frame()
 }
@@ -318,6 +396,18 @@ type ConnectResponse_Close struct {
 	Close *v1.StreamClose `protobuf:"bytes,8,opt,name=close,proto3,oneof"`
 }
 
+type ConnectResponse_CredentialLeaseGrant struct {
+	CredentialLeaseGrant *CredentialLeaseGrant `protobuf:"bytes,9,opt,name=credential_lease_grant,json=credentialLeaseGrant,proto3,oneof"`
+}
+
+type ConnectResponse_CommandReconcileRequest struct {
+	CommandReconcileRequest *CommandReconcileRequest `protobuf:"bytes,10,opt,name=command_reconcile_request,json=commandReconcileRequest,proto3,oneof"`
+}
+
+type ConnectResponse_CertificateRotationGrant struct {
+	CertificateRotationGrant *CertificateRotationGrant `protobuf:"bytes,11,opt,name=certificate_rotation_grant,json=certificateRotationGrant,proto3,oneof"`
+}
+
 func (*ConnectResponse_Welcome) isConnectResponse_Frame() {}
 
 func (*ConnectResponse_Command) isConnectResponse_Frame() {}
@@ -331,6 +421,12 @@ func (*ConnectResponse_RemoteAccessData) isConnectResponse_Frame() {}
 func (*ConnectResponse_RemoteAccessClose) isConnectResponse_Frame() {}
 
 func (*ConnectResponse_Close) isConnectResponse_Frame() {}
+
+func (*ConnectResponse_CredentialLeaseGrant) isConnectResponse_Frame() {}
+
+func (*ConnectResponse_CommandReconcileRequest) isConnectResponse_Frame() {}
+
+func (*ConnectResponse_CertificateRotationGrant) isConnectResponse_Frame() {}
 
 type ConnectorHello struct {
 	state                          protoimpl.MessageState `protogen:"open.v1"`
@@ -417,16 +513,17 @@ func (x *ConnectorHello) GetClientNonce() []byte {
 }
 
 type ConnectorWelcome struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ProtocolVersion     string                 `protobuf:"bytes,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	ConnectionEpoch     uint64                 `protobuf:"varint,2,opt,name=connection_epoch,json=connectionEpoch,proto3" json:"connection_epoch,omitempty"`
-	ServerTime          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=server_time,json=serverTime,proto3" json:"server_time,omitempty"`
-	HeartbeatInterval   *durationpb.Duration   `protobuf:"bytes,4,opt,name=heartbeat_interval,json=heartbeatInterval,proto3" json:"heartbeat_interval,omitempty"`
-	MaxMessageBytes     uint32                 `protobuf:"varint,5,opt,name=max_message_bytes,json=maxMessageBytes,proto3" json:"max_message_bytes,omitempty"`
-	MaxInflightCommands uint32                 `protobuf:"varint,6,opt,name=max_inflight_commands,json=maxInflightCommands,proto3" json:"max_inflight_commands,omitempty"`
-	ServerNonce         []byte                 `protobuf:"bytes,7,opt,name=server_nonce,json=serverNonce,proto3" json:"server_nonce,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"open.v1"`
+	ProtocolVersion              string                 `protobuf:"bytes,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	ConnectionEpoch              uint64                 `protobuf:"varint,2,opt,name=connection_epoch,json=connectionEpoch,proto3" json:"connection_epoch,omitempty"`
+	ServerTime                   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=server_time,json=serverTime,proto3" json:"server_time,omitempty"`
+	HeartbeatInterval            *durationpb.Duration   `protobuf:"bytes,4,opt,name=heartbeat_interval,json=heartbeatInterval,proto3" json:"heartbeat_interval,omitempty"`
+	MaxMessageBytes              uint32                 `protobuf:"varint,5,opt,name=max_message_bytes,json=maxMessageBytes,proto3" json:"max_message_bytes,omitempty"`
+	MaxInflightCommands          uint32                 `protobuf:"varint,6,opt,name=max_inflight_commands,json=maxInflightCommands,proto3" json:"max_inflight_commands,omitempty"`
+	ServerNonce                  []byte                 `protobuf:"bytes,7,opt,name=server_nonce,json=serverNonce,proto3" json:"server_nonce,omitempty"`
+	CertificateRotationRequested bool                   `protobuf:"varint,8,opt,name=certificate_rotation_requested,json=certificateRotationRequested,proto3" json:"certificate_rotation_requested,omitempty"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *ConnectorWelcome) Reset() {
@@ -508,6 +605,13 @@ func (x *ConnectorWelcome) GetServerNonce() []byte {
 	return nil
 }
 
+func (x *ConnectorWelcome) GetCertificateRotationRequested() bool {
+	if x != nil {
+		return x.CertificateRotationRequested
+	}
+	return false
+}
+
 type ConnectorHeartbeat struct {
 	state                     protoimpl.MessageState `protogen:"open.v1"`
 	ConnectionEpoch           uint64                 `protobuf:"varint,1,opt,name=connection_epoch,json=connectionEpoch,proto3" json:"connection_epoch,omitempty"`
@@ -576,182 +680,6 @@ func (x *ConnectorHeartbeat) GetActiveRemoteAccessStreams() uint32 {
 	return 0
 }
 
-type ConnectorCommand struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	CommandId       string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
-	ConnectionEpoch uint64                 `protobuf:"varint,2,opt,name=connection_epoch,json=connectionEpoch,proto3" json:"connection_epoch,omitempty"`
-	CommandType     string                 `protobuf:"bytes,3,opt,name=command_type,json=commandType,proto3" json:"command_type,omitempty"`
-	Payload         []byte                 `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
-	PayloadHash     string                 `protobuf:"bytes,5,opt,name=payload_hash,json=payloadHash,proto3" json:"payload_hash,omitempty"`
-	ExpiresAt       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	IdempotencyKey  string                 `protobuf:"bytes,7,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *ConnectorCommand) Reset() {
-	*x = ConnectorCommand{}
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ConnectorCommand) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ConnectorCommand) ProtoMessage() {}
-
-func (x *ConnectorCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ConnectorCommand.ProtoReflect.Descriptor instead.
-func (*ConnectorCommand) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *ConnectorCommand) GetCommandId() string {
-	if x != nil {
-		return x.CommandId
-	}
-	return ""
-}
-
-func (x *ConnectorCommand) GetConnectionEpoch() uint64 {
-	if x != nil {
-		return x.ConnectionEpoch
-	}
-	return 0
-}
-
-func (x *ConnectorCommand) GetCommandType() string {
-	if x != nil {
-		return x.CommandType
-	}
-	return ""
-}
-
-func (x *ConnectorCommand) GetPayload() []byte {
-	if x != nil {
-		return x.Payload
-	}
-	return nil
-}
-
-func (x *ConnectorCommand) GetPayloadHash() string {
-	if x != nil {
-		return x.PayloadHash
-	}
-	return ""
-}
-
-func (x *ConnectorCommand) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
-func (x *ConnectorCommand) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-type CommandResult struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	CommandId       string                 `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
-	ConnectionEpoch uint64                 `protobuf:"varint,2,opt,name=connection_epoch,json=connectionEpoch,proto3" json:"connection_epoch,omitempty"`
-	Status          string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
-	Result          []byte                 `protobuf:"bytes,4,opt,name=result,proto3" json:"result,omitempty"`
-	ResultHash      string                 `protobuf:"bytes,5,opt,name=result_hash,json=resultHash,proto3" json:"result_hash,omitempty"`
-	Error           *v1.ErrorStatus        `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *CommandResult) Reset() {
-	*x = CommandResult{}
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CommandResult) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CommandResult) ProtoMessage() {}
-
-func (x *CommandResult) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CommandResult.ProtoReflect.Descriptor instead.
-func (*CommandResult) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *CommandResult) GetCommandId() string {
-	if x != nil {
-		return x.CommandId
-	}
-	return ""
-}
-
-func (x *CommandResult) GetConnectionEpoch() uint64 {
-	if x != nil {
-		return x.ConnectionEpoch
-	}
-	return 0
-}
-
-func (x *CommandResult) GetStatus() string {
-	if x != nil {
-		return x.Status
-	}
-	return ""
-}
-
-func (x *CommandResult) GetResult() []byte {
-	if x != nil {
-		return x.Result
-	}
-	return nil
-}
-
-func (x *CommandResult) GetResultHash() string {
-	if x != nil {
-		return x.ResultHash
-	}
-	return ""
-}
-
-func (x *CommandResult) GetError() *v1.ErrorStatus {
-	if x != nil {
-		return x.Error
-	}
-	return nil
-}
-
 type ClientAcknowledge struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ServerSequence uint64                 `protobuf:"varint,1,opt,name=server_sequence,json=serverSequence,proto3" json:"server_sequence,omitempty"`
@@ -761,7 +689,7 @@ type ClientAcknowledge struct {
 
 func (x *ClientAcknowledge) Reset() {
 	*x = ClientAcknowledge{}
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[7]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -773,7 +701,7 @@ func (x *ClientAcknowledge) String() string {
 func (*ClientAcknowledge) ProtoMessage() {}
 
 func (x *ClientAcknowledge) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[7]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -786,7 +714,7 @@ func (x *ClientAcknowledge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientAcknowledge.ProtoReflect.Descriptor instead.
 func (*ClientAcknowledge) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{7}
+	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ClientAcknowledge) GetServerSequence() uint64 {
@@ -805,7 +733,7 @@ type ServerAcknowledge struct {
 
 func (x *ServerAcknowledge) Reset() {
 	*x = ServerAcknowledge{}
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[8]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -817,7 +745,7 @@ func (x *ServerAcknowledge) String() string {
 func (*ServerAcknowledge) ProtoMessage() {}
 
 func (x *ServerAcknowledge) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[8]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -830,7 +758,7 @@ func (x *ServerAcknowledge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerAcknowledge.ProtoReflect.Descriptor instead.
 func (*ServerAcknowledge) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{8}
+	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ServerAcknowledge) GetClientSequence() uint64 {
@@ -854,7 +782,7 @@ type RemoteAccessOpen struct {
 
 func (x *RemoteAccessOpen) Reset() {
 	*x = RemoteAccessOpen{}
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[9]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -866,7 +794,7 @@ func (x *RemoteAccessOpen) String() string {
 func (*RemoteAccessOpen) ProtoMessage() {}
 
 func (x *RemoteAccessOpen) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[9]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -879,7 +807,7 @@ func (x *RemoteAccessOpen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoteAccessOpen.ProtoReflect.Descriptor instead.
 func (*RemoteAccessOpen) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{9}
+	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RemoteAccessOpen) GetStreamId() string {
@@ -936,7 +864,7 @@ type RemoteAccessData struct {
 
 func (x *RemoteAccessData) Reset() {
 	*x = RemoteAccessData{}
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[10]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -948,7 +876,7 @@ func (x *RemoteAccessData) String() string {
 func (*RemoteAccessData) ProtoMessage() {}
 
 func (x *RemoteAccessData) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[10]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -961,7 +889,7 @@ func (x *RemoteAccessData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoteAccessData.ProtoReflect.Descriptor instead.
 func (*RemoteAccessData) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{10}
+	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RemoteAccessData) GetStreamId() string {
@@ -1002,7 +930,7 @@ type RemoteAccessClose struct {
 
 func (x *RemoteAccessClose) Reset() {
 	*x = RemoteAccessClose{}
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[11]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1014,7 +942,7 @@ func (x *RemoteAccessClose) String() string {
 func (*RemoteAccessClose) ProtoMessage() {}
 
 func (x *RemoteAccessClose) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_connector_proto_msgTypes[11]
+	mi := &file_argus_connector_v1_connector_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1027,7 +955,7 @@ func (x *RemoteAccessClose) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoteAccessClose.ProtoReflect.Descriptor instead.
 func (*RemoteAccessClose) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{11}
+	return file_argus_connector_v1_connector_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RemoteAccessClose) GetStreamId() string {
@@ -1048,15 +976,18 @@ var File_argus_connector_v1_connector_proto protoreflect.FileDescriptor
 
 const file_argus_connector_v1_connector_proto_rawDesc = "" +
 	"\n" +
-	"\"argus/connector/v1/connector.proto\x12\x12argus.connector.v1\x1a\x1cargus/common/v1/common.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa6\x03\n" +
+	"\"argus/connector/v1/connector.proto\x12\x12argus.connector.v1\x1a\x1cargus/common/v1/common.proto\x1a!argus/connector/v1/commands.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xea\x05\n" +
 	"\x0eConnectRequest\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12:\n" +
 	"\x05hello\x18\x02 \x01(\v2\".argus.connector.v1.ConnectorHelloH\x00R\x05hello\x12F\n" +
 	"\theartbeat\x18\x03 \x01(\v2&.argus.connector.v1.ConnectorHeartbeatH\x00R\theartbeat\x12J\n" +
 	"\x0ecommand_result\x18\x04 \x01(\v2!.argus.connector.v1.CommandResultH\x00R\rcommandResult\x12I\n" +
 	"\vacknowledge\x18\x05 \x01(\v2%.argus.connector.v1.ClientAcknowledgeH\x00R\vacknowledge\x12T\n" +
-	"\x12remote_access_data\x18\x06 \x01(\v2$.argus.connector.v1.RemoteAccessDataH\x00R\x10remoteAccessDataB\a\n" +
-	"\x05frame\"\xc0\x04\n" +
+	"\x12remote_access_data\x18\x06 \x01(\v2$.argus.connector.v1.RemoteAccessDataH\x00R\x10remoteAccessData\x12f\n" +
+	"\x18credential_lease_request\x18\a \x01(\v2*.argus.connector.v1.CredentialLeaseRequestH\x00R\x16credentialLeaseRequest\x12f\n" +
+	"\x18command_reconcile_result\x18\b \x01(\v2*.argus.connector.v1.CommandReconcileResultH\x00R\x16commandReconcileResult\x12r\n" +
+	"\x1ccertificate_rotation_request\x18\t \x01(\v2..argus.connector.v1.CertificateRotationRequestH\x00R\x1acertificateRotationRequestB\a\n" +
+	"\x05frame\"\xfb\x06\n" +
 	"\x0fConnectResponse\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12@\n" +
 	"\awelcome\x18\x02 \x01(\v2$.argus.connector.v1.ConnectorWelcomeH\x00R\awelcome\x12@\n" +
@@ -1065,7 +996,11 @@ const file_argus_connector_v1_connector_proto_rawDesc = "" +
 	"\x12remote_access_open\x18\x05 \x01(\v2$.argus.connector.v1.RemoteAccessOpenH\x00R\x10remoteAccessOpen\x12T\n" +
 	"\x12remote_access_data\x18\x06 \x01(\v2$.argus.connector.v1.RemoteAccessDataH\x00R\x10remoteAccessData\x12W\n" +
 	"\x13remote_access_close\x18\a \x01(\v2%.argus.connector.v1.RemoteAccessCloseH\x00R\x11remoteAccessClose\x124\n" +
-	"\x05close\x18\b \x01(\v2\x1c.argus.common.v1.StreamCloseH\x00R\x05closeB\a\n" +
+	"\x05close\x18\b \x01(\v2\x1c.argus.common.v1.StreamCloseH\x00R\x05close\x12`\n" +
+	"\x16credential_lease_grant\x18\t \x01(\v2(.argus.connector.v1.CredentialLeaseGrantH\x00R\x14credentialLeaseGrant\x12i\n" +
+	"\x19command_reconcile_request\x18\n" +
+	" \x01(\v2+.argus.connector.v1.CommandReconcileRequestH\x00R\x17commandReconcileRequest\x12l\n" +
+	"\x1acertificate_rotation_grant\x18\v \x01(\v2,.argus.connector.v1.CertificateRotationGrantH\x00R\x18certificateRotationGrantB\a\n" +
 	"\x05frame\"\x99\x02\n" +
 	"\x0eConnectorHello\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\tR\x0fprotocolVersion\x12\x1f\n" +
@@ -1074,7 +1009,7 @@ const file_argus_connector_v1_connector_proto_rawDesc = "" +
 	"\x10software_version\x18\x03 \x01(\tR\x0fsoftwareVersion\x12\"\n" +
 	"\fcapabilities\x18\x04 \x03(\tR\fcapabilities\x12I\n" +
 	"!last_acknowledged_server_sequence\x18\x05 \x01(\x04R\x1elastAcknowledgedServerSequence\x12!\n" +
-	"\fclient_nonce\x18\x06 \x01(\fR\vclientNonce\"\xf2\x02\n" +
+	"\fclient_nonce\x18\x06 \x01(\fR\vclientNonce\"\xb8\x03\n" +
 	"\x10ConnectorWelcome\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\tR\x0fprotocolVersion\x12)\n" +
 	"\x10connection_epoch\x18\x02 \x01(\x04R\x0fconnectionEpoch\x12;\n" +
@@ -1083,31 +1018,13 @@ const file_argus_connector_v1_connector_proto_rawDesc = "" +
 	"\x12heartbeat_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x11heartbeatInterval\x12*\n" +
 	"\x11max_message_bytes\x18\x05 \x01(\rR\x0fmaxMessageBytes\x122\n" +
 	"\x15max_inflight_commands\x18\x06 \x01(\rR\x13maxInflightCommands\x12!\n" +
-	"\fserver_nonce\x18\a \x01(\fR\vserverNonce\"\xde\x01\n" +
+	"\fserver_nonce\x18\a \x01(\fR\vserverNonce\x12D\n" +
+	"\x1ecertificate_rotation_requested\x18\b \x01(\bR\x1ccertificateRotationRequested\"\xde\x01\n" +
 	"\x12ConnectorHeartbeat\x12)\n" +
 	"\x10connection_epoch\x18\x01 \x01(\x04R\x0fconnectionEpoch\x123\n" +
 	"\asent_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\x12'\n" +
 	"\x0factive_commands\x18\x03 \x01(\rR\x0eactiveCommands\x12?\n" +
-	"\x1cactive_remote_access_streams\x18\x04 \x01(\rR\x19activeRemoteAccessStreams\"\xa0\x02\n" +
-	"\x10ConnectorCommand\x12\x1d\n" +
-	"\n" +
-	"command_id\x18\x01 \x01(\tR\tcommandId\x12)\n" +
-	"\x10connection_epoch\x18\x02 \x01(\x04R\x0fconnectionEpoch\x12!\n" +
-	"\fcommand_type\x18\x03 \x01(\tR\vcommandType\x12\x18\n" +
-	"\apayload\x18\x04 \x01(\fR\apayload\x12!\n" +
-	"\fpayload_hash\x18\x05 \x01(\tR\vpayloadHash\x129\n" +
-	"\n" +
-	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12'\n" +
-	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\"\xde\x01\n" +
-	"\rCommandResult\x12\x1d\n" +
-	"\n" +
-	"command_id\x18\x01 \x01(\tR\tcommandId\x12)\n" +
-	"\x10connection_epoch\x18\x02 \x01(\x04R\x0fconnectionEpoch\x12\x16\n" +
-	"\x06status\x18\x03 \x01(\tR\x06status\x12\x16\n" +
-	"\x06result\x18\x04 \x01(\fR\x06result\x12\x1f\n" +
-	"\vresult_hash\x18\x05 \x01(\tR\n" +
-	"resultHash\x122\n" +
-	"\x05error\x18\x06 \x01(\v2\x1c.argus.common.v1.ErrorStatusR\x05error\"<\n" +
+	"\x1cactive_remote_access_streams\x18\x04 \x01(\rR\x19activeRemoteAccessStreams\"<\n" +
 	"\x11ClientAcknowledge\x12'\n" +
 	"\x0fserver_sequence\x18\x01 \x01(\x04R\x0eserverSequence\"<\n" +
 	"\x11ServerAcknowledge\x12'\n" +
@@ -1144,52 +1061,61 @@ func file_argus_connector_v1_connector_proto_rawDescGZIP() []byte {
 	return file_argus_connector_v1_connector_proto_rawDescData
 }
 
-var file_argus_connector_v1_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_argus_connector_v1_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_argus_connector_v1_connector_proto_goTypes = []any{
-	(*ConnectRequest)(nil),        // 0: argus.connector.v1.ConnectRequest
-	(*ConnectResponse)(nil),       // 1: argus.connector.v1.ConnectResponse
-	(*ConnectorHello)(nil),        // 2: argus.connector.v1.ConnectorHello
-	(*ConnectorWelcome)(nil),      // 3: argus.connector.v1.ConnectorWelcome
-	(*ConnectorHeartbeat)(nil),    // 4: argus.connector.v1.ConnectorHeartbeat
-	(*ConnectorCommand)(nil),      // 5: argus.connector.v1.ConnectorCommand
-	(*CommandResult)(nil),         // 6: argus.connector.v1.CommandResult
-	(*ClientAcknowledge)(nil),     // 7: argus.connector.v1.ClientAcknowledge
-	(*ServerAcknowledge)(nil),     // 8: argus.connector.v1.ServerAcknowledge
-	(*RemoteAccessOpen)(nil),      // 9: argus.connector.v1.RemoteAccessOpen
-	(*RemoteAccessData)(nil),      // 10: argus.connector.v1.RemoteAccessData
-	(*RemoteAccessClose)(nil),     // 11: argus.connector.v1.RemoteAccessClose
-	(*v1.StreamClose)(nil),        // 12: argus.common.v1.StreamClose
-	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 14: google.protobuf.Duration
-	(*v1.ErrorStatus)(nil),        // 15: argus.common.v1.ErrorStatus
+	(*ConnectRequest)(nil),             // 0: argus.connector.v1.ConnectRequest
+	(*ConnectResponse)(nil),            // 1: argus.connector.v1.ConnectResponse
+	(*ConnectorHello)(nil),             // 2: argus.connector.v1.ConnectorHello
+	(*ConnectorWelcome)(nil),           // 3: argus.connector.v1.ConnectorWelcome
+	(*ConnectorHeartbeat)(nil),         // 4: argus.connector.v1.ConnectorHeartbeat
+	(*ClientAcknowledge)(nil),          // 5: argus.connector.v1.ClientAcknowledge
+	(*ServerAcknowledge)(nil),          // 6: argus.connector.v1.ServerAcknowledge
+	(*RemoteAccessOpen)(nil),           // 7: argus.connector.v1.RemoteAccessOpen
+	(*RemoteAccessData)(nil),           // 8: argus.connector.v1.RemoteAccessData
+	(*RemoteAccessClose)(nil),          // 9: argus.connector.v1.RemoteAccessClose
+	(*CommandResult)(nil),              // 10: argus.connector.v1.CommandResult
+	(*CredentialLeaseRequest)(nil),     // 11: argus.connector.v1.CredentialLeaseRequest
+	(*CommandReconcileResult)(nil),     // 12: argus.connector.v1.CommandReconcileResult
+	(*CertificateRotationRequest)(nil), // 13: argus.connector.v1.CertificateRotationRequest
+	(*ConnectorCommand)(nil),           // 14: argus.connector.v1.ConnectorCommand
+	(*v1.StreamClose)(nil),             // 15: argus.common.v1.StreamClose
+	(*CredentialLeaseGrant)(nil),       // 16: argus.connector.v1.CredentialLeaseGrant
+	(*CommandReconcileRequest)(nil),    // 17: argus.connector.v1.CommandReconcileRequest
+	(*CertificateRotationGrant)(nil),   // 18: argus.connector.v1.CertificateRotationGrant
+	(*timestamppb.Timestamp)(nil),      // 19: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),        // 20: google.protobuf.Duration
 }
 var file_argus_connector_v1_connector_proto_depIdxs = []int32{
 	2,  // 0: argus.connector.v1.ConnectRequest.hello:type_name -> argus.connector.v1.ConnectorHello
 	4,  // 1: argus.connector.v1.ConnectRequest.heartbeat:type_name -> argus.connector.v1.ConnectorHeartbeat
-	6,  // 2: argus.connector.v1.ConnectRequest.command_result:type_name -> argus.connector.v1.CommandResult
-	7,  // 3: argus.connector.v1.ConnectRequest.acknowledge:type_name -> argus.connector.v1.ClientAcknowledge
-	10, // 4: argus.connector.v1.ConnectRequest.remote_access_data:type_name -> argus.connector.v1.RemoteAccessData
-	3,  // 5: argus.connector.v1.ConnectResponse.welcome:type_name -> argus.connector.v1.ConnectorWelcome
-	5,  // 6: argus.connector.v1.ConnectResponse.command:type_name -> argus.connector.v1.ConnectorCommand
-	8,  // 7: argus.connector.v1.ConnectResponse.acknowledge:type_name -> argus.connector.v1.ServerAcknowledge
-	9,  // 8: argus.connector.v1.ConnectResponse.remote_access_open:type_name -> argus.connector.v1.RemoteAccessOpen
-	10, // 9: argus.connector.v1.ConnectResponse.remote_access_data:type_name -> argus.connector.v1.RemoteAccessData
-	11, // 10: argus.connector.v1.ConnectResponse.remote_access_close:type_name -> argus.connector.v1.RemoteAccessClose
-	12, // 11: argus.connector.v1.ConnectResponse.close:type_name -> argus.common.v1.StreamClose
-	13, // 12: argus.connector.v1.ConnectorWelcome.server_time:type_name -> google.protobuf.Timestamp
-	14, // 13: argus.connector.v1.ConnectorWelcome.heartbeat_interval:type_name -> google.protobuf.Duration
-	13, // 14: argus.connector.v1.ConnectorHeartbeat.sent_at:type_name -> google.protobuf.Timestamp
-	13, // 15: argus.connector.v1.ConnectorCommand.expires_at:type_name -> google.protobuf.Timestamp
-	15, // 16: argus.connector.v1.CommandResult.error:type_name -> argus.common.v1.ErrorStatus
-	13, // 17: argus.connector.v1.RemoteAccessOpen.expires_at:type_name -> google.protobuf.Timestamp
-	12, // 18: argus.connector.v1.RemoteAccessClose.close:type_name -> argus.common.v1.StreamClose
-	0,  // 19: argus.connector.v1.ConnectorControlService.Connect:input_type -> argus.connector.v1.ConnectRequest
-	1,  // 20: argus.connector.v1.ConnectorControlService.Connect:output_type -> argus.connector.v1.ConnectResponse
-	20, // [20:21] is the sub-list for method output_type
-	19, // [19:20] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	10, // 2: argus.connector.v1.ConnectRequest.command_result:type_name -> argus.connector.v1.CommandResult
+	5,  // 3: argus.connector.v1.ConnectRequest.acknowledge:type_name -> argus.connector.v1.ClientAcknowledge
+	8,  // 4: argus.connector.v1.ConnectRequest.remote_access_data:type_name -> argus.connector.v1.RemoteAccessData
+	11, // 5: argus.connector.v1.ConnectRequest.credential_lease_request:type_name -> argus.connector.v1.CredentialLeaseRequest
+	12, // 6: argus.connector.v1.ConnectRequest.command_reconcile_result:type_name -> argus.connector.v1.CommandReconcileResult
+	13, // 7: argus.connector.v1.ConnectRequest.certificate_rotation_request:type_name -> argus.connector.v1.CertificateRotationRequest
+	3,  // 8: argus.connector.v1.ConnectResponse.welcome:type_name -> argus.connector.v1.ConnectorWelcome
+	14, // 9: argus.connector.v1.ConnectResponse.command:type_name -> argus.connector.v1.ConnectorCommand
+	6,  // 10: argus.connector.v1.ConnectResponse.acknowledge:type_name -> argus.connector.v1.ServerAcknowledge
+	7,  // 11: argus.connector.v1.ConnectResponse.remote_access_open:type_name -> argus.connector.v1.RemoteAccessOpen
+	8,  // 12: argus.connector.v1.ConnectResponse.remote_access_data:type_name -> argus.connector.v1.RemoteAccessData
+	9,  // 13: argus.connector.v1.ConnectResponse.remote_access_close:type_name -> argus.connector.v1.RemoteAccessClose
+	15, // 14: argus.connector.v1.ConnectResponse.close:type_name -> argus.common.v1.StreamClose
+	16, // 15: argus.connector.v1.ConnectResponse.credential_lease_grant:type_name -> argus.connector.v1.CredentialLeaseGrant
+	17, // 16: argus.connector.v1.ConnectResponse.command_reconcile_request:type_name -> argus.connector.v1.CommandReconcileRequest
+	18, // 17: argus.connector.v1.ConnectResponse.certificate_rotation_grant:type_name -> argus.connector.v1.CertificateRotationGrant
+	19, // 18: argus.connector.v1.ConnectorWelcome.server_time:type_name -> google.protobuf.Timestamp
+	20, // 19: argus.connector.v1.ConnectorWelcome.heartbeat_interval:type_name -> google.protobuf.Duration
+	19, // 20: argus.connector.v1.ConnectorHeartbeat.sent_at:type_name -> google.protobuf.Timestamp
+	19, // 21: argus.connector.v1.RemoteAccessOpen.expires_at:type_name -> google.protobuf.Timestamp
+	15, // 22: argus.connector.v1.RemoteAccessClose.close:type_name -> argus.common.v1.StreamClose
+	0,  // 23: argus.connector.v1.ConnectorControlService.Connect:input_type -> argus.connector.v1.ConnectRequest
+	1,  // 24: argus.connector.v1.ConnectorControlService.Connect:output_type -> argus.connector.v1.ConnectResponse
+	24, // [24:25] is the sub-list for method output_type
+	23, // [23:24] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_argus_connector_v1_connector_proto_init() }
@@ -1197,12 +1123,16 @@ func file_argus_connector_v1_connector_proto_init() {
 	if File_argus_connector_v1_connector_proto != nil {
 		return
 	}
+	file_argus_connector_v1_commands_proto_init()
 	file_argus_connector_v1_connector_proto_msgTypes[0].OneofWrappers = []any{
 		(*ConnectRequest_Hello)(nil),
 		(*ConnectRequest_Heartbeat)(nil),
 		(*ConnectRequest_CommandResult)(nil),
 		(*ConnectRequest_Acknowledge)(nil),
 		(*ConnectRequest_RemoteAccessData)(nil),
+		(*ConnectRequest_CredentialLeaseRequest)(nil),
+		(*ConnectRequest_CommandReconcileResult)(nil),
+		(*ConnectRequest_CertificateRotationRequest)(nil),
 	}
 	file_argus_connector_v1_connector_proto_msgTypes[1].OneofWrappers = []any{
 		(*ConnectResponse_Welcome)(nil),
@@ -1212,6 +1142,9 @@ func file_argus_connector_v1_connector_proto_init() {
 		(*ConnectResponse_RemoteAccessData)(nil),
 		(*ConnectResponse_RemoteAccessClose)(nil),
 		(*ConnectResponse_Close)(nil),
+		(*ConnectResponse_CredentialLeaseGrant)(nil),
+		(*ConnectResponse_CommandReconcileRequest)(nil),
+		(*ConnectResponse_CertificateRotationGrant)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1219,7 +1152,7 @@ func file_argus_connector_v1_connector_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_argus_connector_v1_connector_proto_rawDesc), len(file_argus_connector_v1_connector_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

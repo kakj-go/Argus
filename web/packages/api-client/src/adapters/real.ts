@@ -5,14 +5,34 @@ import type {
   AuthenticatedSession,
   CreatedApiKeySecret,
   CreatedUserCredential,
+  BastionScope,
+  BastionScopePage,
+  ConfirmPendingActionResult,
+  ConnectionTest,
+  Connector,
+  ConnectorPage,
+  Credential,
+  CredentialCreate,
+  CredentialUpdate,
   DataScope as DataScopeContract,
   Department as DepartmentContract,
   Enterprise as EnterpriseContract,
   EnterpriseUser as EnterpriseUserContract,
   LoginResult,
+  Host,
+  HostPage,
+  KubernetesCluster,
+  KubernetesClusterPage,
+  KubernetesResourcePage,
+  ManagedAccount,
+  ManagedAccountCreate,
+  ManagedAccountUpdate,
+  PendingActionPublic,
+  PodLogs,
   Role as RoleContract,
   RoleBinding as RoleBindingContract,
   ServiceAccount as ServiceAccountContract,
+  Secret as SecretContract,
   SetupInitializeResult,
   SetupStatus as SetupStatusContract,
 } from "../generated/contracts";
@@ -28,6 +48,7 @@ import type {
   RoleBinding,
   ServiceAccount,
   SessionInfo,
+  Secret,
   User,
 } from "../types";
 import {
@@ -144,6 +165,10 @@ function auditEvent(value: AuditEventContract): AuditEvent {
   };
 }
 
+function secretMetadata(value: SecretContract): Secret {
+  return value;
+}
+
 export interface RealAdapter {
   client: ArgusApiClient;
   http: HttpTransport;
@@ -162,7 +187,10 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
   const remember = <T extends { id: string; version?: number }>(
     value: T,
   ): T => {
-    if (value.version !== undefined) versions.set(value.id, value.version);
+    const version =
+      value.version ??
+      (value as T & { resource_version?: number }).resource_version;
+    if (version !== undefined) versions.set(value.id, version);
     return value;
   };
   const expectedVersion = (id: string): number => versions.get(id) ?? 1;
@@ -393,6 +421,402 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
   client.platform.audit = {
     list: (filter, query): Promise<Page<PlatformAuditEvent>> =>
       listAudit("platform", filter?.action, query?.page?.limit),
+  };
+
+  client.secrets = {
+    async list() {
+      const value = await http.request<{
+        items: SecretContract[];
+        page: { next_cursor: string | null; has_more: boolean };
+      }>("enterprise/secrets");
+      return page({
+        items: value.items.map((item) => secretMetadata(remember(item))),
+        page: value.page,
+      });
+    },
+    async get(id) {
+      return secretMetadata(
+        remember(
+          await http.request<SecretContract>(`enterprise/secrets/${id}`),
+        ),
+      );
+    },
+    async create(input) {
+      return secretMetadata(
+        remember(
+          await http.request<SecretContract>("enterprise/secrets", {
+            method: "POST",
+            csrf: true,
+            headers: { "Idempotency-Key": idempotencyKey() },
+            body: input,
+          }),
+        ),
+      );
+    },
+    async update(id, patch) {
+      return secretMetadata(
+        remember(
+          await http.request<SecretContract>(`enterprise/secrets/${id}`, {
+            method: "PUT",
+            csrf: true,
+            body: patch,
+          }),
+        ),
+      );
+    },
+    async rotate(id, value, expectedVersion) {
+      return secretMetadata(
+        remember(
+          await http.request<SecretContract>(
+            `enterprise/secrets/${id}/rotate`,
+            {
+              method: "POST",
+              csrf: true,
+              headers: { "Idempotency-Key": idempotencyKey() },
+              body: { value, expected_version: expectedVersion },
+            },
+          ),
+        ),
+      );
+    },
+    async delete(id) {
+      await http.request<void>(
+        `enterprise/secrets/${id}?expected_version=${expectedVersion(id)}`,
+        { method: "DELETE", csrf: true },
+      );
+    },
+    async listCredentials() {
+      const value = await http.request<{ items: Credential[] }>(
+        "enterprise/credentials",
+      );
+      return value.items.map(remember);
+    },
+    async createCredential(input: CredentialCreate) {
+      return remember(
+        await http.request<Credential>("enterprise/credentials", {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        }),
+      );
+    },
+    async updateCredential(id: string, input: CredentialUpdate) {
+      return remember(
+        await http.request<Credential>(`enterprise/credentials/${id}`, {
+          method: "PUT",
+          csrf: true,
+          body: input,
+        }),
+      );
+    },
+    async listManagedAccounts() {
+      const value = await http.request<{ items: ManagedAccount[] }>(
+        "enterprise/managed-accounts",
+      );
+      return value.items.map(remember);
+    },
+    async createManagedAccount(input: ManagedAccountCreate) {
+      return remember(
+        await http.request<ManagedAccount>("enterprise/managed-accounts", {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        }),
+      );
+    },
+    async updateManagedAccount(id: string, input: ManagedAccountUpdate) {
+      return remember(
+        await http.request<ManagedAccount>(
+          `enterprise/managed-accounts/${id}`,
+          { method: "PUT", csrf: true, body: input },
+        ),
+      );
+    },
+  };
+
+  client.hosts = {
+    ...client.hosts,
+    async list(filter) {
+      const params = new URLSearchParams();
+      if (filter?.query) params.set("query", filter.query);
+      if (filter?.connection_mode) {
+        params.set("connection_mode", filter.connection_mode);
+      }
+      if (filter?.bastion_scope_id) {
+        params.set("bastion_scope_id", filter.bastion_scope_id);
+      }
+      if (filter?.labels) params.set("labels", JSON.stringify(filter.labels));
+      if (filter?.cursor) params.set("cursor", filter.cursor);
+      if (filter?.limit !== undefined)
+        params.set("limit", String(filter.limit));
+      const value = await http.request<HostPage>(
+        `enterprise/hosts${params.size ? `?${params}` : ""}`,
+      );
+      value.items.forEach(remember);
+      return value;
+    },
+    async get(id) {
+      return remember(await http.request<Host>(`enterprise/hosts/${id}`));
+    },
+    async createConnectionTest(input) {
+      return http.request<ConnectionTest>("enterprise/hosts/connection-tests", {
+        method: "POST",
+        csrf: true,
+        headers: { "Idempotency-Key": idempotencyKey() },
+        body: input,
+      });
+    },
+    getConnectionTest: (id) =>
+      http.request<ConnectionTest>(`enterprise/connection-tests/${id}`),
+    previewCreateResource: (input) =>
+      http.request<PendingActionPublic>(
+        "enterprise/hosts/actions/preview-create",
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
+      ),
+    previewUpdateResource: (id, input) =>
+      http.request<PendingActionPublic>(
+        `enterprise/hosts/${id}/actions/preview-update`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
+      ),
+    previewDeleteResource: (id, version) =>
+      http.request<PendingActionPublic>(
+        `enterprise/hosts/${id}/actions/preview-delete`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: { expected_version: version },
+        },
+      ),
+  };
+
+  client.kubernetes = {
+    ...client.kubernetes,
+    async listClusters(query) {
+      const params = new URLSearchParams();
+      if (query?.cursor) params.set("cursor", query.cursor);
+      if (query?.limit !== undefined) params.set("limit", String(query.limit));
+      const value = await http.request<KubernetesClusterPage>(
+        `enterprise/kubernetes-clusters${params.size ? `?${params}` : ""}`,
+      );
+      value.items.forEach(remember);
+      return value;
+    },
+    async getCluster(id) {
+      return remember(
+        await http.request<KubernetesCluster>(
+          `enterprise/kubernetes-clusters/${id}`,
+        ),
+      );
+    },
+    createConnectionTest: (input) =>
+      http.request<ConnectionTest>(
+        "enterprise/kubernetes-clusters/connection-tests",
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
+      ),
+    getConnectionTest: (id) =>
+      http.request<ConnectionTest>(`enterprise/connection-tests/${id}`),
+    previewCreateResource: (input) =>
+      http.request<PendingActionPublic>(
+        "enterprise/kubernetes-clusters/actions/preview-create",
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
+      ),
+    previewUpdateResource: (id, input) =>
+      http.request<PendingActionPublic>(
+        `enterprise/kubernetes-clusters/${id}/actions/preview-update`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
+      ),
+    previewDeleteResource: (id, version) =>
+      http.request<PendingActionPublic>(
+        `enterprise/kubernetes-clusters/${id}/actions/preview-delete`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: { expected_version: version },
+        },
+      ),
+    listResources: (id, query) => {
+      const params = new URLSearchParams({
+        resource_type: query.resource_type,
+      });
+      if (query.namespace) params.set("namespace", query.namespace);
+      if (query.query) params.set("query", query.query);
+      if (query.cursor) params.set("cursor", query.cursor);
+      if (query.limit !== undefined) params.set("limit", String(query.limit));
+      return http.request<KubernetesResourcePage>(
+        `enterprise/kubernetes-clusters/${id}/resources?${params}`,
+      );
+    },
+    getPodLogs: (id, query) => {
+      const params = new URLSearchParams({
+        namespace: query.namespace,
+        pod: query.pod,
+      });
+      if (query.container) params.set("container", query.container);
+      if (query.tail_lines !== undefined) {
+        params.set("tail_lines", String(query.tail_lines));
+      }
+      return http.request<PodLogs>(
+        `enterprise/kubernetes-clusters/${id}/pod-logs?${params}`,
+      );
+    },
+  };
+
+  client.connectors = {
+    ...client.connectors,
+    async list(query) {
+      const params = new URLSearchParams();
+      if (query?.cursor) params.set("cursor", query.cursor);
+      if (query?.limit !== undefined) params.set("limit", String(query.limit));
+      const value = await http.request<ConnectorPage>(
+        `enterprise/connectors${params.size ? `?${params}` : ""}`,
+      );
+      value.items.forEach(remember);
+      return value;
+    },
+    async get(id) {
+      return remember(
+        await http.request<Connector>(`enterprise/connectors/${id}`),
+      );
+    },
+    async listBastionScopes(query) {
+      const params = new URLSearchParams();
+      if (query?.cursor) params.set("cursor", query.cursor);
+      if (query?.limit !== undefined) params.set("limit", String(query.limit));
+      const value = await http.request<BastionScopePage>(
+        `enterprise/bastion-scopes${params.size ? `?${params}` : ""}`,
+      );
+      value.items.forEach(remember);
+      return value;
+    },
+    async getBastionScope(id) {
+      return remember(
+        await http.request<BastionScope>(`enterprise/bastion-scopes/${id}`),
+      );
+    },
+    previewCreateBastionScope: (input) =>
+      http.request<PendingActionPublic>(
+        "enterprise/bastion-scopes/actions/preview-create",
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
+      ),
+    previewUpdateBastionScope: (id, input) =>
+      http.request<PendingActionPublic>(
+        `enterprise/bastion-scopes/${id}/actions/preview-update`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
+      ),
+    previewDeleteBastionScope: (id, version) =>
+      http.request<PendingActionPublic>(
+        `enterprise/bastion-scopes/${id}/actions/preview-delete`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: { expected_version: version },
+        },
+      ),
+    previewReplaceBastionConnector: (id, version) =>
+      http.request<PendingActionPublic>(
+        `enterprise/bastion-scopes/${id}/actions/preview-replacement`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: { expected_version: version },
+        },
+      ),
+    previewUninstallConnector: (id, version) =>
+      http.request<PendingActionPublic>(
+        `enterprise/connectors/${id}/actions/preview-uninstall`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: { expected_version: version },
+        },
+      ),
+    async rotateCertificate(id) {
+      return remember(
+        await http.request<Connector>(
+          `enterprise/connectors/${id}/rotate-certificate?expected_version=${expectedVersion(id)}`,
+          {
+            method: "POST",
+            csrf: true,
+            headers: { "Idempotency-Key": idempotencyKey() },
+          },
+        ),
+      );
+    },
+  };
+
+  client.approvals = {
+    ...client.approvals,
+    async list() {
+      const value = await http.request<{
+        items: PendingActionPublic[];
+        page: { next_cursor: string | null; has_more: boolean };
+      }>("enterprise/pending-actions");
+      return page(value);
+    },
+    get: (actionRef) =>
+      http.request<PendingActionPublic>(
+        `enterprise/pending-actions/${encodeURIComponent(actionRef)}`,
+      ),
+    confirm: (actionRef) =>
+      http.request<ConfirmPendingActionResult>(
+        `enterprise/pending-actions/${encodeURIComponent(actionRef)}/confirm`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+        },
+      ),
+    cancel: (actionRef) =>
+      http.request<PendingActionPublic>(
+        `enterprise/pending-actions/${encodeURIComponent(actionRef)}/cancel`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+        },
+      ),
   };
 
   async function listAudit(
@@ -703,10 +1127,11 @@ function createUnavailableClient(): ArgusApiClient {
     hosts: {
       list: () => unavailable("hosts.list"),
       get: () => unavailable("hosts.get"),
-      previewCreate: () => unavailable("hosts.previewCreate"),
-      update: () => unavailable("hosts.update"),
-      delete: () => unavailable("hosts.delete"),
-      testConnection: () => unavailable("hosts.testConnection"),
+      createConnectionTest: () => unavailable("hosts.createConnectionTest"),
+      getConnectionTest: () => unavailable("hosts.getConnectionTest"),
+      previewCreateResource: () => unavailable("hosts.previewCreateResource"),
+      previewUpdateResource: () => unavailable("hosts.previewUpdateResource"),
+      previewDeleteResource: () => unavailable("hosts.previewDeleteResource"),
       getCollector: () => unavailable("hosts.getCollector"),
       previewCollectorInstall: () =>
         unavailable("hosts.previewCollectorInstall"),
@@ -720,24 +1145,32 @@ function createUnavailableClient(): ArgusApiClient {
       get: () => unavailable("connectors.get"),
       listBastionScopes: () => unavailable("connectors.listBastionScopes"),
       getBastionScope: () => unavailable("connectors.getBastionScope"),
-      createBastionScope: () => unavailable("connectors.createBastionScope"),
-      updateBastionScope: () => unavailable("connectors.updateBastionScope"),
-      regenerateEnrollmentToken: () =>
-        unavailable("connectors.regenerateEnrollmentToken"),
-      createUninstallCommand: () =>
-        unavailable("connectors.createUninstallCommand"),
-      deleteBastionScope: () => unavailable("connectors.deleteBastionScope"),
       rotateCertificate: () => unavailable("connectors.rotateCertificate"),
+      previewCreateBastionScope: () =>
+        unavailable("connectors.previewCreateBastionScope"),
+      previewUpdateBastionScope: () =>
+        unavailable("connectors.previewUpdateBastionScope"),
+      previewDeleteBastionScope: () =>
+        unavailable("connectors.previewDeleteBastionScope"),
+      previewReplaceBastionConnector: () =>
+        unavailable("connectors.previewReplaceBastionConnector"),
+      previewUninstallConnector: () =>
+        unavailable("connectors.previewUninstallConnector"),
     },
     kubernetes: {
       listClusters: () => unavailable("kubernetes.listClusters"),
       getCluster: () => unavailable("kubernetes.getCluster"),
-      previewCreateCluster: () =>
-        unavailable("kubernetes.previewCreateCluster"),
-      updateCluster: () => unavailable("kubernetes.updateCluster"),
-      deleteCluster: () => unavailable("kubernetes.deleteCluster"),
-      testClusterConnection: () =>
-        unavailable("kubernetes.testClusterConnection"),
+      createConnectionTest: () =>
+        unavailable("kubernetes.createConnectionTest"),
+      getConnectionTest: () => unavailable("kubernetes.getConnectionTest"),
+      previewCreateResource: () =>
+        unavailable("kubernetes.previewCreateResource"),
+      previewUpdateResource: () =>
+        unavailable("kubernetes.previewUpdateResource"),
+      previewDeleteResource: () =>
+        unavailable("kubernetes.previewDeleteResource"),
+      listResources: () => unavailable("kubernetes.listResources"),
+      getPodLogs: () => unavailable("kubernetes.getPodLogs"),
       listWorkloads: () => unavailable("kubernetes.listWorkloads"),
       listNodeBindings: () => unavailable("kubernetes.listNodeBindings"),
       verifyNodeBinding: () => unavailable("kubernetes.verifyNodeBinding"),
@@ -825,7 +1258,14 @@ function createUnavailableClient(): ArgusApiClient {
       get: () => unavailable("secrets.get"),
       create: () => unavailable("secrets.create"),
       update: () => unavailable("secrets.update"),
+      rotate: () => unavailable("secrets.rotate"),
       delete: () => unavailable("secrets.delete"),
+      listCredentials: () => unavailable("secrets.listCredentials"),
+      createCredential: () => unavailable("secrets.createCredential"),
+      updateCredential: () => unavailable("secrets.updateCredential"),
+      listManagedAccounts: () => unavailable("secrets.listManagedAccounts"),
+      createManagedAccount: () => unavailable("secrets.createManagedAccount"),
+      updateManagedAccount: () => unavailable("secrets.updateManagedAccount"),
     },
     audit: { list: () => unavailable("audit.list") },
     platform: {

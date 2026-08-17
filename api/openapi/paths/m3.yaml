@@ -1,0 +1,433 @@
+secret_collection:
+  get:
+    operationId: listSecrets
+    summary: List Secret metadata without values.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Secret page., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/SecretPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createSecret
+    summary: Create an encrypted write-only Secret.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/SecretCreate"}}}}
+    responses:
+      "201": {description: Secret metadata., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Secret"}}}}
+      default: {$ref: "#/components/responses/Error"}
+secret_item:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getSecret
+    summary: Get Secret metadata.
+    responses:
+      "200": {description: Secret metadata., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Secret"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  put:
+    operationId: updateSecret
+    summary: Update Secret metadata.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/SecretUpdate"}}}}
+    responses:
+      "200": {description: Updated Secret., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Secret"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  delete:
+    operationId: deleteSecret
+    summary: Disable an unreferenced Secret.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "204": {description: Secret disabled.}
+      default: {$ref: "#/components/responses/Error"}
+secret_rotate:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: rotateSecret
+    summary: Rotate the write-only value of a Secret.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/SecretRotate"}}}}
+    responses:
+      "200": {description: Rotated Secret metadata., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Secret"}}}}
+      default: {$ref: "#/components/responses/Error"}
+credential_collection:
+  get:
+    operationId: listCredentials
+    summary: List Credential metadata.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Credential page., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/CredentialPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createCredential
+    summary: Create a typed Credential referencing a Secret.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/CredentialCreate"}}}}
+    responses:
+      "201": {description: Credential., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Credential"}}}}
+      default: {$ref: "#/components/responses/Error"}
+credential_item:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  put:
+    operationId: updateCredential
+    summary: Update a Credential.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/CredentialUpdate"}}}}
+    responses:
+      "200": {description: Credential., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Credential"}}}}
+      default: {$ref: "#/components/responses/Error"}
+managed_account_collection:
+  get:
+    operationId: listManagedAccounts
+    summary: List managed accounts.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Managed account page., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ManagedAccountPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  post:
+    operationId: createManagedAccount
+    summary: Create a managed account.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ManagedAccountCreate"}}}}
+    responses:
+      "201": {description: Managed account., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ManagedAccount"}}}}
+      default: {$ref: "#/components/responses/Error"}
+managed_account_item:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  put:
+    operationId: updateManagedAccount
+    summary: Update a managed account.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ManagedAccountUpdate"}}}}
+    responses:
+      "200": {description: Managed account., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ManagedAccount"}}}}
+      default: {$ref: "#/components/responses/Error"}
+host_collection:
+  get:
+    operationId: listHosts
+    summary: List DataScope-filtered Hosts.
+    parameters:
+      - {name: query, in: query, required: false, schema: {type: string, maxLength: 256}}
+      - {name: connection_mode, in: query, required: false, schema: {$ref: "../components/m3.yaml#/components/schemas/HostConnectionMode"}}
+      - {name: bastion_scope_id, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: labels, in: query, required: false, schema: {type: string, maxLength: 4096}}
+      - {$ref: "#/components/parameters/Cursor"}
+      - {$ref: "#/components/parameters/Limit"}
+    responses:
+      "200": {description: Host page., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/HostPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+host_item:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getHost
+    summary: Get a DataScope-filtered Host.
+    responses:
+      "200": {description: Host., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Host"}}}}
+      default: {$ref: "#/components/responses/Error"}
+host_preview_create:
+  post:
+    operationId: previewCreateHost
+    summary: Freeze a validated Host creation plan.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/HostPreviewCreate"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+host_preview_update:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewUpdateHost
+    summary: Freeze a Host metadata, labels, or path update.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/HostPreviewUpdate"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+host_preview_delete:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewDeleteHost
+    summary: Freeze a Host logical deletion plan.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ResourcePreviewDelete"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+host_connection_tests:
+  post:
+    operationId: createHostConnectionTest
+    summary: Start a bounded Host connection test.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/HostConnectionTestCreate"}}}}
+    responses:
+      "202": {description: Connection Test., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConnectionTest"}}}}
+      default: {$ref: "#/components/responses/Error"}
+connection_test_item:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getConnectionTest
+    summary: Get a connection test result.
+    responses:
+      "200": {description: Connection Test., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConnectionTest"}}}}
+      default: {$ref: "#/components/responses/Error"}
+kubernetes_collection:
+  get:
+    operationId: listKubernetesClusters
+    summary: List DataScope-filtered Kubernetes clusters.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Cluster page., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/KubernetesClusterPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+kubernetes_item:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getKubernetesCluster
+    summary: Get a DataScope-filtered Kubernetes cluster.
+    responses:
+      "200": {description: Kubernetes cluster., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/KubernetesCluster"}}}}
+      default: {$ref: "#/components/responses/Error"}
+kubernetes_preview_create:
+  post:
+    operationId: previewCreateKubernetesCluster
+    summary: Freeze a Kubernetes cluster creation plan.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/KubernetesPreviewCreate"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+kubernetes_preview_update:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewUpdateKubernetesCluster
+    summary: Freeze a Kubernetes cluster update.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/KubernetesPreviewUpdate"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+kubernetes_preview_delete:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewDeleteKubernetesCluster
+    summary: Freeze a Kubernetes cluster logical deletion.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ResourcePreviewDelete"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+kubernetes_connection_tests:
+  post:
+    operationId: createKubernetesConnectionTest
+    summary: Start a bounded Kubernetes connection test.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/KubernetesConnectionTestCreate"}}}}
+    responses:
+      "202": {description: Connection Test., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConnectionTest"}}}}
+      default: {$ref: "#/components/responses/Error"}
+kubernetes_resources:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: listKubernetesResources
+    summary: List bounded Kubernetes resources after cluster and Namespace DataScope checks.
+    parameters:
+      - {name: resource_type, in: query, required: true, schema: {type: string, enum: [namespace, node, pod, deployment, statefulset, daemonset, service]}}
+      - {name: namespace, in: query, required: false, schema: {type: string, maxLength: 253}}
+      - {name: query, in: query, required: false, schema: {type: string, maxLength: 256}}
+      - {$ref: "#/components/parameters/Cursor"}
+      - {$ref: "#/components/parameters/Limit"}
+    responses:
+      "200": {description: Kubernetes resource page., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/KubernetesResourcePage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+kubernetes_pod_logs:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getKubernetesPodLogs
+    summary: Read at most one MiB of Pod logs.
+    parameters:
+      - {name: namespace, in: query, required: true, schema: {type: string, maxLength: 253}}
+      - {name: pod, in: query, required: true, schema: {type: string, maxLength: 253}}
+      - {name: container, in: query, required: false, schema: {type: string, maxLength: 253}}
+      - {name: tail_lines, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 5000, default: 500}}
+    responses:
+      "200": {description: Bounded Pod logs., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/PodLogs"}}}}
+      default: {$ref: "#/components/responses/Error"}
+pending_action_collection:
+  get:
+    operationId: listPendingActions
+    summary: List resource-management Pending Actions.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200":
+        description: Pending Action page.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [items, page]
+              properties:
+                items: {type: array, items: {$ref: "../../schemas/action/pending-action-public.schema.json"}}
+                page: {$ref: "../components/common.yaml#/components/schemas/CursorPage"}
+      default: {$ref: "#/components/responses/Error"}
+pending_action_item:
+  parameters:
+    - {name: action_ref, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+  get:
+    operationId: getPendingAction
+    summary: Get a public Pending Action.
+    responses:
+      "200": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+pending_action_confirm:
+  parameters:
+    - {name: action_ref, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+  post:
+    operationId: confirmPendingAction
+    summary: Confirm and synchronously commit a resource Pending Action.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    responses:
+      "200": {description: Committed result., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConfirmPendingActionResult"}}}}
+      default: {$ref: "#/components/responses/Error"}
+pending_action_cancel:
+  parameters:
+    - {name: action_ref, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+  post:
+    operationId: cancelPendingAction
+    summary: Cancel a resource Pending Action.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    responses:
+      "200": {description: Cancelled Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+bastion_collection:
+  get:
+    operationId: listBastionScopes
+    summary: List Bastion Scopes.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Bastion Scope page., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/BastionScopePage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+bastion_item:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getBastionScope
+    summary: Get a Bastion Scope.
+    responses:
+      "200": {description: Bastion Scope., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/BastionScope"}}}}
+      default: {$ref: "#/components/responses/Error"}
+bastion_preview_create:
+  post:
+    operationId: previewCreateBastionScope
+    summary: Freeze Bastion Scope creation and enrollment policy.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/BastionPreviewCreate"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+bastion_preview_update:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewUpdateBastionScope
+    summary: Freeze a Bastion Scope update or migration.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ResourcePreviewUpdate"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+bastion_preview_delete:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewDeleteBastionScope
+    summary: Freeze a Bastion Scope deletion.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ResourcePreviewDelete"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+bastion_replacement:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewReplaceBastionConnector
+    summary: Fence the active Connector through a confirmed replacement action.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ResourcePreviewDelete"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+connector_collection:
+  get:
+    operationId: listConnectors
+    summary: List Connector diagnostics.
+    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    responses:
+      "200": {description: Connector page., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConnectorPage"}}}}
+      default: {$ref: "#/components/responses/Error"}
+connector_item:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getConnector
+    summary: Get Connector diagnostics.
+    responses:
+      "200": {description: Connector., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Connector"}}}}
+      default: {$ref: "#/components/responses/Error"}
+connector_rotate:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: requestConnectorCertificateRotation
+    summary: Request short-lived Connector certificate rotation.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
+    responses:
+      "202": {description: Connector rotation requested., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Connector"}}}}
+      default: {$ref: "#/components/responses/Error"}
+connector_preview_uninstall:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewUninstallConnector
+    summary: Freeze a Connector uninstall command and its fencing context.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ResourcePreviewDelete"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+connector_enroll:
+  post:
+    operationId: enrollConnector
+    summary: Consume a one-time enrollment token and sign a Connector CSR.
+    security: [{connectorEnrollmentToken: []}]
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConnectorEnrollRequest"}}}}
+    responses:
+      "201": {description: Connector identity and certificate., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConnectorEnrollResult"}}}}
+      default: {$ref: "#/components/responses/Error"}
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: "../components/common.yaml#/components/schemas/IdempotencyKey"}
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: {type: string, minLength: 32, maxLength: 256}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema: {type: integer, format: int64, minimum: 1}
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content: {application/json: {schema: {$ref: "../components/common.yaml#/components/schemas/ApiError"}}}

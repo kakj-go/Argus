@@ -1,0 +1,859 @@
+openapi: 3.1.0
+info:
+  title: Argus Connector API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/bastion-scopes:
+    get:
+      operationId: listBastionScopes
+      summary: List Bastion Scopes.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Bastion Scope page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BastionScopePage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/bastion-scopes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: getBastionScope
+      summary: Get a Bastion Scope.
+      responses:
+        '200':
+          description: Bastion Scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BastionScope'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/bastion-scopes/actions/preview-create:
+    post:
+      operationId: previewCreateBastionScope
+      summary: Freeze Bastion Scope creation and enrollment policy.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BastionPreviewCreate'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/bastion-scopes/{id}/actions/preview-update:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: previewUpdateBastionScope
+      summary: Freeze a Bastion Scope update or migration.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourcePreviewUpdate'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/bastion-scopes/{id}/actions/preview-delete:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: previewDeleteBastionScope
+      summary: Freeze a Bastion Scope deletion.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourcePreviewDelete'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/bastion-scopes/{id}/actions/preview-replacement:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: previewReplaceBastionConnector
+      summary: Fence the active Connector through a confirmed replacement action.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourcePreviewDelete'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/connectors:
+    get:
+      operationId: listConnectors
+      summary: List Connector diagnostics.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Connector page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/connectors/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: getConnector
+      summary: Get Connector diagnostics.
+      responses:
+        '200':
+          description: Connector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connector'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/connectors/{id}/rotate-certificate:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: requestConnectorCertificateRotation
+      summary: Request short-lived Connector certificate rotation.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '202':
+          description: Connector rotation requested.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connector'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/connectors/{id}/actions/preview-uninstall:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: previewUninstallConnector
+      summary: Freeze a Connector uninstall command and its fencing context.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourcePreviewDelete'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /connectors/enroll:
+    post:
+      operationId: enrollConnector
+      summary: Consume a one-time enrollment token and sign a Connector CSR.
+      security:
+        - connectorEnrollmentToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectorEnrollRequest'
+      responses:
+        '201':
+          description: Connector identity and certificate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorEnrollResult'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+    connectorEnrollmentToken:
+      type: apiKey
+      in: header
+      name: X-Argus-Enrollment-Token
+  schemas:
+    BastionScope:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - name
+        - environment
+        - labels
+        - status
+        - fencing_generation
+        - member_count
+        - resource_version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        environment:
+          $ref: '#/components/schemas/Environment'
+        labels:
+          $ref: '#/components/schemas/Labels'
+        status:
+          type: string
+          enum:
+            - pending
+            - active
+            - suspected_offline
+            - offline
+            - uninstalling
+            - uninstalled
+            - deleted
+        connector_host_id:
+          type: string
+          format: uuid
+        active_connector_id:
+          type: string
+          format: uuid
+        fencing_generation:
+          type: integer
+          format: int64
+          minimum: 1
+        member_count:
+          type: integer
+          minimum: 0
+        resource_version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    BastionScopePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BastionScope'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    BastionPreviewCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - environment
+        - labels
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        environment:
+          $ref: '#/components/schemas/Environment'
+        labels:
+          $ref: '#/components/schemas/UserLabels'
+    Connector:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - role
+        - name
+        - status
+        - capabilities
+        - connection_epoch
+        - certificate_expires_at
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        role:
+          $ref: '#/components/schemas/ConnectorRole'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        host_id:
+          type: string
+          format: uuid
+        bastion_scope_id:
+          type: string
+          format: uuid
+        kubernetes_cluster_id:
+          type: string
+          format: uuid
+        software_version:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          enum:
+            - pending
+            - online
+            - suspected_offline
+            - offline
+            - draining
+            - uninstalled
+            - revoked
+        capabilities:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 2
+            pattern: ^[a-z][a-z0-9_.-]+$
+        connection_epoch:
+          type: integer
+          format: int64
+          minimum: 0
+        certificate_expires_at:
+          type: string
+          format: date-time
+        connected_at:
+          type: string
+          format: date-time
+        last_heartbeat_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ConnectorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Connector'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    ConnectorEnrollRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - csr_pem
+        - device_fingerprint
+        - instance_id
+        - name
+        - software_version
+        - capabilities
+      properties:
+        csr_pem:
+          type: string
+          minLength: 1
+          maxLength: 32768
+          writeOnly: true
+        device_fingerprint:
+          type: string
+          minLength: 32
+          maxLength: 256
+        instance_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        software_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        capabilities:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 2
+            pattern: ^[a-z][a-z0-9_.-]+$
+    ConnectorEnrollResult:
+      type: object
+      additionalProperties: false
+      required:
+        - connector_id
+        - role
+        - certificate_pem
+        - ca_bundle_pem
+        - gateway_endpoint
+        - certificate_expires_at
+        - result
+      properties:
+        connector_id:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/ConnectorRole'
+        host_id:
+          type: string
+          format: uuid
+        bastion_scope_id:
+          type: string
+          format: uuid
+        kubernetes_cluster_id:
+          type: string
+          format: uuid
+        certificate_pem:
+          type: string
+          writeOnly: true
+        ca_bundle_pem:
+          type: string
+        gateway_endpoint:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        certificate_expires_at:
+          type: string
+          format: date-time
+        result:
+          type: string
+          enum:
+            - registered
+            - idempotent_retry
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    Environment:
+      type: string
+      enum:
+        - development
+        - staging
+        - production
+    UserLabelKey:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+    SystemLabelKey:
+      type: string
+      maxLength: 72
+      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+      readOnly: true
+    LabelValue:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
+    Labels:
+      type: object
+      maxProperties: 64
+      propertyNames:
+        anyOf:
+          - $ref: '#/components/schemas/UserLabelKey'
+          - $ref: '#/components/schemas/SystemLabelKey'
+      additionalProperties:
+        $ref: '#/components/schemas/LabelValue'
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    UserLabels:
+      type: object
+      maxProperties: 64
+      propertyNames:
+        $ref: '#/components/schemas/UserLabelKey'
+      additionalProperties:
+        $ref: '#/components/schemas/LabelValue'
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    pending-action-public.schema:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      $id: https://argus.io/schemas/v1/action/pending-action-public.schema.json
+      title: PendingActionPublic
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - action_ref
+        - title
+        - summary
+        - risk
+        - preview
+        - diff
+        - status
+        - available_actions
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        schema_version:
+          const: argus.pending_action/v1
+        action_ref:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        risk:
+          enum:
+            - read
+            - write
+            - dangerous
+            - critical
+        preview:
+          $ref: '#/components/schemas/PublicJsonObject'
+        diff:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - kind
+              - text
+            properties:
+              kind:
+                enum:
+                  - add
+                  - remove
+                  - change
+                  - note
+              text:
+                type: string
+                maxLength: 2048
+        status:
+          enum:
+            - prepared
+            - awaiting_confirmation
+            - awaiting_approval
+            - ready
+            - executing
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+            - expired
+            - rejected
+            - invalidated
+        available_actions:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - confirm
+              - cancel
+              - approve
+              - reject
+        approval:
+          type: object
+          additionalProperties: false
+          required:
+            - required
+            - minimum_approvers
+            - approved_count
+            - separation_of_duty
+          properties:
+            required:
+              type: boolean
+            policy_ref:
+              type: string
+            minimum_approvers:
+              type: integer
+              minimum: 0
+            approved_count:
+              type: integer
+              minimum: 0
+            separation_of_duty:
+              type: boolean
+        execution_ref:
+          type: string
+          minLength: 1
+        result_summary:
+          type: string
+          maxLength: 4096
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ResourcePreviewUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        environment:
+          $ref: '#/components/schemas/Environment'
+        labels:
+          $ref: '#/components/schemas/UserLabels'
+        connection_test_id:
+          type: string
+          format: uuid
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    ResourcePreviewDelete:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    ConnectorRole:
+      type: string
+      enum:
+        - bastion
+        - kubernetes
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

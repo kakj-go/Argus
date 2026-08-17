@@ -164,52 +164,65 @@ describe("enterprise users", () => {
 });
 
 describe("hosts CRUD", () => {
-  it("creates via preview/confirm, then updates and deletes", async () => {
+  it("creates and updates through generated preview contracts", async () => {
     const client = makeClient();
     await login(client, "chenxi");
 
     const before = await client.hosts.list();
     expect(before.items.length).toBe(9);
 
-    const action = await client.hosts.previewCreate({
+    const connectionTest = await client.hosts.createConnectionTest({
+      address: "10.0.9.99",
+      port: 22,
+      platform: "linux",
+      connection_mode: "via_bastion",
+      bastion_scope_id: "scope-sh",
+      credential_id: "sec-ssh-prod",
+      username: "root",
+    });
+    const action = await client.hosts.previewCreateResource({
       name: "mock-host-01",
       address: "10.0.9.99",
       port: 22,
       platform: "linux",
-      connectionMode: "via_bastion",
-      bastionScopeId: "scope-sh",
-      credentialRef: "sec-ssh-prod",
+      connection_mode: "via_bastion",
+      bastion_scope_id: "scope-sh",
+      credential_id: "sec-ssh-prod",
+      username: "root",
       environment: "production",
+      labels: {},
+      connection_test_id: connectionTest.id,
     });
     expect(action.status).toBe("awaiting_confirmation");
     expect(action.risk).toBe("write");
 
-    const { execution } = await client.approvals.confirm(action.action_ref);
-    expect(execution).toBeDefined();
-    expect(execution?.status).toBe("running");
-
-    await waitFor(async () => {
-      const current = await client.tasks.get(execution?.execution_id ?? "");
-      return current.status === "succeeded";
-    });
+    const result = await client.approvals.confirm(action.action_ref);
+    expect(result.execution).toBeUndefined();
+    expect(result.pending_action.status).toBe("succeeded");
 
     const hosts = await client.hosts.list({ query: "mock-host-01" });
     expect(hosts.items.length).toBe(1);
     const created = hosts.items[0];
-    expect(created?.connectionMode).toBe("via_bastion");
+    expect(created?.connection_mode).toBe("via_bastion");
 
     const scope = await client.connectors.getBastionScope("scope-sh");
-    expect(scope.memberHostIds).toContain(created?.id);
+    expect(scope.member_count).toBeGreaterThan(0);
 
-    const updated = await client.hosts.update(created?.id ?? "", {
+    const update = await client.hosts.previewUpdateResource(created?.id ?? "", {
       labels: { role: "batch" },
+      expected_version: created?.resource_version ?? 1,
     });
-    expect(updated.labels["role"]).toBe("batch");
+    const updateResult = await client.approvals.confirm(update.action_ref);
+    expect(updateResult.pending_action.status).toBe("succeeded");
+    expect((await client.hosts.get(created?.id ?? "")).labels["role"]).toBe(
+      "batch",
+    );
 
-    await client.hosts.delete(created?.id ?? "");
-    expect(
-      (await client.hosts.list({ query: "mock-host-01" })).items.length,
-    ).toBe(0);
+    const deletion = await client.hosts.previewDeleteResource(
+      created?.id ?? "",
+      2,
+    );
+    expect(deletion.available_actions).toContain("confirm");
 
     const audits = await client.audit.list({ action: "host.create.commit" });
     expect(audits.items.length).toBeGreaterThan(0);
@@ -219,10 +232,16 @@ describe("hosts CRUD", () => {
     const client = makeClient();
     await login(client, "chenxi");
 
-    const ok = await client.hosts.testConnection("host-web-11");
-    expect(ok.success).toBe(true);
-    const offline = await client.hosts.testConnection("host-win-ad-02");
-    expect(offline.success).toBe(false);
+    const test = await client.hosts.createConnectionTest({
+      address: "10.0.1.11",
+      port: 22,
+      platform: "linux",
+      connection_mode: "via_bastion",
+      bastion_scope_id: "scope-sh",
+      credential_id: "sec-ssh-prod",
+      username: "root",
+    });
+    expect(test.status).toBe("succeeded");
 
     expect(await client.hosts.getCollector("host-cache-bj-01")).toBeNull();
     const install = await client.hosts.previewCollectorInstall(
@@ -236,9 +255,6 @@ describe("hosts CRUD", () => {
     });
     const collector = await client.hosts.getCollector("host-cache-bj-01");
     expect(collector?.status).toBe("converged");
-    expect((await client.hosts.get("host-cache-bj-01")).telemetryRoute).toBe(
-      "edge-gw-bj",
-    );
 
     const route = await client.approvals.preview({
       tool: "telemetry.collector.route",
@@ -251,9 +267,6 @@ describe("hosts CRUD", () => {
       );
       return current.status === "succeeded";
     });
-    expect((await client.hosts.get("host-cache-bj-01")).telemetryRoute).toBe(
-      "direct_argus",
-    );
   });
 });
 
@@ -675,164 +688,69 @@ describe("setup", () => {
   });
 });
 
-describe("connector registration simulation", () => {
-  it("updates Bastion Scope metadata and its active display records", async () => {
+describe("connector generated port", () => {
+  it("returns snake_case Connector and Bastion pages", async () => {
     const client = makeClient();
     await login(client, "chenxi");
 
-    const updated = await client.connectors.updateBastionScope("scope-sh", {
-      name: "上海核心堡垒机",
-      environment: "staging",
-      labels: { region: "cn-east", tier: "core" },
-    });
+    const scopes = await client.connectors.listBastionScopes();
+    const scope = scopes.items.find((entry) => entry.id === "scope-sh");
+    expect(scope?.active_connector_id).toBe("conn-sh-01");
+    expect(scope?.member_count).toBeGreaterThan(0);
+    expect(scopes.page.partial.partial).toBe(false);
 
+    const connectors = await client.connectors.list();
+    const connector = connectors.items.find(
+      (entry) => entry.id === "conn-sh-01",
+    );
+    expect(connector?.role).toBe("bastion");
+    expect(connector?.connection_epoch).toBeGreaterThan(0);
+  });
+
+  it("updates Bastion metadata only after explicit confirmation", async () => {
+    const client = makeClient();
+    await login(client, "chenxi");
+    const before = await client.connectors.getBastionScope("scope-sh");
+    const action = await client.connectors.previewUpdateBastionScope(
+      before.id,
+      {
+        name: "上海核心堡垒机",
+        environment: "staging",
+        labels: { region: "cn-east", tier: "core" },
+        expected_version: before.resource_version,
+      },
+    );
+    expect((await client.connectors.getBastionScope(before.id)).name).toBe(
+      before.name,
+    );
+
+    const result = await client.approvals.confirm(action.action_ref);
+    expect(result.pending_action.status).toBe("succeeded");
+    expect(result.execution).toBeUndefined();
+    const updated = await client.connectors.getBastionScope(before.id);
     expect(updated.name).toBe("上海核心堡垒机");
-    expect(updated.environment).toBe("staging");
-    const host = await client.hosts.get(updated.connectorHostId ?? "");
-    expect(host.name).toBe("上海核心堡垒机");
-    expect(host.environment).toBe("staging");
-    expect(host.labels).toEqual({
-      region: "cn-east",
-      tier: "core",
-      role: "bastion",
-    });
-    const connector = await client.connectors.get(
-      updated.activeConnectorId ?? "",
+    expect(updated.resource_version).toBe(before.resource_version + 1);
+  });
+
+  it("uninstalls an online Connector only after explicit confirmation", async () => {
+    const client = makeClient();
+    await login(client, "chenxi");
+    const before = await client.connectors.get("conn-sh-01");
+    const action = await client.connectors.previewUninstallConnector(
+      before.id,
+      before.version,
     );
-    expect(connector.name).toBe("上海核心堡垒机");
-  });
+    expect((await client.connectors.get(before.id)).status).toBe("online");
 
-  it("registers the first machine, retries idempotently, and rejects a competitor", async () => {
-    const client = makeClient();
-    await login(client, "chenxi");
-
-    const pending = await client.connectors.getBastionScope("scope-sh2");
-    expect(pending.status).toBe("pending");
-    const tokenId = pending.registrationToken?.id ?? "";
-    expect(tokenId).toBeTruthy();
-
-    const first = client.simulate.connectorRegister("scope-sh2", {
-      deviceFingerprint: "machine-a",
-      enrollmentTokenId: tokenId,
-    });
-    expect(first.code).toBe("registered");
-
-    const retry = client.simulate.connectorRegister("scope-sh2", {
-      deviceFingerprint: "machine-a",
-      enrollmentTokenId: tokenId,
-    });
-    expect(retry.code).toBe("idempotent_retry");
-    expect(retry.connectorId).toBe(first.connectorId);
-
-    const competitor = client.simulate.connectorRegister("scope-sh2", {
-      deviceFingerprint: "machine-b",
-      enrollmentTokenId: tokenId,
-    });
-    expect(competitor).toMatchObject({
-      success: false,
-      code: "token_consumed",
-    });
-    expect(competitor.message).toContain("其他机器");
-
-    const active = await client.connectors.getBastionScope("scope-sh2");
-    expect(active.status).toBe("active");
-    expect(active.activeConnectorId).toBe(first.connectorId);
-    expect(active.registrationToken).toBeUndefined();
-  });
-
-  it("revokes an unused command when a newer command is generated", async () => {
-    const client = makeClient();
-    await login(client, "chenxi");
-
-    const pending = await client.connectors.getBastionScope("scope-sh2");
-    const oldTokenId = pending.registrationToken?.id ?? "";
-    const nextToken =
-      await client.connectors.regenerateEnrollmentToken("scope-sh2");
-
-    expect(nextToken.id).not.toBe(oldTokenId);
-    expect(
-      client.simulate.connectorRegister("scope-sh2", {
-        deviceFingerprint: "machine-a",
-        enrollmentTokenId: oldTokenId,
-      }),
-    ).toMatchObject({ success: false, code: "token_revoked" });
-  });
-
-  it("replaces an active Connector without changing the Scope or root Host", async () => {
-    const client = makeClient();
-    await login(client, "chenxi");
-
-    const before = await client.connectors.getBastionScope("scope-sh");
-    const oldConnectorId = before.activeConnectorId ?? "";
-    await expect(
-      client.connectors.regenerateEnrollmentToken("scope-sh"),
-    ).rejects.toThrow("must be uninstalled or offline");
-
-    client.simulate.setConnectorOnline(oldConnectorId, false);
+    const result = await client.approvals.confirm(action.action_ref);
+    expect(result.pending_action.status).toBe("executing");
+    await waitFor(
+      async () =>
+        (await client.connectors.get(before.id)).status === "uninstalled",
+    );
+    expect((await client.connectors.get(before.id)).status).toBe("uninstalled");
     expect((await client.connectors.getBastionScope("scope-sh")).status).toBe(
-      "degraded",
-    );
-    const token = await client.connectors.regenerateEnrollmentToken("scope-sh");
-    expect(token.purpose).toBe("connector_replacement");
-
-    const result = client.simulate.connectorRegister("scope-sh", {
-      deviceFingerprint: "replacement-machine",
-      enrollmentTokenId: token.id,
-    });
-    const after = await client.connectors.getBastionScope("scope-sh");
-
-    expect(result.code).toBe("registered");
-    expect(after.id).toBe(before.id);
-    expect(after.connectorHostId).toBe(before.connectorHostId);
-    expect(after.activeConnectorId).not.toBe(oldConnectorId);
-    expect((await client.connectors.get(oldConnectorId)).status).toBe(
-      "offline",
-    );
-  });
-
-  it("uninstalls an online Connector while preserving its Scope and members", async () => {
-    const client = makeClient();
-    await login(client, "chenxi");
-
-    const before = await client.connectors.getBastionScope("scope-sh");
-    const command = await client.connectors.createUninstallCommand("scope-sh");
-    expect(command.uninstallCommand).toContain("--token uninstall_");
-
-    const result = client.simulate.connectorUninstall("scope-sh", command.id);
-    expect(result.code).toBe("uninstalled");
-
-    const after = await client.connectors.getBastionScope("scope-sh");
-    expect(after.status).toBe("uninstalled");
-    expect(after.activeConnectorId).toBeUndefined();
-    expect(after.connectorHostId).toBe(before.connectorHostId);
-    expect(after.memberHostIds).toEqual(before.memberHostIds);
-    const rootHost = await client.hosts.get(after.connectorHostId ?? "");
-    expect(rootHost.connectionStatus).toBe("offline");
-
-    const reinstall =
-      await client.connectors.regenerateEnrollmentToken("scope-sh");
-    expect(reinstall.purpose).toBe("connector_replacement");
-  });
-
-  it("blocks deletion with members and deletes an empty uninstalled Scope", async () => {
-    const client = makeClient();
-    await login(client, "chenxi");
-
-    const command = await client.connectors.createUninstallCommand("scope-bj");
-    client.simulate.connectorUninstall("scope-bj", command.id);
-    await expect(
-      client.connectors.deleteBastionScope("scope-bj"),
-    ).rejects.toThrow("move all member hosts out");
-
-    await client.hosts.delete("host-app-bj-01");
-    await client.hosts.delete("host-cache-bj-01");
-    await client.connectors.deleteBastionScope("scope-bj");
-
-    await expect(client.connectors.getBastionScope("scope-bj")).rejects.toThrow(
-      "bastion scope not found",
-    );
-    await expect(client.hosts.get("host-gw-bj-01")).rejects.toThrow(
-      "host not found",
+      "uninstalled",
     );
   });
 });

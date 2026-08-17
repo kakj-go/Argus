@@ -14,10 +14,21 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$root"
-helm lint deploy/helm/argus-platform --set setupToken=m1-smoke
+helm lint deploy/helm/argus-platform \
+  --set-string runtime.postgresqlPassword=m1-smoke \
+  --set-string runtime.redisPassword=m1-smoke \
+  --set-string runtime.idempotencyEncryptionKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA \
+  --set-string runtime.cursorSigningKey=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB \
+  --set-string runtime.pendingActionEncryptionKey=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC \
+  --set-json 'runtime.secretKEKKeyring={"current_version":1,"keys":{"1":"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"}}'
 helm template argus deploy/helm/argus-platform \
   --set profile=production \
-  --set setupToken=m1-smoke >"$rendered"
+  --set-string runtime.postgresqlPassword=m1-smoke \
+  --set-string runtime.redisPassword=m1-smoke \
+  --set-string runtime.idempotencyEncryptionKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA \
+  --set-string runtime.cursorSigningKey=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB \
+  --set-string runtime.pendingActionEncryptionKey=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC \
+  --set-json 'runtime.secretKEKKeyring={"current_version":1,"keys":{"1":"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"}}' >"$rendered"
 rg -q 'host: cards\.argus\.example\.com' "$rendered"
 rg -q 'name: cards' "$rendered"
 rg -q 'containerPort: 8083' "$rendered"
@@ -29,6 +40,7 @@ docker build \
   --build-arg VITE_API_BASE_URL=https://api.argus.invalid \
   --build-arg VITE_CARD_ORIGIN=https://cards.argus.invalid \
   --build-arg VITE_PLATFORM_URL=https://platform.argus.invalid \
+  --build-arg VITE_DIRECT_EGRESS_ADDRESSES=198.51.100.10 \
   .
 
 docker run --detach --name "$container" \

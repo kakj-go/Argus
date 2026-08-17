@@ -1,0 +1,75 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: argus-direct-executor-selfsigned
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-direct-executor-root-ca
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  isCA: true
+  commonName: argus-direct-executor-root-ca
+  secretName: argus-direct-executor-root-ca
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: argus-direct-executor-selfsigned
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: argus-direct-executor-ca
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  ca:
+    secretName: argus-direct-executor-root-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-direct-executor
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  secretName: argus-direct-executor-tls
+  duration: 2160h
+  renewBefore: 360h
+  dnsNames:
+    - argus-direct-executor
+    - argus-direct-executor.{{ .Values.namespaces.system }}.svc
+  usages:
+    - server auth
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: argus-direct-executor-ca
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-server-direct-executor-client
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  secretName: argus-server-direct-executor-client-tls
+  duration: 2160h
+  renewBefore: 360h
+  dnsNames:
+    - argus-server
+  usages:
+    - client auth
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: argus-direct-executor-ca
+    kind: Issuer

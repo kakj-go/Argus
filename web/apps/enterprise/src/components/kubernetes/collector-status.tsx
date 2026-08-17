@@ -3,10 +3,10 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useApi,
-  type CollectorInstallState,
-  type K8sCluster,
+  type KubernetesCluster,
   type PendingActionPublic,
 } from "@argus/api-client";
+import type { CollectorInstallState } from "@argus/api-client/provisional";
 import {
   Button,
   Card,
@@ -62,7 +62,7 @@ export function CollectorStatusPanel({
   cluster,
   collector,
 }: {
-  cluster: K8sCluster;
+  cluster: KubernetesCluster;
   collector: CollectorInstallState;
 }) {
   const { t } = useTranslation();
@@ -120,7 +120,7 @@ export function CollectorStatusPanel({
   const conflicts = (claimsQuery.data ?? []).filter(
     (claim) => claim.status === "conflict",
   );
-  const egressOk = cluster.connectionStatus === "connected";
+  const egressOk = cluster.connection_status === "connected";
 
   return (
     <div className="argus-k8s-stack">

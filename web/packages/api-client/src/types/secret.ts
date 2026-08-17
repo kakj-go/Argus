@@ -1,40 +1,15 @@
-import type { ISODateString } from "./common";
+import type { Secret } from "../generated/contracts";
 
-export type SecretType =
-  | "ssh_password"
-  | "ssh_private_key"
-  | "winrm_password"
-  | "kubeconfig"
-  | "api_token"
-  | "basic_auth";
+export type SecretType = Secret["type"];
 
-/**
- * Secrets only ever expose metadata. Values are write-only, encrypted at
- * rest, and every access produces an audit event (docs/03 §10).
- */
-export interface Secret {
-  id: string;
-  enterpriseId: string;
-  name: string;
-  type: SecretType;
-  description?: string;
-  referenceCount: number;
-  lastAccessedAt?: ISODateString;
-  createdBy: string;
-  createdAt: ISODateString;
-  updatedAt: ISODateString;
-}
-
-export interface CreateSecretInput {
-  name: string;
-  type: SecretType;
-  description?: string;
-  value: string;
-}
-
-export interface UpdateSecretInput {
-  name?: string;
-  description?: string;
-  /** Rotates the stored value; never returned back. */
-  value?: string;
-}
+export type {
+  Credential,
+  CredentialCreate,
+  CredentialUpdate,
+  ManagedAccount,
+  ManagedAccountCreate,
+  ManagedAccountUpdate,
+  Secret,
+  SecretCreate as CreateSecretInput,
+  SecretUpdate as UpdateSecretInput,
+} from "../generated/contracts";

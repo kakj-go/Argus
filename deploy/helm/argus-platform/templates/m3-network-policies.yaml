@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argus-direct-executor
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: argus-direct-executor
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-server
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - ports:
+        - {protocol: TCP, port: 22}
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 5985}
+        - {protocol: TCP, port: 5986}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-postgresql
+      ports:
+        - {protocol: TCP, port: 5432}

@@ -26,10 +26,10 @@ describe("configured adapter", () => {
       mode: "real",
       base_url: "https://api.example.test",
     });
-    await expect(client.hosts.list()).rejects.toBeInstanceOf(
+    await expect(client.conversations.list()).rejects.toBeInstanceOf(
       ClientOperationUnavailableError,
     );
-    await expect(client.hosts.list()).rejects.toMatchObject({
+    await expect(client.conversations.list()).rejects.toMatchObject({
       code: "CLIENT_OPERATION_UNAVAILABLE",
     });
   });
@@ -46,6 +46,74 @@ describe("configured adapter", () => {
         Object.keys(mock[domain]).sort(),
       );
     }
+  });
+
+  it("maps bounded Kubernetes resources and Pod logs to the M3 paths", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                cluster_id: "cluster-1",
+                resource_type: "pod",
+                namespace: "production",
+                name: "api-0",
+                labels: {},
+                summary: { status: "Running" },
+              },
+            ],
+            page: {
+              next_cursor: null,
+              has_more: false,
+              partial: { partial: false, reasons: [] },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            cluster_id: "cluster-1",
+            namespace: "production",
+            pod: "api-0",
+            content: "ready",
+            truncated: false,
+            bytes: 5,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    const client = await createConfiguredApiClient({
+      portal: "enterprise",
+      mode: "real",
+      base_url: "https://api.example.test",
+      fetch,
+    });
+
+    const resources = await client.kubernetes.listResources("cluster-1", {
+      resource_type: "pod",
+      namespace: "production",
+      query: "api",
+      limit: 25,
+    });
+    const logs = await client.kubernetes.getPodLogs("cluster-1", {
+      namespace: "production",
+      pod: "api-0",
+      container: "api",
+      tail_lines: 200,
+    });
+
+    expect(resources.items[0]?.name).toBe("api-0");
+    expect(logs.content).toBe("ready");
+    expect(String(fetch.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/enterprise/kubernetes-clusters/cluster-1/resources?resource_type=pod&namespace=production&query=api&limit=25",
+    );
+    expect(String(fetch.mock.calls[1]?.[0])).toBe(
+      "https://api.example.test/api/v1/enterprise/kubernetes-clusters/cluster-1/pod-logs?namespace=production&pod=api-0&container=api&tail_lines=200",
+    );
   });
 });
 
@@ -256,19 +324,17 @@ describe("SSE transport", () => {
   });
 
   it("turns stale cursors into a stable terminal error", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            code: "STREAM_CURSOR_STALE",
-            message_key: "errors.stream_cursor_stale",
-            request_id: "r",
-            retryable: false,
-          }),
-          { status: 409 },
-        ),
-      );
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "STREAM_CURSOR_STALE",
+          message_key: "errors.stream_cursor_stale",
+          request_id: "r",
+          retryable: false,
+        }),
+        { status: 409 },
+      ),
+    );
     const stream = new SseTransport(
       new HttpTransport({ base_url: "https://api.example.test", fetch }),
     ).stream("events");
