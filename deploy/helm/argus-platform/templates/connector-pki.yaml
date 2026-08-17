@@ -69,6 +69,12 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  name: argus-worker
+  namespace: {{ .Values.namespaces.system }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
   name: argus-connector-gateway
   namespace: {{ .Values.namespaces.system }}
 ---
@@ -93,6 +99,9 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: argus-server
+    namespace: {{ .Values.namespaces.system }}
+  - kind: ServiceAccount
+    name: argus-worker
     namespace: {{ .Values.namespaces.system }}
   - kind: ServiceAccount
     name: argus-connector-gateway

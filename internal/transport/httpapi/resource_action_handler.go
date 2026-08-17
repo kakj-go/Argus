@@ -6,12 +6,13 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 
+	actionservice "github.com/kakj-go/Argus/internal/action"
 	actionapi "github.com/kakj-go/Argus/internal/gen/openapi/actionapi"
 	connectionapi "github.com/kakj-go/Argus/internal/gen/openapi/connectionapi"
 	"github.com/kakj-go/Argus/internal/identity"
 	"github.com/kakj-go/Argus/internal/resource"
+	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
 type ConnectionHandler struct {
@@ -45,6 +46,7 @@ func (handler ConnectionHandler) auth(ctx context.Context) (identity.Principal, 
 type ResourceActionHandler struct {
 	Identity EnterpriseIdentityHandler
 	Service  resource.Service
+	Workflow actionservice.Service
 }
 
 func (handler ResourceActionHandler) ListPendingActions(ctx context.Context, _ actionapi.ListPendingActionsRequestObject) (actionapi.ListPendingActionsResponseObject, error) {
@@ -92,20 +94,59 @@ func (handler ResourceActionHandler) ConfirmPendingAction(ctx context.Context, r
 	if apiError != nil {
 		return actionapi.ConfirmPendingActiondefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
 	}
-	confirmation, err := handler.Service.Confirm(ctx, resourceSubject(p), p.EnterpriseIDValue(), request.ActionRef, request.Params.IdempotencyKey)
+	requestID := request.Params.IdempotencyKey
+	if current, ok := RequestFromContext(ctx); ok {
+		requestID = current.RequestID
+	}
+	confirmation, err := handler.Workflow.Confirm(ctx, p.ActorID(), requestID, p.EnterpriseIDValue(), p.AuthorizationVersion(), request.ActionRef, request.Params.IdempotencyKey)
 	if err != nil {
 		return actionapi.ConfirmPendingActiondefaultJSONResponse{Body: actionError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}
-	value := confirmation.PendingAction
-	result := actionapi.ConfirmPendingActionResult{PendingAction: convertPending[actionapi.PendingActionPublicSchema](value)}
-	if value.ResultResourceID.Valid && value.ResultResourceType.Valid && value.ResultResourceVersion.Valid {
-		result.ResourceRef = &actionapi.ResourceRef{ResourceId: value.ResultResourceID.UUID.String(), ResourceType: actionapi.ResourceRefResourceType(value.ResultResourceType.String), Version: value.ResultResourceVersion.Int64}
+	result := actionapi.PendingActionCommandResult{PendingAction: convertPending[actionapi.PendingActionPublicSchema](confirmation.PendingAction)}
+	if confirmation.Execution != nil {
+		value := toActionExecution(*confirmation.Execution, confirmation.PendingAction)
+		result.Execution = &value
 	}
-	if confirmation.Enrollment != nil {
-		command := confirmation.Enrollment.InstallCommand
-		result.Enrollment = &actionapi.EnrollmentResult{EnrollmentId: openapi_types.UUID(confirmation.Enrollment.EnrollmentID), ExpiresAt: confirmation.Enrollment.ExpiresAt, InstallCommand: &command}
+	if confirmation.ApprovalRequest != nil {
+		view, viewErr := handler.Workflow.GetApprovalView(ctx, p.EnterpriseIDValue(), confirmation.ApprovalRequest.ID)
+		if viewErr != nil {
+			return actionapi.ConfirmPendingActiondefaultJSONResponse{Body: actionError(ctx, viewErr), StatusCode: http.StatusInternalServerError}, nil
+		}
+		value := toActionApprovalView(view)
+		result.ApprovalRequest = &value
 	}
 	return actionapi.ConfirmPendingAction200JSONResponse(result), nil
+}
+
+func toActionExecution(value db.Execution, pending db.PendingAction) actionapi.Execution {
+	available := false
+	result := actionapi.Execution{ExecutionId: value.ID.String(), ActionRef: pending.ActionRef, Status: value.Status,
+		OneTimeResultAvailable: &available, CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time}
+	if value.ResultRef.Valid {
+		result.ResultRef = &value.ResultRef.String
+	}
+	if value.ErrorCode.Valid {
+		result.ErrorCode = &value.ErrorCode.String
+	}
+	return result
+}
+
+func toActionApprovalView(value actionservice.ApprovalView) actionapi.ApprovalRequestView {
+	requirements := make([]actionapi.ApprovalRequirement, 0, len(value.Requirements))
+	for _, item := range value.Requirements {
+		requirements = append(requirements, actionapi.ApprovalRequirement{PolicyId: item.PolicyID, PolicyVersion: item.PolicyVersion,
+			MinimumApprovers: int(item.MinimumApprovers), ApprovedCount: int(item.ApprovedCount), SeparationOfDuty: item.SeparationOfDuty,
+			Status: actionapi.ApprovalRequirementStatus(item.Status)})
+	}
+	decisions := make([]actionapi.ApprovalDecision, 0, len(value.Decisions))
+	for _, item := range value.Decisions {
+		reason := item.Reason
+		decisions = append(decisions, actionapi.ApprovalDecision{DecisionId: item.ID.String(), ActorUserId: item.ActorUserID.String(),
+			Decision: item.Decision, Reason: &reason, DecidedAt: item.DecidedAt.Time})
+	}
+	return actionapi.ApprovalRequestView{ApprovalRequestId: value.Request.ID, ActionRef: value.Action.ActionRef,
+		Status: actionapi.ApprovalRequestViewStatus(value.Request.Status), Requirements: requirements, Decisions: decisions,
+		ExpiresAt: value.Request.ExpiresAt.Time, CreatedAt: value.Request.CreatedAt.Time, UpdatedAt: value.Request.UpdatedAt.Time}
 }
 
 func (handler ResourceActionHandler) auth(ctx context.Context, mutation bool, csrf, permission string) (identity.Principal, *actionapi.ApiError) {
@@ -132,9 +173,3 @@ func connectionError(ctx context.Context, err error) connectionapi.ApiError {
 	base := hostError(ctx, err)
 	return connectionapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
 }
-
-func actionResourceRef(id uuid.UUID, resourceType string, version int64) *actionapi.ResourceRef {
-	return &actionapi.ResourceRef{ResourceId: id.String(), ResourceType: actionapi.ResourceRefResourceType(resourceType), Version: version}
-}
-
-func connectionUUID(value uuid.UUID) openapi_types.UUID { return openapi_types.UUID(value) }

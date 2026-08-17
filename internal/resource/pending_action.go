@@ -42,15 +42,24 @@ type PrepareActionInput struct {
 	ImmutablePlan                    any
 	ResourceScopeSnapshot            any
 	CommitHandler                    string
+	RunID                            uuid.NullUUID
+}
+
+type ActionSubject struct {
+	ID                   string
+	Type                 string
+	AuthorizationVersion int64
+	ConfirmationRequired bool
 }
 
 type ActionCommitResult struct {
-	ResourceType    string
-	ResourceID      uuid.UUID
-	ResourceVersion int64
-	Summary         string
-	ErrorCode       string
-	Enrollment      *EnrollmentResult
+	ResourceType       string
+	ResourceID         uuid.UUID
+	ResourceVersion    int64
+	Summary            string
+	ErrorCode          string
+	ConnectorCommandID uuid.NullUUID
+	Enrollment         *EnrollmentResult
 }
 
 type EnrollmentResult struct {
@@ -67,12 +76,64 @@ type ActionConfirmation struct {
 type ActionCommitFunc func(context.Context, *db.Queries, db.PendingAction, json.RawMessage) (ActionCommitResult, error)
 type ActionRevalidateFunc func(context.Context, *db.Queries, db.PendingAction, json.RawMessage) ([]byte, error)
 
+// ExecuteReady consumes the private token and applies the immutable plan. It
+// must only be called by the internal Action Executor after confirmation and
+// all approval requirements have transitioned the action to ready.
+func (service PendingActionService) ExecuteReady(ctx context.Context, q *db.Queries, action db.PendingAction, revalidate ActionRevalidateFunc, commit ActionCommitFunc) (ActionCommitResult, error) {
+	if action.Status != "ready" || time.Now().UTC().After(action.ExpiresAt.Time) {
+		return ActionCommitResult{}, ErrActionUnavailable
+	}
+	plan, err := q.GetPendingActionPlan(ctx, db.GetPendingActionPlanParams{ActionRef: action.ActionRef, EnterpriseID: action.EnterpriseID})
+	if err != nil || plan.AuthorizationVersion != action.AuthorizationVersion {
+		return ActionCommitResult{}, ErrActionInvalidated
+	}
+	canonicalPlan, err := canonicalJSON(plan.ImmutablePlan)
+	if err != nil {
+		return ActionCommitResult{}, ErrActionInvalidated
+	}
+	planHash := sha256.Sum256(canonicalPlan)
+	if !subtleEqual(planHash[:], plan.PlanHash) {
+		return ActionCommitResult{}, ErrActionInvalidated
+	}
+	token, err := q.GetPendingActionTokenForUpdate(ctx, db.GetPendingActionTokenForUpdateParams{ActionRef: action.ActionRef, EnterpriseID: action.EnterpriseID})
+	if err != nil || token.Status != "active" || time.Now().UTC().After(token.ExpiresAt.Time) {
+		return ActionCommitResult{}, ErrActionUnavailable
+	}
+	plaintext, err := (actionCipher{key: service.Key}).decrypt(token.Nonce, token.Ciphertext, actionAAD(action.EnterpriseID.String(), action.ID.String()))
+	if err != nil || !verifyActionToken(string(plaintext), token.TokenHash) {
+		clear(plaintext)
+		return ActionCommitResult{}, ErrActionInvalidated
+	}
+	clear(plaintext)
+	if revalidate != nil {
+		impactHash, err := revalidate(ctx, q, action, canonicalPlan)
+		if err != nil || !subtleEqual(impactHash, action.ImpactHash) {
+			return ActionCommitResult{}, ErrActionInvalidated
+		}
+	}
+	rows, err := q.ConsumePendingActionToken(ctx, db.ConsumePendingActionTokenParams{PendingActionID: action.ID, EnterpriseID: action.EnterpriseID})
+	if err != nil || rows != 1 {
+		return ActionCommitResult{}, ErrActionUnavailable
+	}
+	if _, err := q.MarkPendingActionExecutingM4(ctx, db.MarkPendingActionExecutingM4Params{ID: action.ID, EnterpriseID: action.EnterpriseID}); err != nil {
+		return ActionCommitResult{}, ErrActionUnavailable
+	}
+	return commit(ctx, q, action, canonicalPlan)
+}
+
 func (service PendingActionService) Prepare(ctx context.Context, actorID string, enterpriseID uuid.UUID, input PrepareActionInput, idempotencyKey string) (db.PendingAction, error) {
+	return service.PrepareForSubject(ctx, ActionSubject{ID: actorID, Type: "user", AuthorizationVersion: input.AuthorizationVersion, ConfirmationRequired: true}, enterpriseID, input, idempotencyKey)
+}
+
+func (service PendingActionService) PrepareForSubject(ctx context.Context, subject ActionSubject, enterpriseID uuid.UUID, input PrepareActionInput, idempotencyKey string) (db.PendingAction, error) {
 	if service.TTL <= 0 {
 		service.TTL = 15 * time.Minute
 	}
-	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actorID, input.ActionType+".preview", idempotencyKey, input, 201, func(q *db.Queries) (db.PendingAction, error) {
-		actorUUID, err := uuid.Parse(actorID)
+	if subject.Type != "user" && subject.Type != "service_account" {
+		return db.PendingAction{}, ErrActionUnavailable
+	}
+	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", subject.ID, input.ActionType+".preview", idempotencyKey, input, 201, func(q *db.Queries) (db.PendingAction, error) {
+		actorUUID, err := uuid.Parse(subject.ID)
 		if err != nil {
 			return db.PendingAction{}, ErrActionUnavailable
 		}
@@ -104,11 +165,15 @@ func (service PendingActionService) Prepare(ctx context.Context, actorID string,
 			return db.PendingAction{}, err
 		}
 		expiresAt := time.Now().UTC().Add(service.TTL)
+		status := "awaiting_approval"
+		if subject.ConfirmationRequired {
+			status = "awaiting_confirmation"
+		}
 		action, err := q.CreatePendingAction(ctx, db.CreatePendingActionParams{ID: actionID, ActionRef: actionRef, EnterpriseID: enterpriseID,
-			CreatorUserID: actorUUID, AuthorizationVersion: input.AuthorizationVersion, ActionType: input.ActionType, Title: input.Title,
+			CreatorSubjectID: actorUUID, CreatorSubjectType: subject.Type, AuthorizationVersion: subject.AuthorizationVersion, ActionType: input.ActionType, Title: input.Title,
 			Summary: input.Summary, Risk: input.Risk, Preview: previewJSON, Diff: diffJSON, ResourceType: input.ResourceType,
 			ResourceID: input.ResourceID, ExpectedResourceVersion: input.ExpectedResourceVersion, ImpactHash: impactHash[:],
-			ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true}})
+			Status: status, ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true}, RunID: input.RunID})
 		if err != nil {
 			return db.PendingAction{}, err
 		}
@@ -117,7 +182,7 @@ func (service PendingActionService) Prepare(ctx context.Context, actorID string,
 			return db.PendingAction{}, err
 		}
 		if _, err := q.CreatePendingActionPlan(ctx, db.CreatePendingActionPlanParams{ID: newResourceID(), PendingActionID: action.ID,
-			EnterpriseID: enterpriseID, PreviewCallID: previewCallID, CommitTool: input.CommitHandler, AuthorizationVersion: input.AuthorizationVersion,
+			EnterpriseID: enterpriseID, PreviewCallID: previewCallID, CommitTool: input.CommitHandler, AuthorizationVersion: subject.AuthorizationVersion,
 			PlanSchemaVersion: "argus.resource_plan/v1", PlanHash: planHash[:], ImmutablePlan: planJSON, ResourceScopeSnapshot: snapshotJSON}); err != nil {
 			return db.PendingAction{}, err
 		}
@@ -135,8 +200,8 @@ func (service PendingActionService) Prepare(ctx context.Context, actorID string,
 			return db.PendingAction{}, err
 		}
 		clear([]byte(token))
-		if err := appendResourceAudit(ctx, q, actorID, enterpriseID, input.ActionType+".preview", input.ResourceType, input.ResourceID.UUID,
-			map[string]any{"summary": "resource action prepared", "authorization_version": input.AuthorizationVersion}); err != nil {
+		if err := appendResourceAudit(ctx, q, subject.ID, enterpriseID, input.ActionType+".preview", input.ResourceType, input.ResourceID.UUID,
+			map[string]any{"summary": "resource action prepared", "authorization_version": subject.AuthorizationVersion, "subject_type": subject.Type}); err != nil {
 			return db.PendingAction{}, err
 		}
 		return action, nil
@@ -160,7 +225,7 @@ func (service PendingActionService) Cancel(ctx context.Context, actorID string, 
 		ActionRef string `json:"action_ref"`
 	}{ActionRef: actionRef}
 	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actorID, "pending_action.cancel", idempotencyKey, request, 200, func(q *db.Queries) (db.PendingAction, error) {
-		result, err := q.CancelPendingAction(ctx, db.CancelPendingActionParams{ActionRef: actionRef, EnterpriseID: enterpriseID, CreatorUserID: actorUUID})
+		result, err := q.CancelPendingAction(ctx, db.CancelPendingActionParams{ActionRef: actionRef, EnterpriseID: enterpriseID, CreatorSubjectID: actorUUID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return db.PendingAction{}, ErrActionUnavailable
 		}
@@ -185,7 +250,7 @@ func (service PendingActionService) Confirm(ctx context.Context, actorID string,
 	}{ActionRef: actionRef, AuthorizationVersion: authorizationVersion}
 	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actorID, "pending_action.confirm", idempotencyKey, request, 200, func(q *db.Queries) (ActionConfirmation, error) {
 		action, err := q.GetPendingActionForUpdate(ctx, db.GetPendingActionForUpdateParams{ActionRef: actionRef, EnterpriseID: enterpriseID})
-		if err != nil || action.Status != "awaiting_confirmation" || time.Now().UTC().After(action.ExpiresAt.Time) || action.CreatorUserID != actorUUID {
+		if err != nil || action.Status != "awaiting_confirmation" || time.Now().UTC().After(action.ExpiresAt.Time) || action.CreatorSubjectType != "user" || action.CreatorSubjectID != actorUUID {
 			return ActionConfirmation{}, ErrActionUnavailable
 		}
 		if action.AuthorizationVersion != authorizationVersion {

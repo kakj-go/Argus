@@ -26,6 +26,8 @@
         "locale": {"enum": ["zh-CN", "en-US"]},
         "status": {"enum": ["pending", "running", "waiting_input", "waiting_approval", "waiting_system", "succeeded", "failed", "cancelled", "timed_out"]},
         "current_step_id": {"type": "string"},
+        "stop_reason": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 128},
+        "error_code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 128},
         "authorization_version": {"type": "integer", "minimum": 1},
         "version": {"type": "integer", "minimum": 1},
         "created_at": {"type": "string", "format": "date-time"},

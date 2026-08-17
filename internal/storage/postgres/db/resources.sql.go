@@ -14,23 +14,24 @@ import (
 
 const cancelPendingAction = `-- name: CancelPendingAction :one
 UPDATE pending_actions SET status = 'cancelled', updated_at = now()
-WHERE action_ref = $1 AND enterprise_id = $2 AND creator_user_id = $3 AND status = 'awaiting_confirmation' RETURNING id, action_ref, enterprise_id, creator_user_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at
+WHERE action_ref = $1 AND enterprise_id = $2 AND creator_subject_type = 'user' AND creator_subject_id = $3
+  AND status IN ('awaiting_confirmation','awaiting_approval','ready') RETURNING id, action_ref, enterprise_id, creator_subject_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at, creator_subject_type, run_id, confirmation_required, policy_snapshot_hash
 `
 
 type CancelPendingActionParams struct {
-	ActionRef     string    `json:"action_ref"`
-	EnterpriseID  uuid.UUID `json:"enterprise_id"`
-	CreatorUserID uuid.UUID `json:"creator_user_id"`
+	ActionRef        string    `json:"action_ref"`
+	EnterpriseID     uuid.UUID `json:"enterprise_id"`
+	CreatorSubjectID uuid.UUID `json:"creator_subject_id"`
 }
 
 func (q *Queries) CancelPendingAction(ctx context.Context, arg CancelPendingActionParams) (PendingAction, error) {
-	row := q.db.QueryRow(ctx, cancelPendingAction, arg.ActionRef, arg.EnterpriseID, arg.CreatorUserID)
+	row := q.db.QueryRow(ctx, cancelPendingAction, arg.ActionRef, arg.EnterpriseID, arg.CreatorSubjectID)
 	var i PendingAction
 	err := row.Scan(
 		&i.ID,
 		&i.ActionRef,
 		&i.EnterpriseID,
-		&i.CreatorUserID,
+		&i.CreatorSubjectID,
 		&i.AuthorizationVersion,
 		&i.ActionType,
 		&i.Title,
@@ -51,6 +52,10 @@ func (q *Queries) CancelPendingAction(ctx context.Context, arg CancelPendingActi
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatorSubjectType,
+		&i.RunID,
+		&i.ConfirmationRequired,
+		&i.PolicySnapshotHash,
 	)
 	return i, err
 }
@@ -393,15 +398,16 @@ func (q *Queries) CreateKubernetesCluster(ctx context.Context, arg CreateKuberne
 }
 
 const createPendingAction = `-- name: CreatePendingAction :one
-INSERT INTO pending_actions (id, action_ref, enterprise_id, creator_user_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, expires_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'awaiting_confirmation',$12,$13,$14,$15,$16) RETURNING id, action_ref, enterprise_id, creator_user_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at
+INSERT INTO pending_actions (id, action_ref, enterprise_id, creator_subject_id, creator_subject_type, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, expires_at, run_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id, action_ref, enterprise_id, creator_subject_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at, creator_subject_type, run_id, confirmation_required, policy_snapshot_hash
 `
 
 type CreatePendingActionParams struct {
 	ID                      uuid.UUID          `json:"id"`
 	ActionRef               string             `json:"action_ref"`
 	EnterpriseID            uuid.UUID          `json:"enterprise_id"`
-	CreatorUserID           uuid.UUID          `json:"creator_user_id"`
+	CreatorSubjectID        uuid.UUID          `json:"creator_subject_id"`
+	CreatorSubjectType      string             `json:"creator_subject_type"`
 	AuthorizationVersion    int64              `json:"authorization_version"`
 	ActionType              string             `json:"action_type"`
 	Title                   string             `json:"title"`
@@ -409,11 +415,13 @@ type CreatePendingActionParams struct {
 	Risk                    string             `json:"risk"`
 	Preview                 []byte             `json:"preview"`
 	Diff                    []byte             `json:"diff"`
+	Status                  string             `json:"status"`
 	ResourceType            string             `json:"resource_type"`
 	ResourceID              uuid.NullUUID      `json:"resource_id"`
 	ExpectedResourceVersion pgtype.Int8        `json:"expected_resource_version"`
 	ImpactHash              []byte             `json:"impact_hash"`
 	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
+	RunID                   uuid.NullUUID      `json:"run_id"`
 }
 
 func (q *Queries) CreatePendingAction(ctx context.Context, arg CreatePendingActionParams) (PendingAction, error) {
@@ -421,7 +429,8 @@ func (q *Queries) CreatePendingAction(ctx context.Context, arg CreatePendingActi
 		arg.ID,
 		arg.ActionRef,
 		arg.EnterpriseID,
-		arg.CreatorUserID,
+		arg.CreatorSubjectID,
+		arg.CreatorSubjectType,
 		arg.AuthorizationVersion,
 		arg.ActionType,
 		arg.Title,
@@ -429,18 +438,20 @@ func (q *Queries) CreatePendingAction(ctx context.Context, arg CreatePendingActi
 		arg.Risk,
 		arg.Preview,
 		arg.Diff,
+		arg.Status,
 		arg.ResourceType,
 		arg.ResourceID,
 		arg.ExpectedResourceVersion,
 		arg.ImpactHash,
 		arg.ExpiresAt,
+		arg.RunID,
 	)
 	var i PendingAction
 	err := row.Scan(
 		&i.ID,
 		&i.ActionRef,
 		&i.EnterpriseID,
-		&i.CreatorUserID,
+		&i.CreatorSubjectID,
 		&i.AuthorizationVersion,
 		&i.ActionType,
 		&i.Title,
@@ -461,6 +472,10 @@ func (q *Queries) CreatePendingAction(ctx context.Context, arg CreatePendingActi
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatorSubjectType,
+		&i.RunID,
+		&i.ConfirmationRequired,
+		&i.PolicySnapshotHash,
 	)
 	return i, err
 }
@@ -714,7 +729,7 @@ func (q *Queries) ExpireQueuedConnectionTests(ctx context.Context) (int64, error
 const finishPendingAction = `-- name: FinishPendingAction :one
 UPDATE pending_actions SET status = $3, result_resource_type = $4, result_resource_id = $5,
  result_resource_version = $6, result_summary = $7, error_code = $8, updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND status = 'executing' RETURNING id, action_ref, enterprise_id, creator_user_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at
+WHERE id = $1 AND enterprise_id = $2 AND status = 'executing' RETURNING id, action_ref, enterprise_id, creator_subject_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at, creator_subject_type, run_id, confirmation_required, policy_snapshot_hash
 `
 
 type FinishPendingActionParams struct {
@@ -744,7 +759,7 @@ func (q *Queries) FinishPendingAction(ctx context.Context, arg FinishPendingActi
 		&i.ID,
 		&i.ActionRef,
 		&i.EnterpriseID,
-		&i.CreatorUserID,
+		&i.CreatorSubjectID,
 		&i.AuthorizationVersion,
 		&i.ActionType,
 		&i.Title,
@@ -765,6 +780,10 @@ func (q *Queries) FinishPendingAction(ctx context.Context, arg FinishPendingActi
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatorSubjectType,
+		&i.RunID,
+		&i.ConfirmationRequired,
+		&i.PolicySnapshotHash,
 	)
 	return i, err
 }
@@ -883,7 +902,7 @@ func (q *Queries) GetKubernetesCluster(ctx context.Context, arg GetKubernetesClu
 }
 
 const getPendingAction = `-- name: GetPendingAction :one
-SELECT id, action_ref, enterprise_id, creator_user_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at FROM pending_actions WHERE action_ref = $1 AND enterprise_id = $2
+SELECT id, action_ref, enterprise_id, creator_subject_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at, creator_subject_type, run_id, confirmation_required, policy_snapshot_hash FROM pending_actions WHERE action_ref = $1 AND enterprise_id = $2
 `
 
 type GetPendingActionParams struct {
@@ -898,7 +917,7 @@ func (q *Queries) GetPendingAction(ctx context.Context, arg GetPendingActionPara
 		&i.ID,
 		&i.ActionRef,
 		&i.EnterpriseID,
-		&i.CreatorUserID,
+		&i.CreatorSubjectID,
 		&i.AuthorizationVersion,
 		&i.ActionType,
 		&i.Title,
@@ -919,12 +938,16 @@ func (q *Queries) GetPendingAction(ctx context.Context, arg GetPendingActionPara
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatorSubjectType,
+		&i.RunID,
+		&i.ConfirmationRequired,
+		&i.PolicySnapshotHash,
 	)
 	return i, err
 }
 
 const getPendingActionForUpdate = `-- name: GetPendingActionForUpdate :one
-SELECT id, action_ref, enterprise_id, creator_user_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at FROM pending_actions WHERE action_ref = $1 AND enterprise_id = $2 FOR UPDATE
+SELECT id, action_ref, enterprise_id, creator_subject_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at, creator_subject_type, run_id, confirmation_required, policy_snapshot_hash FROM pending_actions WHERE action_ref = $1 AND enterprise_id = $2 FOR UPDATE
 `
 
 type GetPendingActionForUpdateParams struct {
@@ -939,7 +962,7 @@ func (q *Queries) GetPendingActionForUpdate(ctx context.Context, arg GetPendingA
 		&i.ID,
 		&i.ActionRef,
 		&i.EnterpriseID,
-		&i.CreatorUserID,
+		&i.CreatorSubjectID,
 		&i.AuthorizationVersion,
 		&i.ActionType,
 		&i.Title,
@@ -960,6 +983,10 @@ func (q *Queries) GetPendingActionForUpdate(ctx context.Context, arg GetPendingA
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatorSubjectType,
+		&i.RunID,
+		&i.ConfirmationRequired,
+		&i.PolicySnapshotHash,
 	)
 	return i, err
 }
@@ -1118,7 +1145,7 @@ func (q *Queries) ListKubernetesClusters(ctx context.Context, enterpriseID uuid.
 }
 
 const listPendingActions = `-- name: ListPendingActions :many
-SELECT id, action_ref, enterprise_id, creator_user_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at FROM pending_actions WHERE enterprise_id = $1 ORDER BY created_at DESC, id DESC
+SELECT id, action_ref, enterprise_id, creator_subject_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at, creator_subject_type, run_id, confirmation_required, policy_snapshot_hash FROM pending_actions WHERE enterprise_id = $1 ORDER BY created_at DESC, id DESC
 `
 
 func (q *Queries) ListPendingActions(ctx context.Context, enterpriseID uuid.UUID) ([]PendingAction, error) {
@@ -1134,7 +1161,7 @@ func (q *Queries) ListPendingActions(ctx context.Context, enterpriseID uuid.UUID
 			&i.ID,
 			&i.ActionRef,
 			&i.EnterpriseID,
-			&i.CreatorUserID,
+			&i.CreatorSubjectID,
 			&i.AuthorizationVersion,
 			&i.ActionType,
 			&i.Title,
@@ -1155,6 +1182,10 @@ func (q *Queries) ListPendingActions(ctx context.Context, enterpriseID uuid.UUID
 			&i.ExpiresAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CreatorSubjectType,
+			&i.RunID,
+			&i.ConfirmationRequired,
+			&i.PolicySnapshotHash,
 		); err != nil {
 			return nil, err
 		}
@@ -1205,7 +1236,7 @@ func (q *Queries) MarkConnectorConnectionTestRunning(ctx context.Context, arg Ma
 
 const markPendingActionExecuting = `-- name: MarkPendingActionExecuting :one
 UPDATE pending_actions SET status = 'executing', updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND status = 'awaiting_confirmation' AND expires_at > now() RETURNING id, action_ref, enterprise_id, creator_user_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at
+WHERE id = $1 AND enterprise_id = $2 AND status = 'awaiting_confirmation' AND expires_at > now() RETURNING id, action_ref, enterprise_id, creator_subject_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at, creator_subject_type, run_id, confirmation_required, policy_snapshot_hash
 `
 
 type MarkPendingActionExecutingParams struct {
@@ -1220,7 +1251,7 @@ func (q *Queries) MarkPendingActionExecuting(ctx context.Context, arg MarkPendin
 		&i.ID,
 		&i.ActionRef,
 		&i.EnterpriseID,
-		&i.CreatorUserID,
+		&i.CreatorSubjectID,
 		&i.AuthorizationVersion,
 		&i.ActionType,
 		&i.Title,
@@ -1241,6 +1272,10 @@ func (q *Queries) MarkPendingActionExecuting(ctx context.Context, arg MarkPendin
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatorSubjectType,
+		&i.RunID,
+		&i.ConfirmationRequired,
+		&i.PolicySnapshotHash,
 	)
 	return i, err
 }

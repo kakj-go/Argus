@@ -1,0 +1,24 @@
+openapi: 3.1.0
+info: {title: Argus Approval and Execution API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/approval-policies: {$ref: ../argus.yaml#/paths/~1enterprise~1approval-policies}
+  "/enterprise/approval-policies/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1approval-policies~1{id}"}
+  /enterprise/approval-requests: {$ref: ../argus.yaml#/paths/~1enterprise~1approval-requests}
+  "/enterprise/approval-requests/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1approval-requests~1{id}"}
+  "/enterprise/approval-requests/{id}/decisions": {$ref: "../argus.yaml#/paths/~1enterprise~1approval-requests~1{id}~1decisions"}
+  /enterprise/executions: {$ref: ../argus.yaml#/paths/~1enterprise~1executions}
+  "/enterprise/executions/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1executions~1{id}"}
+  "/enterprise/executions/{id}/one-time-result": {$ref: "../argus.yaml#/paths/~1enterprise~1executions~1{id}~1one-time-result"}
+components:
+  securitySchemes: {sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}}
+  schemas:
+    ApprovalPolicy: {$ref: ../components/m4.yaml#/components/schemas/ApprovalPolicy}
+    ApprovalPolicyWrite: {$ref: ../components/m4.yaml#/components/schemas/ApprovalPolicyWrite}
+    ApprovalRequirement: {$ref: ../components/m4.yaml#/components/schemas/ApprovalRequirement}
+    ApprovalRequestView: {$ref: ../components/m4.yaml#/components/schemas/ApprovalRequestView}
+    ApprovalDecisionCreate: {$ref: ../components/m4.yaml#/components/schemas/ApprovalDecisionCreate}
+    PendingActionCommandResult: {$ref: ../components/m4.yaml#/components/schemas/PendingActionCommandResult}
+    ExecutionPage: {$ref: ../components/m4.yaml#/components/schemas/ExecutionPage}
+    ActionOneTimeResult: {$ref: ../components/m4.yaml#/components/schemas/ActionOneTimeResult}

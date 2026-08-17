@@ -1,5 +1,6 @@
 {{- if eq .Values.profile "production" }}
-{{- range $name := list "argus-web" "argus-server" "argus-worker" "argus-direct-executor" "argus-connector-gateway" "argus-telemetry-ingest" "argus-telemetry-query" }}
+{{- $workers := list "argus-worker-agent" "argus-worker-action" "argus-worker-compaction" "argus-worker-automation" "argus-worker-sandbox" -}}
+{{- range $name := concat (list "argus-web" "argus-server" "argus-direct-executor" "argus-connector-gateway" "argus-telemetry-ingest" "argus-telemetry-query") $workers }}
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -12,7 +13,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: {{ $name }}
 {{- end }}
-{{- range $name := list "argus-server" "argus-worker" "argus-direct-executor" "argus-connector-gateway" "argus-telemetry-ingest" "argus-telemetry-query" }}
+{{- range $name := concat (list "argus-server" "argus-direct-executor" "argus-connector-gateway" "argus-telemetry-ingest" "argus-telemetry-query") $workers }}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -24,8 +25,14 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: {{ $name }}
+  {{- $poolName := trimPrefix "argus-worker-" $name }}
+  {{- if hasKey $.Values.workerPools $poolName }}
+  minReplicas: {{ (index $.Values.workerPools $poolName).production.minReplicas }}
+  maxReplicas: {{ (index $.Values.workerPools $poolName).production.maxReplicas }}
+  {{- else }}
   minReplicas: {{ $.Values.production.minReplicas }}
   maxReplicas: {{ $.Values.production.maxReplicas }}
+  {{- end }}
   metrics:
     - type: Resource
       resource:

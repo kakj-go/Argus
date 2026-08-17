@@ -286,6 +286,14 @@ components:
             - timed_out
         current_step_id:
           type: string
+        stop_reason:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+          maxLength: 128
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+          maxLength: 128
         authorization_version:
           type: integer
           minimum: 1

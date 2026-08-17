@@ -8,16 +8,23 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/kakj-go/Argus/internal/action"
+	"github.com/kakj-go/Argus/internal/agent"
 	"github.com/kakj-go/Argus/internal/authorization"
+	"github.com/kakj-go/Argus/internal/automation"
 	"github.com/kakj-go/Argus/internal/config"
 	connectorservice "github.com/kakj-go/Argus/internal/connector"
+	"github.com/kakj-go/Argus/internal/conversation"
 	"github.com/kakj-go/Argus/internal/directexecutor"
 	"github.com/kakj-go/Argus/internal/identity"
 	"github.com/kakj-go/Argus/internal/kubernetesreader"
+	"github.com/kakj-go/Argus/internal/mcp"
+	modelservice "github.com/kakj-go/Argus/internal/model"
 	"github.com/kakj-go/Argus/internal/outbox"
 	"github.com/kakj-go/Argus/internal/pagination"
 	"github.com/kakj-go/Argus/internal/platform"
 	"github.com/kakj-go/Argus/internal/resource"
+	"github.com/kakj-go/Argus/internal/sandbox"
 	secretservice "github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
@@ -95,11 +102,25 @@ func (a *App) Run(ctx context.Context) error {
 		ClusterEnrollment: connectorDomain,
 		Kubernetes: kubernetesreader.Reader{Store: postgresStore, Secrets: secretDomain, Validator: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs},
 			Notifier: connectorDomain}}
+	workflowDomain := action.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Resources: resourceDomain,
+		OneTimeResultKey: a.config.PendingActionKey}
 	secretHandler := httpapi.SecretHandler{Identity: enterpriseIdentityHandler, Service: secretDomain}
 	hostHandler := httpapi.HostHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
 	kubernetesHandler := httpapi.KubernetesHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
 	connectionHandler := httpapi.ConnectionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
-	actionHandler := httpapi.ResourceActionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
+	actionHandler := httpapi.ResourceActionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain, Workflow: workflowDomain}
+	workflowHandler := httpapi.WorkflowHandler{Identity: enterpriseIdentityHandler, Service: workflowDomain}
+	conversationHandler := httpapi.ConversationHandler{Identity: enterpriseIdentityHandler,
+		Service: conversation.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}}}
+	modelHandler := httpapi.ModelHandler{Identity: enterpriseIdentityHandler,
+		Service: modelservice.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Keyring: secretKeyring}}
+	toolRegistry := mcp.NewRegistry()
+	if err := (agent.ResourceTools{Store: postgresStore, Resources: resourceDomain}).Register(toolRegistry); err != nil {
+		return err
+	}
+	automationHandler := httpapi.AutomationHandler{Identity: enterpriseIdentityHandler,
+		Service: automation.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Tools: toolRegistry}}
+	sandboxHandler := httpapi.SandboxHandler{Auth: setupHandler, Service: sandbox.Service{Store: postgresStore, Keyring: secretKeyring}}
 	connectorHandler := httpapi.ConnectorHandler{Identity: enterpriseIdentityHandler, Service: connectorDomain, Bastion: bastionDomain}
 	go (outbox.Relay{Store: postgresStore, Redis: redisClient, Logger: a.logger}).Run(ctx)
 	server := &http.Server{
@@ -108,8 +129,11 @@ func (a *App) Run(ctx context.Context) error {
 			PostgreSQL: postgresStore, Redis: redisClient, Setup: &setupHandler, Platform: &platformHandler,
 			EnterpriseIdentity: &enterpriseIdentityHandler, EnterpriseAuthorization: &enterpriseAuthorizationHandler,
 			Machine: &machineHandler, Audit: &auditHandler, Secret: &secretHandler, Host: &hostHandler, Kubernetes: &kubernetesHandler,
-			Connection: &connectionHandler, ResourceAction: &actionHandler, AllowedOrigins: a.config.AllowedOrigins,
-			Connector: &connectorHandler,
+			Connection: &connectionHandler, ResourceAction: &actionHandler, Workflow: &workflowHandler, Conversation: &conversationHandler, Model: &modelHandler,
+			Automation:     &automationHandler,
+			Sandbox:        &sandboxHandler,
+			AllowedOrigins: a.config.AllowedOrigins,
+			Connector:      &connectorHandler,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

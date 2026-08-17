@@ -28,7 +28,6 @@ import type {
 import type {
   CollectionClaim,
   CollectorInstallState,
-  Conversation,
   K8sNodeBinding,
   RemoteSession,
   TaskViewModel,
@@ -36,6 +35,7 @@ import type {
 import type { MockChatMessage } from "./chat-types";
 import type {
   MockActionPlanRecord,
+  MockConversationRecord,
   MockEnterpriseUserRecord,
 } from "./internal-types";
 import type {
@@ -78,7 +78,7 @@ export interface MockDb {
   tasks: TaskViewModel[];
   pendingActions: PendingActionPublic[];
   actionPlans: Record<string, MockActionPlanRecord>;
-  conversations: Conversation[];
+  conversations: MockConversationRecord[];
   messages: MockChatMessage[];
   models: AIModel[];
   modelQuotas: ModelQuota[];

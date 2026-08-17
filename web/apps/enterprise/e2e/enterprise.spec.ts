@@ -512,7 +512,7 @@ test("approvals inbox: open a pending action and approve it", async ({
   await approveButton.click();
 
   // 审批记录出现「已批准」，操作进入执行（mock 定时推进任务步骤）。
-  await expect(detail.getByText("已批准")).toBeVisible();
+  await expect(detail.getByText("已批准").first()).toBeVisible();
   await expect(approveButton).not.toBeVisible();
   await expect(detail.getByText(/待执行|执行中/)).toBeVisible();
 });

@@ -13,6 +13,7 @@
 | Run/Step/Task | PostgreSQL | 新任务通知、短期进度缓存 | Worker 扫描未完成 Task |
 | ConversationEvent/RunCheckpoint/ContextSnapshot | PostgreSQL，超大正文进入 Artifact Store | 热上下文和流式通知缓存 | 从事件账本、RunState 和最后有效 Snapshot 重建；压缩不删除原事件 |
 | PendingAction/Approval/Execution | PostgreSQL | 短期幂等窗口、状态通知 | 按数据库状态恢复 |
+| Execution 一次性结果 | PostgreSQL AES-GCM 密文与消费事实 | 不缓存明文 | 原发起人在短 TTL 内按 Idempotency-Key 领取；过期或消费后不可恢复 |
 | Action Binding/私有 Token | PostgreSQL 加密记录或专用 Secret Store | 可选短 TTL 读取缓存 | 从权威记录恢复或要求重新 Preview |
 | ConnectorCommand | PostgreSQL | 路由和进度通知 | 根据 Command 状态和 Connector 对账 |
 | 在线 Connector Session | PostgreSQL 保存最后事实 | 带 TTL 的实时 Registry | Connector 心跳重建 |
@@ -147,6 +148,10 @@ Action Binding 和 Pending Action 的唯一状态位于 PostgreSQL；Redis 只�
 - Agent Loop 不保存 Pod 本地会话；每次 Model Call、Tool Batch 和 Compaction 都以持久化 Run Version、Task Lease 和幂等键执行。
 - ContextAssembler 给定相同 Run Version、Active ContextSnapshot 和 Event Tail 时必须产生相同来源集合与 Projection Hash。
 - HPA 使用可运行 Task 数、最老 Task 年龄、模型并发和 CPU；不能只看 CPU。
+
+M4 将普通 Worker 拆为五个独立 Pool：`agent` 运行模型与可见 Tool，`action` 原子消费私有计划并执行 Commit/ResultUnknown 对账，`compaction` 生成 ContextSnapshot，`automation` 调度并执行固定 Tool，`sandbox` 管理 Lifecycle 与恢复。五个 Pool 共用同一 PostgreSQL Task/Fence 协议，但 Deployment、并发、NetworkPolicy、PDB 和指标独立；`default` Pool 只用于本地兼容运行，不是生产部署拓扑。
+
+`action` Pool 遇到 ConnectorCommand 未终态时保持 `result_unknown`，只在对账得到 `succeeded`、`failed`、`timed_out` 或 `expired` 事实后收敛，不因 Lease 过期重放副作用。`sandbox` Pool 在上游响应丢失时按 Task 元数据查找原 Session；月度配额把已结算 Usage 与活动 Session 的 TTL 预留合并计算，并在 quota 行锁内做最终确认。
 
 ### 7.3 Direct Executor Worker Pool
 

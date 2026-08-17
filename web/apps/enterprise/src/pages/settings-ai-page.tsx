@@ -40,9 +40,9 @@ type ModelDrawerState =
 
 export function SettingsAiPage() {
   const { t } = useTranslation();
-  const admin = usePermission("*");
+  const canManageModels = usePermission("model.manage");
   const canManageQuota = usePermission("model_quota.manage");
-  const departmentAdmin = !admin && canManageQuota;
+  const departmentAdmin = !canManageModels && canManageQuota;
   const [tab, setTab] = useState("models");
   const [dashboardModelId, setDashboardModelId] = useState<string>();
   return (
@@ -52,7 +52,7 @@ export function SettingsAiPage() {
     >
       <Tabs onValueChange={setTab} value={tab}>
         <TabsList>
-          {admin && (
+          {canManageModels && (
             <TabsTrigger value="models">
               {t("aiSettings.tabs.models")}
             </TabsTrigger>
@@ -61,7 +61,7 @@ export function SettingsAiPage() {
             {t("aiSettings.tabs.governance")}
           </TabsTrigger>
         </TabsList>
-        {admin && (
+        {canManageModels && (
           <TabsContent value="models">
             <ModelsView
               onDashboard={(id) => {
@@ -73,7 +73,7 @@ export function SettingsAiPage() {
         )}
         <TabsContent value="governance">
           <GovernanceView
-            canManage={admin || departmentAdmin}
+            canManage={canManageModels || departmentAdmin}
             modelId={dashboardModelId}
             onModelChange={setDashboardModelId}
           />
@@ -239,6 +239,15 @@ function ModelDrawer({
   const [baseUrl, setBaseUrl] = useState(existing?.baseUrl ?? "");
   const [apiKey, setApiKey] = useState("");
   const [modelId, setModelId] = useState(existing?.modelId ?? "");
+  const [apiProtocol, setApiProtocol] = useState<
+    "chat_completions" | "responses"
+  >(existing?.apiProtocol ?? "responses");
+  const [contextWindowTokens, setContextWindowTokens] = useState(
+    String(existing?.contextWindowTokens ?? 128_000),
+  );
+  const [maxOutputTokens, setMaxOutputTokens] = useState(
+    String(existing?.maxOutputTokens ?? 8192),
+  );
   const [inputPrice, setInputPrice] = useState(
     String(existing?.inputPricePerMillionTokens ?? ""),
   );
@@ -254,6 +263,9 @@ function ModelDrawer({
           baseUrl,
           apiKey: apiKey || undefined,
           modelId,
+          apiProtocol,
+          contextWindowTokens: Number(contextWindowTokens),
+          maxOutputTokens: Number(maxOutputTokens),
           inputPricePerMillionTokens: Number(inputPrice),
           outputPricePerMillionTokens: Number(outputPrice),
         });
@@ -263,6 +275,9 @@ function ModelDrawer({
         baseUrl,
         apiKey,
         modelId,
+        apiProtocol,
+        contextWindowTokens: Number(contextWindowTokens),
+        maxOutputTokens: Number(maxOutputTokens),
         inputPricePerMillionTokens: Number(inputPrice),
         outputPricePerMillionTokens: Number(outputPrice),
       });
@@ -326,6 +341,42 @@ function ModelDrawer({
             value={modelId}
           />
         </Field>
+        <Field label={t("aiSettings.model.apiProtocol")}>
+          <Select
+            onValueChange={(value) =>
+              setApiProtocol(
+                value as "chat_completions" | "responses",
+              )
+            }
+            options={[
+              { value: "responses", label: "Responses" },
+              { value: "chat_completions", label: "Chat Completions" },
+            ]}
+            value={apiProtocol}
+          />
+        </Field>
+        <div className="argus-form-row">
+          <Field label={t("aiSettings.model.contextWindowTokens")}>
+            <Input
+              min="4096"
+              onChange={(event) => setContextWindowTokens(event.target.value)}
+              required
+              step="1"
+              type="number"
+              value={contextWindowTokens}
+            />
+          </Field>
+          <Field label={t("aiSettings.model.maxOutputTokens")}>
+            <Input
+              min="1"
+              onChange={(event) => setMaxOutputTokens(event.target.value)}
+              required
+              step="1"
+              type="number"
+              value={maxOutputTokens}
+            />
+          </Field>
+        </div>
         <div className="argus-form-row">
           <Field label={t("aiSettings.model.inputPrice")}>
             <Input
@@ -363,7 +414,7 @@ function QuotaDrawer({
   const { t } = useTranslation();
   const api = useApi();
   const session = useEnterpriseAuthStore((state) => state.session);
-  const enterpriseAdmin = usePermission("*");
+  const enterpriseAdmin = usePermission("model.manage");
   const departments = useOrgDepartments();
   const users = useOrgUsers();
   const queryClient = useQueryClient();

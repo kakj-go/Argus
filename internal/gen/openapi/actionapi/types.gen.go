@@ -11,6 +11,57 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for ApprovalRequestViewStatus.
+const (
+	ApprovalRequestViewStatusApproved    ApprovalRequestViewStatus = "approved"
+	ApprovalRequestViewStatusExpired     ApprovalRequestViewStatus = "expired"
+	ApprovalRequestViewStatusInvalidated ApprovalRequestViewStatus = "invalidated"
+	ApprovalRequestViewStatusPending     ApprovalRequestViewStatus = "pending"
+	ApprovalRequestViewStatusRejected    ApprovalRequestViewStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalRequestViewStatus enum.
+func (e ApprovalRequestViewStatus) Valid() bool {
+	switch e {
+	case ApprovalRequestViewStatusApproved:
+		return true
+	case ApprovalRequestViewStatusExpired:
+		return true
+	case ApprovalRequestViewStatusInvalidated:
+		return true
+	case ApprovalRequestViewStatusPending:
+		return true
+	case ApprovalRequestViewStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApprovalRequirementStatus.
+const (
+	ApprovalRequirementStatusApproved    ApprovalRequirementStatus = "approved"
+	ApprovalRequirementStatusInvalidated ApprovalRequirementStatus = "invalidated"
+	ApprovalRequirementStatusPending     ApprovalRequirementStatus = "pending"
+	ApprovalRequirementStatusRejected    ApprovalRequirementStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalRequirementStatus enum.
+func (e ApprovalRequirementStatus) Valid() bool {
+	switch e {
+	case ApprovalRequirementStatusApproved:
+		return true
+	case ApprovalRequirementStatusInvalidated:
+		return true
+	case ApprovalRequirementStatusPending:
+		return true
+	case ApprovalRequirementStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PartialMetadataReasons.
 const (
 	AuthorizationFiltered PartialMetadataReasons = "authorization_filtered"
@@ -29,45 +80,6 @@ func (e PartialMetadataReasons) Valid() bool {
 	case SourceTimeout:
 		return true
 	case SourceUnavailable:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ResourceRefResourceType.
-const (
-	Artifact          ResourceRefResourceType = "artifact"
-	BastionScope      ResourceRefResourceType = "bastion_scope"
-	Connector         ResourceRefResourceType = "connector"
-	Credential        ResourceRefResourceType = "credential"
-	Host              ResourceRefResourceType = "host"
-	KubernetesCluster ResourceRefResourceType = "kubernetes_cluster"
-	ManagedAccount    ResourceRefResourceType = "managed_account"
-	Secret            ResourceRefResourceType = "secret"
-	TelemetryQuery    ResourceRefResourceType = "telemetry_query"
-)
-
-// Valid indicates whether the value is a known member of the ResourceRefResourceType enum.
-func (e ResourceRefResourceType) Valid() bool {
-	switch e {
-	case Artifact:
-		return true
-	case BastionScope:
-		return true
-	case Connector:
-		return true
-	case Credential:
-		return true
-	case Host:
-		return true
-	case KubernetesCluster:
-		return true
-	case ManagedAccount:
-		return true
-	case Secret:
-		return true
-	case TelemetryQuery:
 		return true
 	default:
 		return false
@@ -99,12 +111,42 @@ type ApiError_Params_AdditionalProperties struct {
 	union json.RawMessage
 }
 
-// ConfirmPendingActionResult defines model for ConfirmPendingActionResult.
-type ConfirmPendingActionResult struct {
-	Enrollment    *EnrollmentResult         `json:"enrollment,omitempty"`
-	PendingAction PendingActionPublicSchema `json:"pending_action"`
-	ResourceRef   *ResourceRef              `json:"resource_ref,omitempty"`
+// ApprovalDecision defines model for ApprovalDecision.
+type ApprovalDecision struct {
+	ActorUserId string      `json:"actor_user_id"`
+	DecidedAt   time.Time   `json:"decided_at"`
+	Decision    interface{} `json:"decision"`
+	DecisionId  string      `json:"decision_id"`
+	Reason      *string     `json:"reason,omitempty"`
 }
+
+// ApprovalRequestView defines model for ApprovalRequestView.
+type ApprovalRequestView struct {
+	ActionRef         string                    `json:"action_ref"`
+	ApprovalRequestId openapi_types.UUID        `json:"approval_request_id"`
+	CreatedAt         time.Time                 `json:"created_at"`
+	Decisions         []ApprovalDecision        `json:"decisions"`
+	ExpiresAt         time.Time                 `json:"expires_at"`
+	Requirements      []ApprovalRequirement     `json:"requirements"`
+	Status            ApprovalRequestViewStatus `json:"status"`
+	UpdatedAt         time.Time                 `json:"updated_at"`
+}
+
+// ApprovalRequestViewStatus defines model for ApprovalRequestView.Status.
+type ApprovalRequestViewStatus string
+
+// ApprovalRequirement defines model for ApprovalRequirement.
+type ApprovalRequirement struct {
+	ApprovedCount    int                       `json:"approved_count"`
+	MinimumApprovers int                       `json:"minimum_approvers"`
+	PolicyId         openapi_types.UUID        `json:"policy_id"`
+	PolicyVersion    int64                     `json:"policy_version"`
+	SeparationOfDuty bool                      `json:"separation_of_duty"`
+	Status           ApprovalRequirementStatus `json:"status"`
+}
+
+// ApprovalRequirementStatus defines model for ApprovalRequirement.Status.
+type ApprovalRequirementStatus string
 
 // CursorPage defines model for CursorPage.
 type CursorPage struct {
@@ -113,11 +155,16 @@ type CursorPage struct {
 	Partial    PartialMetadata `json:"partial"`
 }
 
-// EnrollmentResult defines model for EnrollmentResult.
-type EnrollmentResult struct {
-	EnrollmentId   openapi_types.UUID `json:"enrollment_id"`
-	ExpiresAt      time.Time          `json:"expires_at"`
-	InstallCommand *string            `json:"install_command,omitempty"`
+// Execution defines model for Execution.
+type Execution struct {
+	ActionRef              string      `json:"action_ref"`
+	CreatedAt              time.Time   `json:"created_at"`
+	ErrorCode              *string     `json:"error_code,omitempty"`
+	ExecutionId            string      `json:"execution_id"`
+	OneTimeResultAvailable *bool       `json:"one_time_result_available,omitempty"`
+	ResultRef              *string     `json:"result_ref,omitempty"`
+	Status                 interface{} `json:"status"`
+	UpdatedAt              time.Time   `json:"updated_at"`
 }
 
 // IdempotencyKey defines model for IdempotencyKey.
@@ -131,6 +178,13 @@ type PartialMetadata struct {
 
 // PartialMetadataReasons defines model for PartialMetadata.Reasons.
 type PartialMetadataReasons string
+
+// PendingActionCommandResult defines model for PendingActionCommandResult.
+type PendingActionCommandResult struct {
+	ApprovalRequest *ApprovalRequestView      `json:"approval_request,omitempty"`
+	Execution       *Execution                `json:"execution,omitempty"`
+	PendingAction   PendingActionPublicSchema `json:"pending_action"`
+}
 
 // PublicJsonObject defines model for PublicJsonObject.
 type PublicJsonObject map[string]*PublicJsonValue
@@ -154,16 +208,6 @@ type PublicJsonValue4 = []*PublicJsonValue
 
 // RequestId defines model for RequestId.
 type RequestId = string
-
-// ResourceRef defines model for ResourceRef.
-type ResourceRef struct {
-	ResourceId   string                  `json:"resource_id"`
-	ResourceType ResourceRefResourceType `json:"resource_type"`
-	Version      int64                   `json:"version"`
-}
-
-// ResourceRefResourceType defines model for ResourceRef.ResourceType.
-type ResourceRefResourceType string
 
 // PendingActionPublicSchema defines model for pending-action-public.schema.
 type PendingActionPublicSchema struct {

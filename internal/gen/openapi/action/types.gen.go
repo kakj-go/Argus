@@ -42,13 +42,14 @@ type ApprovalRequest struct {
 
 // Execution defines model for Execution.
 type Execution struct {
-	ActionRef   string      `json:"action_ref"`
-	CreatedAt   time.Time   `json:"created_at"`
-	ErrorCode   *string     `json:"error_code,omitempty"`
-	ExecutionId string      `json:"execution_id"`
-	ResultRef   *string     `json:"result_ref,omitempty"`
-	Status      interface{} `json:"status"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	ActionRef              string      `json:"action_ref"`
+	CreatedAt              time.Time   `json:"created_at"`
+	ErrorCode              *string     `json:"error_code,omitempty"`
+	ExecutionId            string      `json:"execution_id"`
+	OneTimeResultAvailable *bool       `json:"one_time_result_available,omitempty"`
+	ResultRef              *string     `json:"result_ref,omitempty"`
+	Status                 interface{} `json:"status"`
+	UpdatedAt              time.Time   `json:"updated_at"`
 }
 
 // PendingActionPublic defines model for PendingActionPublic.

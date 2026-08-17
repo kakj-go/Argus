@@ -106,6 +106,9 @@ components:
             - cancelled
         result_ref:
           type: string
+        one_time_result_available:
+          type: boolean
+          readOnly: true
         error_code:
           type: string
           pattern: ^[A-Z][A-Z0-9_]*$

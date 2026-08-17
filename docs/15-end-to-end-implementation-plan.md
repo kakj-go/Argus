@@ -80,7 +80,7 @@
 | M1 | 前端与 API 基座 | real/mock Adapter 分离，UI/Token/i18n/安全欠账收敛，前端不再暴露私有 PendingAction 参数 |
 | M2 | 初始化、身份与授权闭环 | Setup、平台域、企业域、Department、RoleBinding/DataScope、Session、审计走真实 API |
 | M3 | 资源与连接闭环 | 带 labels 的 Host/Kubernetes、Secret/Credential、Connector、Bastion Scope、Direct Executor 可真实管理 |
-| M4 | 确定性执行闭环 | Outbox/Lease/Fence、Run、单 Agent Loop、上下文投影/压缩、Preview/PendingAction/Approval/Execution 可恢复执行 |
+| M4 | 确定性执行闭环 | Outbox/Lease/Fence、Run、单 Agent Loop、上下文投影/压缩、Tool 权限/Schema 门禁、Preview/PendingAction/Approval/Execution 可恢复执行、AutomationRevision |
 | M5 | Card 闭环 | 系统 Card 通过 CSP/MessagePort/Manifest/Binding 安全展示和触发动作，企业 Card 通过发布门禁 |
 | M6 | 人工远程访问闭环 | Grant、短期票据、SSH/WinRM、录像、终止、撤权和审计完整 |
 | M7 | 遥测闭环 | Collector、Ingest/Kafka/ClickHouse/Query、可信资源身份和统一数据裁剪贯通 |
@@ -88,7 +88,7 @@
 
 详细任务见[分阶段任务文件](./plans/README.md)。
 
-截至 2026-08-17，M0-M3 已按各自退出标准完成；下一实施阶段为 M4。M3 的最终临时集群验收运行号为 `20260817060430-49810`，结束后 Namespace、PVC 和 Lease 均为零残留。
+截至 2026-08-17，M0-M4 已按各自退出标准完成；下一实施阶段为 M5。M4 的最终临时集群验收运行号为 `20260817144832-31660`，脱敏证据位于 `artifacts/m4-e2e/20260817144832-31660`，结束后 Namespace、PVC 和 Lease 均为零残留。
 
 ## 5. 依赖关系
 
@@ -138,7 +138,7 @@ M1 与 M2 可以在 M0 契约稳定后部分并行，但真实页面接入必须
 - 事务状态变化与 Outbox 同事务提交。
 - Worker/Connector/Execution 使用幂等键、Lease/Fence 和 ResultUnknown 对账。
 - 所有企业资源查询先校验真实 `enterprise_id`，再应用 DataScope。
-- Agent 使用不可变 ConversationEvent Ledger、结构化 RunCheckpoint 和派生 ContextSnapshot；大 ToolResult 先确定性投影，压缩不删除原始历史。
+- Agent 使用不可变 ConversationEvent Ledger、结构化 RunCheckpoint 和派生 ContextSnapshot；大 ToolResult 先确定性投影，压缩不删除原始历史。`ModelCall` 保存调用与计费事实，`ModelUsage` 只作为聚合查询投影。
 - ContextAssembler 与 ModelProvider Adapter 分离，默认生成 Provider-neutral 上下文；Provider 原生 Compaction 只作可选优化。
 
 ### 6.4 安全与审计
@@ -160,9 +160,9 @@ M8 结束时至少通过以下全链路场景：
 4. 接入带标签的堡垒机、内网 Host、公网 Direct Host 和 KubernetesCluster。
 5. 范围内用户可以列表/详情/Tool 查询资源，范围外资源通过直接 ID、批量、游标、Card 和遥测查询均不可见。
 6. 修改授权敏感标签使 Host 离开 DataScope，旧游标、PendingAction 和票据失效，活动订阅重新鉴权。
-7. Agent 发起变更 Preview，浏览器只持有 ActionBinding，用户确认后 Action Executor 确定性 Commit；重复点击不产生重复副作用。
+7. Agent 发起变更 Preview，可信 `run_id` 贯穿 PendingAction、Execution 和 Verify；浏览器只持有 ActionBinding，用户确认后 Action Executor 确定性 Commit，重复点击不产生重复副作用。
 8. 长会话和大 ToolResult 触发确定性投影与 ContextSnapshot；原始事件仍可追溯，Worker 重启后能从相同切点恢复，摘要不能恢复已撤销权限。
-9. 需要审批的生产动作不能由创建人自批；撤权后 Commit 失败；ResultUnknown 可对账恢复。
+9. 需要审批的生产动作不能由创建人自批；多策略必须全部满足；撤权后 Commit 失败；ResultUnknown 仅依据外部命令终态对账且不重放副作用；AutomationRun 固定使用创建时 Revision。
 10. 系统 Card 使用 MessagePort 展示裁剪后的 Tool Result，伪造消息、Binding ID 或 Origin 被拒绝。
 11. RemoteAccessGrant 只允许指定 Host/标签结果与 ManagedAccount；票据撤销、会话终止、录像和审计可验证。
 12. Collector 伪造 Enterprise/Resource/Collector 身份被覆盖或拒绝，Metrics/Logs/Traces 只通过 Query Service 按资源范围返回。
@@ -182,12 +182,12 @@ M8 结束时至少通过以下全链路场景：
 
 ## 9. 当前建议起点
 
-截至 2026-08-16，M0 契约与文档冻结已经完成：OpenAPI、JSON Schema、protobuf、错误/状态注册表、PendingAction 三层私有存储边界、Go/TypeScript/Proto 生成、全量 DTO Fixture、安全投影、完整事件组切点和 Breaking Check 均已建立。
+截至 2026-08-17，M0-M4 已完成：契约与生成门禁、显式 mock/real 前端基座、身份授权、资源/Connector，以及 Agent/审批/确定性执行均已有代码、测试和临时 Kubernetes Namespace 证据。
 
-下一步从 M1 开始：
+下一步从 M5 开始：
 
-- 让现有 mock 和新增 HTTP/SSE/WebSocket Adapter 消费 `@argus/api-client/contracts`。
-- 删除 Project/Membership/tags、公开 PendingAction 私有参数和旧 Chat/Card 流式类型。
+- 在现有独立 Card Runtime、Manifest/CSP/MessagePort 基座上实现 CardVersion、发布、启用和回滚治理。
+- 让 RenderPlan、Data/Query/Action Binding 只引用已授权 Tool Result 和服务端 ActionBinding，不复制私有参数或提交 Token。
 - 完成组件、样式、i18n、认证边界和 Card Host 安全欠账。
 
 M1 完成后进入 M2，建立第一条真实 Setup → Platform → Enterprise 授权垂直闭环。这条路径是后续 Connector、Agent、Card、远程访问和遥测的共同根基。

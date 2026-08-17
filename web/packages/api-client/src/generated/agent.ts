@@ -77,6 +77,8 @@ export interface components {
             /** @enum {unknown} */
             status: "pending" | "running" | "waiting_input" | "waiting_approval" | "waiting_system" | "succeeded" | "failed" | "cancelled" | "timed_out";
             current_step_id?: string;
+            stop_reason?: string;
+            error_code?: string;
             authorization_version: number;
             version: number;
             /** Format: date-time */

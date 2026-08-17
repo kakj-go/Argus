@@ -1,40 +1,12 @@
 #!/usr/bin/env bash
 
-CERT_MANAGER_INSTALLED_BY_E2E=false
 M3_CONNECTOR_PIDS=()
 M3_TARGET_IMAGE="argus/argus-e2e-ssh:m3-${RUN_ID}"
 M3_GATEWAY_PORT=${ARGUS_E2E_CONNECTOR_GATEWAY_PORT:-4193}
 M3_SSH_PORT=${ARGUS_E2E_SSH_PORT:-4222}
 M3_DIRECT_SSH_PORT=2222
 
-cert_manager_version_compatible() {
-  local actual=${1#v} required=${2#v}
-  local actual_major actual_minor actual_patch required_major required_minor required_patch
-  IFS=. read -r actual_major actual_minor actual_patch <<<"$actual"
-  IFS=. read -r required_major required_minor required_patch <<<"$required"
-  [[ "$actual_major" =~ ^[0-9]+$ && "$actual_minor" =~ ^[0-9]+$ && "$actual_patch" =~ ^[0-9]+$ ]] || return 1
-  [[ "$required_major" =~ ^[0-9]+$ && "$required_minor" =~ ^[0-9]+$ && "$required_patch" =~ ^[0-9]+$ ]] || return 1
-  [[ "$actual_major" -eq "$required_major" && "$actual_minor" -eq "$required_minor" && "$actual_patch" -ge "$required_patch" ]]
-}
-
 prepare_m3_dependencies() {
-  local version image actual_version
-  version=$(awk -F'"' '/certManager:/ {print $2}' "${ROOT_DIR}/deploy/versions.lock.yaml")
-  [[ -n "$version" ]] || fail "cert-manager version is missing from deploy/versions.lock.yaml"
-  if k -n cert-manager get deployment cert-manager >/dev/null 2>&1; then
-    image=$(k -n cert-manager get deployment cert-manager -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
-    actual_version=$(sed -E 's/.*:v?([0-9]+\.[0-9]+\.[0-9]+)(@.*)?$/\1/' <<<"$image")
-    cert_manager_version_compatible "$actual_version" "$version" || \
-      fail "existing cert-manager is not compatible with locked baseline v${version}: ${image:-unknown}"
-    log "reusing compatible cert-manager v${actual_version} (baseline v${version})"
-  else
-    log "installing locked cert-manager v${version}"
-    retry 3 helm upgrade --install argus-e2e-cert-manager "https://charts.jetstack.io/charts/cert-manager-v${version}.tgz" \
-      --kube-context "$KUBE_CONTEXT" --namespace cert-manager --create-namespace \
-      --set crds.enabled=true --wait --timeout 10m >/dev/null
-    CERT_MANAGER_INSTALLED_BY_E2E=true
-  fi
-
   log "building M3 SSH target image ${M3_TARGET_IMAGE}"
   retry 3 docker build --quiet -f deploy/docker/e2e-ssh.Dockerfile -t "$M3_TARGET_IMAGE" . >/dev/null
   case "$KUBE_CONTEXT" in
@@ -55,10 +27,6 @@ cleanup_m3() {
     wait "$pid" >/dev/null 2>&1 || true
   done
   docker image rm "$M3_TARGET_IMAGE" >/dev/null 2>&1 || true
-  if [[ "$CERT_MANAGER_INSTALLED_BY_E2E" == true ]]; then
-    helm uninstall argus-e2e-cert-manager --kube-context "$KUBE_CONTEXT" --namespace cert-manager --wait >/dev/null 2>&1 || true
-    k delete namespace cert-manager --wait=false >/dev/null 2>&1 || true
-  fi
 }
 
 m3_mutation_headers() {

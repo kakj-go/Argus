@@ -7,7 +7,6 @@ import type {
   CreatedUserCredential,
   BastionScope,
   BastionScopePage,
-  ConfirmPendingActionResult,
   ConnectionTest,
   Connector,
   ConnectorPage,
@@ -58,6 +57,10 @@ import {
 import { HttpTransport, type HttpTransportOptions } from "../transport/http";
 import { SseTransport } from "../transport/sse";
 import { WebSocketTransport } from "../transport/websocket";
+import { installAgentDomains } from "./real/agent";
+import type { RealDomainContext } from "./real/context";
+import { installSandboxDomains } from "./real/sandbox";
+import { installWorkflowDomains } from "./real/workflow";
 
 export type Portal = "setup" | "platform" | "enterprise";
 
@@ -182,6 +185,7 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
     ...options,
     csrf_token: options.csrf_token ?? (() => csrfToken),
   });
+  const sse = new SseTransport(http);
   const portal = options.portal;
   const versions = new Map<string, number>();
   const remember = <T extends { id: string; version?: number }>(
@@ -206,6 +210,15 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
   };
 
   const client = createUnavailableClient();
+  const domainContext: RealDomainContext = {
+    client,
+    http,
+    sse,
+    versions,
+    remember,
+    expectedVersion,
+    idempotencyKey,
+  };
   client.auth = {
     async login(input) {
       const audience = requireAudience();
@@ -405,6 +418,8 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
     },
   };
 
+  installSandboxDomains(domainContext);
+
   function withAdminCredential(value: CreatedUserCredential): EnterpriseAdmin {
     return {
       ...enterpriseAdmin(remember(value.user)),
@@ -414,6 +429,9 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
   }
 
   client.org = createOrganizationClient(http, versions, remember);
+  installWorkflowDomains(domainContext);
+  installAgentDomains(domainContext);
+
   client.audit = {
     list: (filter, query) =>
       listAudit("enterprise", filter?.action, query?.page?.limit),
@@ -786,39 +804,6 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
     },
   };
 
-  client.approvals = {
-    ...client.approvals,
-    async list() {
-      const value = await http.request<{
-        items: PendingActionPublic[];
-        page: { next_cursor: string | null; has_more: boolean };
-      }>("enterprise/pending-actions");
-      return page(value);
-    },
-    get: (actionRef) =>
-      http.request<PendingActionPublic>(
-        `enterprise/pending-actions/${encodeURIComponent(actionRef)}`,
-      ),
-    confirm: (actionRef) =>
-      http.request<ConfirmPendingActionResult>(
-        `enterprise/pending-actions/${encodeURIComponent(actionRef)}/confirm`,
-        {
-          method: "POST",
-          csrf: true,
-          headers: { "Idempotency-Key": idempotencyKey() },
-        },
-      ),
-    cancel: (actionRef) =>
-      http.request<PendingActionPublic>(
-        `enterprise/pending-actions/${encodeURIComponent(actionRef)}/cancel`,
-        {
-          method: "POST",
-          csrf: true,
-          headers: { "Idempotency-Key": idempotencyKey() },
-        },
-      ),
-  };
-
   async function listAudit(
     audience: "platform" | "enterprise",
     action?: string,
@@ -836,7 +821,7 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
   return {
     client,
     http,
-    sse: new SseTransport(http),
+    sse,
     websocket: new WebSocketTransport(),
   };
 }
@@ -1124,6 +1109,16 @@ function createUnavailableClient(): ArgusApiClient {
       updateModel: () => unavailable("conversations.updateModel"),
       subscribe: () => unavailableSync("conversations.subscribe"),
     },
+    runs: {
+      get: () => unavailable("runs.get"),
+      cancel: () => unavailable("runs.cancel"),
+      compact: () => unavailable("runs.compact"),
+    },
+    executions: {
+      list: () => unavailable("executions.list"),
+      get: () => unavailable("executions.get"),
+      claimOneTimeResult: () => unavailable("executions.claimOneTimeResult"),
+    },
     hosts: {
       list: () => unavailable("hosts.list"),
       get: () => unavailable("hosts.get"),
@@ -1196,6 +1191,11 @@ function createUnavailableClient(): ArgusApiClient {
       approve: () => unavailable("approvals.approve"),
       reject: () => unavailable("approvals.reject"),
     },
+    approvalRequests: {
+      list: () => unavailable("approvalRequests.list"),
+      get: () => unavailable("approvalRequests.get"),
+      decide: () => unavailable("approvalRequests.decide"),
+    },
     models: {
       list: () => unavailable("models.list"),
       get: () => unavailable("models.get"),
@@ -1207,6 +1207,15 @@ function createUnavailableClient(): ArgusApiClient {
       listQuotas: () => unavailable("models.listQuotas"),
       setQuota: () => unavailable("models.setQuota"),
       usage: () => unavailable("models.usage"),
+    },
+    automations: {
+      list: () => unavailable("automations.list"),
+      get: () => unavailable("automations.get"),
+      create: () => unavailable("automations.create"),
+      update: () => unavailable("automations.update"),
+      enable: () => unavailable("automations.enable"),
+      disable: () => unavailable("automations.disable"),
+      listRuns: () => unavailable("automations.listRuns"),
     },
     interactiveCards: {
       list: () => unavailable("interactiveCards.list"),
@@ -1307,6 +1316,9 @@ function createUnavailableClient(): ArgusApiClient {
       sessions: {
         list: () => unavailable("platform.sessions.list"),
         terminate: () => unavailable("platform.sessions.terminate"),
+      },
+      usage: {
+        list: () => unavailable("platform.usage.list"),
       },
       audit: { list: () => unavailable("platform.audit.list") },
     },

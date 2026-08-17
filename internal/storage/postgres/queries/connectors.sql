@@ -184,6 +184,9 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *;
 -- name: GetConnectorCommand :one
 SELECT * FROM connector_commands WHERE command_id = $1 AND connector_id = $2 AND connection_epoch = $3;
 
+-- name: GetConnectorCommandByID :one
+SELECT * FROM connector_commands WHERE id = $1;
+
 -- name: ListUncertainConnectorCommands :many
 SELECT * FROM connector_commands WHERE connector_id = $1 AND status IN ('delivery_unknown','result_unknown')
 ORDER BY created_at LIMIT $2;

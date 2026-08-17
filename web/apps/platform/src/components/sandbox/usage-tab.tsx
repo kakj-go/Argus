@@ -9,7 +9,6 @@ import {
   MetricChart,
   StatCard,
 } from "@argus/ui";
-import { platformUsageSeries } from "../../lib/format";
 
 /** 平台用量 Tab：确定性派生的 14 天趋势 + 汇总 StatCard。 */
 export function UsageTab() {
@@ -20,8 +19,23 @@ export function UsageTab() {
     queryKey: ["platform", "sessions"],
     queryFn: () => api.platform.sessions.list(),
   });
+  const usageQuery = useQuery({
+    queryKey: ["platform", "sandbox", "usage"],
+    queryFn: () => api.platform.usage.list(),
+  });
 
-  const usage = useMemo(() => platformUsageSeries(14), []);
+  const usage = useMemo(
+    () =>
+      [...(usageQuery.data ?? [])]
+        .sort((left, right) => left.month.localeCompare(right.month))
+        .map((point) => ({
+          label: point.month,
+          sessions: point.session_count,
+          sessionMinutes: Math.round(point.session_seconds / 60),
+          cpuMinutes: 0,
+        })),
+    [usageQuery.data],
+  );
   const totals = useMemo(
     () => ({
       sessions: usage.reduce((sum, point) => sum + point.sessions, 0),

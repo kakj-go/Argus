@@ -70,9 +70,12 @@ diagnostics() {
   } 2>&1 | redact >"${ARTIFACT_DIR}/cluster.txt"
   k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus --all-containers=true --prefix=true --tail=1000 2>&1 \
     | redact >"${ARTIFACT_DIR}/argus.log" || true
-  if [[ "$PHASE" == "m3" ]]; then
+  if [[ "$PHASE" == "m3" || "$PHASE" == "m4" ]]; then
     k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus-m3-e2e --all-containers=true --prefix=true --tail=1000 2>&1 \
       | redact >"${ARTIFACT_DIR}/m3-workloads.log" || true
+  fi
+  if declare -F diagnostics_m4 >/dev/null; then
+    diagnostics_m4
   fi
   k -n "$SYSTEM_NS" logs statefulset/argus-postgresql --tail=300 2>&1 \
     | redact >"${ARTIFACT_DIR}/postgresql.log" || true
@@ -86,6 +89,12 @@ cleanup() {
   diagnostics
   if declare -F cleanup_m3 >/dev/null; then
     cleanup_m3
+  fi
+  if declare -F cleanup_m4 >/dev/null; then
+    cleanup_m4
+  fi
+  if declare -F cleanup_cert_manager_dependency >/dev/null; then
+    cleanup_cert_manager_dependency
   fi
   for pid in "${PF_PIDS[@]:-}"; do
     kill "$pid" >/dev/null 2>&1 || true
@@ -157,7 +166,11 @@ create_namespaces() {
 
 build_images() {
   log "building backend image ${BACKEND_IMAGE}"
-  retry 3 docker build --quiet -f deploy/docker/backend.Dockerfile -t "$BACKEND_IMAGE" . >/dev/null
+  backend_args=()
+  if [[ "$PHASE" == "m4" ]]; then
+    backend_args+=(--build-arg GO_BUILD_TAGS=m4e2e)
+  fi
+  retry 3 docker build --quiet -f deploy/docker/backend.Dockerfile -t "$BACKEND_IMAGE" "${backend_args[@]}" . >/dev/null
   log "building real-mode web image ${WEB_IMAGE}"
   retry 3 docker build --quiet -f deploy/docker/web.Dockerfile -t "$WEB_IMAGE" \
     --build-arg VITE_API_MODE=real \
@@ -314,7 +327,8 @@ start_api_port_forward() {
 }
 
 request() {
-  name=$1 expected=$2 method=$3 path=$4 jar=$5 body=$6
+  local name=$1 expected=$2 method=$3 path=$4 jar=$5 body=$6 status
+  local -a args
   shift 6
   LAST_REQUEST_NAME=$name
   RESPONSE_FILE="${WORK_DIR}/${name}.json"
@@ -491,6 +505,9 @@ run_api_flow() {
   if declare -F run_m3_api_flow >/dev/null; then
     run_m3_api_flow
   fi
+  if declare -F run_m4_api_flow >/dev/null; then
+    run_m4_api_flow
+  fi
 
   log "stopping Redis to verify PostgreSQL authority"
   k -n "$SYSTEM_NS" scale statefulset/argus-redis --replicas=0 >/dev/null
@@ -550,8 +567,14 @@ main() {
   create_namespaces
   build_images
   install_dependencies
+  if declare -F prepare_cert_manager_dependency >/dev/null; then
+    prepare_cert_manager_dependency
+  fi
   if declare -F prepare_m3_dependencies >/dev/null; then
     prepare_m3_dependencies
+  fi
+  if declare -F prepare_m4_dependencies >/dev/null; then
+    prepare_m4_dependencies
   fi
   install_argus
   start_port_forwards
@@ -560,8 +583,14 @@ main() {
   log "${phase_label} Kubernetes E2E passed; diagnostics: ${ARTIFACT_DIR}"
 }
 
+if [[ "$PHASE" == "m3" || "$PHASE" == "m4" ]]; then
+  source "${ROOT_DIR}/scripts/e2e-cert-manager.sh"
+fi
 if [[ "$PHASE" == "m3" ]]; then
   source "${ROOT_DIR}/scripts/e2e-m3-flow.sh"
+fi
+if [[ "$PHASE" == "m4" ]]; then
+  source "${ROOT_DIR}/scripts/e2e-m4-flow.sh"
 fi
 
 main "$@"

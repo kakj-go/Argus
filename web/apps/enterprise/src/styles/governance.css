@@ -11,6 +11,12 @@
   gap: var(--space-3);
 }
 
+.argus-gov-one-time-result {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 52rem;
+}
+
 .argus-gov-section-title {
   margin: 0 0 var(--space-2);
   font: 600 var(--font-size-12)/1.4 var(--font-sans);
@@ -247,6 +253,18 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.argus-approval-requirements {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.argus-approval-requirement {
+  display: grid;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  border-block-start: 1px solid var(--border-subtle);
 }
 .argus-approval-decisions__item {
   display: flex;

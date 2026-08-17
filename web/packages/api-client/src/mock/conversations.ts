@@ -1,9 +1,11 @@
 import type { ArgusApiClient } from "../client";
 import type {
   AgentEvent,
+  Conversation,
   ConversationEvent,
   StreamEventEnvelope,
 } from "../generated/contracts";
+import type { MockConversationRecord } from "./internal-types";
 import type { MockChatMessage as ChatMessage } from "./chat-types";
 import type { MockChatStreamEvent } from "./chat-types";
 import type { MockContext } from "./context";
@@ -19,13 +21,23 @@ function serializeMessage(message: ChatMessage): Record<string, unknown> {
     ...(message.modelId ? { model_id: message.modelId } : {}),
     ...(message.modelRevision ? { model_revision: message.modelRevision } : {}),
     ...(message.inputPricePerMillionSnapshot !== undefined
-      ? { input_price_per_million_snapshot: message.inputPricePerMillionSnapshot }
+      ? {
+          input_price_per_million_snapshot:
+            message.inputPricePerMillionSnapshot,
+        }
       : {}),
     ...(message.outputPricePerMillionSnapshot !== undefined
-      ? { output_price_per_million_snapshot: message.outputPricePerMillionSnapshot }
+      ? {
+          output_price_per_million_snapshot:
+            message.outputPricePerMillionSnapshot,
+        }
       : {}),
-    ...(message.inputTokens !== undefined ? { input_tokens: message.inputTokens } : {}),
-    ...(message.outputTokens !== undefined ? { output_tokens: message.outputTokens } : {}),
+    ...(message.inputTokens !== undefined
+      ? { input_tokens: message.inputTokens }
+      : {}),
+    ...(message.outputTokens !== undefined
+      ? { output_tokens: message.outputTokens }
+      : {}),
     ...(message.createdInteractiveCardId
       ? { created_interactive_card_id: message.createdInteractiveCardId }
       : {}),
@@ -34,7 +46,9 @@ function serializeMessage(message: ChatMessage): Record<string, unknown> {
       tool_name: call.toolName,
       status: call.status,
       ...(call.summary ? { summary: call.summary } : {}),
-      ...(call.durationMs !== undefined ? { duration_ms: call.durationMs } : {}),
+      ...(call.durationMs !== undefined
+        ? { duration_ms: call.durationMs }
+        : {}),
       started_at: call.startedAt,
     })),
     cards: (message.cards ?? []).map((card) => ({
@@ -42,8 +56,12 @@ function serializeMessage(message: ChatMessage): Record<string, unknown> {
       interactive_card_id: card.interactiveCardId,
       version: card.version,
       ...(card.title ? { title: card.title } : {}),
-      ...(card.pendingActionRef ? { pending_action_ref: card.pendingActionRef } : {}),
-      ...(card.actionBindingId ? { action_binding_id: card.actionBindingId } : {}),
+      ...(card.pendingActionRef
+        ? { pending_action_ref: card.pendingActionRef }
+        : {}),
+      ...(card.actionBindingId
+        ? { action_binding_id: card.actionBindingId }
+        : {}),
     })),
     ...(message.event
       ? {
@@ -85,6 +103,18 @@ function conversationEvent(
     content_hash: `mock-content-${message.id}`.padEnd(64, "0"),
     data_classification: "internal",
     payload: { message: serializeMessage(message) },
+  };
+}
+
+function publicConversation(value: MockConversationRecord): Conversation {
+  return {
+    id: value.id,
+    title: value.title,
+    selected_model_id: value.selectedModelId,
+    status: value.status,
+    version: value.version ?? 1,
+    created_at: value.createdAt,
+    updated_at: value.lastMessageAt,
   };
 }
 
@@ -228,20 +258,22 @@ export function createConversationsDomain(
       const items = db.conversations
         .filter((entry) => entry.enterpriseId === ctx.enterpriseId())
         .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
-      return ctx.paginate(items, query);
+      return ctx.paginate(items.map(publicConversation), query);
     },
     async get(id) {
       await ctx.pause();
-      return ctx.mustFind(
-        db.conversations,
-        (entry) => entry.id === id,
-        "conversation",
+      return publicConversation(
+        ctx.mustFind(
+          db.conversations,
+          (entry) => entry.id === id,
+          "conversation",
+        ),
       );
     },
     async create(input) {
       await ctx.pause();
       const selectedModelId =
-        input?.selectedModelId ??
+        input?.selected_model_id ??
         db.models.find(
           (model) => model.enterpriseId === ctx.enterpriseId() && model.enabled,
         )?.id;
@@ -255,10 +287,11 @@ export function createConversationsDomain(
         status: "active" as const,
         lastMessageAt: ctx.nowIso(),
         createdAt: ctx.nowIso(),
+        version: 1,
       };
       db.conversations.unshift(conversation);
       ctx.save();
-      return conversation;
+      return publicConversation(conversation);
     },
     async archive(id) {
       await ctx.pause();
@@ -268,8 +301,9 @@ export function createConversationsDomain(
         "conversation",
       );
       conversation.status = "archived";
+      conversation.version = (conversation.version ?? 1) + 1;
       ctx.save();
-      return conversation;
+      return publicConversation(conversation);
     },
     async listEvents(conversationId) {
       await ctx.pause();
@@ -288,15 +322,17 @@ export function createConversationsDomain(
       );
       const model = ctx.mustFind(
         db.models,
-        (entry) => entry.id === modelId && entry.enterpriseId === ctx.enterpriseId(),
+        (entry) =>
+          entry.id === modelId && entry.enterpriseId === ctx.enterpriseId(),
         "AI model",
       );
       if (!model.enabled || model.healthStatus !== "healthy") {
         throw new Error("model unavailable");
       }
       conversation.selectedModelId = model.id;
+      conversation.version = (conversation.version ?? 1) + 1;
       ctx.save();
-      return conversation;
+      return publicConversation(conversation);
     },
     sendMessage(conversationId, input, options) {
       const conversation = ctx.mustFind(
@@ -307,7 +343,8 @@ export function createConversationsDomain(
       const enterpriseUser = db.enterpriseUsers.find(
         (entry) => entry.userId === ctx.actor().id,
       );
-      if (!enterpriseUser) throw new Error("enterprise enterpriseUser required");
+      if (!enterpriseUser)
+        throw new Error("enterprise enterpriseUser required");
       const month = ctx.nowIso().slice(0, 7);
       const points = db.usagePoints.filter(
         (point) =>
@@ -342,16 +379,17 @@ export function createConversationsDomain(
         id: nextId(db, "msg"),
         conversationId,
         role: "user",
-        content: input.text,
+        content: input.content,
         createdAt: ctx.nowIso(),
         modelId: conversation.selectedModelId,
       };
       db.messages.push(userMessage);
       conversation.lastMessageAt = userMessage.createdAt;
       ctx.save();
-      if (input.command?.type === "interactive_card.create") {
+      if (options?.mock_intent === "interactive_card.create") {
         const createdAt = ctx.nowIso();
-        const name = input.text.replace(/^\s*\/?\s*/, "").slice(0, 28) || "新交互卡片";
+        const name =
+          input.content.replace(/^\s*\/?\s*/, "").slice(0, 28) || "新交互卡片";
         const card = {
           id: nextId(db, "card"),
           enterpriseId: ctx.enterpriseId(),
@@ -366,7 +404,12 @@ export function createConversationsDomain(
           htmlTemplate:
             '<article style="padding:16px;font-family:system-ui"><h3 data-slot="title"></h3><div data-slot="items"></div></article>',
           slots: [
-            { name: "title", type: "string" as const, required: true, aiGenerated: true },
+            {
+              name: "title",
+              type: "string" as const,
+              required: true,
+              aiGenerated: true,
+            },
             { name: "items", type: "array" as const, required: true },
           ],
           bindings: [],
@@ -375,7 +418,13 @@ export function createConversationsDomain(
             valid: false,
             checkedAt: createdAt,
             passedScenarios: [],
-            issues: [{ code: "BINDING_REQUIRED", message: "required slot has no binding", slot: "items" }],
+            issues: [
+              {
+                code: "BINDING_REQUIRED",
+                message: "required slot has no binding",
+                slot: "items",
+              },
+            ],
           },
           createdBy: ctx.actor().id,
           createdAt,
@@ -383,34 +432,44 @@ export function createConversationsDomain(
         };
         db.interactiveCards.push(card);
         ctx.save();
-        return streamEnvelopes((async function* () {
-          const messageId = nextId(db, "msg");
-          yield { type: "message_start" as const, messageId };
-          yield {
-            type: "token" as const,
-            messageId,
-            delta: `已创建“${card.name}”草稿。卡片默认禁用，请前往交互卡片详情完成绑定、验证并启用。`,
-          };
-          yield { type: "interactive_card_created" as const, messageId, interactiveCardId: card.id };
-          const message: ChatMessage = {
-            id: messageId,
-            conversationId,
-            role: "assistant",
-            content: `已创建“${card.name}”草稿。卡片默认禁用，请前往交互卡片详情完成绑定、验证并启用。`,
-            modelId: conversation.selectedModelId,
-            modelRevision: db.models.find((entry) => entry.id === conversation.selectedModelId)?.revision,
-            inputPricePerMillionSnapshot: db.models.find((entry) => entry.id === conversation.selectedModelId)?.inputPricePerMillionTokens,
-            outputPricePerMillionSnapshot: db.models.find((entry) => entry.id === conversation.selectedModelId)?.outputPricePerMillionTokens,
-            createdInteractiveCardId: card.id,
-            createdAt: ctx.nowIso(),
-          };
-          db.messages.push(message);
-          ctx.save();
-          yield { type: "message_done" as const, message };
-        })(), options?.signal);
+        return streamEnvelopes(
+          (async function* () {
+            const messageId = nextId(db, "msg");
+            const content = `已创建“${card.name}”草稿。卡片默认禁用，请前往交互卡片详情完成绑定、验证并启用。`;
+            yield { type: "message_start" as const, messageId };
+            yield { type: "token" as const, messageId, delta: content };
+            yield {
+              type: "interactive_card_created" as const,
+              messageId,
+              interactiveCardId: card.id,
+            };
+            const message: ChatMessage = {
+              id: messageId,
+              conversationId,
+              role: "assistant",
+              content,
+              modelId: conversation.selectedModelId,
+              modelRevision: db.models.find(
+                (entry) => entry.id === conversation.selectedModelId,
+              )?.revision,
+              inputPricePerMillionSnapshot: db.models.find(
+                (entry) => entry.id === conversation.selectedModelId,
+              )?.inputPricePerMillionTokens,
+              outputPricePerMillionSnapshot: db.models.find(
+                (entry) => entry.id === conversation.selectedModelId,
+              )?.outputPricePerMillionTokens,
+              createdInteractiveCardId: card.id,
+              createdAt: ctx.nowIso(),
+            };
+            db.messages.push(message);
+            ctx.save();
+            yield { type: "message_done" as const, message };
+          })(),
+          options.signal,
+        );
       }
       return streamEnvelopes(
-        ctx.streamReply(conversationId, input.text),
+        ctx.streamReply(conversationId, input.content),
         options?.signal,
       );
     },

@@ -9,8 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { House, Menu, MessageSquarePlus, Settings2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Conversation } from "@argus/api-client/provisional";
-import { useApi } from "@argus/api-client";
+import { useApi, type Conversation } from "@argus/api-client";
 import { AppShell, Button, SearchInput } from "@argus/ui";
 import { useUiStore } from "../store/ui";
 import { AccountActions } from "./account-actions";
@@ -44,10 +43,10 @@ function groupConversations(items: Conversation[]): ConversationGroup[] {
   const today = startOfToday.getTime();
   const day = 86_400_000;
   const sorted = [...items].sort(
-    (a, b) => Date.parse(b.lastMessageAt) - Date.parse(a.lastMessageAt),
+    (a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at),
   );
   for (const item of sorted) {
-    const at = Date.parse(item.lastMessageAt);
+    const at = Date.parse(item.updated_at);
     if (at >= today) groups[0]!.items.push(item);
     else if (at >= today - day) groups[1]!.items.push(item);
     else if (at >= today - 6 * day) groups[2]!.items.push(item);
@@ -137,7 +136,7 @@ function ConversationList() {
                   type="button"
                 >
                   <span>{item.title}</span>
-                  <small>{formatTime(item.lastMessageAt, i18n.language)}</small>
+                  <small>{formatTime(item.updated_at, i18n.language)}</small>
                 </button>
               ))}
             </div>

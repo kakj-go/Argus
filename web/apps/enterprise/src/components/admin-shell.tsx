@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Bell,
   Bot,
+  CalendarClock,
   ChevronsLeft,
   ChevronsRight,
   Component,
@@ -68,7 +69,7 @@ function useAdminCounts() {
   const approvals = useQuery({
     queryKey: ["approvals", "awaiting_approval"],
     queryFn: () => api.approvals.list({ status: ["awaiting_approval"] }),
-    enabled: !realMode,
+    enabled: true,
   });
   return {
     hosts: hosts.data?.items.length,
@@ -98,10 +99,11 @@ function buildSections(
         },
       ],
     },
-    ...(!realMode ? [{
+    {
       groupKey: "shell.groups.execution",
       items: [
         { key: "shell.nav.tasks", to: "/tasks", icon: History },
+        { key: "shell.nav.automation", to: "/automations", icon: CalendarClock },
         {
           key: "shell.nav.approvals",
           to: "/approvals",
@@ -110,12 +112,12 @@ function buildSections(
           alert: (counts.pendingApprovals ?? 0) > 0,
         },
       ],
-    }] : []),
+    },
     {
       groupKey: "shell.groups.settings",
       items: [
         { key: "shell.nav.settingsOrg", to: "/settings/org", icon: Users },
-        ...(!realMode ? [{ key: "shell.nav.settingsAi", to: "/settings/ai", icon: Bot }] : []),
+        { key: "shell.nav.settingsAi", to: "/settings/ai", icon: Bot },
         ...(!realMode ? [{
           key: "shell.nav.settingsInteractiveCards",
           to: "/settings/interactive-cards",
@@ -260,6 +262,7 @@ const pageTitles: Record<string, string> = {
   "/kubernetes": "shell.nav.kubernetes",
   "/tasks": "shell.nav.tasks",
   "/approvals": "shell.nav.approvals",
+  "/automations": "shell.nav.automation",
   "/settings/org": "shell.nav.settingsOrg",
   "/settings/ai": "shell.nav.settingsAi",
   "/settings/interactive-cards": "shell.nav.settingsInteractiveCards",

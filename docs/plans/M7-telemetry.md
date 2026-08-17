@@ -10,6 +10,8 @@
 - M4 Preview/Commit、Execution 和授权快照完成。
 - M2 DataScope 可解析为授权 Resource IDs。
 
+M7 Collector 安装写操作复用 M4 的 Preview → Confirmation/Approval → Action Executor → Execution，并沿用 `result_unknown` 对账；Telemetry Query Tool 复用 M4 Artifact/ToolResultProjection 上限与授权读取，不新增第二套 Agent Result Store。
+
 ## 任务
 
 - [ ] `M7-PROFILE-01` 实现版本化 Distribution、CollectionProfile、ConfigRevision 和 CollectionClaim。

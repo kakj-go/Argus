@@ -97,8 +97,8 @@ WHERE test.enterprise_id = $1 AND test.credential_id IN (SELECT credential.id FR
 AND test.status IN ('queued','running','succeeded','result_unknown');
 
 -- name: CreatePendingAction :one
-INSERT INTO pending_actions (id, action_ref, enterprise_id, creator_user_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, expires_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'awaiting_confirmation',$12,$13,$14,$15,$16) RETURNING *;
+INSERT INTO pending_actions (id, action_ref, enterprise_id, creator_subject_id, creator_subject_type, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, expires_at, run_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *;
 
 -- name: CreatePendingActionPlan :one
 INSERT INTO pending_action_plans (id, pending_action_id, enterprise_id, preview_call_id, commit_tool, authorization_version, plan_schema_version, plan_hash, immutable_plan, resource_scope_snapshot)
@@ -140,4 +140,5 @@ WHERE id = $1 AND enterprise_id = $2 AND status = 'executing' RETURNING *;
 
 -- name: CancelPendingAction :one
 UPDATE pending_actions SET status = 'cancelled', updated_at = now()
-WHERE action_ref = $1 AND enterprise_id = $2 AND creator_user_id = $3 AND status = 'awaiting_confirmation' RETURNING *;
+WHERE action_ref = $1 AND enterprise_id = $2 AND creator_subject_type = 'user' AND creator_subject_id = $3
+  AND status IN ('awaiting_confirmation','awaiting_approval','ready') RETURNING *;

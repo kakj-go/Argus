@@ -1,0 +1,900 @@
+openapi: 3.1.0
+info:
+  title: Argus Approval and Execution API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/approval-policies:
+    get:
+      operationId: listApprovalPolicies
+      summary: listApprovalPolicies.
+      responses:
+        '200':
+          description: Approval policies.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalPolicy'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createApprovalPolicy
+      summary: createApprovalPolicy.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalPolicyWrite'
+      responses:
+        '201':
+          description: Approval policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalPolicy'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-policies/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updateApprovalPolicy
+      summary: updateApprovalPolicy.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalPolicyWrite'
+      responses:
+        '200':
+          description: Approval policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalPolicy'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-requests:
+    get:
+      operationId: listApprovalRequests
+      summary: listApprovalRequests.
+      responses:
+        '200':
+          description: Approval requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalRequestView'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-requests/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getApprovalRequest
+      summary: getApprovalRequest.
+      responses:
+        '200':
+          description: Approval request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalRequestView'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-requests/{id}/decisions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: decideApprovalRequest
+      summary: decideApprovalRequest.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionCreate'
+      responses:
+        '200':
+          description: Updated approval request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalRequestView'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/executions:
+    get:
+      operationId: listExecutions
+      summary: listExecutions.
+      responses:
+        '200':
+          description: Execution page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/executions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getExecution
+      summary: getExecution.
+      responses:
+        '200':
+          description: Execution.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/executions/{id}/one-time-result:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: claimExecutionOneTimeResult
+      summary: Claim an encrypted short-lived action result exactly once.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: One-time action result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOneTimeResult'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    ApprovalPolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - enabled
+        - tool_ids
+        - risks
+        - resource_types
+        - minimum_approvers
+        - separation_of_duty
+        - approver_role_ids
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        enabled:
+          type: boolean
+        tool_ids:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9_.-]*$
+        risks:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - write
+              - dangerous
+              - critical
+        resource_types:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        label_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        minimum_approvers:
+          type: integer
+          minimum: 1
+          maximum: 10
+        separation_of_duty:
+          type: boolean
+        approver_role_ids:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        expires_after_seconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+          default: 86400
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ApprovalPolicyWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - enabled
+        - tool_ids
+        - risks
+        - resource_types
+        - minimum_approvers
+        - separation_of_duty
+        - approver_role_ids
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        enabled:
+          type: boolean
+        tool_ids:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9_.-]*$
+        risks:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - write
+              - dangerous
+              - critical
+        resource_types:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        label_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        minimum_approvers:
+          type: integer
+          minimum: 1
+          maximum: 10
+        separation_of_duty:
+          type: boolean
+        approver_role_ids:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        expires_after_seconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+          default: 86400
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 0
+    ApprovalRequirement:
+      type: object
+      additionalProperties: false
+      required:
+        - policy_id
+        - policy_version
+        - minimum_approvers
+        - separation_of_duty
+        - approved_count
+        - status
+      properties:
+        policy_id:
+          type: string
+          format: uuid
+        policy_version:
+          type: integer
+          format: int64
+          minimum: 1
+        minimum_approvers:
+          type: integer
+          minimum: 1
+        separation_of_duty:
+          type: boolean
+        approved_count:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+            - invalidated
+    ApprovalRequestView:
+      type: object
+      additionalProperties: false
+      required:
+        - approval_request_id
+        - action_ref
+        - requirements
+        - decisions
+        - status
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        approval_request_id:
+          type: string
+          format: uuid
+        action_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+        requirements:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApprovalRequirement'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalDecision'
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+            - expired
+            - invalidated
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ApprovalDecisionCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - decision
+      properties:
+        decision:
+          type: string
+          enum:
+            - approved
+            - rejected
+        reason:
+          type: string
+          maxLength: 4096
+    PendingActionCommandResult:
+      type: object
+      additionalProperties: false
+      required:
+        - pending_action
+      properties:
+        pending_action:
+          $ref: '#/components/schemas/pending-action-public.schema'
+        approval_request:
+          $ref: '#/components/schemas/ApprovalRequestView'
+        execution:
+          $ref: '#/components/schemas/Execution'
+    ExecutionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Execution'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    ActionOneTimeResult:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - execution_id
+        - result_kind
+        - enrollment
+        - expires_at
+      properties:
+        schema_version:
+          type: string
+          const: argus.action_one_time_result/v1
+        execution_id:
+          type: string
+          format: uuid
+        result_kind:
+          type: string
+          enum:
+            - connector_enrollment
+        enrollment:
+          $ref: '#/components/schemas/EnrollmentResult'
+        expires_at:
+          type: string
+          format: date-time
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    UserLabelKey:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+    SystemLabelKey:
+      type: string
+      maxLength: 72
+      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+      readOnly: true
+    LabelValue:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
+    LabelRequirement:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+            - values
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              const: eq
+            values:
+              type: array
+              minItems: 1
+              maxItems: 1
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/LabelValue'
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+            - values
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              const: in
+            values:
+              type: array
+              minItems: 1
+              maxItems: 32
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/LabelValue'
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              enum:
+                - exists
+                - not_exists
+    LabelSelector:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - requirements
+      properties:
+        schema_version:
+          const: argus.label_selector/v1
+        requirements:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/LabelRequirement'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    ApprovalDecision:
+      type: object
+      additionalProperties: false
+      required:
+        - decision_id
+        - actor_user_id
+        - decision
+        - decided_at
+      properties:
+        decision_id:
+          type: string
+        actor_user_id:
+          type: string
+        decision:
+          enum:
+            - approved
+            - rejected
+        reason:
+          type: string
+          maxLength: 4096
+        decided_at:
+          type: string
+          format: date-time
+    Execution:
+      type: object
+      additionalProperties: false
+      required:
+        - execution_id
+        - action_ref
+        - status
+        - created_at
+        - updated_at
+      properties:
+        execution_id:
+          type: string
+        action_ref:
+          type: string
+        status:
+          enum:
+            - pending
+            - running
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+        result_ref:
+          type: string
+        one_time_result_available:
+          type: boolean
+          readOnly: true
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    EnrollmentResult:
+      type: object
+      additionalProperties: false
+      required:
+        - enrollment_id
+        - install_command
+        - expires_at
+      properties:
+        enrollment_id:
+          type: string
+          format: uuid
+        install_command:
+          type: string
+          minLength: 1
+          maxLength: 8192
+          writeOnly: true
+        expires_at:
+          type: string
+          format: date-time
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    pending-action-public.schema:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      $id: https://argus.io/schemas/v1/action/pending-action-public.schema.json
+      title: PendingActionPublic
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - action_ref
+        - title
+        - summary
+        - risk
+        - preview
+        - diff
+        - status
+        - available_actions
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        schema_version:
+          const: argus.pending_action/v1
+        action_ref:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        risk:
+          enum:
+            - read
+            - write
+            - dangerous
+            - critical
+        preview:
+          $ref: '#/components/schemas/PublicJsonObject'
+        diff:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - kind
+              - text
+            properties:
+              kind:
+                enum:
+                  - add
+                  - remove
+                  - change
+                  - note
+              text:
+                type: string
+                maxLength: 2048
+        status:
+          enum:
+            - prepared
+            - awaiting_confirmation
+            - awaiting_approval
+            - ready
+            - executing
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+            - expired
+            - rejected
+            - invalidated
+        available_actions:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - confirm
+              - cancel
+              - approve
+              - reject
+        approval:
+          type: object
+          additionalProperties: false
+          required:
+            - required
+            - minimum_approvers
+            - approved_count
+            - separation_of_duty
+          properties:
+            required:
+              type: boolean
+            policy_ref:
+              type: string
+            minimum_approvers:
+              type: integer
+              minimum: 0
+            approved_count:
+              type: integer
+              minimum: 0
+            separation_of_duty:
+              type: boolean
+        execution_ref:
+          type: string
+          minLength: 1
+        result_summary:
+          type: string
+          maxLength: 4096
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256

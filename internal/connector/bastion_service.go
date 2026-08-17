@@ -288,7 +288,7 @@ func (service BastionService) CommitAction(ctx context.Context, q *db.Queries, a
 			ConnectionStatus: "onboarding", PinnedHostKey: ""}); err != nil {
 			return resource.ActionCommitResult{}, err
 		}
-		enrollment, err := service.Enrollment.CreateEnrollment(ctx, q, action.CreatorUserID.String(), action.EnterpriseID, CreateEnrollmentInput{Role: "bastion",
+		enrollment, err := service.Enrollment.CreateEnrollment(ctx, q, action.CreatorSubjectID.String(), action.EnterpriseID, CreateEnrollmentInput{Role: "bastion",
 			Purpose: "initial_registration", BastionScopeID: uuid.NullUUID{UUID: scope.ID, Valid: true}, HostID: uuid.NullUUID{UUID: plan.HostID, Valid: true},
 			Policy: json.RawMessage(`{"capabilities":["host.connection_probe","kubernetes.connection_probe","kubernetes.query","credential.lease","connector.uninstall"]}`)})
 		if err != nil {
@@ -343,7 +343,7 @@ func (service BastionService) CommitAction(ctx context.Context, q *db.Queries, a
 			_ = q.RevokeConnectorCertificates(ctx, db.RevokeConnectorCertificatesParams{ConnectorID: current.ActiveConnectorID.UUID, EnterpriseID: action.EnterpriseID})
 		}
 		_ = q.RevokeActiveEnrollmentTokens(ctx, db.RevokeActiveEnrollmentTokensParams{EnterpriseID: action.EnterpriseID, BastionScopeID: uuid.NullUUID{UUID: plan.ScopeID, Valid: true}})
-		enrollment, err := service.Enrollment.CreateEnrollment(ctx, q, action.CreatorUserID.String(), action.EnterpriseID, CreateEnrollmentInput{Role: "bastion",
+		enrollment, err := service.Enrollment.CreateEnrollment(ctx, q, action.CreatorSubjectID.String(), action.EnterpriseID, CreateEnrollmentInput{Role: "bastion",
 			Purpose: "connector_replacement", BastionScopeID: uuid.NullUUID{UUID: plan.ScopeID, Valid: true}, HostID: uuid.NullUUID{UUID: plan.HostID, Valid: true}, Policy: json.RawMessage(`{}`)})
 		if err != nil {
 			return resource.ActionCommitResult{}, err
@@ -401,14 +401,15 @@ func (service BastionService) commitConnectorUninstall(ctx context.Context, q *d
 	if err != nil {
 		return resource.ActionCommitResult{}, err
 	}
-	if _, err := q.CreateConnectorCommand(ctx, db.CreateConnectorCommandParams{ID: newID(), CommandID: commandID, EnterpriseID: action.EnterpriseID,
+	command, err := q.CreateConnectorCommand(ctx, db.CreateConnectorCommandParams{ID: newID(), CommandID: commandID, EnterpriseID: action.EnterpriseID,
 		ConnectorID: connector.ID, ConnectionEpoch: connector.ConnectionEpoch, OperationRef: action.ActionRef, CommandType: "connector_uninstall",
 		PayloadSchemaVersion: "argus.connector_command/v1", Payload: payload, PayloadHash: hash[:], IdempotencyKey: action.ActionRef,
-		ExpiresAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(5 * time.Minute), Valid: true}}); err != nil {
+		ExpiresAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(5 * time.Minute), Valid: true}})
+	if err != nil {
 		return resource.ActionCommitResult{}, err
 	}
 	return resource.ActionCommitResult{ResourceType: "connector", ResourceID: connector.ID, ResourceVersion: connector.Version,
-		Summary: "Connector uninstall command queued"}, nil
+		Summary: "Connector uninstall command queued", ConnectorCommandID: uuid.NullUUID{UUID: command.ID, Valid: true}}, nil
 }
 
 func nullUUIDString(value uuid.NullUUID) string {

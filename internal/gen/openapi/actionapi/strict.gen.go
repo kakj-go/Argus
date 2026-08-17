@@ -20,7 +20,7 @@ type StrictServerInterface interface {
 	// CancelPendingAction Cancel a resource Pending Action.
 	// (POST /enterprise/pending-actions/{action_ref}/cancel)
 	CancelPendingAction(ctx context.Context, request CancelPendingActionRequestObject) (CancelPendingActionResponseObject, error)
-	// ConfirmPendingAction Confirm and synchronously commit a resource Pending Action.
+	// ConfirmPendingAction Confirm a Pending Action and create approval or asynchronous execution state.
 	// (POST /enterprise/pending-actions/{action_ref}/confirm)
 	ConfirmPendingAction(ctx context.Context, request ConfirmPendingActionRequestObject) (ConfirmPendingActionResponseObject, error)
 }

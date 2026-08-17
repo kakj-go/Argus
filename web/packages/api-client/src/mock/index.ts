@@ -1,5 +1,13 @@
 import type { ArgusApiClient } from "../client";
 import type {
+  Automation,
+  AutomationRun,
+  AutomationWrite,
+  ApprovalRequestView,
+  Execution,
+  Run,
+} from "../generated/contracts";
+import type {
   ListQuery,
   Page,
   User,
@@ -68,6 +76,8 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
   const persist = options.persist !== false;
   const emitter = new Emitter();
   const db: MockDb = (persist ? loadDb() : null) ?? seed();
+  let automations: Automation[] = [];
+  const automationRuns = new Map<string, AutomationRun[]>();
 
   function seed(): MockDb {
     const fresh = createSeedDb();
@@ -184,16 +194,171 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
     emitTask,
   };
   const ctx: MockContext = { ...base, ...createEngine(base) };
+  const approvalsDomain = createApprovalsDomain(ctx);
+
+  function mockApprovalView(actionRef: string): ApprovalRequestView {
+    const action = ctx.getAction(actionRef);
+    const approval = action.approval;
+    if (!approval) throw new Error("approval request not found");
+    const plan = db.actionPlans[actionRef];
+    const status =
+      action.status === "rejected"
+        ? "rejected"
+        : action.status === "expired"
+          ? "expired"
+          : action.status === "awaiting_approval"
+            ? "pending"
+            : "approved";
+    return {
+      approval_request_id: actionRef,
+      action_ref: actionRef,
+      status,
+      requirements: [
+        {
+          policy_id: approval.policy_ref ?? "mock-policy",
+          policy_version: 1,
+          minimum_approvers: approval.minimum_approvers,
+          separation_of_duty: approval.separation_of_duty,
+          approved_count: approval.approved_count,
+          status:
+            status === "approved"
+              ? "approved"
+              : status === "rejected"
+                ? "rejected"
+                : "pending",
+        },
+      ],
+      decisions: (plan?.approval_decisions ?? []).map((decision, index) => ({
+        decision_id: `${actionRef}:${index + 1}`,
+        actor_user_id: decision.actor_user_id,
+        decision: decision.decision,
+        ...(decision.reason ? { reason: decision.reason } : {}),
+        decided_at: decision.decided_at,
+      })),
+      expires_at: action.expires_at,
+      created_at: action.created_at,
+      updated_at: action.updated_at,
+    };
+  }
+
+  const automationDomain: ArgusApiClient["automations"] = {
+    async list() {
+      await pause();
+      return automations.map((item) => ({ ...item }));
+    },
+    async get(id) {
+      await pause();
+      return { ...mustFind(automations, (item) => item.id === id, "automation") };
+    },
+    async create(input: AutomationWrite) {
+      await pause();
+      const now = nowIso();
+      const value: Automation = {
+        id: crypto.randomUUID(),
+        name: input.name,
+        service_account_id: input.service_account_id,
+        tool_id: input.tool_id,
+        tool_input: input.tool_input,
+        cron: input.cron,
+        timezone: input.timezone,
+        status: "disabled",
+        next_run_at: now,
+        version: 1,
+        created_at: now,
+        updated_at: now,
+      };
+      automations = [...automations, value];
+      return { ...value };
+    },
+    async update(id, input) {
+      await pause();
+      const value = mustFind(automations, (item) => item.id === id, "automation");
+      Object.assign(value, input, { version: value.version + 1, updated_at: nowIso() });
+      return { ...value };
+    },
+    async enable(id, expectedVersion) {
+      const current = await automationDomain.get(id);
+      if (current.version !== expectedVersion) throw new Error("version conflict");
+      return automationDomain.update(id, {
+        name: current.name,
+        service_account_id: current.service_account_id,
+        tool_id: current.tool_id,
+        tool_input: current.tool_input,
+        cron: current.cron,
+        timezone: current.timezone,
+        expected_version: current.version,
+      }).then((value) => {
+        const stored = mustFind(automations, (item) => item.id === id, "automation");
+        stored.status = "enabled";
+        value.status = "enabled";
+        return value;
+      });
+    },
+    async disable(id, expectedVersion) {
+      const value = await automationDomain.enable(id, expectedVersion);
+      const stored = mustFind(automations, (item) => item.id === id, "automation");
+      stored.status = "disabled";
+      value.status = "disabled";
+      return value;
+    },
+    async listRuns(id) {
+      await pause();
+      return [...(automationRuns.get(id) ?? [])];
+    },
+  };
 
   return {
     auth: createAuthDomain(ctx),
     conversations: createConversationsDomain(ctx),
+    runs: {
+      async get(): Promise<Run> {
+        throw new Error("mock run lookup is unavailable");
+      },
+      async cancel(): Promise<Run> {
+        throw new Error("mock run cancellation is unavailable");
+      },
+      async compact(): Promise<Run> {
+        throw new Error("mock run compaction is unavailable");
+      },
+    },
+    executions: {
+      async list() {
+        return { items: [] as Execution[], nextCursor: null, hasMore: false };
+      },
+      async get(): Promise<Execution> {
+        throw new Error("mock execution lookup is unavailable");
+      },
+      async claimOneTimeResult() {
+        throw new Error("mock one-time result lookup is unavailable");
+      },
+    },
     hosts: createHostsDomain(ctx),
     connectors: createConnectorsDomain(ctx),
     kubernetes: createKubernetesDomain(ctx),
     tasks: createTasksDomain(ctx),
-    approvals: createApprovalsDomain(ctx),
+    approvals: approvalsDomain,
+    approvalRequests: {
+      async list() {
+        await pause();
+        return db.pendingActions
+          .filter((action) => action.approval)
+          .map((action) => mockApprovalView(action.action_ref));
+      },
+      async get(id) {
+        await pause();
+        return mockApprovalView(id);
+      },
+      async decide(id, input) {
+        if (input.decision === "approved") {
+          await approvalsDomain.approve(id, input.reason);
+        } else {
+          await approvalsDomain.reject(id, input.reason ?? "Rejected");
+        }
+        return mockApprovalView(id);
+      },
+    },
     models: createModelsDomain(ctx),
+    automations: automationDomain,
     interactiveCards: createInteractiveCardsDomain(ctx),
     org: createOrgDomain(ctx),
     secrets: createSecretsDomain(ctx),

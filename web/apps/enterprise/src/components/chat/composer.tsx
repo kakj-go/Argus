@@ -13,9 +13,10 @@ import {
   X,
 } from "lucide-react";
 import { useApi } from "@argus/api-client";
-import type { InteractiveCardCreateCommand } from "@argus/api-client/provisional";
 import { Button, Tooltip } from "@argus/ui";
 import { usePermission } from "../../lib/permissions";
+
+const mockMode = import.meta.env.VITE_API_MODE === "mock";
 
 type MentionChip = { kind: "host" | "connector"; id: string; label: string };
 type PickerState = {
@@ -51,7 +52,7 @@ export function ChatComposer({
 }: {
   sending: boolean;
   disabled?: boolean;
-  onSend: (text: string, command?: InteractiveCardCreateCommand) => void;
+  onSend: (text: string, mockIntent?: "interactive_card.create") => void;
   onStop: () => void;
 }) {
   const { t } = useTranslation();
@@ -61,7 +62,7 @@ export function ChatComposer({
   const [mentions, setMentions] = useState<MentionChip[]>([]);
   const [files, setFiles] = useState<string[]>([]);
   const [picker, setPicker] = useState<PickerState | null>(null);
-  const [command, setCommand] = useState<InteractiveCardCreateCommand>();
+  const [mockIntent, setMockIntent] = useState<"interactive_card.create">();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hosts = useQuery({
@@ -81,13 +82,13 @@ export function ChatComposer({
       label.toLowerCase().includes(picker.query.toLowerCase());
     if (picker.kind === "command") {
       const label = t("chat.composer.createInteractiveCard");
-      return canCreateCard && match(label)
+      return mockMode && canCreateCard && match(label)
         ? [
             {
               id: "interactive_card.create",
               label,
               detail: t("chat.composer.createInteractiveCardHint"),
-              kind: "command",
+              kind: "command" as const,
             },
           ]
         : [];
@@ -121,7 +122,10 @@ export function ChatComposer({
   const updateText = (value: string, caret: number) => {
     setText(value);
     const trigger = detectTrigger(value, caret);
-    if (!trigger || (trigger.trigger === "/" && !canCreateCard)) {
+    if (
+      !trigger ||
+      (trigger.trigger === "/" && (!mockMode || !canCreateCard))
+    ) {
       setPicker(null);
       return;
     }
@@ -134,17 +138,20 @@ export function ChatComposer({
   };
   const selectItem = (item: PickerItem) => {
     if (!picker) return;
-    if (item.kind === "command")
-      setCommand({ type: "interactive_card.create" });
-    else {
-      const [, id] = item.id.split(":");
-      const kind = item.kind === "host" ? "host" : "connector";
-      setMentions((current) =>
-        current.some((entry) => entry.id === item.id)
-          ? current
-          : [...current, { kind, id: id ?? item.id, label: item.label }],
-      );
+    if (item.kind === "command") {
+      setMockIntent("interactive_card.create");
+      setText(text.slice(0, picker.start) + text.slice(picker.end));
+      setPicker(null);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+      return;
     }
+    const [, id] = item.id.split(":");
+    const kind = item.kind === "host" ? "host" : "connector";
+    setMentions((current) =>
+      current.some((entry) => entry.id === item.id)
+        ? current
+        : [...current, { kind, id: id ?? item.id, label: item.label }],
+    );
     setText(text.slice(0, picker.start) + text.slice(picker.end));
     setPicker(null);
     requestAnimationFrame(() => textareaRef.current?.focus());
@@ -152,11 +159,11 @@ export function ChatComposer({
   const submit = () => {
     const value = text.trim();
     if (!value || sending || disabled) return;
-    onSend(value, command);
+    onSend(value, mockIntent);
     setText("");
     setMentions([]);
     setFiles([]);
-    setCommand(undefined);
+    setMockIntent(undefined);
     setPicker(null);
     requestAnimationFrame(autosize);
   };
@@ -173,7 +180,7 @@ export function ChatComposer({
     }
   };
   const insertTrigger = (trigger: "@" | "/") => {
-    if (trigger === "/" && !canCreateCard) return;
+    if (trigger === "/" && (!mockMode || !canCreateCard)) return;
     const caret = textareaRef.current?.selectionStart ?? text.length;
     const next = `${text.slice(0, caret)}${trigger}${text.slice(caret)}`;
     updateText(next, caret + 1);
@@ -193,15 +200,15 @@ export function ChatComposer({
   return (
     <div className="argus-chat-composer">
       <div className="argus-chat-composer__inner">
-        {(mentions.length > 0 || files.length > 0 || command) && (
+        {(mentions.length > 0 || files.length > 0 || mockIntent) && (
           <div className="argus-chat-composer__chips">
-            {command && (
+            {mockIntent && (
               <span className="argus-chat-chip">
                 <FilePlus2 size={12} />/
                 {t("chat.composer.createInteractiveCard")}
                 <button
                   aria-label="remove command"
-                  onClick={() => setCommand(undefined)}
+                  onClick={() => setMockIntent(undefined)}
                   type="button"
                 >
                   <X size={11} />
@@ -270,7 +277,13 @@ export function ChatComposer({
                       role="option"
                       type="button"
                     >
-                      <FilePlus2 size={14} />
+                      {item.kind === "command" ? (
+                        <FilePlus2 size={14} />
+                      ) : item.kind === "host" ? (
+                        <Server size={14} />
+                      ) : (
+                        <Cable size={14} />
+                      )}
                       {item.label}
                       <small>{item.detail}</small>
                     </button>
@@ -324,7 +337,7 @@ export function ChatComposer({
                 <AtSign size={15} />
               </Button>
             </Tooltip>
-            {canCreateCard && (
+            {mockMode && canCreateCard && (
               <Tooltip content={t("chat.composer.createInteractiveCard")}>
                 <Button
                   aria-label={t("chat.composer.createInteractiveCard")}

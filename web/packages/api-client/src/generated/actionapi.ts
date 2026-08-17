@@ -46,7 +46,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Confirm and synchronously commit a resource Pending Action. */
+        /** Confirm a Pending Action and create approval or asynchronous execution state. */
         post: operations["confirmPendingAction"];
         delete?: never;
         options?: never;
@@ -77,10 +77,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        ConfirmPendingActionResult: {
+        PendingActionCommandResult: {
             pending_action: components["schemas"]["pending-action-public.schema"];
-            resource_ref?: components["schemas"]["ResourceRef"];
-            enrollment?: components["schemas"]["EnrollmentResult"];
+            approval_request?: components["schemas"]["ApprovalRequestView"];
+            execution?: components["schemas"]["Execution"];
         };
         RequestId: string;
         ApiError: {
@@ -141,19 +141,53 @@ export interface components {
             partial: components["schemas"]["PartialMetadata"];
         };
         IdempotencyKey: string;
-        ResourceRef: {
-            /** @enum {string} */
-            resource_type: "secret" | "credential" | "managed_account" | "host" | "kubernetes_cluster" | "bastion_scope" | "connector" | "telemetry_query" | "artifact";
-            resource_id: string;
-            /** Format: int64 */
-            version: number;
-        };
-        EnrollmentResult: {
+        ApprovalRequirement: {
             /** Format: uuid */
-            enrollment_id: string;
-            install_command: string;
+            policy_id: string;
+            /** Format: int64 */
+            policy_version: number;
+            minimum_approvers: number;
+            separation_of_duty: boolean;
+            approved_count: number;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "invalidated";
+        };
+        ApprovalDecision: {
+            decision_id: string;
+            actor_user_id: string;
+            /** @enum {unknown} */
+            decision: "approved" | "rejected";
+            reason?: string;
+            /** Format: date-time */
+            decided_at: string;
+        };
+        ApprovalRequestView: {
+            /** Format: uuid */
+            approval_request_id: string;
+            action_ref: string;
+            requirements: components["schemas"]["ApprovalRequirement"][];
+            decisions: components["schemas"]["ApprovalDecision"][];
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "expired" | "invalidated";
             /** Format: date-time */
             expires_at: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Execution: {
+            execution_id: string;
+            action_ref: string;
+            /** @enum {unknown} */
+            status: "pending" | "running" | "succeeded" | "failed" | "result_unknown" | "cancelled";
+            result_ref?: string;
+            readonly one_time_result_available?: boolean;
+            error_code?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
     };
     responses: {
@@ -243,13 +277,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Committed result. */
+            /** @description Confirmation state. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfirmPendingActionResult"];
+                    "application/json": components["schemas"]["PendingActionCommandResult"];
                 };
             };
             default: components["responses"]["Error"];

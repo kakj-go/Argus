@@ -49,6 +49,10 @@ Tool Calling 与结构化输出全部通过才创建并启用模型；Context Wi
 
 OpenSandbox 完全由平台超级管理员维护，是 SaaS 平台的底层执行资产。企业工作台和管理后台不提供 OpenSandbox 菜单、页面、Profile 选择、配额、会话或用量查询 API。Agent 运行时只能由服务端依据平台策略选择允许的 Profile，企业用户和模型不能通过配置扩大 Sandbox、网络、Secret、Connector 或生产执行权限。平台管理员也不能借由 Sandbox 管理访问企业业务正文。
 
+M4 通过 Lifecycle Adapter 管理 Backend、摘要固定的 Image、版本化 Profile、企业并发/月度秒数配额、Session 和 Usage。Broker 只根据 `task_kind` 与启用的 Profile 选择运行环境，Tool 输入、企业用户和模型都不能提交 Profile ID。Session 绑定 `enterprise_id + task_id + profile_revision + upstream_session_id + expires_at`；创建响应丢失时按上游 `argus.task_id` 元数据对账，终止和失败结算在 PostgreSQL 行锁事务中只执行一次。
+
+Replay OpenSandbox 只用于 `m4e2e` build tag 的固定 Smoke，不向 Model Catalog 暴露执行、文件或任意代码 Tool。生产 Artifact 扫描必须证明 Replay Provider、测试私网放行和 mock seed 不在生产镜像中。
+
 ## 8. 测试要求
 
-Mock/API 测试覆盖创建成功、兼容性失败不落库、密钥不回显、Context Window/能力探测、Revision、价格快照、月金额、无限额度、部门池与个人上限组合、跨部门拒绝、普通推理与 Compaction 预留结算。E2E 覆盖一步创建、额度配置、同会话切换模型、额度耗尽禁用及全局/单模型仪表盘权限。
+API 测试覆盖创建成功、兼容性失败不落库、密钥不回显、Context Window/能力探测、Revision、价格快照、月金额、无限额度、部门池与个人上限组合、跨部门拒绝、普通推理与 Compaction 预留结算。Sandbox 测试覆盖 Profile 选择、并发/月度配额、重复创建对账、响应丢失、超时清理和 Usage 单次结算。E2E 覆盖双协议模型、额度配置、Chat 调用、平台 Sandbox 治理与固定 Smoke。

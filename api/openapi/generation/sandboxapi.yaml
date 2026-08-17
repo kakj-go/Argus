@@ -1,0 +1,29 @@
+openapi: 3.1.0
+info: {title: Argus Platform Sandbox API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /platform/sandbox/backends: {$ref: ../argus.yaml#/paths/~1platform~1sandbox~1backends}
+  "/platform/sandbox/backends/{id}": {$ref: "../argus.yaml#/paths/~1platform~1sandbox~1backends~1{id}"}
+  "/platform/sandbox/backends/{id}/test": {$ref: "../argus.yaml#/paths/~1platform~1sandbox~1backends~1{id}~1test"}
+  /platform/sandbox/images: {$ref: ../argus.yaml#/paths/~1platform~1sandbox~1images}
+  "/platform/sandbox/images/{id}": {$ref: "../argus.yaml#/paths/~1platform~1sandbox~1images~1{id}"}
+  /platform/sandbox/profiles: {$ref: ../argus.yaml#/paths/~1platform~1sandbox~1profiles}
+  "/platform/sandbox/profiles/{id}": {$ref: "../argus.yaml#/paths/~1platform~1sandbox~1profiles~1{id}"}
+  "/platform/sandbox/enterprise-quotas/{enterprise_id}": {$ref: "../argus.yaml#/paths/~1platform~1sandbox~1enterprise-quotas~1{enterprise_id}"}
+  /platform/sandbox/sessions: {$ref: ../argus.yaml#/paths/~1platform~1sandbox~1sessions}
+  "/platform/sandbox/sessions/{id}/terminate": {$ref: "../argus.yaml#/paths/~1platform~1sandbox~1sessions~1{id}~1terminate"}
+  /platform/sandbox/usage: {$ref: ../argus.yaml#/paths/~1platform~1sandbox~1usage}
+components:
+  securitySchemes: {sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}}
+  schemas:
+    SandboxBackend: {$ref: ../components/m4.yaml#/components/schemas/SandboxBackend}
+    SandboxBackendWrite: {$ref: ../components/m4.yaml#/components/schemas/SandboxBackendWrite}
+    SandboxImage: {$ref: ../components/m4.yaml#/components/schemas/SandboxImage}
+    SandboxImageWrite: {$ref: ../components/m4.yaml#/components/schemas/SandboxImageWrite}
+    SandboxProfile: {$ref: ../components/m4.yaml#/components/schemas/SandboxProfile}
+    SandboxProfileWrite: {$ref: ../components/m4.yaml#/components/schemas/SandboxProfileWrite}
+    SandboxQuota: {$ref: ../components/m4.yaml#/components/schemas/SandboxQuota}
+    SandboxQuotaWrite: {$ref: ../components/m4.yaml#/components/schemas/SandboxQuotaWrite}
+    SandboxSession: {$ref: ../components/m4.yaml#/components/schemas/SandboxSession}
+    SandboxUsage: {$ref: ../components/m4.yaml#/components/schemas/SandboxUsage}

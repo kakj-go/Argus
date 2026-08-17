@@ -105,7 +105,7 @@ M1 Runtime 对 Card 脚本暴露的唯一浏览器对象是 `window.argusCard`�
 | HTTP                 | `net/http` + `chi`                   | 保持传输层轻量，领域复杂度不放入 Web 框架                                                                                                                            |
 | 外部 API             | REST + OpenAPI 3.1                   | 使用 `oapi-codegen` 生成 Go 类型/接口，使用 `openapi-typescript` 生成 TypeScript 契约；前端 Adapter 在生成契约之上封装                                               |
 | 内部 RPC             | gRPC + protobuf                      | 使用 Buf 管理 lint、生成和 breaking change；Connector 使用双向流；Server 到 Direct Executor 使用独立 CA 的内部 mTLS unary RPC，PostgreSQL 队列保留权威状态与恢复能力 |
-| MCP                  | 官方 Go MCP SDK + Argus Tool Gateway | SDK 只处理协议；权限、私有 Token 分流和 Tool 投影由 Argus 实现                                                                                                       |
+| MCP                  | Argus 进程内 Tool Registry/Gateway；独立服务时使用官方 Go MCP SDK | M4 小内核避免额外网络跳；权限、私有 Token 分流、投影和 `.commit` 身份门禁由 Argus 实现。未来拆分后只允许内部 mTLS，不经公共 Ingress |
 | Agent Harness        | Go 小内核，语义参考 Pi agent-core    | Provider-neutral Message/Event、可插拔 ContextAssembler、顺序优先的 Tool Loop；不引入第二套 Workflow Runtime                                                         |
 | PostgreSQL           | `pgx` + `sqlc`                       | 使用显式 SQL 实现事务、条件更新、Lease、Fence Token 和 Outbox，不使用重 ORM；查询与生成文件按领域拆分并遵守 2000 行上限                                              |
 | PostgreSQL Migration | Goose                                | Migration 以独立 Job 运行并持有 PostgreSQL advisory lock，普通 Server 启动不修改 Schema                                                                              |

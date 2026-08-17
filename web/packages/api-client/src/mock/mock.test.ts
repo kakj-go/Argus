@@ -378,12 +378,13 @@ describe("conversations", () => {
     await login(client, "chenxi");
     const conversation = await client.conversations.create({
       title: "新增主机会话",
+      selected_model_id: "model-qwen32b",
     });
 
     const events: StreamEventEnvelope[] = [];
     for await (const event of client.conversations.sendMessage(
       conversation.id,
-      { text: "帮我新增一台主机 10.1.2.3 并接入监控" },
+      { content: "帮我新增一台主机 10.1.2.3 并接入监控" },
     )) {
       events.push(event);
     }
@@ -443,6 +444,9 @@ describe("AI model governance", () => {
       baseUrl: "https://models.example/v1",
       apiKey: "invalid-key",
       modelId: "incompatible-model",
+      apiProtocol: "chat_completions",
+      contextWindowTokens: 128_000,
+      maxOutputTokens: 8192,
       inputPricePerMillionTokens: 1,
       outputPricePerMillionTokens: 2,
     });
@@ -456,6 +460,9 @@ describe("AI model governance", () => {
       baseUrl: "https://models.example/v1",
       apiKey: "sk-valid-secret",
       modelId: "compatible-chat",
+      apiProtocol: "responses",
+      contextWindowTokens: 128_000,
+      maxOutputTokens: 8192,
       inputPricePerMillionTokens: 1.25,
       outputPricePerMillionTokens: 3.5,
     });
@@ -508,12 +515,12 @@ describe("AI model governance", () => {
     const client = makeClient();
     await login(client, "chenxi");
     const conversation = await client.conversations.create({
-      selectedModelId: "model-qwen32b",
+      selected_model_id: "model-qwen32b",
     });
     for await (const event of client.conversations.sendMessage(
       conversation.id,
       {
-        text: "检查主机状态",
+        content: "检查主机状态",
       },
     )) {
       expect(event.event_type).toBe("agent_event");
@@ -533,35 +540,6 @@ describe("AI model governance", () => {
 });
 
 describe("interactive cards", () => {
-  it("creates a disabled draft from the chat command", async () => {
-    const client = makeClient();
-    await login(client, "chenxi");
-    const conversation = await client.conversations.create();
-    const events: StreamEventEnvelope[] = [];
-    for await (const event of client.conversations.sendMessage(
-      conversation.id,
-      {
-        text: "创建一个主机容量表",
-        command: { type: "interactive_card.create" },
-      },
-    )) {
-      events.push(event);
-    }
-    const created = events
-      .map(agentEvent)
-      .find((event) =>
-        Boolean(
-          (event?.payload as Record<string, unknown> | undefined)
-            ?.created_interactive_card_id,
-        ),
-      );
-    expect(created).toBeTruthy();
-    const cards = await client.interactiveCards.list({ source: "enterprise" });
-    const card = cards.find((entry) => entry.name.includes("主机容量表"));
-    expect(card?.enabled).toBe(false);
-    expect(card?.lifecycle).toBe("draft");
-  });
-
   it("enforces binding validation and keeps system cards read-only", async () => {
     const client = makeClient();
     await login(client, "chenxi");

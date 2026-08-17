@@ -271,7 +271,16 @@ export function createEngine(ctx: BaseContext): Engine {
     });
     ctx.save();
     return enrollment
-      ? { pending_action: action, enrollment }
+      ? {
+          pending_action: action,
+          one_time_result: {
+            schema_version: "argus.action_one_time_result/v1",
+            execution_id: `mock-${action.action_ref}`,
+            result_kind: "connector_enrollment",
+            enrollment,
+            expires_at: enrollment.expires_at,
+          },
+        }
       : { pending_action: action };
   }
 
@@ -329,7 +338,7 @@ export function createEngine(ctx: BaseContext): Engine {
     scope: MockBastionScope,
     purpose: ConnectorEnrollmentPurpose,
     createdBy: string,
-  ): NonNullable<ConfirmActionResult["enrollment"]> {
+  ): NonNullable<ConfirmActionResult["one_time_result"]>["enrollment"] {
     for (const existing of db.enrollmentTokens) {
       if (
         existing.bastionScopeId === scope.id &&
@@ -369,7 +378,9 @@ export function createEngine(ctx: BaseContext): Engine {
 
   function applySideEffect(
     action: PendingActionPublic,
-  ): ConfirmActionResult["enrollment"] | undefined {
+  ):
+    | NonNullable<ConfirmActionResult["one_time_result"]>["enrollment"]
+    | undefined {
     const plan = db.actionPlans[action.action_ref];
     if (!plan) throw new Error("pending action plan unavailable");
     const { input_data } = plan;

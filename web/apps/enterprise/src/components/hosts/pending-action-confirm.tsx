@@ -25,10 +25,12 @@ function diffLinesOf(action: PendingActionPublic) {
  */
 export function PendingActionConfirm({
   action,
+  claimOneTimeResult = false,
   onDone,
   onCancel,
 }: {
   action: PendingActionPublic;
+  claimOneTimeResult?: boolean;
   onDone?: (result: ConfirmActionResult) => void;
   onCancel?: () => void;
 }) {
@@ -42,7 +44,32 @@ export function PendingActionConfirm({
     if (confirming) return;
     setConfirming(true);
     try {
-      const result = await api.approvals.confirm(action.action_ref);
+      let result = await api.approvals.confirm(action.action_ref);
+      if (claimOneTimeResult && result.execution && !result.one_time_result) {
+        const executionId = result.execution.execution_id;
+        for (let attempt = 0; attempt < 120; attempt += 1) {
+          const execution = await api.executions.get(executionId);
+          result = { ...result, execution };
+          if (execution.status === "succeeded") {
+            if (execution.one_time_result_available) {
+              result = {
+                ...result,
+                one_time_result: await api.executions.claimOneTimeResult(
+                  execution.execution_id,
+                ),
+              };
+            }
+            break;
+          }
+          if (
+            execution.status === "failed" ||
+            execution.status === "cancelled"
+          ) {
+            throw new Error(execution.error_code ?? "execution failed");
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+        }
+      }
       setStatus("success");
       setResultMessage(
         result.pending_action.status === "succeeded"

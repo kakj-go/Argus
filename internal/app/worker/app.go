@@ -8,33 +8,171 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/kakj-go/Argus/internal/action"
+	"github.com/kakj-go/Argus/internal/agent"
 	"github.com/kakj-go/Argus/internal/app/component"
+	"github.com/kakj-go/Argus/internal/automation"
 	"github.com/kakj-go/Argus/internal/config"
+	connectorservice "github.com/kakj-go/Argus/internal/connector"
 	"github.com/kakj-go/Argus/internal/directexecutor"
 	directv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/directexecutor/v1"
+	"github.com/kakj-go/Argus/internal/kubernetesreader"
+	"github.com/kakj-go/Argus/internal/mcp"
+	modelservice "github.com/kakj-go/Argus/internal/model"
 	"github.com/kakj-go/Argus/internal/resource"
+	"github.com/kakj-go/Argus/internal/runtime"
+	"github.com/kakj-go/Argus/internal/sandbox"
 	secretservice "github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
+	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
 )
 
 const (
 	PoolDefault        = "default"
+	PoolAgent          = "agent"
+	PoolAction         = "action"
+	PoolCompaction     = "compaction"
+	PoolAutomation     = "automation"
+	PoolSandbox        = "sandbox"
 	PoolDirectExecutor = "direct-executor"
 )
 
 func Run(ctx context.Context, logger *slog.Logger, pool string) error {
-	if pool != PoolDefault && pool != PoolDirectExecutor {
+	if pool != PoolDefault && pool != PoolAgent && pool != PoolAction && pool != PoolCompaction && pool != PoolAutomation && pool != PoolSandbox && pool != PoolDirectExecutor {
 		return fmt.Errorf("unsupported worker pool %q", pool)
 	}
 	if pool == PoolDirectExecutor {
 		return runDirectExecutor(ctx, logger)
 	}
-	return component.Wait(ctx, logger, "argus-worker-"+pool, config.LoadHealthAddress())
+	return runRuntimeWorker(ctx, logger, pool)
+}
+
+func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) error {
+	cfg := config.LoadServer()
+	if cfg.DatabaseURL == "" || len(cfg.PendingActionKey) != 32 || cfg.SecretKEKPath == "" {
+		return errors.New("runtime worker requires PostgreSQL, pending-action key, and secret KEK")
+	}
+	keyring, err := secretservice.LoadKeyring(cfg.SecretKEKPath)
+	if err != nil {
+		return err
+	}
+	store, err := postgres.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	redisClient, err := redisstore.Open(ctx, cfg.RedisURL)
+	if err != nil && redisClient == nil {
+		return err
+	}
+	if redisClient != nil {
+		defer func() { _ = redisClient.Close() }()
+	}
+	kubernetesClient, err := connectorservice.NewDynamicClient(cfg.KubeconfigPath)
+	if err != nil {
+		return err
+	}
+	denied, err := resource.ParseDeniedCIDRs(cfg.DirectDeniedCIDRs)
+	if err != nil {
+		return err
+	}
+	directDispatcher, err := directexecutor.NewDispatcher(cfg.DirectExecutorEndpoint, cfg.DirectExecutorServerName,
+		cfg.DirectExecutorTLSCert, cfg.DirectExecutorTLSKey, cfg.DirectExecutorCABundle)
+	if err != nil {
+		return err
+	}
+	defer directDispatcher.Close()
+	secretDomain := secretservice.Service{Store: store, Keyring: keyring}
+	actionDomain := resource.PendingActionService{Store: store, Idempotency: postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey}, Key: cfg.PendingActionKey}
+	connectorDomain := connectorservice.Service{Store: store, Redis: redisClient, GatewayEndpoint: cfg.ConnectorGatewayAddress,
+		EnrollmentURL: cfg.ConnectorEnrollmentURL, Credentials: secretDomain,
+		Issuer: connectorservice.CertManagerIssuer{Client: kubernetesClient, Namespace: cfg.SystemNamespace,
+			IssuerName: cfg.ConnectorIssuerName, IssuerGeneration: cfg.ConnectorIssuerGeneration}}
+	bastionDomain := connectorservice.BastionService{Store: store, Actions: actionDomain, Enrollment: connectorDomain}
+	resourceDomain := resource.Service{Store: store, Actions: actionDomain, Access: resource.AccessService{Store: store},
+		Direct: resource.DirectTargetValidator{DeniedCIDRs: denied}, Commands: connectorDomain, DirectCommands: directDispatcher,
+		Extension: bastionDomain, ClusterEnrollment: connectorDomain,
+		Kubernetes: kubernetesreader.Reader{Store: store, Secrets: secretDomain, Validator: resource.DirectTargetValidator{DeniedCIDRs: denied}, Notifier: connectorDomain}}
+	registry := mcp.NewRegistry()
+	if err := (agent.ResourceTools{Store: store, Resources: resourceDomain}).Register(registry); err != nil {
+		return err
+	}
+	modelDomain := modelservice.Service{Store: store, Keyring: keyring}
+	workflowDomain := action.Service{Store: store, Idempotency: postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey}, Resources: resourceDomain,
+		OneTimeResultKey: cfg.PendingActionKey}
+	handlers := map[string]runtime.Handler{
+		PoolAgent:      agent.Loop{Store: store, Models: modelDomain, Tools: registry},
+		PoolAction:     action.Executor{Store: store, Resources: resourceDomain, OneTimeResultKey: cfg.PendingActionKey},
+		PoolCompaction: agent.Compactor{Store: store, Models: modelDomain},
+		PoolAutomation: automation.Runner{Store: store, Tools: registry, Workflow: workflowDomain},
+		PoolSandbox:    sandbox.Runner{Service: sandbox.Service{Store: store, Keyring: keyring}},
+	}
+	queues := []string{pool}
+	if pool == PoolDefault {
+		queues = []string{PoolAgent, PoolAction, PoolCompaction, PoolAutomation, PoolSandbox}
+	}
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "argus-worker"
+	}
+	workerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errorsChannel := make(chan error, len(queues)+2)
+	var group sync.WaitGroup
+	for _, queue := range queues {
+		queue := queue
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			errorsChannel <- (runtime.Processor{Store: store, Queue: queue, Owner: hostname + ":" + queue, Handle: handlers[queue], Logger: logger}).Run(workerCtx)
+		}()
+	}
+	if pool == PoolDefault || pool == PoolAutomation {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			errorsChannel <- (automation.Scheduler{Store: store, Logger: logger}).Run(workerCtx)
+		}()
+	}
+	if pool == PoolDefault || pool == PoolSandbox {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			errorsChannel <- (sandbox.Reconciler{Service: sandbox.Service{Store: store, Keyring: keyring}, Logger: logger}).Run(workerCtx)
+		}()
+	}
+	if pool == PoolDefault || pool == PoolAction {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			errorsChannel <- (action.Reconciler{Executor: action.Executor{Store: store, Resources: resourceDomain}, Logger: logger}).Run(workerCtx)
+		}()
+	}
+	health := &http.Server{Addr: config.LoadHealthAddress(), Handler: component.HealthHandler("argus-worker-" + pool), ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		if serveErr := health.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			errorsChannel <- serveErr
+		}
+	}()
+	logger.Info("argus runtime worker started", "pool", pool, "queues", queues)
+	select {
+	case err = <-errorsChannel:
+		cancel()
+	case <-ctx.Done():
+		err = nil
+	}
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	_ = health.Shutdown(shutdownCtx)
+	group.Wait()
+	return err
 }
 
 func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {

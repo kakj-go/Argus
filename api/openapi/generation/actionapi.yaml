@@ -11,4 +11,4 @@ components:
   securitySchemes:
     sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
   schemas:
-    ConfirmPendingActionResult: {$ref: ../components/m3.yaml#/components/schemas/ConfirmPendingActionResult}
+    PendingActionCommandResult: {$ref: ../components/m4.yaml#/components/schemas/PendingActionCommandResult}

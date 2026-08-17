@@ -92,9 +92,13 @@ export interface ApprovalPolicy {
   description?: string;
   matchRiskLevels: RiskLevel[];
   matchEnvironments: Environment[];
+  toolIds?: string[];
+  resourceTypes?: string[];
+  labelSelector?: import("../generated/contracts").LabelSelector;
   minApprovers: number;
   approverRoleIds: string[];
   separationOfDuty: boolean;
+  expiresAfterSeconds?: number;
   enabled: boolean;
   createdAt: ISODateString;
 }

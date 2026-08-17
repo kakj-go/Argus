@@ -143,6 +143,80 @@ paths:
     $ref: ./paths/m3.yaml#/connector_preview_uninstall
   /connectors/enroll:
     $ref: ./paths/m3.yaml#/connector_enroll
+  /conversations:
+    $ref: ./paths/m4.yaml#/conversation_collection
+  /conversations/{conversation_id}:
+    $ref: ./paths/m4.yaml#/conversation_item
+  /conversations/{conversation_id}/messages:
+    $ref: ./paths/m4.yaml#/conversation_messages
+  /conversations/{conversation_id}/ledger:
+    $ref: ./paths/m4.yaml#/conversation_events
+  /runs/{run_id}:
+    $ref: ./paths/m4.yaml#/run_item
+  /runs/{run_id}/cancel:
+    $ref: ./paths/m4.yaml#/run_cancel
+  /runs/{run_id}/compact:
+    $ref: ./paths/m4.yaml#/run_compact
+  /tool-results/{result_ref}:
+    $ref: ./paths/m4.yaml#/tool_result_item
+  /enterprise/ai-models:
+    $ref: ./paths/m4.yaml#/model_collection
+  /enterprise/ai-models/test-and-create:
+    $ref: ./paths/m4.yaml#/model_test_create
+  /enterprise/ai-models/{id}:
+    $ref: ./paths/m4.yaml#/model_item
+  /enterprise/ai-models/{id}/test:
+    $ref: ./paths/m4.yaml#/model_test
+  /enterprise/model-quotas:
+    $ref: ./paths/m4.yaml#/model_quota_collection
+  /enterprise/model-usage:
+    $ref: ./paths/m4.yaml#/model_usage_collection
+  /enterprise/approval-policies:
+    $ref: ./paths/m4.yaml#/approval_policy_collection
+  /enterprise/approval-policies/{id}:
+    $ref: ./paths/m4.yaml#/approval_policy_item
+  /enterprise/approval-requests:
+    $ref: ./paths/m4.yaml#/approval_request_collection
+  /enterprise/approval-requests/{id}:
+    $ref: ./paths/m4.yaml#/approval_request_item
+  /enterprise/approval-requests/{id}/decisions:
+    $ref: ./paths/m4.yaml#/approval_decision
+  /enterprise/executions:
+    $ref: ./paths/m4.yaml#/execution_collection
+  /enterprise/executions/{id}:
+    $ref: ./paths/m4.yaml#/execution_item
+  /enterprise/executions/{id}/one-time-result:
+    $ref: ./paths/m4.yaml#/execution_one_time_result
+  /enterprise/automations:
+    $ref: ./paths/m4.yaml#/automation_collection
+  /enterprise/automations/{id}:
+    $ref: ./paths/m4.yaml#/automation_item
+  /enterprise/automations/{id}/{state_action}:
+    $ref: ./paths/m4.yaml#/automation_state
+  /enterprise/automations/{id}/runs:
+    $ref: ./paths/m4.yaml#/automation_runs
+  /platform/sandbox/backends:
+    $ref: ./paths/m4.yaml#/sandbox_backend_collection
+  /platform/sandbox/backends/{id}:
+    $ref: ./paths/m4.yaml#/sandbox_backend_item
+  /platform/sandbox/backends/{id}/test:
+    $ref: ./paths/m4.yaml#/sandbox_backend_test
+  /platform/sandbox/images:
+    $ref: ./paths/m4.yaml#/sandbox_image_collection
+  /platform/sandbox/images/{id}:
+    $ref: ./paths/m4.yaml#/sandbox_image_item
+  /platform/sandbox/profiles:
+    $ref: ./paths/m4.yaml#/sandbox_profile_collection
+  /platform/sandbox/profiles/{id}:
+    $ref: ./paths/m4.yaml#/sandbox_profile_item
+  /platform/sandbox/enterprise-quotas/{enterprise_id}:
+    $ref: ./paths/m4.yaml#/sandbox_quota_item
+  /platform/sandbox/sessions:
+    $ref: ./paths/m4.yaml#/sandbox_session_collection
+  /platform/sandbox/sessions/{id}/terminate:
+    $ref: ./paths/m4.yaml#/sandbox_terminate
+  /platform/sandbox/usage:
+    $ref: ./paths/m4.yaml#/sandbox_usage_collection
   /conversations/{conversation_id}/events:
     get:
       operationId: streamConversationEvents
@@ -369,6 +443,18 @@ components:
       $ref: ./components/m3.yaml#/components/schemas/BastionScope
     Connector:
       $ref: ./components/m3.yaml#/components/schemas/Connector
+    Conversation:
+      $ref: ./components/m4.yaml#/components/schemas/Conversation
+    AIModel:
+      $ref: ./components/m4.yaml#/components/schemas/AIModel
+    ApprovalPolicy:
+      $ref: ./components/m4.yaml#/components/schemas/ApprovalPolicy
+    ApprovalRequirement:
+      $ref: ./components/m4.yaml#/components/schemas/ApprovalRequirement
+    Automation:
+      $ref: ./components/m4.yaml#/components/schemas/Automation
+    SandboxProfile:
+      $ref: ./components/m4.yaml#/components/schemas/SandboxProfile
   securitySchemes:
     sessionCookie:
       type: apiKey

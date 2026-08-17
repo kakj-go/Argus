@@ -69,3 +69,24 @@ codes:
   CONNECTOR_COMMAND_SCHEMA_INVALID: {http_status: 422, message_key: errors.connector.command_schema_invalid, retryable: false}
   CONNECTOR_RESULT_NOT_REPLAYABLE: {http_status: 409, message_key: errors.connector.result_not_replayable, retryable: false}
   CONNECTOR_CERTIFICATE_ROTATION_FAILED: {http_status: 409, message_key: errors.connector.certificate_rotation_failed, retryable: true}
+  MODEL_ENDPOINT_NOT_ALLOWED: {http_status: 422, message_key: errors.model.endpoint_not_allowed, retryable: false}
+  MODEL_COMPATIBILITY_FAILED: {http_status: 422, message_key: errors.model.compatibility_failed, retryable: false}
+  MODEL_UNAVAILABLE: {http_status: 503, message_key: errors.model.unavailable, retryable: true}
+  MODEL_QUOTA_EXCEEDED: {http_status: 429, message_key: errors.model.quota_exceeded, retryable: false}
+  RUN_ALREADY_ACTIVE: {http_status: 409, message_key: errors.agent.run_already_active, retryable: false}
+  RUN_CANCELLED: {http_status: 409, message_key: errors.agent.run_cancelled, retryable: false}
+  CONTEXT_TOO_LARGE: {http_status: 422, message_key: errors.agent.context_too_large, retryable: false}
+  TOOL_NOT_AVAILABLE: {http_status: 404, message_key: errors.tool.not_available, retryable: false}
+  TOOL_INPUT_INVALID: {http_status: 422, message_key: errors.tool.input_invalid, retryable: false}
+  TOOL_RESULT_TOO_LARGE: {http_status: 422, message_key: errors.tool.result_too_large, retryable: false}
+  APPROVAL_REQUIRED: {http_status: 409, message_key: errors.approval.required, retryable: false}
+  APPROVAL_POLICY_REQUIRED: {http_status: 422, message_key: errors.approval.policy_required, retryable: false}
+  APPROVAL_NOT_ELIGIBLE: {http_status: 403, message_key: errors.approval.not_eligible, retryable: false}
+  ACTION_INVALIDATED: {http_status: 409, message_key: errors.actions.invalidated, retryable: false}
+  EXECUTION_RESULT_UNKNOWN: {http_status: 202, message_key: errors.execution.execution_result_unknown, retryable: true}
+  ACTION_RESULT_NOT_AVAILABLE: {http_status: 404, message_key: errors.execution.one_time_result_not_available, retryable: true}
+  ACTION_RESULT_EXPIRED: {http_status: 410, message_key: errors.execution.one_time_result_expired, retryable: false}
+  ACTION_RESULT_ALREADY_CONSUMED: {http_status: 409, message_key: errors.execution.one_time_result_consumed, retryable: false}
+  AUTOMATION_OVERLAP_SKIPPED: {http_status: 409, message_key: errors.automation.overlap_skipped, retryable: true}
+  SANDBOX_PROFILE_UNAVAILABLE: {http_status: 503, message_key: errors.sandbox.profile_unavailable, retryable: true}
+  SANDBOX_QUOTA_EXCEEDED: {http_status: 429, message_key: errors.sandbox.quota_exceeded, retryable: false}

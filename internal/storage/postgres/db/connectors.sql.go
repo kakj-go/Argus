@@ -944,6 +944,40 @@ func (q *Queries) GetConnectorCommand(ctx context.Context, arg GetConnectorComma
 	return i, err
 }
 
+const getConnectorCommandByID = `-- name: GetConnectorCommandByID :one
+SELECT id, command_id, enterprise_id, connector_id, connection_epoch, operation_ref, credential_lease_id, command_type, payload_schema_version, payload, payload_hash, idempotency_key, status, result, result_hash, error_code, expires_at, acknowledged_at, started_at, completed_at, created_at, updated_at FROM connector_commands WHERE id = $1
+`
+
+func (q *Queries) GetConnectorCommandByID(ctx context.Context, id uuid.UUID) (ConnectorCommand, error) {
+	row := q.db.QueryRow(ctx, getConnectorCommandByID, id)
+	var i ConnectorCommand
+	err := row.Scan(
+		&i.ID,
+		&i.CommandID,
+		&i.EnterpriseID,
+		&i.ConnectorID,
+		&i.ConnectionEpoch,
+		&i.OperationRef,
+		&i.CredentialLeaseID,
+		&i.CommandType,
+		&i.PayloadSchemaVersion,
+		&i.Payload,
+		&i.PayloadHash,
+		&i.IdempotencyKey,
+		&i.Status,
+		&i.Result,
+		&i.ResultHash,
+		&i.ErrorCode,
+		&i.ExpiresAt,
+		&i.AcknowledgedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getEnrollmentTokenForUpdate = `-- name: GetEnrollmentTokenForUpdate :one
 SELECT id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, status, expires_at, consumed_at, consumed_device_hash, registered_connector_id, created_by, created_at FROM connector_enrollment_tokens WHERE token_hash = $1 FOR UPDATE
 `

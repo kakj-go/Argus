@@ -147,11 +147,13 @@ type Run struct {
 	CreatedAt            time.Time   `json:"created_at"`
 	CurrentStepId        *string     `json:"current_step_id,omitempty"`
 	EnterpriseId         string      `json:"enterprise_id"`
+	ErrorCode            *string     `json:"error_code,omitempty"`
 	Locale               interface{} `json:"locale"`
 	ModelId              string      `json:"model_id"`
 	ModelRevision        int         `json:"model_revision"`
 	RunId                string      `json:"run_id"`
 	Status               interface{} `json:"status"`
+	StopReason           *string     `json:"stop_reason,omitempty"`
 	UpdatedAt            time.Time   `json:"updated_at"`
 	Version              int         `json:"version"`
 }

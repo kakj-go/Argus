@@ -51,6 +51,7 @@
         "action_ref": {"type": "string"},
         "status": {"enum": ["pending", "running", "succeeded", "failed", "result_unknown", "cancelled"]},
         "result_ref": {"type": "string"},
+        "one_time_result_available": {"type": "boolean", "readOnly": true},
         "error_code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
         "created_at": {"type": "string", "format": "date-time"},
         "updated_at": {"type": "string", "format": "date-time"}

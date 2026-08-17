@@ -6,6 +6,7 @@ ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
+ARG GO_BUILD_TAGS=""
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -17,6 +18,7 @@ COPY migrations ./migrations
 RUN mkdir -p /out && \
     for name in argus-server argus-worker argus-connector-gateway argus-telemetry argus-connector argusctl argus-migrate; do \
       CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
+		-tags "$GO_BUILD_TAGS" \
         -trimpath \
         -ldflags "-s -w -X github.com/kakj-go/Argus/internal/buildinfo.Version=$VERSION -X github.com/kakj-go/Argus/internal/buildinfo.Commit=$COMMIT -X github.com/kakj-go/Argus/internal/buildinfo.Date=$BUILD_DATE" \
         -o /out/$name ./cmd/$name; \

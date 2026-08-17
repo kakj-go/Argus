@@ -35,19 +35,19 @@
 
 ### 3.1 总体结论
 
-截至 2026-08-17，当前仓库已经完成 M0 契约冻结、M1 前端/API 基座、M2 Evaluation 身份授权闭环和 M3 Evaluation 资源/Connector 闭环。M3 的 Secret/Credential/ManagedAccount、Host/Kubernetes、资源 PendingAction、Bastion/Connector、Direct Executor、真实前端、部署和临时 Kubernetes Namespace E2E 均已通过；Agent、Remote Access、Card 服务端治理和 Telemetry 仍按 M4 以后里程碑推进。
+截至 2026-08-17，当前仓库已经完成 M0 契约冻结、M1 前端/API 基座、M2 Evaluation 身份授权闭环、M3 Evaluation 资源/Connector 闭环和 M4 Evaluation Agent/确定性执行闭环。M4 已交付契约、Migration、五个 Worker Pool、双协议 Model、Agent/Compaction、带权限与严格 Schema 门禁的 Tool Registry、Approval/Execution、不可变 AutomationRevision、OpenSandbox 治理、真实前端和临时 Namespace 验证。Card 服务端治理、Remote Access 和 Telemetry 仍归 M5-M7。
 
 | 范围                               | 当前状态                                                                                                             | 可交付程度                                                                                                  |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| 企业门户                           | M2 身份/IAM，以及 M3 Host、Kubernetes、Secret、ManagedAccount、Bastion/Connector 和资源确认流程已接 real API         | 身份与资源接入核心流程可真实使用；Agent、Remote Access、Collector/Telemetry 操作保持不可用                  |
-| 平台门户                           | 平台登录/改密、企业生命周期、临时密码企业管理员和平台审计已接 real API                                               | M2 平台管理核心流程可真实使用；Sandbox 治理归入 M4                                                          |
+| 企业门户                           | M2 身份/IAM、M3 资源接入，以及 M4 Chat、Model、Approval、Execution、Automation 已接 real API                         | 身份、资源、Agent 和确定性执行核心流程可真实使用；Remote Access、Collector/Telemetry 保持不可用            |
+| 平台门户                           | 平台登录/改密、企业生命周期、临时密码企业管理员、平台审计和 M4 Sandbox 治理已接 real API                             | 平台管理与 Sandbox Backend/Image/Profile/Quota/Session 治理可真实使用                                      |
 | 初始化门户                         | Setup Token、系统信息、平台超级管理员和永久锁定已接 real API                                                         | 全新安装可完成真实一次性初始化；不包含 OpenSandbox 配置步骤                                                 |
 | Card Runtime                       | 独立 Origin 构建、Manifest/内容哈希/CSP 校验、可执行 Card 文档、`window.argusCard` 和 MessagePort Bridge 已完成      | 浏览器安全运行基座可用；CardVersion 持久化与服务端 Binding 治理属于 M5                                      |
-| API Client                         | 生成契约、领域 Port、版本化 mock、显式 real Adapter 和 HTTP/可恢复 SSE/WebSocket Transport 已完成；M2/M3 Path 已接入 | mock/real 显式选择且配置错误 fail closed；M4+ 操作不回退 mock                                               |
-| `argus-server`                     | 已实现 M2 身份/IAM，以及 M3 Secret、资源、PendingAction、Connector Enrollment/管理和 Kubernetes 读取 Handler         | Evaluation 身份、授权与资源控制面可用；Agent、Remote Access 和 Telemetry 尚未实现                           |
-| Worker/Gateway/Telemetry/Connector | Direct Executor、Connector Gateway 与 Connector M3 控制/命令行为已实现；普通 Worker 和 Telemetry 仍为后续阶段        | M3 仅允许 Probe、Kubernetes Read、Credential Lease、Uninstall；无任意 Shell、Remote Frame 或 Collector 命令 |
+| API Client                         | 生成契约、领域 Port、版本化 mock、显式 real Adapter 和 HTTP/可恢复 SSE/WebSocket Transport 已完成；M2-M4 Path 已接入 | mock/real 显式选择且配置错误 fail closed；M5+ 操作不回退 mock                                               |
+| `argus-server`                     | 已实现 M2/M3 领域 API，并增加 M4 Conversation/Run SSE、Model、Approval/Execution、Automation 和 Platform Sandbox Handler | Agent/Action 控制面可用；Remote Access、Card 服务端治理和 Telemetry 尚未实现 |
+| Worker/Gateway/Telemetry/Connector | Direct Executor、Connector Gateway 与 M3 Command 已实现；M4 增加 agent/action/compaction/automation/sandbox 五个 Worker Pool | Commit 对模型隐藏，未知外部结果先对账；仍无任意 Shell、Remote Frame 或 Collector 命令 |
 | `argusctl`                         | 已实现 preflight、plan、镜像、install、status、verify、tunnel、uninstall                                             | 可安装和验证 Evaluation；Production 安装硬阻断                                                              |
-| OpenAPI/protobuf/migration         | M0 门禁、M2/M3 Path/DTO、Connector/Direct Executor protobuf 和两批 Goose/sqlc Schema 已完成                          | 身份/IAM 与资源/Connector 数据模型已落地；后续领域继续增量扩展                                              |
+| OpenAPI/protobuf/migration         | M0 门禁、M2-M4 Path/DTO、Connector/Direct Executor protobuf 和三批 Goose/sqlc Schema 已完成                          | 身份、资源、Agent/Action/Sandbox 数据模型已落地；后续领域继续增量扩展                                       |
 | Kubernetes 交付物                  | Dockerfile、六个 Chart、Profile、Schema、版本锁和本地 Registry Loader 已存在；Web 镜像提供四个前端入口               | 可部署完整 Evaluation 基座                                                                                  |
 
 因此，现阶段可以声明“完整依赖和运行角色可部署”，但不能把前端 mock 流程、后端进程健康和“业务后端已完成”视为同一完成度。
@@ -61,7 +61,7 @@
 | `web/apps/enterprise`   | 企业业务域       | Chatbox、主机、Kubernetes、任务、审批、组织权限、模型、Card、Secret、审计 |
 | `web/apps/card-runtime` | 独立 Card Origin | CSP 下加载并运行已校验的 Card 文档，通过 MessagePort 与 Host 通信         |
 
-三个门户都必须通过 `VITE_API_MODE=mock|real` 显式选择 API 模式。未知模式、real 缺少 `VITE_API_BASE_URL`、Enterprise real 缺少 `VITE_CARD_ORIGIN`，以及 Setup real 缺少 `VITE_PLATFORM_URL` 时都会停止启动，不会回退到 mock。M2 已补齐身份/IAM Path，M3 已补齐 Host、Kubernetes、Secret、ManagedAccount、Bastion、Connector、ConnectionTest 和资源 PendingAction Path；M4+ 领域操作继续稳定返回 `CLIENT_OPERATION_UNAVAILABLE`。
+三个门户都必须通过 `VITE_API_MODE=mock|real` 显式选择 API 模式。未知模式、real 缺少 `VITE_API_BASE_URL`、Enterprise real 缺少 `VITE_CARD_ORIGIN`，以及 Setup real 缺少 `VITE_PLATFORM_URL` 时都会停止启动，不会回退到 mock。M2 已补齐身份/IAM Path，M3 已补齐资源与 Connector Path，M4 已补齐 Conversation/Run、Model、Approval/Execution、Automation 和 Platform Sandbox Path；M5+ 领域操作继续稳定返回 `CLIENT_OPERATION_UNAVAILABLE`。
 
 共享包目录已在 M1 按目标边界收敛；后续领域实现必须继续复用这些包，不能在业务应用内重新建立平行基座：
 
@@ -74,11 +74,11 @@
 | `@argus/card-host`     | Manifest/RenderPlan 与内容哈希校验、精确 Origin 握手、MessagePort Bridge 和受控 Binding 调用 |
 | `@argus/observability` | 前端遥测上下文和事件入口                                                                     |
 
-前端 Playwright 同时支持 Enterprise、Platform、Setup 和 Card Runtime 四个 Origin。既有 mock 套件覆盖产品流程、Audience、Labels、Card Bridge/CSP 与 `zh-CN/en-US × light/dark` axe 门禁；real 模式覆盖 M2 身份流程和 M3 Host 可见性、Secret/资源接入流程。真实业务证据分别由 `make e2e-m2-k8s` 与 `make e2e-m3-k8s` 在临时 Namespace 中运行，不以 mock Playwright 替代。
+前端 Playwright 同时支持 Enterprise、Platform、Setup 和 Card Runtime 四个 Origin。既有 mock 套件覆盖产品流程、Audience、Labels、Card Bridge/CSP 与 `zh-CN/en-US × light/dark` axe 门禁；real 模式覆盖 M2 身份、M3 资源接入，以及 M4 Chat、Model、Approval、Execution、Automation 和 Platform Sandbox 治理流程。真实业务证据由各里程碑 Kubernetes E2E 在临时 Namespace 中运行，不以 mock Playwright 替代。
 
-M1 已清除 Project、Membership、旧 `tags` 和公开 PendingAction 私有字段。M2/M3 真实写表单统一使用 React Hook Form + Zod，临时密码、APIKey、Bastion 安装结果和 Secret 原值只按一次性结果边界处理。Host/Kubernetes/Connector DTO 已切到 M3 生成的 snake_case 契约；剩余 provisional 类型只对应 Agent、Remote Access、Collector/Telemetry 等后续领域。
+M1 已清除 Project、Membership、旧 `tags` 和公开 PendingAction 私有字段。真实写表单统一使用 React Hook Form + Zod，临时密码、APIKey、Bastion 安装结果、Execution 一次性结果和 Secret 原值只按一次性结果边界处理。M2-M4 已冻结领域 DTO 均使用生成的 snake_case 契约；剩余 provisional 类型只对应 Remote Access、Collector/Telemetry 等后续领域。
 
-Agent 运行时当前仍只有目录骨架：M0 已冻结 ConversationEvent、Run/Step/Task、ModelCall、ToolResultProjection、ContextSnapshot、Tool Metadata 和上下文预算契约，M1 前端 mock 已通过这些冻结 envelope 驱动页面 reducer，但尚无服务端持久化、Agent Loop、ContextAssembler 或 Compactor 实现。mock 的协议形状和断线恢复测试不能替代真实 Harness。目标实现见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
+Agent 运行时已完成 Provider-neutral 单 Agent 小内核：PostgreSQL 持久化不可变 ConversationEvent、Run/Step/Task、ModelCall、ToolResult、ContextSnapshot、PendingAction 和 Execution 事实；`ModelUsage` 只从 ModelCall 聚合查询。五个 Worker Pool 通过 Lease/Fence 恢复，支持双模型协议、ContextAssembler、确定性投影与 Compaction、Tool 权限/Schema 门禁、审批和 Action Executor。可信 `run_id` 从 Agent Preview 贯穿 PendingAction/Execution 并在完成后恢复同一 Run 的 Verify Step。实现边界见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
 
 ### 3.3 后端程序与运行角色
 
@@ -86,14 +86,14 @@ Agent 运行时当前仍只有目录骨架：M0 已冻结 ConversationEvent、Ru
 
 | 二进制                    | 部署位置                 | 目标职责                                          | 当前状态                                                                                         |
 | ------------------------- | ------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `argus-server`            | `argus-system`           | Web/API、身份、权限、领域服务、Action Executor    | M2 身份/IAM 与 M3 Secret/Resource/PendingAction/Connector API 可用；通用 Action Executor 属于 M4 |
-| `argus-worker`            | `argus-system`           | Agent、Tool Run、任务、Sandbox、安装执行          | `direct-executor` Pool 已执行 M3 连接探测；普通 Agent/Tool Worker 仍为骨架                       |
+| `argus-server`            | `argus-system`           | Web/API、身份、权限、领域服务、Action Executor    | M2-M4 身份、资源、Conversation/Model、Approval/Execution、Automation 和 Sandbox API 可用        |
+| `argus-worker`            | `argus-system`           | Agent、Tool Run、任务、Sandbox、安装执行          | agent/action/compaction/automation/sandbox 五个 Pool 已运行；Direct Executor 继续执行 M3 连接探测 |
 | `argus-connector-gateway` | `argus-system`           | Connector 长连接、命令流、Artifact、Remote Access | M3 mTLS 握手、Registry、epoch、Drain 和类型化命令可用；Artifact/Remote Access 后续实现           |
 | `argus-telemetry`         | `argus-observability`    | `ingest` 写 Kafka；`query` 查 ClickHouse          | 模式校验和生命周期骨架                                                                           |
 | `argus-connector`         | 受管主机/堡垒机          | 主动 mTLS 接入、命令和 Artifact/会话隧道          | M3 Enrollment、证书、心跳、Probe/Kubernetes Read/Uninstall 可用；无任意 Shell、Artifact 和会话流 |
 | `argusctl`                | 部署者工作站或 CI Runner | Preflight、Install、Upgrade、Verify、Uninstall    | Evaluation 安装闭环已实现；独立 Upgrade 子命令待补                                               |
 
-`argus-worker` 已以独立 Deployment 运行 Direct Executor Pool，使用独立 ServiceAccount、NetworkPolicy、固定出口配置和内部 mTLS RPC。PostgreSQL 队列是 ConnectionTest 权威事实，RPC 丢失由扫描恢复；该 Pool 不接受浏览器或普通 Worker 传入任意 Socket 参数。
+`argus-worker` 已以独立 Deployment 运行 Direct Executor Pool，并为 M4 增加 agent、action、compaction、automation、sandbox 五个独立 Deployment。所有 Pool 使用 PostgreSQL Lease/Fence 恢复；Redis 只唤醒。Tool Gateway 当前是 Worker 进程内可信 Registry，未来拆分时才增加内部 mTLS 网络边界。
 
 ### 3.4 已交付部署基础与剩余边界
 
@@ -113,11 +113,13 @@ Agent 运行时当前仍只有目录骨架：M0 已冻结 ConversationEvent、Ru
 - Enterprise real Adapter 与页面已接 Host 路径迁移、Kubernetes 有界资源/Pod Logs、Secret/ManagedAccount、Bastion/Connector 卸载和 Preview/Confirm；`in_cluster` 一次性安装命令只在确认结果中展示，Collector、Remote Access 和 Agent 操作不读取 mock 数据。
 - Connector 卸载结果等待 Gateway ACK 后才删除本地身份；无类型化清理证明的 reconcile 保持 `result_unknown`。有效重连恢复 Bastion Scope/Kubernetes 在线状态，Scope 删除要求已卸载或已 fencing 离线，并逻辑删除根 Host。
 - `make e2e-m3-k8s`：真实 Secret/Credential/ManagedAccount、Bastion/Connector、证书轮换与 ACK 后卸载、Host 跨 Scope 迁移、双 Gateway 派发、内网/公网 Host、三种 Kubernetes 接入、DataScope 撤权、Redis 停止和 Server/Gateway 恢复，M2 3 条与 M3 6 条 real Playwright，以及成功/失败无条件清理。2026-08-17 的成功运行号为 `20260817060430-49810`，脱敏诊断位于本地同名 `artifacts/m3-e2e/` 目录，Namespace/PVC/Lease 零残留。
+- M4 Conversation/Run/Task/Model/Approval/Execution/Automation/Sandbox 契约、Migration、五个 Worker Pool、双协议 Model Provider、ContextAssembler/Compaction、Tool 权限与严格 Schema Registry、确定性 Projection、不可变 AutomationRevision 和确定性 Action Executor。
+- Enterprise Chat/Model/Approval/Execution/Automation 与 Platform Sandbox 页面已接 real API；Replay Model Provider 仅存在于 `m4e2e` build tag，生产 Artifact 扫描拒绝测试 Provider、mock seed 和私网模型开关。
+- `make e2e-m4-k8s`：真实身份与资源基座、双模型协议、Chat Tool、可信 Run→PendingAction→Execution→Verify 绑定、用户确认、多策略审批、Worker 删除、Redis 清空、AutomationRevision 固定、ResultUnknown 不重放、模型额度耗尽、Sandbox 生命周期与配额、real Playwright，以及成功/失败无条件清理。2026-08-17 的成功运行号为 `20260817144832-31660`，脱敏诊断位于 `artifacts/m4-e2e/20260817144832-31660`，Namespace/PVC/Lease 零残留。
 
 仍未完成且不能由部署基座替代：
 
-- Agent/通用 Action/Approval/Execution、Card 服务端治理、Remote Access、Collector、OTLP 摄入和查询业务实现。
-- OpenSandbox 平台治理 API；部署仍由 Helm 管理，该 API 在 M4 Agent/Sandbox 接入前补齐。
+- Card 服务端治理、Remote Access、Collector、OTLP 摄入和查询业务实现。
 - SBOM、镜像签名、漏洞门禁、备份恢复和独立 Upgrade 工作流。
 - Production PostgreSQL HA、外部 KMS/HSM、Connector CA 根轮换演练、固定出口生产验证、OpenSandbox 强化 Runtime ADR和平台超级管理员 MFA/恢复/Step-up；这些未完成前 Production 安装保持硬阻断。
 
@@ -333,17 +335,17 @@ argus-e2e-<run-id>-observability
 
 里程碑唯一口径为[端到端实现计划](./15-end-to-end-implementation-plan.md)和[分阶段任务文件](./plans/README.md)，不在本盘点文档维护另一套编号。
 
-- M0 契约与文档、M1 前端/API 基座、M2 身份授权闭环和 M3 资源/Connector 闭环均已完成。
-- 下一步执行 M4，在 M3 PendingAction、ConnectorCommand、Credential Lease 和 PostgreSQL 权威队列上增加 Agent、Tool、Approval 与通用 Execution，不重建资源基座。
+- M0 契约与文档、M1 前端/API 基座、M2 身份授权闭环、M3 资源/Connector 闭环和 M4 Agent/确定性执行闭环均已完成。
+- 当前执行 M5，在既有 ActionBinding/Execution 和 M1 Card Runtime 上补 CardVersion、RenderPlan 与服务端治理。
 - 后续按 M5-M8 依次推进 Card 服务端治理、Remote Access、Telemetry 和 Production 门禁。
 
 ## 12. 当前优先级结论
 
-M0-M3 已完成。当前最合理的下一交付目标是 M4 的 Agent/Action 闭环：
+M0-M4 已完成，当前优先级为 M5 Card 服务端治理闭环：
 
-1. 复用 M3 的 PendingAction/Plan/Token、ConnectorCommand、Credential Lease、AuthorizationVersion 和 PostgreSQL 队列事实。
-2. 实现单 Agent Loop、ContextAssembler/Compactor、Tool Preview/Commit、Approval 与通用 Execution。
-3. 用真实 HTTP/SSE、Worker 和临时 Namespace E2E 验证事件顺序、断线恢复、撤权、未知结果对账和敏感字段投影。
-4. 保持 Card、Remote Access 和 Telemetry 在 M5-M7 的既定边界内逐阶段接入。
+1. 在独立 Card Runtime 和既有 ActionBinding/Execution 基础上实现 CardVersion、发布、RenderPlan 与 Binding 服务端校验。
+2. 保持模型、浏览器与 Card 只能提交公开 Binding ID，不暴露业务参数、Commit Token 或私有计划。
+3. 继续通过契约、浏览器安全测试和临时 Namespace E2E 验证 Card 发布与执行闭环。
+4. 保持 Remote Access、Telemetry 和 Production 门禁在 M6-M8 的既定边界内逐阶段接入。
 
 详细顺序、任务拆分和阶段退出标准见[端到端实现计划](./15-end-to-end-implementation-plan.md)与[分阶段任务文件](./plans/README.md)。

@@ -1,0 +1,426 @@
+conversation_collection:
+  get:
+    operationId: listConversations
+    summary: listConversations.
+    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+    responses:
+      '200': {description: Conversation page., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ConversationPage'}}}}
+      default: {$ref: '#/components/responses/Error'}
+  post:
+    operationId: createConversation
+    summary: createConversation.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ConversationCreate'}}}}
+    responses:
+      '201': {description: Conversation., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/Conversation'}}}}
+      default: {$ref: '#/components/responses/Error'}
+conversation_item:
+  parameters: [{name: conversation_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getConversation
+    summary: getConversation.
+    responses:
+      '200': {description: Conversation., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/Conversation'}}}}
+      default: {$ref: '#/components/responses/Error'}
+  put:
+    operationId: updateConversation
+    summary: updateConversation.
+    parameters: [{$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ConversationUpdate'}}}}
+    responses:
+      '200': {description: Conversation., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/Conversation'}}}}
+      default: {$ref: '#/components/responses/Error'}
+conversation_messages:
+  parameters: [{name: conversation_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: createConversationMessage
+    summary: createConversationMessage.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/MessageCreate'}}}}
+    responses:
+      '202': {description: Message and Run accepted., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/MessageAccepted'}}}}
+      default: {$ref: '#/components/responses/Error'}
+conversation_events:
+  parameters: [{name: conversation_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: listConversationEvents
+    summary: listConversationEvents.
+    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+    responses:
+      '200': {description: Immutable event page., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ConversationEventPage'}}}}
+      default: {$ref: '#/components/responses/Error'}
+run_item:
+  parameters: [{name: run_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getRun
+    summary: getRun.
+    responses:
+      '200': {description: Run., content: {application/json: {schema: {$ref: '../../schemas/agent/agent.schema.json#/$defs/Run'}}}}
+      default: {$ref: '#/components/responses/Error'}
+run_cancel:
+  parameters: [{name: run_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: cancelRun
+    summary: cancelRun.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    responses:
+      '200': {description: Cancelled Run., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/RunCommandResult'}}}}
+      default: {$ref: '#/components/responses/Error'}
+run_compact:
+  parameters: [{name: run_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: compactRun
+    summary: compactRun.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    responses:
+      '202': {description: Compaction scheduled., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/RunCommandResult'}}}}
+      default: {$ref: '#/components/responses/Error'}
+tool_result_item:
+  parameters: [{name: result_ref, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}]
+  get:
+    operationId: getToolResult
+    summary: getToolResult.
+    responses:
+      '200': {description: Authorized Tool result., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ToolResult'}}}}
+      default: {$ref: '#/components/responses/Error'}
+model_collection:
+  get:
+    operationId: listAIModels
+    summary: listAIModels.
+    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+    responses:
+      '200': {description: AI Model page., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/AIModelPage'}}}}
+      default: {$ref: '#/components/responses/Error'}
+model_test_create:
+  post:
+    operationId: testAndCreateAIModel
+    summary: testAndCreateAIModel.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/AIModelTestCreate'}}}}
+    responses:
+      '201': {description: Compatibility result and model., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/AIModelTestResult'}}}}
+      default: {$ref: '#/components/responses/Error'}
+model_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getAIModel
+    summary: getAIModel.
+    responses:
+      '200': {description: AI Model., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/AIModel'}}}}
+      default: {$ref: '#/components/responses/Error'}
+  put:
+    operationId: updateAIModel
+    summary: updateAIModel.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/AIModelUpdate'}}}}
+    responses:
+      '200': {description: Updated AI Model., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/AIModel'}}}}
+      default: {$ref: '#/components/responses/Error'}
+model_test:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: testAIModel
+    summary: testAIModel.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    responses:
+      '200': {description: Compatibility result., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/AIModelTestResult'}}}}
+      default: {$ref: '#/components/responses/Error'}
+model_quota_collection:
+  get:
+    operationId: listModelQuotas
+    summary: listModelQuotas.
+    responses:
+      '200': {description: Model quotas., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/ModelQuota'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+  post:
+    operationId: upsertModelQuota
+    summary: upsertModelQuota.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ModelQuotaUpsert'}}}}
+    responses:
+      '200': {description: Model quota., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ModelQuota'}}}}
+      default: {$ref: '#/components/responses/Error'}
+model_usage_collection:
+  get:
+    operationId: listModelUsage
+    summary: listModelUsage.
+    parameters: [{name: month, in: query, required: false, schema: {type: string, minLength: 7, maxLength: 7}}, {name: model_id, in: query, required: false, schema: {type: string, format: uuid}}]
+    responses:
+      '200': {description: Model usage., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/ModelUsage'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+approval_policy_collection:
+  get:
+    operationId: listApprovalPolicies
+    summary: listApprovalPolicies.
+    responses:
+      '200': {description: Approval policies., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/ApprovalPolicy'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+  post:
+    operationId: createApprovalPolicy
+    summary: createApprovalPolicy.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ApprovalPolicyWrite'}}}}
+    responses:
+      '201': {description: Approval policy., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ApprovalPolicy'}}}}
+      default: {$ref: '#/components/responses/Error'}
+approval_policy_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  put:
+    operationId: updateApprovalPolicy
+    summary: updateApprovalPolicy.
+    parameters: [{$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ApprovalPolicyWrite'}}}}
+    responses:
+      '200': {description: Approval policy., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ApprovalPolicy'}}}}
+      default: {$ref: '#/components/responses/Error'}
+approval_request_collection:
+  get:
+    operationId: listApprovalRequests
+    summary: listApprovalRequests.
+    responses:
+      '200': {description: Approval requests., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/ApprovalRequestView'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+approval_request_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getApprovalRequest
+    summary: getApprovalRequest.
+    responses:
+      '200': {description: Approval request., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ApprovalRequestView'}}}}
+      default: {$ref: '#/components/responses/Error'}
+approval_decision:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: decideApprovalRequest
+    summary: decideApprovalRequest.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ApprovalDecisionCreate'}}}}
+    responses:
+      '200': {description: Updated approval request., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ApprovalRequestView'}}}}
+      default: {$ref: '#/components/responses/Error'}
+execution_collection:
+  get:
+    operationId: listExecutions
+    summary: listExecutions.
+    responses:
+      '200': {description: Execution page., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ExecutionPage'}}}}
+      default: {$ref: '#/components/responses/Error'}
+execution_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getExecution
+    summary: getExecution.
+    responses:
+      '200': {description: Execution., content: {application/json: {schema: {$ref: '../../schemas/action/workflow.schema.json#/$defs/Execution'}}}}
+      default: {$ref: '#/components/responses/Error'}
+execution_one_time_result:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: claimExecutionOneTimeResult
+    summary: Claim an encrypted short-lived action result exactly once.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    responses:
+      '200': {description: One-time action result., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/ActionOneTimeResult'}}}}
+      default: {$ref: '#/components/responses/Error'}
+automation_collection:
+  get:
+    operationId: listAutomations
+    summary: listAutomations.
+    responses:
+      '200': {description: Automations., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/Automation'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+  post:
+    operationId: createAutomation
+    summary: createAutomation.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/AutomationWrite'}}}}
+    responses:
+      '201': {description: Automation., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/Automation'}}}}
+      default: {$ref: '#/components/responses/Error'}
+automation_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getAutomation
+    summary: getAutomation.
+    responses:
+      '200': {description: Automation., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/Automation'}}}}
+      default: {$ref: '#/components/responses/Error'}
+  put:
+    operationId: updateAutomation
+    summary: updateAutomation.
+    parameters: [{$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/AutomationWrite'}}}}
+    responses:
+      '200': {description: Automation., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/Automation'}}}}
+      default: {$ref: '#/components/responses/Error'}
+automation_state:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}, {name: state_action, in: path, required: true, schema: {type: string, enum: [enable, disable]}}]
+  post:
+    operationId: changeAutomationState
+    summary: changeAutomationState.
+    parameters: [{$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses:
+      '200': {description: Automation., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/Automation'}}}}
+      default: {$ref: '#/components/responses/Error'}
+automation_runs:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: listAutomationRuns
+    summary: listAutomationRuns.
+    responses:
+      '200': {description: Automation runs., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/AutomationRun'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_backend_collection:
+  get:
+    operationId: listSandboxBackends
+    summary: listSandboxBackends.
+    responses:
+      '200': {description: Sandbox backends., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/SandboxBackend'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+  post:
+    operationId: createSandboxBackend
+    summary: createSandboxBackend.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxBackendWrite'}}}}
+    responses:
+      '201': {description: Sandbox backend., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxBackend'}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_backend_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  put:
+    operationId: updateSandboxBackend
+    summary: updateSandboxBackend.
+    parameters: [{$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxBackendWrite'}}}}
+    responses:
+      '200': {description: Sandbox backend., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxBackend'}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_backend_test:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: testSandboxBackend
+    summary: testSandboxBackend.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    responses:
+      '200': {description: Tested Sandbox backend., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxBackend'}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_image_collection:
+  get:
+    operationId: listSandboxImages
+    summary: listSandboxImages.
+    responses:
+      '200': {description: Sandbox images., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/SandboxImage'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+  post:
+    operationId: createSandboxImage
+    summary: createSandboxImage.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxImageWrite'}}}}
+    responses:
+      '201': {description: Sandbox image., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxImage'}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_image_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  put:
+    operationId: updateSandboxImage
+    summary: updateSandboxImage.
+    parameters: [{$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxImageWrite'}}}}
+    responses:
+      '200': {description: Sandbox image., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxImage'}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_profile_collection:
+  get:
+    operationId: listSandboxProfiles
+    summary: listSandboxProfiles.
+    responses:
+      '200': {description: Sandbox profiles., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/SandboxProfile'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+  post:
+    operationId: createSandboxProfile
+    summary: createSandboxProfile.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxProfileWrite'}}}}
+    responses:
+      '201': {description: Sandbox profile., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxProfile'}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_profile_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  put:
+    operationId: updateSandboxProfile
+    summary: updateSandboxProfile.
+    parameters: [{$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxProfileWrite'}}}}
+    responses:
+      '200': {description: Sandbox profile., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxProfile'}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_quota_item:
+  parameters: [{name: enterprise_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getSandboxQuota
+    summary: getSandboxQuota.
+    responses:
+      '200': {description: Sandbox quota., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxQuota'}}}}
+      default: {$ref: '#/components/responses/Error'}
+  put:
+    operationId: updateSandboxQuota
+    summary: updateSandboxQuota.
+    parameters: [{$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxQuotaWrite'}}}}
+    responses:
+      '200': {description: Sandbox quota., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxQuota'}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_session_collection:
+  get:
+    operationId: listSandboxSessions
+    summary: listSandboxSessions.
+    responses:
+      '200': {description: Sandbox sessions., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/SandboxSession'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_usage_collection:
+  get:
+    operationId: listSandboxUsage
+    summary: listSandboxUsage.
+    responses:
+      '200': {description: Sandbox usage., content: {application/json: {schema: {type: array, items: {$ref: '../components/m4.yaml#/components/schemas/SandboxUsage'}}}}}
+      default: {$ref: '#/components/responses/Error'}
+sandbox_terminate:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: terminateSandboxSession
+    summary: terminateSandboxSession.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    responses:
+      '200': {description: Sandbox Session., content: {application/json: {schema: {$ref: '../components/m4.yaml#/components/schemas/SandboxSession'}}}}
+      default: {$ref: '#/components/responses/Error'}
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: '../components/common.yaml#/components/schemas/IdempotencyKey'}
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: {type: string, minLength: 32, maxLength: 256}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema: {type: integer, format: int64, minimum: 1}
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content: {application/json: {schema: {$ref: '../components/common.yaml#/components/schemas/ApiError'}}}

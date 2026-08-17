@@ -26,12 +26,308 @@ describe("configured adapter", () => {
       mode: "real",
       base_url: "https://api.example.test",
     });
-    await expect(client.conversations.list()).rejects.toBeInstanceOf(
+    await expect(client.interactiveCards.list()).rejects.toBeInstanceOf(
       ClientOperationUnavailableError,
     );
-    await expect(client.conversations.list()).rejects.toMatchObject({
+    await expect(client.interactiveCards.list()).rejects.toMatchObject({
       code: "CLIENT_OPERATION_UNAVAILABLE",
     });
+  });
+
+  it("submits a conversation message before resuming its SSE stream", async () => {
+    const encoder = new TextEncoder();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            event: { sequence: 7 },
+            run: { run_id: "run-1" },
+          }),
+          { status: 202, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    schema_version: "argus.stream_event/v1",
+                    event_id: "event-8",
+                    sequence: 8,
+                    event_type: "stream_closing",
+                    occurred_at: "2026-08-17T08:00:00Z",
+                    terminal: true,
+                    close_reason: "normal",
+                    data: {},
+                  })}\n\n`,
+                ),
+              );
+              controller.close();
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    const client = await createConfiguredApiClient({
+      portal: "enterprise",
+      mode: "real",
+      base_url: "https://api.example.test",
+      csrf_token: () => "csrf",
+      fetch,
+    });
+
+    const events = [];
+    for await (const event of client.conversations.sendMessage("conversation-1", {
+      content: "status",
+    })) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.event_id)).toEqual(["event-8"]);
+    const streamHeaders = fetch.mock.calls[1]?.[1]?.headers as Headers;
+    expect(streamHeaders.get("last-event-id")).toBe("7");
+  });
+
+  it.each(["chat_completions", "responses"] as const)(
+    "sends the explicitly selected %s model protocol",
+    async (apiProtocol) => {
+      const fetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            compatible: false,
+            checks: [
+              { name: "basic", status: "failed", error_code: "MODEL_TEST" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+      const client = await createConfiguredApiClient({
+        portal: "enterprise",
+        mode: "real",
+        base_url: "https://api.example.test",
+        csrf_token: () => "csrf",
+        fetch,
+      });
+
+      await client.models.testAndCreate({
+        name: "primary",
+        baseUrl: "https://models.example.test/v1",
+        apiKey: "model-secret",
+        modelId: "model-1",
+        apiProtocol,
+        contextWindowTokens: 128_000,
+        maxOutputTokens: 8192,
+        inputPricePerMillionTokens: 1,
+        outputPricePerMillionTokens: 2,
+      });
+
+      const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
+      expect(body.api_protocol).toBe(apiProtocol);
+      expect(body.context_window_tokens).toBe(128_000);
+      expect(body.max_output_tokens).toBe(8192);
+    },
+  );
+
+  it("sends approval decisions without action parameters", async () => {
+    const json = (value: unknown) =>
+      new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json([
+          {
+            approval_request_id: "approval-1",
+            action_ref: "action-1",
+            requirements: [],
+            decisions: [],
+            status: "pending",
+            expires_at: "2026-08-18T00:00:00Z",
+            created_at: "2026-08-17T00:00:00Z",
+            updated_at: "2026-08-17T00:00:00Z",
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(json({ status: "approved" }))
+      .mockResolvedValueOnce(json({ action_ref: "action-1", status: "ready" }));
+    const client = await createConfiguredApiClient({
+      portal: "enterprise",
+      mode: "real",
+      base_url: "https://api.example.test",
+      csrf_token: () => "csrf",
+      fetch,
+    });
+
+    await client.approvals.approve("action-1", "reviewed");
+
+    const body = JSON.parse(String(fetch.mock.calls[1]?.[1]?.body));
+    expect(body).toEqual({ decision: "approved", reason: "reviewed" });
+    expect(JSON.stringify(body)).not.toMatch(/params|token|plan/i);
+  });
+
+  it("uses explicit Run, ApprovalRequest, and Execution endpoints", async () => {
+    const json = (value: unknown) =>
+      new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    const run = {
+      schema_version: "argus.run/v1",
+      run_id: "run-1",
+      conversation_id: "conversation-1",
+      status: "running",
+      stop_reason: "none",
+      created_at: "2026-08-17T00:00:00Z",
+      updated_at: "2026-08-17T00:00:00Z",
+    };
+    const approval = {
+      approval_request_id: "approval-1",
+      action_ref: "action-1",
+      requirements: [],
+      decisions: [],
+      status: "pending",
+      expires_at: "2026-08-18T00:00:00Z",
+      created_at: "2026-08-17T00:00:00Z",
+      updated_at: "2026-08-17T00:00:00Z",
+    };
+    const execution = {
+      execution_id: "execution-1",
+      action_ref: "action-1",
+      status: "result_unknown",
+      created_at: "2026-08-17T00:00:00Z",
+      updated_at: "2026-08-17T00:00:00Z",
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(json(run))
+      .mockResolvedValueOnce(json({ run }))
+      .mockResolvedValueOnce(json({ run }))
+      .mockResolvedValueOnce(json([approval]))
+      .mockResolvedValueOnce(json(approval))
+      .mockResolvedValueOnce(json({ ...approval, status: "approved" }))
+      .mockResolvedValueOnce(
+        json({
+          items: [execution],
+          page: {
+            next_cursor: null,
+            has_more: false,
+            partial: { partial: false, reasons: [] },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(json(execution))
+      .mockResolvedValueOnce(
+        json({
+          schema_version: "argus.action_one_time_result/v1",
+          execution_id: "execution-1",
+          result_kind: "connector_enrollment",
+          enrollment: {
+            enrollment_id: "00000000-0000-0000-0000-000000000001",
+            install_command: "install --token redacted-in-test",
+            expires_at: "2026-08-17T00:05:00Z",
+          },
+          expires_at: "2026-08-17T00:05:00Z",
+        }),
+      );
+    const client = await createConfiguredApiClient({
+      portal: "enterprise",
+      mode: "real",
+      base_url: "https://api.example.test",
+      csrf_token: () => "csrf",
+      fetch,
+    });
+
+    await client.runs.get("run-1");
+    await client.runs.cancel("run-1");
+    await client.runs.compact("run-1");
+    await client.approvalRequests.list();
+    await client.approvalRequests.get("approval-1");
+    await client.approvalRequests.decide("approval-1", {
+      decision: "approved",
+      reason: "reviewed",
+    });
+    await client.executions.list();
+    await client.executions.get("execution-1");
+    await client.executions.claimOneTimeResult("execution-1");
+
+    expect(fetch.mock.calls.map((call) => String(call[0]))).toEqual([
+      "https://api.example.test/api/v1/runs/run-1",
+      "https://api.example.test/api/v1/runs/run-1/cancel",
+      "https://api.example.test/api/v1/runs/run-1/compact",
+      "https://api.example.test/api/v1/enterprise/approval-requests",
+      "https://api.example.test/api/v1/enterprise/approval-requests/approval-1",
+      "https://api.example.test/api/v1/enterprise/approval-requests/approval-1/decisions",
+      "https://api.example.test/api/v1/enterprise/executions",
+      "https://api.example.test/api/v1/enterprise/executions/execution-1",
+      "https://api.example.test/api/v1/enterprise/executions/execution-1/one-time-result",
+    ]);
+    expect(JSON.parse(String(fetch.mock.calls[5]?.[1]?.body))).toEqual({
+      decision: "approved",
+      reason: "reviewed",
+    });
+    expect(fetch.mock.calls[8]?.[1]?.method).toBe("POST");
+    expect(fetch.mock.calls[8]?.[1]?.body).toBeUndefined();
+  });
+
+  it("uses real automation paths and keeps sandbox credentials write-only", async () => {
+    const json = (value: unknown) =>
+      new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: "automation-1" }))
+      .mockResolvedValueOnce(
+        json({
+          id: "backend-1",
+          name: "sandbox",
+          endpoint: "https://sandbox.example.test",
+          status: "enabled",
+          health_status: "healthy",
+          version: 1,
+          created_at: "2026-08-17T00:00:00Z",
+          updated_at: "2026-08-17T00:00:00Z",
+        }),
+      );
+    const client = await createConfiguredApiClient({
+      portal: "platform",
+      mode: "real",
+      base_url: "https://api.example.test",
+      csrf_token: () => "csrf",
+      fetch,
+    });
+
+    await client.automations.create({
+      name: "inventory",
+      service_account_id: "service-1",
+      tool_id: "host.list",
+      tool_input: {},
+      cron: "0 * * * *",
+      timezone: "Asia/Shanghai",
+    });
+    const backend = await client.platform.sandboxBackends.create({
+      name: "sandbox",
+      endpoint: "https://sandbox.example.test",
+      credentialRef: "sandbox-secret",
+      tlsVerify: true,
+      defaultStorage: "",
+    });
+
+    expect(String(fetch.mock.calls[0]?.[0])).toContain(
+      "/api/v1/enterprise/automations",
+    );
+    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body)).api_key).toBe(
+      "sandbox-secret",
+    );
+    expect(backend.credentialRef).toBe("write-only");
+    expect(JSON.stringify(backend)).not.toContain("sandbox-secret");
   });
 
   it("keeps mock and real domain method shapes aligned", async () => {

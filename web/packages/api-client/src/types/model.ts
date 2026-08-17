@@ -15,6 +15,9 @@ export interface AIModel {
   name: string;
   baseUrl: string;
   modelId: string;
+  apiProtocol: "chat_completions" | "responses";
+  contextWindowTokens: number;
+  maxOutputTokens: number;
   credentialRef: string;
   inputPricePerMillionTokens: number;
   outputPricePerMillionTokens: number;
@@ -31,6 +34,9 @@ export interface TestAndCreateAIModelInput {
   baseUrl: string;
   apiKey: string;
   modelId: string;
+  apiProtocol: "chat_completions" | "responses";
+  contextWindowTokens: number;
+  maxOutputTokens: number;
   inputPricePerMillionTokens: number;
   outputPricePerMillionTokens: number;
 }
@@ -46,6 +52,9 @@ export interface UpdateAIModelInput {
   baseUrl?: string;
   apiKey?: string;
   modelId?: string;
+  apiProtocol?: "chat_completions" | "responses";
+  contextWindowTokens?: number;
+  maxOutputTokens?: number;
   inputPricePerMillionTokens?: number;
   outputPricePerMillionTokens?: number;
   enabled?: boolean;

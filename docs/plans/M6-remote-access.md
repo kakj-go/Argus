@@ -12,6 +12,8 @@
 
 M3 ConnectorCommand 未包含 Remote Access Frame，M3 Direct Executor 也只执行连接探测和 Kubernetes 读取；本里程碑才增加人工会话 Listener、Ticket、PTY/Runspace 和录像链路。
 
+M4 Automation、Model Agent、Sandbox 和 Action Executor 均未获得 RemoteAccessTicket 能力；M6 必须继续使用独立票据、Listener、队列和审计，不能复用 M4 的一次性 Enrollment Result 或 Commit Token。
+
 ## 任务
 
 - [ ] `M6-GRANT-01` 实现 RemoteAccessGrant 的显式 Host ID/标签选择器、ManagedAccount、协议、动作和有效期。

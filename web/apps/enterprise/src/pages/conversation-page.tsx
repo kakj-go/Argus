@@ -2,9 +2,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Check, PanelRight, Pencil, X } from "lucide-react";
+import { Archive, Check, Minimize2, PanelRight, Pencil, X } from "lucide-react";
 import type { AIModel, ModelAvailability } from "@argus/api-client";
-import type { InteractiveCardCreateCommand } from "@argus/api-client/provisional";
 import { useApi } from "@argus/api-client";
 import { Button, Input, Select } from "@argus/ui";
 import { ChatComposer } from "../components/chat/composer";
@@ -205,8 +204,10 @@ export function ConversationPage() {
     error,
     stopReason,
     compaction,
+    activeRunId,
     send,
     stop,
+    compact,
   } = useChatStream();
 
   const { data: conversation } = useQuery({
@@ -237,7 +238,7 @@ export function ConversationPage() {
       availability.find((entry) => entry.modelId === model.id)?.available,
   );
   const preferredModelId =
-    conversation?.selectedModelId ??
+    conversation?.selected_model_id ??
     window.localStorage.getItem("argus.lastModelId") ??
     availableModels[0]?.id;
 
@@ -251,20 +252,20 @@ export function ConversationPage() {
     });
   }, [api, conversationId, queryClient]);
 
-  const handleSend = (text: string, command?: InteractiveCardCreateCommand) => {
+  const handleSend = (text: string, mockIntent?: "interactive_card.create") => {
     void (async () => {
       let id = conversationId;
       if (!id) {
         // 欢迎空态下直接发送：先建会话（首条消息截断为标题）再跳转。
         const created = await api.conversations.create({
           title: text.length > 30 ? `${text.slice(0, 30)}…` : text,
-          selectedModelId: preferredModelId,
+          selected_model_id: preferredModelId ?? "",
         });
         await queryClient.invalidateQueries({ queryKey: ["conversations"] });
         void navigate({ to: "/", search: { c: created.id } });
         id = created.id;
       }
-      await send(id, text, command);
+      await send(id, text, mockIntent);
     })();
   };
 
@@ -292,7 +293,7 @@ export function ConversationPage() {
             models={models}
             onModelChange={(modelId) => void changeModel(modelId)}
             selectedModelId={
-              conversation?.selectedModelId ?? preferredModelId ?? ""
+              conversation?.selected_model_id ?? preferredModelId ?? ""
             }
             title={title}
           />
@@ -326,6 +327,14 @@ export function ConversationPage() {
               before: compaction.tokens_before ?? 0,
               after: compaction.tokens_after ?? 0,
             })}
+          </div>
+        )}
+        {sending && activeRunId && (
+          <div className="argus-chat-composer__note" role="status">
+            <Button onClick={compact} size="sm" variant="ghost">
+              <Minimize2 size={14} />
+              {t("chat.compaction.request")}
+            </Button>
           </div>
         )}
         <ChatComposer

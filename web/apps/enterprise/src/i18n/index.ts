@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import { aiSettingsEn, aiSettingsZh } from "./ai-settings";
+import { automationsEn, automationsZh } from "./automations";
 import { chatEn, chatZh } from "./chat";
 import { commonEn, commonZh } from "./common";
 import { hostsEn, hostsZh } from "./hosts";
@@ -24,6 +25,7 @@ const modulesZh = [
   hostsZh,
   kubernetesZh,
   aiSettingsZh,
+  automationsZh,
 ];
 const modulesEn = [
   commonEn,
@@ -33,6 +35,7 @@ const modulesEn = [
   hostsEn,
   kubernetesEn,
   aiSettingsEn,
+  automationsEn,
 ];
 
 const storedLocale = window.localStorage.getItem("argus.locale");

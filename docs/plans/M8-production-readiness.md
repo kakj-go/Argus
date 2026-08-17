@@ -9,6 +9,8 @@
 - M2 至 M7 的发布范围全部达到各自退出标准。
 - PostgreSQL HA/备份和 Sandbox Runtime ADR 已决策。
 
+M4 只达到 Evaluation：Replay Provider 仅用于带 build tag 的 E2E，模型公网出口在应用层拒绝私网但尚未形成目标生产网络证明；平台 MFA、Step-up、Break Glass、外部 KMS/HSM、CA 根轮换和灾备仍是本里程碑硬阻断项。
+
 ## 任务
 
 - [ ] `M8-ADR-01` 完成 PostgreSQL Operator/HA/PITR、Sandbox Runtime、Card Origin、Remote Access 录像格式 ADR。

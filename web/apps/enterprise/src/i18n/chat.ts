@@ -113,6 +113,7 @@ export const chatZh = {
       failed: "生成未完成，请重试。",
     },
     compaction: {
+      request: "压缩上下文",
       running: "正在压缩上下文（压缩前 {{before}} Token）…",
       completed: "上下文压缩完成：{{before}} → {{after}} Token。",
       failed: "上下文压缩失败，已保留原始会话事件。",
@@ -233,6 +234,7 @@ export const chatEn = {
       failed: "Generation did not complete. Please retry.",
     },
     compaction: {
+      request: "Compact context",
       running: "Compacting context ({{before}} tokens before compaction)…",
       completed: "Context compaction completed: {{before}} → {{after}} tokens.",
       failed: "Context compaction failed; original conversation events were preserved.",

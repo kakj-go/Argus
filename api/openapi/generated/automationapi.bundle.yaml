@@ -1,0 +1,380 @@
+openapi: 3.1.0
+info:
+  title: Argus Automation API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/automations:
+    get:
+      operationId: listAutomations
+      summary: listAutomations.
+      responses:
+        '200':
+          description: Automations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Automation'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createAutomation
+      summary: createAutomation.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationWrite'
+      responses:
+        '201':
+          description: Automation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Automation'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/automations/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getAutomation
+      summary: getAutomation.
+      responses:
+        '200':
+          description: Automation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Automation'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      operationId: updateAutomation
+      summary: updateAutomation.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationWrite'
+      responses:
+        '200':
+          description: Automation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Automation'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/automations/{id}/{state_action}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: state_action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - enable
+            - disable
+    post:
+      operationId: changeAutomationState
+      summary: changeAutomationState.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Automation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Automation'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/automations/{id}/runs:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listAutomationRuns
+      summary: listAutomationRuns.
+      responses:
+        '200':
+          description: Automation runs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AutomationRun'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    Automation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - service_account_id
+        - tool_id
+        - tool_input
+        - cron
+        - timezone
+        - status
+        - next_run_at
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        service_account_id:
+          type: string
+          format: uuid
+        tool_id:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]*$
+        tool_input:
+          $ref: '#/components/schemas/PublicJsonObject'
+        cron:
+          type: string
+          minLength: 9
+          maxLength: 128
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 128
+        status:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        next_run_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AutomationWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - service_account_id
+        - tool_id
+        - tool_input
+        - cron
+        - timezone
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        service_account_id:
+          type: string
+          format: uuid
+        tool_id:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]*$
+        tool_input:
+          $ref: '#/components/schemas/PublicJsonObject'
+        cron:
+          type: string
+          minLength: 9
+          maxLength: 128
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 128
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    AutomationRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - automation_id
+        - automation_revision
+        - scheduled_for
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        automation_id:
+          type: string
+          format: uuid
+        automation_revision:
+          type: integer
+          minimum: 1
+        scheduled_for:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - waiting_approval
+            - succeeded
+            - failed
+            - skipped
+            - cancelled
+        pending_action_ref:
+          type: string
+        result_ref:
+          type: string
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1

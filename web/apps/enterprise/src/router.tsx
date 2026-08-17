@@ -42,6 +42,10 @@ const ApprovalsPage = lazyRouteComponent(
   () => import("./pages/approvals-page"),
   "ApprovalsPage",
 );
+const AutomationsPage = lazyRouteComponent(
+  () => import("./pages/automations-page"),
+  "AutomationsPage",
+);
 const SettingsOrgPage = lazyRouteComponent(
   () => import("./pages/settings-org-page"),
   "SettingsOrgPage",
@@ -148,6 +152,11 @@ const approvalsRoute = createRoute({
   path: "/approvals",
   component: ApprovalsPage,
 });
+const automationsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "/automations",
+  component: AutomationsPage,
+});
 const settingsOrgRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "/settings/org",
@@ -194,6 +203,7 @@ const routeTree = rootRoute.addChildren([
       kubernetesClusterRoute,
       tasksRoute,
       approvalsRoute,
+      automationsRoute,
       settingsOrgRoute,
       settingsAiRoute,
       settingsInteractiveCardsRoute,

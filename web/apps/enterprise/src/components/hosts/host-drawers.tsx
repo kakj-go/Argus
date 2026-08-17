@@ -105,7 +105,7 @@ export function AddBastionDrawer({
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
   const [enrollment, setEnrollment] =
-    useState<ConfirmActionResult["enrollment"]>();
+    useState<ConfirmActionResult["one_time_result"]>();
 
   const close = (next: boolean) => {
     if (!next) {
@@ -147,10 +147,11 @@ export function AddBastionDrawer({
       {pendingAction ? (
         <PendingActionConfirm
           action={pendingAction}
+          claimOneTimeResult
           onCancel={() => setPendingAction(null)}
           onDone={(result) => {
             setPendingAction(null);
-            setEnrollment(result.enrollment);
+            setEnrollment(result.one_time_result);
             onCreated();
           }}
         />
@@ -161,7 +162,10 @@ export function AddBastionDrawer({
             title={t("hosts.bastionForm.commandWarningTitle")}
             tone="warning"
           />
-          <CodeBlock code={enrollment.install_command} language="bash" />
+          <CodeBlock
+            code={enrollment.enrollment.install_command ?? ""}
+            language="bash"
+          />
           <span>{formatDateTime(enrollment.expires_at)}</span>
         </div>
       ) : (
@@ -270,12 +274,15 @@ export function EditBastionDrawer({
       {pendingAction ? (
         <PendingActionConfirm
           action={pendingAction}
+          claimOneTimeResult
           onCancel={() => setPendingAction(null)}
           onDone={(result) => {
             setPendingAction(null);
             onSaved();
-            if (result.enrollment) {
-              setInstallCommand(result.enrollment.install_command);
+            if (result.one_time_result?.enrollment.install_command) {
+              setInstallCommand(
+                result.one_time_result.enrollment.install_command,
+              );
             } else {
               onOpenChange(false);
             }

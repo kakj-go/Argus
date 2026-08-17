@@ -65,7 +65,7 @@ export function ClusterFormDrawer({
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
   const [enrollment, setEnrollment] =
-    useState<ConfirmActionResult["enrollment"]>();
+    useState<ConfirmActionResult["one_time_result"]>();
 
   const scopesQuery = useQuery({
     queryKey: ["connectors", "bastionScopes"],
@@ -215,7 +215,10 @@ export function ClusterFormDrawer({
             title={t("kubernetes.form.enrollmentTitle")}
             tone="warning"
           />
-          <CodeBlock code={enrollment.install_command} language="bash" />
+          <CodeBlock
+            code={enrollment.enrollment.install_command ?? ""}
+            language="bash"
+          />
           <p className="argus-muted">
             {t("kubernetes.form.enrollmentExpires", {
               time: new Date(enrollment.expires_at).toLocaleString(),
@@ -230,11 +233,12 @@ export function ClusterFormDrawer({
       ) : pendingAction ? (
         <PendingActionCard
           action={pendingAction}
+          claimOneTimeResult={connectionMode === "in_cluster" && !editing}
           onSettled={(confirmed, result) => {
             void invalidateClusters();
-            if (confirmed && result?.enrollment) {
+            if (confirmed && result?.one_time_result) {
               setPendingAction(null);
-              setEnrollment(result.enrollment);
+              setEnrollment(result.one_time_result);
               return;
             }
             resetAndClose();

@@ -30,6 +30,53 @@ func repoRoot(t *testing.T) string {
 	return root
 }
 
+func TestM4AutomationRunsBindImmutableRevisions(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	migration, err := os.ReadFile(filepath.Join(root, "migrations/postgresql/00003_m4_action_agent.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(migration)
+	for _, required := range []string{
+		"CREATE TABLE automation_revisions",
+		"automation_revision integer NOT NULL",
+		"REFERENCES automation_revisions(automation_id, enterprise_id, revision)",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("M4 migration lacks immutable Automation revision guard %q", required)
+		}
+	}
+}
+
+func TestM4AgentActionsRetainTrustedRunBinding(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	resources, err := os.ReadFile(filepath.Join(root, "internal/storage/postgres/queries/resources.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow, err := os.ReadFile(filepath.Join(root, "internal/action/service.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(resources), "expires_at, run_id)") {
+		t.Fatal("PendingAction creation does not persist the trusted Agent Run binding")
+	}
+	if !strings.Contains(string(workflow), "RunID: action.RunID") {
+		t.Fatal("Execution contract no longer carries the PendingAction Run binding")
+	}
+	automation, err := os.ReadFile(filepath.Join(root, "internal/storage/postgres/queries/automation.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"MarkAutomationRunExecuting", "FinishAutomationRunByPendingAction"} {
+		if !strings.Contains(string(automation), required) {
+			t.Fatalf("AutomationRun terminal propagation lacks %s", required)
+		}
+	}
+}
+
 func TestSchemas(t *testing.T) {
 	root := repoRoot(t)
 	cases := []struct {
@@ -1105,6 +1152,7 @@ func schemaString(node map[string]any, mode fixtureMode) string {
 		{"^[a-z0-9]", "production"},
 		{"^\\$", "$.items"},
 		{"^[A-Za-z0-9", "request_00000001"},
+		{"^sha256:[a-f0-9]{64}$", "sha256:" + strings.Repeat("a", 64)},
 		{"^[a-f0-9]{64}$", strings.Repeat("a", 64)},
 		{"^argus_ak_", "argus_ak_ABC123.secret_abcdefghijklmnopqrstuvwxyz012345"},
 		{"^[a-z][a-z0-9-]{1,62}$", "example"},

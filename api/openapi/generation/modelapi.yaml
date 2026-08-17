@@ -1,0 +1,23 @@
+openapi: 3.1.0
+info: {title: Argus Model API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/ai-models: {$ref: ../argus.yaml#/paths/~1enterprise~1ai-models}
+  /enterprise/ai-models/test-and-create: {$ref: ../argus.yaml#/paths/~1enterprise~1ai-models~1test-and-create}
+  "/enterprise/ai-models/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1ai-models~1{id}"}
+  "/enterprise/ai-models/{id}/test": {$ref: "../argus.yaml#/paths/~1enterprise~1ai-models~1{id}~1test"}
+  /enterprise/model-quotas: {$ref: ../argus.yaml#/paths/~1enterprise~1model-quotas}
+  /enterprise/model-usage: {$ref: ../argus.yaml#/paths/~1enterprise~1model-usage}
+components:
+  securitySchemes: {sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}}
+  schemas:
+    AIModelProtocol: {$ref: ../components/m4.yaml#/components/schemas/AIModelProtocol}
+    AIModel: {$ref: ../components/m4.yaml#/components/schemas/AIModel}
+    AIModelTestCreate: {$ref: ../components/m4.yaml#/components/schemas/AIModelTestCreate}
+    AIModelUpdate: {$ref: ../components/m4.yaml#/components/schemas/AIModelUpdate}
+    AIModelTestResult: {$ref: ../components/m4.yaml#/components/schemas/AIModelTestResult}
+    AIModelPage: {$ref: ../components/m4.yaml#/components/schemas/AIModelPage}
+    ModelQuota: {$ref: ../components/m4.yaml#/components/schemas/ModelQuota}
+    ModelQuotaUpsert: {$ref: ../components/m4.yaml#/components/schemas/ModelQuotaUpsert}
+    ModelUsage: {$ref: ../components/m4.yaml#/components/schemas/ModelUsage}

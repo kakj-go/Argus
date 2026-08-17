@@ -1,0 +1,1004 @@
+openapi: 3.1.0
+info:
+  title: Argus Conversation API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /conversations:
+    get:
+      operationId: listConversations
+      summary: listConversations.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Conversation page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createConversation
+      summary: createConversation.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationCreate'
+      responses:
+        '201':
+          description: Conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        default:
+          $ref: '#/components/responses/Error'
+  /conversations/{conversation_id}:
+    parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getConversation
+      summary: getConversation.
+      responses:
+        '200':
+          description: Conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      operationId: updateConversation
+      summary: updateConversation.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationUpdate'
+      responses:
+        '200':
+          description: Conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        default:
+          $ref: '#/components/responses/Error'
+  /conversations/{conversation_id}/messages:
+    parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: createConversationMessage
+      summary: createConversationMessage.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageCreate'
+      responses:
+        '202':
+          description: Message and Run accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageAccepted'
+        default:
+          $ref: '#/components/responses/Error'
+  /conversations/{conversation_id}/ledger:
+    parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listConversationEvents
+      summary: listConversationEvents.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Immutable event page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationEventPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /runs/{run_id}:
+    parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getRun
+      summary: getRun.
+      responses:
+        '200':
+          description: Run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        default:
+          $ref: '#/components/responses/Error'
+  /runs/{run_id}/cancel:
+    parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: cancelRun
+      summary: cancelRun.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Cancelled Run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunCommandResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /runs/{run_id}/compact:
+    parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: compactRun
+      summary: compactRun.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '202':
+          description: Compaction scheduled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunCommandResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /tool-results/{result_ref}:
+    parameters:
+      - name: result_ref
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    get:
+      operationId: getToolResult
+      summary: getToolResult.
+      responses:
+        '200':
+          description: Authorized Tool result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /conversations/{conversation_id}/events:
+    get:
+      operationId: streamConversationEvents
+      summary: Resume a conversation event stream.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+      responses:
+        '200':
+          description: SSE frames whose data field validates as StreamEventEnvelope.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '409':
+          description: Resume cursor is expired or bound to a stale authorization version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    Conversation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - selected_model_id
+        - status
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        selected_model_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ConversationCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - selected_model_id
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        selected_model_id:
+          type: string
+          format: uuid
+    ConversationUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        selected_model_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    ConversationPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Conversation'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    MessageCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 1048576
+    MessageAccepted:
+      type: object
+      additionalProperties: false
+      required:
+        - event
+        - run
+      properties:
+        event:
+          $ref: '#/components/schemas/ConversationEvent'
+        run:
+          $ref: '#/components/schemas/Run'
+    ConversationEventPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConversationEvent'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RunCommandResult:
+      type: object
+      additionalProperties: false
+      required:
+        - run
+      properties:
+        run:
+          $ref: '#/components/schemas/Run'
+        snapshot:
+          $ref: '#/components/schemas/ContextSnapshot'
+    ToolResult:
+      type: object
+      additionalProperties: false
+      required:
+        - result_ref
+        - tool_call_id
+        - tool_id
+        - content_hash
+        - byte_size
+        - partial
+        - projection
+      properties:
+        result_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+        tool_call_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        tool_id:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]*$
+        content_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        byte_size:
+          type: integer
+          minimum: 0
+          maximum: 4194304
+        partial:
+          type: boolean
+        projection:
+          $ref: '#/components/schemas/ToolResultProjection'
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    ConversationEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - event_id
+        - sequence
+        - enterprise_id
+        - conversation_id
+        - event_type
+        - occurred_at
+        - content_hash
+        - payload
+      properties:
+        schema_version:
+          const: argus.conversation_event/v1
+        event_id:
+          type: string
+          minLength: 1
+        sequence:
+          type: integer
+          minimum: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        conversation_id:
+          type: string
+          minLength: 1
+        run_id:
+          type: string
+          minLength: 1
+        step_id:
+          type: string
+          minLength: 1
+        event_type:
+          enum:
+            - user_message
+            - assistant_message
+            - model_usage
+            - tool_call_requested
+            - tool_call_started
+            - tool_call_result
+            - pending_action_created
+            - user_confirmation
+            - approval_update
+            - execution_update
+            - card_action_result
+            - run_state_changed
+            - context_compacted
+        actor_type:
+          enum:
+            - user
+            - model
+            - service
+            - worker
+            - system
+        actor_id:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        content_hash:
+          type: string
+          minLength: 32
+        artifact_ref:
+          type: string
+          minLength: 1
+        data_classification:
+          enum:
+            - public
+            - internal
+            - sensitive
+        payload:
+          $ref: '#/components/schemas/PublicJsonObject'
+    Run:
+      type: object
+      additionalProperties: false
+      required:
+        - run_id
+        - conversation_id
+        - enterprise_id
+        - model_id
+        - model_revision
+        - locale
+        - status
+        - authorization_version
+        - version
+        - created_at
+        - updated_at
+      properties:
+        run_id:
+          type: string
+        conversation_id:
+          type: string
+        enterprise_id:
+          type: string
+        model_id:
+          type: string
+        model_revision:
+          type: integer
+          minimum: 1
+        locale:
+          enum:
+            - zh-CN
+            - en-US
+        status:
+          enum:
+            - pending
+            - running
+            - waiting_input
+            - waiting_approval
+            - waiting_system
+            - succeeded
+            - failed
+            - cancelled
+            - timed_out
+        current_step_id:
+          type: string
+        stop_reason:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+          maxLength: 128
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+          maxLength: 128
+        authorization_version:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ResourceRef:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_type
+        - resource_id
+        - version
+      properties:
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+    RunCheckpoint:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - run_id
+        - conversation_id
+        - enterprise_id
+        - model_id
+        - model_revision
+        - locale
+        - status
+        - goal
+        - completed_step_ids
+        - open_questions
+        - target_resource_refs
+        - active_public_pending_action_refs
+        - tool_call_refs
+        - execution_refs
+        - last_error_codes
+        - authorization_version
+        - version
+      properties:
+        schema_version:
+          const: argus.run_checkpoint/v1
+        run_id:
+          type: string
+        conversation_id:
+          type: string
+        enterprise_id:
+          type: string
+        model_id:
+          type: string
+        model_revision:
+          type: integer
+          minimum: 1
+        locale:
+          enum:
+            - zh-CN
+            - en-US
+        status:
+          enum:
+            - pending
+            - running
+            - waiting_input
+            - waiting_approval
+            - waiting_system
+            - succeeded
+            - failed
+            - cancelled
+            - timed_out
+        current_step_id:
+          type: string
+        goal:
+          type: string
+          maxLength: 8192
+        user_constraints:
+          type: array
+          items:
+            type: string
+            maxLength: 2048
+        plan:
+          type: array
+          items:
+            type: string
+            maxLength: 2048
+        completed_step_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        next_step:
+          type: string
+          maxLength: 2048
+        open_questions:
+          type: array
+          items:
+            type: string
+            maxLength: 2048
+        waiting_reason:
+          type: string
+        target_resource_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceRef'
+        active_public_pending_action_refs:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        tool_call_refs:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        execution_refs:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        last_error_codes:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: ^[A-Z][A-Z0-9_]*$
+        authorization_version:
+          type: integer
+          minimum: 1
+        resource_scope_snapshot_ref:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+    ContextSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - id
+        - enterprise_id
+        - conversation_id
+        - run_id
+        - source_from_event_id
+        - source_through_event_id
+        - first_kept_event_id
+        - source_from_sequence
+        - source_through_sequence
+        - first_kept_sequence
+        - typed_checkpoint
+        - narrative_summary
+        - compaction_model_id
+        - compaction_model_revision
+        - compaction_prompt_version
+        - estimated_tokens_before
+        - actual_tokens_after
+        - source_hash
+        - snapshot_hash
+        - status
+        - created_at
+      properties:
+        schema_version:
+          const: argus.context_snapshot/v1
+        id:
+          type: string
+        enterprise_id:
+          type: string
+        conversation_id:
+          type: string
+        run_id:
+          type: string
+        source_from_event_id:
+          type: string
+        source_through_event_id:
+          type: string
+        first_kept_event_id:
+          type: string
+        source_from_sequence:
+          type: integer
+          minimum: 1
+        source_through_sequence:
+          type: integer
+          minimum: 1
+        first_kept_sequence:
+          type: integer
+          minimum: 1
+        typed_checkpoint:
+          $ref: '#/components/schemas/RunCheckpoint'
+        narrative_summary:
+          type: string
+          maxLength: 65536
+        compaction_model_id:
+          type: string
+        compaction_model_revision:
+          type: integer
+          minimum: 1
+        compaction_prompt_version:
+          type: string
+        estimated_tokens_before:
+          type: integer
+          minimum: 0
+        actual_tokens_after:
+          type: integer
+          minimum: 0
+        source_hash:
+          type: string
+          minLength: 32
+        snapshot_hash:
+          type: string
+          minLength: 32
+        status:
+          enum:
+            - pending
+            - active
+            - failed
+            - superseded
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        created_at:
+          type: string
+          format: date-time
+    ToolResultProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - tool_call_id
+        - projection_schema_version
+        - result_ref
+        - result_hash
+        - summary
+        - resource_refs
+        - partial
+        - original_bytes
+        - projected_bytes
+      properties:
+        schema_version:
+          const: argus.tool_result_projection/v1
+        tool_call_id:
+          type: string
+        projection_schema_version:
+          type: string
+        result_ref:
+          type: string
+        result_hash:
+          type: string
+          minLength: 32
+        summary:
+          $ref: '#/components/schemas/PublicJsonObject'
+        samples:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        resource_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceRef'
+        partial:
+          type: boolean
+        partial_reasons:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+        original_bytes:
+          type: integer
+          minimum: 0
+        projected_bytes:
+          type: integer
+          minimum: 0
+      allOf:
+        - if:
+            properties:
+              partial:
+                const: true
+            required:
+              - partial
+          then:
+            required:
+              - partial_reasons
+            properties:
+              partial_reasons:
+                minItems: 1
+        - if:
+            properties:
+              partial:
+                const: false
+            required:
+              - partial
+          then:
+            not:
+              required:
+                - partial_reasons
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema:
+        $ref: '#/components/schemas/RequestId'
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

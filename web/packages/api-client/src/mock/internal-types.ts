@@ -4,6 +4,18 @@ export interface MockEnterpriseUserRecord {
   departmentId: string;
 }
 
+export interface MockConversationRecord {
+  id: string;
+  enterpriseId: string;
+  title: string;
+  createdBy: string;
+  selectedModelId: string;
+  status: "active" | "archived";
+  lastMessageAt: string;
+  createdAt: string;
+  version?: number;
+}
+
 export interface MockApprovalDecision {
   actor_user_id: string;
   actor_name?: string;

@@ -47,9 +47,15 @@ kubernetes.cluster.create.preview
 kubernetes.cluster.create.commit
 kubernetes.cluster.list
 kubernetes.cluster.get
+kubernetes.namespace.list
+kubernetes.node.list
 kubernetes.pod.list
 kubernetes.pod.get
+kubernetes.deployment.list
+kubernetes.statefulset.list
+kubernetes.daemonset.list
 kubernetes.service.list
+kubernetes.pod.logs
 telemetry.host.install.preview
 telemetry.host.install.commit
 telemetry.kubernetes.install.preview
@@ -71,6 +77,8 @@ card.render
 ```
 
 取消采用统一的 `pending_action.cancel`，它接收公开 `action_ref` 并再次检查用户和会话；取消不是业务 Commit，不需要向模型暴露私有 Token。查询、预览和提交必须显式区分，高风险 Tool 不应依靠模型记住“刚才已经确认”。
+
+Tool Registry 在执行前统一校验当前 Subject 的 Tool 权限、ServiceAccount `allowed_tool_ids`、严格 Input Schema、风险/执行模式和 DataScope。模型输出中的未知字段、非法类型、截断 JSON 或调用方自报来源均不能进入领域 Service。
 
 ### 2.1 Preview/Commit 强制配对约定
 
@@ -135,6 +143,8 @@ Commit 的 MCP 输入 Schema 固定为：
 
 多 Tool 数据组合可以通过受限表达式描述，并保留所有输入的来源链。
 
+M4 的确定性投影上限为：完整 Tool Result 最多 4 MiB 并保存为 Artifact，列表最多投影 50 项，Pod Logs 最多投影 32 KiB，任一模型投影总量最多 64 KiB。投影保存稳定 Hash、`projected_bytes`、`resource_refs` 和公开 `result_ref`；完整结果不能复制进模型上下文。
+
 ## 4. Agent Harness 与持久化 Run
 
 Agent Loop、上下文账本、ToolResult Projection、ContextSnapshot、Token 预算和压缩恢复的完整契约见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。本节只描述它与持久化 Run 和两阶段操作的关系。
@@ -171,6 +181,8 @@ Worker 失联后，只有 Lease 过期且数据库中的 Fence Token 未变化�
 
 完整 ConversationEvent 只追加保存；RunState 和 Typed Checkpoint 从数据库事实生成。ContextSnapshot 只保存被压缩历史的来源范围、结构化 Checkpoint、叙述摘要、模型/Prompt Revision 和压缩前后 Token。压缩不得删除原始 Message、ToolCall、ToolResult 或执行事件。
 
+Agent Loop 为 Preview 注入服务端可信 `run_id`，PendingAction 和后续 Execution 继承该关联；Preview 后原 Run 进入 `waiting_input`，Action 终态创建 Verify Task 并只恢复同一 Run。浏览器和模型输入中不存在可自报的 `run_id`。公开 Run 必须返回稳定 `stop_reason` 和 `error_code`，便于断线恢复后区分取消、额度耗尽和执行失败。
+
 第一版只运行一个 Model Agent。查询 Tool 只有显式标记 `parallel_safe` 时可以并行，默认顺序执行；Preview 默认顺序执行，Commit 不出现在 Model Agent Tool Registry 中。
 
 ## 5. 两阶段操作
@@ -204,7 +216,7 @@ sequenceDiagram
     E-->>H: 更新卡片状态
 ```
 
-用户点击确认后的提交不再进入模型推理。它仍然是一条 MCP `tools/call`，但只能由 `argus-server` 内 Action Executor 使用内部服务身份发起。浏览器请求的唯一业务标识是 `action_binding_id`，不得携带 Commit Tool 名称、业务参数或 `argus__token`。
+用户点击确认后的提交不再进入模型推理。M4 的 Tool Gateway 是 Worker 进程内可信 Registry；提交只允许 Action Executor 使用内部身份调用隐藏的 Commit Handler。浏览器请求只携带公开 `action_ref` 或后续 Card 产生的 `action_binding_id`，不得携带 Commit Tool 名称、业务参数或 `argus__token`。若未来把 Gateway 拆成独立进程，内部调用必须使用 mTLS，且不得暴露到公共 Ingress。
 
 ## 6. Preview Tool 返回约定
 
@@ -379,9 +391,11 @@ stateDiagram-v2
     ResultUnknown --> Failed: 确认未成功
 ```
 
-创建人确认不能自动满足“非创建人审批”规则。Approval Request 保存审批策略版本、审批人范围、最少人数、职责分离要求和每次决定；权限撤销、企业停用或计划变化会使尚未执行的审批失效。
+创建人确认不能自动满足“非创建人审批”规则。Approval Request 为每条命中策略保存独立 Requirement Snapshot；所有 Requirement 都满足后才可进入 `ready`，任一有效拒绝会拒绝整个请求。权限撤销、企业停用、策略版本、资源版本、标签影响或计划变化会使尚未执行的审批失效。
 
-Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为发起人补齐缺失的 Role、DataScope、Tool、资源或目标账号权限。企业只有一名可用管理员时，Policy 可以允许受控 Break Glass，但必须绑定当前 Pending Action、要求 Step-up MFA 和理由/工单、使用最短有效期并产生高优先级审计；不能由同一人使用多个账号伪造双人审批。
+Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为发起人补齐缺失的 Role、DataScope、Tool、资源或目标账号权限。M4 不提供 Break Glass；Step-up MFA、紧急绕过和恢复演练统一由 M8 实现，在此之前不能用单管理员场景降低审批要求。
+
+Execution 如果产生 Bastion 或 Kubernetes Connector Enrollment，公开对象只返回 `one_time_result_available`。原发起人使用独立幂等接口领取 AES-GCM 加密保存、最长五分钟有效的一次性结果；同一 Idempotency-Key 可以重放同一响应，新 Key 二次领取稳定失败。明文安装命令不得进入 PendingAction、Execution、ConversationEvent、审计、日志或 Redis。
 
 ### 11.1 Automation 身份
 
@@ -399,13 +413,15 @@ Automation
 
 每次运行都重新检查 ServiceAccount 状态、DataScope、Tool、目标资源、AuthorizationVersion 和 Policy，不能长期继承创建人的权限快照。Automation 只能走 Tool/Execution 路径，不得创建或消费 RemoteAccessSession 票据。
 
+Automation 创建或更新时写入不可变 AutomationRevision；AutomationRun 固定绑定触发时的 Revision 和输入，后续编辑不能改变已排队或待审批 Run。审批拒绝、Execution 成功/失败和 ResultUnknown 对账终态必须同步收敛 AutomationRun。
+
 ## 12. 并发、幂等和错误处理
 
 - 确认、取消、过期和审批使用数据库条件更新，只能有一个合法状态迁移成功。
 - Action Binding 调用先以 `(binding_id, request_id)` 去重；Commit 再以 Pending Action/Execution 的业务幂等键去重。
 - 用户双击返回同一个 Execution，不创建第二次执行。
 - Commit 已创建 Execution 但响应丢失时，Action Executor 查询现有 Execution，不重新调用业务变更。
-- 远端结果未知时返回 `RESULT_UNKNOWN`，进入对账流程，不能当作普通失败自动重试。
+- 远端结果未知时返回 `EXECUTION_RESULT_UNKNOWN`，进入对账流程；只有 ConnectorCommand/上游操作的终态事实才能完成 Execution，不能当作普通失败自动重试或重放副作用。
 - Preview 过期后必须重新 Preview；不能只延长旧 Token 的有效期。
 
 ## 13. Tool 发布门禁

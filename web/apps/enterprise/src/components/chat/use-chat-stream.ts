@@ -1,9 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useApi } from "@argus/api-client";
-import type {
-  InteractiveCardCreateCommand,
-} from "@argus/api-client/provisional";
+import { StreamTerminatedError, useApi } from "@argus/api-client";
+import { useEnterpriseAuthStore } from "@argus/auth";
 import type { ChatMessage } from "./chat-view-model";
 import {
   initialConversationProjection,
@@ -20,13 +18,15 @@ export type ChatStreamState = {
   error: string | null;
   stopReason: "completed" | "cancelled" | "failed" | "output_limit" | null;
   compaction: CompactionView;
+  activeRunId: string | null;
   send: (
     conversationId: string,
     text: string,
-    command?: InteractiveCardCreateCommand,
+    mockIntent?: "interactive_card.create",
   ) => Promise<void>;
   /** 中断当前网络流和本地消费循环。 */
   stop: () => void;
+  compact: () => void;
 };
 
 /**
@@ -40,6 +40,8 @@ export function useChatStream(): ChatStreamState {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const runRef = useRef<string | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stopReason, setStopReason] = useState<
     "completed" | "cancelled" | "failed" | "output_limit" | null
   >(null);
@@ -49,14 +51,21 @@ export function useChatStream(): ChatStreamState {
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
+    const runId = runRef.current;
+    if (runId) void api.runs.cancel(runId).catch(() => undefined);
     setStopReason("cancelled");
-  }, []);
+  }, [api]);
+
+  const compact = useCallback(() => {
+    const runId = runRef.current;
+    if (runId) void api.runs.compact(runId).catch(() => undefined);
+  }, [api]);
 
   const send = useCallback(
     async (
       conversationId: string,
       text: string,
-      command?: InteractiveCardCreateCommand,
+      mockIntent?: "interactive_card.create",
     ) => {
       if (sending) return;
       const controller = new AbortController();
@@ -78,10 +87,15 @@ export function useChatStream(): ChatStreamState {
       try {
         const stream = api.conversations.sendMessage(
           conversationId,
-          { text, command },
-          { signal: controller.signal },
+          { content: text },
+          { signal: controller.signal, mock_intent: mockIntent },
         );
         for await (const envelope of stream) {
+          const streamed = envelope.data as { run_id?: string };
+          if (streamed.run_id && streamed.run_id !== runRef.current) {
+            runRef.current = streamed.run_id;
+            setActiveRunId(streamed.run_id);
+          }
           projection = reduceStreamEnvelope(projection, envelope);
           setCompaction(projection.compaction);
           const completed = projection.completed_message;
@@ -101,8 +115,16 @@ export function useChatStream(): ChatStreamState {
         if (!controller.signal.aborted && !projection.stop_reason) {
           setStopReason("completed");
         }
-      } catch {
+      } catch (streamError) {
         if (!controller.signal.aborted) {
+          if (
+            streamError instanceof StreamTerminatedError &&
+            streamError.code === "AUTHORIZATION_VERSION_STALE"
+          ) {
+            useEnterpriseAuthStore.getState().clear();
+            window.location.assign("/login");
+            return;
+          }
           setError("send failed");
           setStopReason("failed");
         }
@@ -113,6 +135,8 @@ export function useChatStream(): ChatStreamState {
         setPendingUser(null);
         setSending(false);
         abortRef.current = null;
+        runRef.current = null;
+        setActiveRunId(null);
       }
     },
     [api, queryClient, sending],
@@ -125,7 +149,9 @@ export function useChatStream(): ChatStreamState {
     error,
     stopReason,
     compaction,
+    activeRunId,
     send,
     stop,
+    compact,
   };
 }

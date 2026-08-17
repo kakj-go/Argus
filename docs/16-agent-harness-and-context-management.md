@@ -11,7 +11,7 @@ Argus 第一版 Agent Harness 采用小内核设计，核心循环参考 Pi `age
 - Compaction：按 Token 预算触发、保留最近内容、在合法 Turn 边界切分并增量更新摘要。
 - Provider Adapter：内部使用统一 Message/Event，调用模型时才转换成供应商格式。
 
-Argus 不复用 Pi 的内存 Session 作为事实来源。Conversation、Run、Step、ToolCall、ToolResult、ContextSnapshot 和 Execution 的权威状态全部保存在 PostgreSQL；Redis 只用于通知和短期加速。
+Argus 不复用 Pi 的内存 Session 作为事实来源。Conversation、Run、Step、ToolCall、ToolResult、ContextSnapshot、PendingAction、Execution 和 ModelCall 的权威状态全部保存在 PostgreSQL；Redis 只用于通知和短期加速。ModelUsage 是从 ModelCall 聚合出的查询投影，不是另一份可写事实。
 
 第一版只实现单 Model Agent。Presentation/Card Render 作为同一 Run 内受限的声明式步骤实现，不启动拥有独立权限的子 Agent；通用子 Agent 调度延后。
 
@@ -23,6 +23,7 @@ Agent Harness 只负责：
 - 调用固定 `model_id + model_revision`。
 - 流式接收模型输出并生成持久化 AgentEvent。
 - 校验和调度当前用户可发现的 Tool。
+- 强制校验 Tool 权限、ServiceAccount `allowed_tool_ids`、输入 Schema、执行模式和结果大小。
 - 根据 ToolResult 继续推理或进入等待/结束状态。
 - 在达到上下文预算时生成 ContextSnapshot。
 
@@ -79,6 +80,7 @@ RunState 是服务端结构化事实，至少包含：
 run_id / conversation_id / enterprise_id
 model_id / model_revision / locale
 status / current_step_id
+stop_reason / error_code
 goal / user_constraints
 plan / completed_step_ids / next_step
 open_questions / waiting_reason
@@ -104,7 +106,7 @@ ModelContextProjection 是一次模型请求的派生对象，不是历史事实
 6. 当前用户输入。
 7. 当前权限投影后的 Tool Catalog。
 
-每次请求保存 Projection Hash、组成来源、估算/实际 Token、模型 Revision 和 ContextSnapshot ID，便于复现和审计，但不保存 Secret 或私有 Token。
+每次请求以 ModelCall 保存 Projection Hash、组成来源、估算/实际 Token、价格快照、模型 Revision、ContextSnapshot ID、延迟和停止原因，便于复现和审计，但不保存 Secret 或私有 Token。
 
 ## 4. Agent Loop
 
@@ -175,10 +177,12 @@ required_permissions
 
 优先使用 Tool 自身的版本化 Projection Schema 做确定性裁剪：
 
-- 列表保留总数、过滤条件、关键字段、有限样本和分页/结果引用。
-- 日志保留时间范围、错误聚类、代表样本、截断原因和 `result_ref`。
+- 列表保留总数、过滤条件、关键字段、最多 50 项样本和分页/结果引用。
+- Pod Logs 模型投影最多 32 KiB，保留时间范围、代表样本、截断原因和 `result_ref`。
 - Metrics 保留聚合、异常区间、缺失/部分数据标记和 Query Ref。
 - Secret、凭证、敏感字段和未授权资源在 Projection 前移除。
+
+任一完整 Tool Result 最多 4 MiB 并保存到 Artifact；模型投影总量最多 64 KiB，同时记录稳定 Projection Hash、`projected_bytes` 和 `resource_refs`。相同规范化输入必须得到相同投影与哈希。
 
 只有无法稳定结构化归纳的结果才允许调用模型生成 Narrative Summary。模型生成的摘要必须带来源引用，不能替代完整 ToolResult。
 
@@ -325,6 +329,12 @@ OpenAI Responses Compaction、Anthropic Server-side Compaction 或 Context Editi
 - Typed Run Checkpoint + Narrative Summary + Recent Tail。
 - Token 预算、自动/手动 Compaction 和恢复。
 - Provider-neutral ContextAssembler。
+- OpenAI Compatible `chat_completions` 与 `responses` 双 Adapter，模型 Revision 固定协议且不自动回退。
+- `agent`、`action`、`compaction`、`automation`、`sandbox` 五个 PostgreSQL Task Worker Pool。
+- Worker 进程内可信 Tool Registry/Gateway；`.commit` 仅注册到隐藏 Catalog 并要求 `action_executor` 身份。
+- 首批 Catalog 覆盖 Host、Connector、PendingAction、Kubernetes Cluster/Namespace/Node/Pod/Deployment/StatefulSet/DaemonSet/Service/Pod Logs 查询，以及 Host/Kubernetes create/update/delete Preview；所有输入先通过严格 Schema 和权限门禁。
+- Agent 注入可信 `run_id` 并贯穿 PendingAction/Execution；Action 终态只恢复同一 Run 的 Verify Task，浏览器和模型不能自报该关联。
+- Automation 使用不可变 Revision，AutomationRun 固定绑定触发时版本，后续编辑不改变已创建 Run。
 
 延后：
 
@@ -347,6 +357,10 @@ OpenAI Responses Compaction、Anthropic Server-side Compaction 或 Context Editi
 8. 上下文、Snapshot、日志和 SSE 搜索不到 Secret、私有参数、Commit Token 或 RemoteAccessTicket。
 9. 授权变化后旧 Snapshot 不能恢复已撤销 Tool 或资源权限。
 10. 同一输入状态生成稳定 Projection Hash，不同 Provider Adapter 获得等价业务语义。
+11. 公开 Run 返回终止 `stop_reason` 和稳定 `error_code`；额度耗尽必须可从 API 观察为 `MODEL_QUOTA_EXCEEDED`。
+12. AutomationRevision、AutomationRun、PendingAction 和 Execution 状态一致；ResultUnknown 未获得外部终态前不得重放副作用。
+
+当前实现将 `length`、`max_tokens`、Responses `incomplete`、内容过滤、失败和取消统一视为不可执行 Tool 的停止原因。流式参数即使已部分拼接，也只能在完整 JSON、通过 Tool Schema/领域校验且停止原因允许时进入 Registry。
 
 ## 16. 参考
 

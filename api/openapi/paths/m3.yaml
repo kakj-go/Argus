@@ -280,10 +280,10 @@ pending_action_confirm:
     - {name: action_ref, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
   post:
     operationId: confirmPendingAction
-    summary: Confirm and synchronously commit a resource Pending Action.
+    summary: Confirm a Pending Action and create approval or asynchronous execution state.
     parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
     responses:
-      "200": {description: Committed result., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConfirmPendingActionResult"}}}}
+      "200": {description: Confirmation state., content: {application/json: {schema: {$ref: "../components/m4.yaml#/components/schemas/PendingActionCommandResult"}}}}
       default: {$ref: "#/components/responses/Error"}
 pending_action_cancel:
   parameters:

@@ -9,6 +9,8 @@
 - M1 Card Host 安全基座完成。
 - M4 Tool Result、ActionBinding 和 Action Executor 完成。
 
+M4 已提供公开 `result_ref`、PendingAction/Approval/Execution、隐藏 Commit Catalog 和异步一次性结果领取。M5 只消费这些公共边界，不读取私有 Plan/Token，也不把 Enrollment 一次性结果注入 Card 数据绑定。
+
 ## 任务
 
 - [ ] `M5-MANIFEST-01` 实现版本化 Manifest、内容哈希、CSP 能力和不可变 CardVersion。

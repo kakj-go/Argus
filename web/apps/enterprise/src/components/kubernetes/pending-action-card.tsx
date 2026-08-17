@@ -27,9 +27,11 @@ function toDiffLines(diff: PendingActionPublic["diff"]) {
  */
 export function PendingActionCard({
   action,
+  claimOneTimeResult = false,
   onSettled,
 }: {
   action: PendingActionPublic;
+  claimOneTimeResult?: boolean;
   onSettled: (confirmed: boolean, result?: ConfirmActionResult) => void;
 }) {
   const { t } = useTranslation();
@@ -53,7 +55,33 @@ export function PendingActionCard({
   };
 
   const confirm = useMutation({
-    mutationFn: () => api.approvals.confirm(action.action_ref),
+    mutationFn: async () => {
+      let result = await api.approvals.confirm(action.action_ref);
+      if (!claimOneTimeResult || !result.execution || result.one_time_result) {
+        return result;
+      }
+      const executionId = result.execution.execution_id;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        const execution = await api.executions.get(executionId);
+        result = { ...result, execution };
+        if (execution.status === "succeeded") {
+          if (execution.one_time_result_available) {
+            return {
+              ...result,
+              one_time_result: await api.executions.claimOneTimeResult(
+                execution.execution_id,
+              ),
+            };
+          }
+          return result;
+        }
+        if (execution.status === "failed" || execution.status === "cancelled") {
+          throw new Error(execution.error_code ?? "execution failed");
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+      }
+      throw new Error("execution timed out");
+    },
     onSuccess: (result) => {
       setStatus("success");
       setResultMessage(

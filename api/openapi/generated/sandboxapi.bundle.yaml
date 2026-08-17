@@ -1,0 +1,811 @@
+openapi: 3.1.0
+info:
+  title: Argus Platform Sandbox API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /platform/sandbox/backends:
+    get:
+      operationId: listSandboxBackends
+      summary: listSandboxBackends.
+      responses:
+        '200':
+          description: Sandbox backends.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SandboxBackend'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createSandboxBackend
+      summary: createSandboxBackend.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxBackendWrite'
+      responses:
+        '201':
+          description: Sandbox backend.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxBackend'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/backends/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updateSandboxBackend
+      summary: updateSandboxBackend.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxBackendWrite'
+      responses:
+        '200':
+          description: Sandbox backend.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxBackend'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/backends/{id}/test:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: testSandboxBackend
+      summary: testSandboxBackend.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Tested Sandbox backend.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxBackend'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/images:
+    get:
+      operationId: listSandboxImages
+      summary: listSandboxImages.
+      responses:
+        '200':
+          description: Sandbox images.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SandboxImage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createSandboxImage
+      summary: createSandboxImage.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxImageWrite'
+      responses:
+        '201':
+          description: Sandbox image.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxImage'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/images/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updateSandboxImage
+      summary: updateSandboxImage.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxImageWrite'
+      responses:
+        '200':
+          description: Sandbox image.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxImage'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/profiles:
+    get:
+      operationId: listSandboxProfiles
+      summary: listSandboxProfiles.
+      responses:
+        '200':
+          description: Sandbox profiles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SandboxProfile'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createSandboxProfile
+      summary: createSandboxProfile.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxProfileWrite'
+      responses:
+        '201':
+          description: Sandbox profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxProfile'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/profiles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updateSandboxProfile
+      summary: updateSandboxProfile.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxProfileWrite'
+      responses:
+        '200':
+          description: Sandbox profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxProfile'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/enterprise-quotas/{enterprise_id}:
+    parameters:
+      - name: enterprise_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getSandboxQuota
+      summary: getSandboxQuota.
+      responses:
+        '200':
+          description: Sandbox quota.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxQuota'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      operationId: updateSandboxQuota
+      summary: updateSandboxQuota.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxQuotaWrite'
+      responses:
+        '200':
+          description: Sandbox quota.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxQuota'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/sessions:
+    get:
+      operationId: listSandboxSessions
+      summary: listSandboxSessions.
+      responses:
+        '200':
+          description: Sandbox sessions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SandboxSession'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/sessions/{id}/terminate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: terminateSandboxSession
+      summary: terminateSandboxSession.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Sandbox Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxSession'
+        default:
+          $ref: '#/components/responses/Error'
+  /platform/sandbox/usage:
+    get:
+      operationId: listSandboxUsage
+      summary: listSandboxUsage.
+      responses:
+        '200':
+          description: Sandbox usage.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SandboxUsage'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    SandboxBackend:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - endpoint
+        - status
+        - health_status
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        endpoint:
+          type: string
+          format: uri
+          maxLength: 2048
+        status:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        health_status:
+          type: string
+          enum:
+            - unknown
+            - healthy
+            - unhealthy
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SandboxBackendWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - endpoint
+        - status
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        endpoint:
+          type: string
+          format: uri
+          maxLength: 2048
+        api_key:
+          type: string
+          minLength: 1
+          maxLength: 8192
+          writeOnly: true
+        status:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 0
+    SandboxImage:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - backend_id
+        - name
+        - image_ref
+        - digest
+        - status
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        backend_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        image_ref:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        digest:
+          type: string
+          minLength: 71
+          maxLength: 71
+        status:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SandboxImageWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - backend_id
+        - name
+        - image_ref
+        - digest
+        - status
+        - expected_version
+      properties:
+        backend_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        image_ref:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        digest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+        status:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 0
+    SandboxProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - backend_id
+        - image_id
+        - task_kinds
+        - cpu_millis
+        - memory_mib
+        - timeout_seconds
+        - network_mode
+        - status
+        - revision
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        backend_id:
+          type: string
+          format: uuid
+        image_id:
+          type: string
+          format: uuid
+        task_kinds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - smoke
+              - attachment_processing
+        cpu_millis:
+          type: integer
+          minimum: 100
+          maximum: 16000
+        memory_mib:
+          type: integer
+          minimum: 128
+          maximum: 65536
+        timeout_seconds:
+          type: integer
+          minimum: 10
+          maximum: 3600
+        network_mode:
+          type: string
+          enum:
+            - none
+            - restricted
+        status:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        revision:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SandboxProfileWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - backend_id
+        - image_id
+        - task_kinds
+        - cpu_millis
+        - memory_mib
+        - timeout_seconds
+        - network_mode
+        - status
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        backend_id:
+          type: string
+          format: uuid
+        image_id:
+          type: string
+          format: uuid
+        task_kinds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - smoke
+              - attachment_processing
+        cpu_millis:
+          type: integer
+          minimum: 100
+          maximum: 16000
+        memory_mib:
+          type: integer
+          minimum: 128
+          maximum: 65536
+        timeout_seconds:
+          type: integer
+          minimum: 10
+          maximum: 3600
+        network_mode:
+          type: string
+          enum:
+            - none
+            - restricted
+        status:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 0
+    SandboxQuota:
+      type: object
+      additionalProperties: false
+      required:
+        - enterprise_id
+        - max_concurrent_sessions
+        - monthly_session_seconds
+        - version
+        - created_at
+        - updated_at
+      properties:
+        enterprise_id:
+          type: string
+          format: uuid
+        max_concurrent_sessions:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        monthly_session_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SandboxQuotaWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - max_concurrent_sessions
+        - monthly_session_seconds
+        - expected_version
+      properties:
+        max_concurrent_sessions:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        monthly_session_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 0
+    SandboxSession:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - task_id
+        - profile_id
+        - profile_revision
+        - upstream_session_id
+        - status
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        profile_id:
+          type: string
+          format: uuid
+        profile_revision:
+          type: integer
+          minimum: 1
+        upstream_session_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        status:
+          type: string
+          enum:
+            - creating
+            - running
+            - terminating
+            - terminated
+            - failed
+            - unknown
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SandboxUsage:
+      type: object
+      additionalProperties: false
+      required:
+        - enterprise_id
+        - month
+        - session_count
+        - session_seconds
+      properties:
+        enterprise_id:
+          type: string
+          format: uuid
+        month:
+          type: string
+          minLength: 7
+          maxLength: 7
+        session_count:
+          type: integer
+          format: int64
+          minimum: 0
+        session_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256

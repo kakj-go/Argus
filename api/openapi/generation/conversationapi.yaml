@@ -1,0 +1,26 @@
+openapi: 3.1.0
+info: {title: Argus Conversation API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /conversations: {$ref: ../argus.yaml#/paths/~1conversations}
+  "/conversations/{conversation_id}": {$ref: "../argus.yaml#/paths/~1conversations~1{conversation_id}"}
+  "/conversations/{conversation_id}/messages": {$ref: "../argus.yaml#/paths/~1conversations~1{conversation_id}~1messages"}
+  "/conversations/{conversation_id}/ledger": {$ref: "../argus.yaml#/paths/~1conversations~1{conversation_id}~1ledger"}
+  "/runs/{run_id}": {$ref: "../argus.yaml#/paths/~1runs~1{run_id}"}
+  "/runs/{run_id}/cancel": {$ref: "../argus.yaml#/paths/~1runs~1{run_id}~1cancel"}
+  "/runs/{run_id}/compact": {$ref: "../argus.yaml#/paths/~1runs~1{run_id}~1compact"}
+  "/tool-results/{result_ref}": {$ref: "../argus.yaml#/paths/~1tool-results~1{result_ref}"}
+  "/conversations/{conversation_id}/events": {$ref: "../argus.yaml#/paths/~1conversations~1{conversation_id}~1events"}
+components:
+  securitySchemes: {sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}}
+  schemas:
+    Conversation: {$ref: ../components/m4.yaml#/components/schemas/Conversation}
+    ConversationCreate: {$ref: ../components/m4.yaml#/components/schemas/ConversationCreate}
+    ConversationUpdate: {$ref: ../components/m4.yaml#/components/schemas/ConversationUpdate}
+    ConversationPage: {$ref: ../components/m4.yaml#/components/schemas/ConversationPage}
+    MessageCreate: {$ref: ../components/m4.yaml#/components/schemas/MessageCreate}
+    MessageAccepted: {$ref: ../components/m4.yaml#/components/schemas/MessageAccepted}
+    ConversationEventPage: {$ref: ../components/m4.yaml#/components/schemas/ConversationEventPage}
+    RunCommandResult: {$ref: ../components/m4.yaml#/components/schemas/RunCommandResult}
+    ToolResult: {$ref: ../components/m4.yaml#/components/schemas/ToolResult}

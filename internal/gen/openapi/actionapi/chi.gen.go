@@ -25,7 +25,7 @@ type ServerInterface interface {
 	// CancelPendingAction Cancel a resource Pending Action.
 	// (POST /enterprise/pending-actions/{action_ref}/cancel)
 	CancelPendingAction(w http.ResponseWriter, r *http.Request, actionRef string, params CancelPendingActionParams)
-	// ConfirmPendingAction Confirm and synchronously commit a resource Pending Action.
+	// ConfirmPendingAction Confirm a Pending Action and create approval or asynchronous execution state.
 	// (POST /enterprise/pending-actions/{action_ref}/confirm)
 	ConfirmPendingAction(w http.ResponseWriter, r *http.Request, actionRef string, params ConfirmPendingActionParams)
 }
@@ -52,7 +52,7 @@ func (_ Unimplemented) CancelPendingAction(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// ConfirmPendingAction Confirm and synchronously commit a resource Pending Action.
+// ConfirmPendingAction Confirm a Pending Action and create approval or asynchronous execution state.
 // (POST /enterprise/pending-actions/{action_ref}/confirm)
 func (_ Unimplemented) ConfirmPendingAction(w http.ResponseWriter, r *http.Request, actionRef string, params ConfirmPendingActionParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -554,7 +554,7 @@ type ConfirmPendingActionResponseObject interface {
 	VisitConfirmPendingActionResponse(w http.ResponseWriter) error
 }
 
-type ConfirmPendingAction200JSONResponse ConfirmPendingActionResult
+type ConfirmPendingAction200JSONResponse PendingActionCommandResult
 
 func (response ConfirmPendingAction200JSONResponse) VisitConfirmPendingActionResponse(w http.ResponseWriter) error {
 

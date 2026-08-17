@@ -80,8 +80,18 @@ type Service struct {
 
 type Subject struct {
 	ActorID              string
+	ActorType            string
 	AuthorizationVersion int64
 	DataScopeIDs         []uuid.UUID
+	RunID                uuid.NullUUID
+}
+
+func (service Service) prepareAction(ctx context.Context, subject Subject, enterpriseID uuid.UUID, input PrepareActionInput, idempotencyKey string) (db.PendingAction, error) {
+	input.RunID = subject.RunID
+	if subject.ActorType == "service_account" {
+		return service.Actions.PrepareForSubject(ctx, ActionSubject{ID: subject.ActorID, Type: "service_account", AuthorizationVersion: subject.AuthorizationVersion}, enterpriseID, input, idempotencyKey)
+	}
+	return service.Actions.Prepare(ctx, subject.ActorID, enterpriseID, input, idempotencyKey)
 }
 
 type HostInput struct {
@@ -297,7 +307,7 @@ func (service Service) PreviewCreateHost(ctx context.Context, subject Subject, e
 		return db.PendingAction{}, err
 	}
 	plan := hostActionPlan{Operation: "create", HostID: hostID, Input: input, Impact: impact, PinnedKey: result.HostKeyFingerprint}
-	return service.Actions.Prepare(ctx, subject.ActorID, enterpriseID, PrepareActionInput{ActionType: "host.create", Title: "Create host", Summary: "Create a validated host resource",
+	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.create", Title: "Create host", Summary: "Create a validated host resource",
 		Risk: "write", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
 		Preview: map[string]any{"host_id": hostID, "name": input.Name, "connection_test_id": test.ID, "matched_data_scope_ids": matched, "affected_subject_count": len(impact.AffectedSubjects)},
 		Diff:    []map[string]string{{"kind": "add", "text": "Create host " + input.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: impact, CommitHandler: "argus.host.create.commit"}, idempotencyKey)
@@ -332,7 +342,7 @@ func (service Service) PreviewUpdateHost(ctx context.Context, subject Subject, e
 		return db.PendingAction{}, err
 	}
 	plan := hostActionPlan{Operation: "update", HostID: hostID, Input: input, Impact: impact, PinnedKey: result.HostKeyFingerprint}
-	return service.Actions.Prepare(ctx, subject.ActorID, enterpriseID, PrepareActionInput{ActionType: "host.update", Title: "Update host", Summary: "Apply validated host changes",
+	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.update", Title: "Update host", Summary: "Apply validated host changes",
 		Risk: "write", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, ExpectedResourceVersion: pgtype.Int8{Int64: input.ExpectedVersion, Valid: true},
 		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID, "affected_subject_count": len(impact.AffectedSubjects)},
 		Diff: []map[string]string{{"kind": "change", "text": "Update host " + current.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: impact, CommitHandler: "argus.host.update.commit"}, idempotencyKey)
@@ -349,7 +359,7 @@ func (service Service) PreviewDeleteHost(ctx context.Context, subject Subject, e
 		return db.PendingAction{}, err
 	}
 	plan := hostActionPlan{Operation: "delete", HostID: hostID, Input: HostInput{ExpectedVersion: expectedVersion}, Impact: impact}
-	return service.Actions.Prepare(ctx, subject.ActorID, enterpriseID, PrepareActionInput{ActionType: "host.delete", Title: "Delete host", Summary: "Logically delete host " + current.Name,
+	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.delete", Title: "Delete host", Summary: "Logically delete host " + current.Name,
 		Risk: "dangerous", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, ExpectedResourceVersion: pgtype.Int8{Int64: expectedVersion, Valid: true},
 		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID, "affected_subject_count": len(impact.AffectedSubjects)},
 		Diff: []map[string]string{{"kind": "remove", "text": "Delete host " + current.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: impact, CommitHandler: "argus.host.delete.commit"}, idempotencyKey)
@@ -357,6 +367,24 @@ func (service Service) PreviewDeleteHost(ctx context.Context, subject Subject, e
 
 func (service Service) Confirm(ctx context.Context, subject Subject, enterpriseID uuid.UUID, actionRef, idempotencyKey string) (ActionConfirmation, error) {
 	return service.Actions.Confirm(ctx, subject.ActorID, enterpriseID, subject.AuthorizationVersion, actionRef, idempotencyKey, service.revalidateAction, service.commitAction)
+}
+
+// RevalidatePendingAction is the internal Action Executor boundary. Public HTTP
+// handlers must never accept or forward the immutable plan carried here.
+func (service Service) RevalidatePendingAction(ctx context.Context, q *db.Queries, action db.PendingAction, plan json.RawMessage) ([]byte, error) {
+	return service.revalidateAction(ctx, q, action, plan)
+}
+
+// CommitPendingAction applies a previously frozen and revalidated plan. It is
+// intentionally only used by the Action Executor, never by the model catalog.
+func (service Service) CommitPendingAction(ctx context.Context, q *db.Queries, action db.PendingAction, plan json.RawMessage) (ActionCommitResult, error) {
+	return service.commitAction(ctx, q, action, plan)
+}
+
+// ExecutePendingAction is the sole internal commit boundary used by the M4
+// Action Executor. It verifies and consumes the private action token.
+func (service Service) ExecutePendingAction(ctx context.Context, q *db.Queries, action db.PendingAction) (ActionCommitResult, error) {
+	return service.Actions.ExecuteReady(ctx, q, action, service.revalidateAction, service.commitAction)
 }
 
 func (service Service) revalidateAction(ctx context.Context, q *db.Queries, action db.PendingAction, raw json.RawMessage) ([]byte, error) {
@@ -442,7 +470,7 @@ func (service Service) commitAction(ctx context.Context, q *db.Queries, action d
 		if err := json.Unmarshal(raw, &plan); err != nil {
 			return ActionCommitResult{}, err
 		}
-		return service.commitKubernetes(ctx, q, action.CreatorUserID.String(), action.EnterpriseID, plan)
+		return service.commitKubernetes(ctx, q, action.CreatorSubjectID.String(), action.EnterpriseID, plan)
 	}
 	if service.Extension != nil {
 		return service.Extension.CommitAction(ctx, q, action, raw)

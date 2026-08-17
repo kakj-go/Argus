@@ -2,9 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TaskStatus, TaskType, TaskViewModel } from "@argus/api-client/provisional";
-import { useApi } from "@argus/api-client";
 import {
+  useApi,
+  type ActionOneTimeResult,
+  type Execution,
+} from "@argus/api-client";
+import {
+  Alert,
   Badge,
+  Button,
+  CodeBlock,
   DataTable,
   EmptyState,
   FilterBar,
@@ -42,9 +49,175 @@ const TYPE_FILTERS: TaskType[] = [
   "certificate_rotation",
   "generic",
 ];
+const realMode = import.meta.env.VITE_API_MODE === "real";
+
+export function TasksPage() {
+  return realMode ? <ExecutionsPage /> : <LegacyTasksPage />;
+}
+
+function ExecutionsPage() {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const [claimingExecution, setClaimingExecution] = useState<string | null>(null);
+  const [oneTimeResult, setOneTimeResult] =
+    useState<ActionOneTimeResult | null>(null);
+  const [claimError, setClaimError] = useState("");
+  const executions = useQuery({
+    queryKey: ["executions"],
+    queryFn: () => api.executions.list(),
+  });
+  const items = executions.data?.items ?? [];
+  const terminal = items.filter(
+    (item) => item.status === "succeeded" || item.status === "failed",
+  );
+  const successRate =
+    terminal.length === 0
+      ? null
+      : Math.round(
+          (terminal.filter((item) => item.status === "succeeded").length /
+            terminal.length) *
+            100,
+        );
+  const claimOneTimeResult = async (execution: Execution) => {
+    if (claimingExecution) return;
+    setClaimError("");
+    setClaimingExecution(execution.execution_id);
+    try {
+      setOneTimeResult(
+        await api.executions.claimOneTimeResult(execution.execution_id),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["executions"] });
+    } catch (error) {
+      setClaimError(
+        error instanceof Error ? error.message : t("governance.tasks.claimFailed"),
+      );
+    } finally {
+      setClaimingExecution(null);
+    }
+  };
+  return (
+    <PageShell
+      description={t("governance.tasks.description")}
+      title={t("governance.tasks.title")}
+    >
+      <div className="argus-gov-stats">
+        <StatCard label={t("governance.tasks.stats.today")} value={items.length} />
+        <StatCard
+          label={t("governance.tasks.stats.successRate")}
+          value={successRate === null ? "—" : `${successRate}%`}
+        />
+        <StatCard
+          label={t("governance.tasks.stats.running")}
+          value={items.filter((item) => item.status === "running").length}
+        />
+        <StatCard
+          label={t("governance.tasks.stats.failed")}
+          value={items.filter((item) => item.status === "failed").length}
+        />
+      </div>
+      {executions.isPending ? (
+        <Spinner label={t("common.loading")} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          description={t("governance.tasks.emptyDescription")}
+          title={t("governance.tasks.emptyTitle")}
+        />
+      ) : (
+        <DataTable<Execution & Record<string, unknown>>
+          columns={[
+            { key: "execution_id", header: "Execution ID" },
+            { key: "action_ref", header: "Action Ref" },
+            {
+              key: "status",
+              header: t("governance.tasks.columns.status"),
+              render: (item) => (
+                <StatusBadge
+                  pulse={item.status === "running"}
+                  tone={executionTone(item.status)}
+                >
+                  {t(`governance.tasks.status.${item.status}`)}
+                </StatusBadge>
+              ),
+            },
+            { key: "result_ref", header: "Result Ref" },
+            { key: "error_code", header: t("automations.errorCode") },
+            {
+              key: "one_time_result_available",
+              header: t("governance.tasks.columns.oneTimeResult"),
+              render: (item) =>
+                item.one_time_result_available ? (
+                  <Button
+                    loading={claimingExecution === item.execution_id}
+                    onClick={() => void claimOneTimeResult(item)}
+                    variant="secondary"
+                  >
+                    {t("governance.tasks.claimOneTimeResult")}
+                  </Button>
+                ) : (
+                  "—"
+                ),
+            },
+            {
+              key: "updated_at",
+              header: t("governance.tasks.columns.startedAt"),
+              render: (item) => formatDateTime(item.updated_at, i18n.language),
+            },
+          ]}
+          data={items as Array<Execution & Record<string, unknown>>}
+          getRowKey={(item) => item.execution_id}
+        />
+      )}
+      {claimError && (
+        <Alert
+          description={claimError}
+          title={t("governance.tasks.claimFailed")}
+          tone="danger"
+        />
+      )}
+      {oneTimeResult?.enrollment.install_command && (
+        <section className="argus-gov-one-time-result">
+          <Alert
+            description={t("governance.tasks.oneTimeResultWarning")}
+            title={t("governance.tasks.oneTimeResultTitle")}
+            tone="warning"
+          />
+          <CodeBlock
+            code={oneTimeResult.enrollment.install_command}
+            language="bash"
+          />
+          <Button onClick={() => setOneTimeResult(null)} variant="secondary">
+            {t("governance.tasks.dismissOneTimeResult")}
+          </Button>
+        </section>
+      )}
+      <Button
+        onClick={() => queryClient.invalidateQueries({ queryKey: ["executions"] })}
+        variant="secondary"
+      >
+        {t("governance.tasks.refresh")}
+      </Button>
+    </PageShell>
+  );
+}
+
+function executionTone(status: Execution["status"]) {
+  switch (status) {
+    case "succeeded":
+      return "success" as const;
+    case "failed":
+      return "danger" as const;
+    case "result_unknown":
+      return "warning" as const;
+    case "running":
+      return "info" as const;
+    default:
+      return "neutral" as const;
+  }
+}
 
 /** 任务记录（路由 /tasks）：筛选列表 + 实时进度 + 详情抽屉。 */
-export function TasksPage() {
+function LegacyTasksPage() {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();

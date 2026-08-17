@@ -69,17 +69,17 @@ paths:
           maxLength: 128
     post:
       operationId: confirmPendingAction
-      summary: Confirm and synchronously commit a resource Pending Action.
+      summary: Confirm a Pending Action and create approval or asynchronous execution state.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/CsrfToken'
       responses:
         '200':
-          description: Committed result.
+          description: Confirmation state.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConfirmPendingActionResult'
+                $ref: '#/components/schemas/PendingActionCommandResult'
         default:
           $ref: '#/components/responses/Error'
   /enterprise/pending-actions/{action_ref}/cancel:
@@ -113,7 +113,7 @@ components:
       in: cookie
       name: argus_session
   schemas:
-    ConfirmPendingActionResult:
+    PendingActionCommandResult:
       type: object
       additionalProperties: false
       required:
@@ -121,10 +121,10 @@ components:
       properties:
         pending_action:
           $ref: '#/components/schemas/pending-action-public.schema'
-        resource_ref:
-          $ref: '#/components/schemas/ResourceRef'
-        enrollment:
-          $ref: '#/components/schemas/EnrollmentResult'
+        approval_request:
+          $ref: '#/components/schemas/ApprovalRequestView'
+        execution:
+          $ref: '#/components/schemas/Execution'
     RequestId:
       type: string
       minLength: 16
@@ -341,50 +341,142 @@ components:
       minLength: 16
       maxLength: 128
       pattern: ^[A-Za-z0-9._:-]+$
-    ResourceRef:
+    ApprovalRequirement:
       type: object
       additionalProperties: false
       required:
-        - resource_type
-        - resource_id
-        - version
+        - policy_id
+        - policy_version
+        - minimum_approvers
+        - separation_of_duty
+        - approved_count
+        - status
       properties:
-        resource_type:
+        policy_id:
           type: string
-          enum:
-            - secret
-            - credential
-            - managed_account
-            - host
-            - kubernetes_cluster
-            - bastion_scope
-            - connector
-            - telemetry_query
-            - artifact
-        resource_id:
-          type: string
-          minLength: 1
-        version:
+          format: uuid
+        policy_version:
           type: integer
           format: int64
           minimum: 1
-    EnrollmentResult:
+        minimum_approvers:
+          type: integer
+          minimum: 1
+        separation_of_duty:
+          type: boolean
+        approved_count:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+            - invalidated
+    ApprovalDecision:
       type: object
       additionalProperties: false
       required:
-        - enrollment_id
-        - install_command
-        - expires_at
+        - decision_id
+        - actor_user_id
+        - decision
+        - decided_at
       properties:
-        enrollment_id:
+        decision_id:
+          type: string
+        actor_user_id:
+          type: string
+        decision:
+          enum:
+            - approved
+            - rejected
+        reason:
+          type: string
+          maxLength: 4096
+        decided_at:
+          type: string
+          format: date-time
+    ApprovalRequestView:
+      type: object
+      additionalProperties: false
+      required:
+        - approval_request_id
+        - action_ref
+        - requirements
+        - decisions
+        - status
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        approval_request_id:
           type: string
           format: uuid
-        install_command:
+        action_ref:
           type: string
           minLength: 1
-          maxLength: 8192
-          writeOnly: true
+          maxLength: 128
+        requirements:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApprovalRequirement'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalDecision'
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+            - expired
+            - invalidated
         expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Execution:
+      type: object
+      additionalProperties: false
+      required:
+        - execution_id
+        - action_ref
+        - status
+        - created_at
+        - updated_at
+      properties:
+        execution_id:
+          type: string
+        action_ref:
+          type: string
+        status:
+          enum:
+            - pending
+            - running
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+        result_ref:
+          type: string
+        one_time_result_available:
+          type: boolean
+          readOnly: true
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
   parameters:

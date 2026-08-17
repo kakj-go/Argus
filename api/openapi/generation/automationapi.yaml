@@ -1,0 +1,15 @@
+openapi: 3.1.0
+info: {title: Argus Automation API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/automations: {$ref: ../argus.yaml#/paths/~1enterprise~1automations}
+  "/enterprise/automations/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1automations~1{id}"}
+  "/enterprise/automations/{id}/{state_action}": {$ref: "../argus.yaml#/paths/~1enterprise~1automations~1{id}~1{state_action}"}
+  "/enterprise/automations/{id}/runs": {$ref: "../argus.yaml#/paths/~1enterprise~1automations~1{id}~1runs"}
+components:
+  securitySchemes: {sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}}
+  schemas:
+    Automation: {$ref: ../components/m4.yaml#/components/schemas/Automation}
+    AutomationWrite: {$ref: ../components/m4.yaml#/components/schemas/AutomationWrite}
+    AutomationRun: {$ref: ../components/m4.yaml#/components/schemas/AutomationRun}

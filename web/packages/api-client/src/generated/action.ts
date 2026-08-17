@@ -33,6 +33,7 @@ export interface components {
             /** @enum {unknown} */
             status: "pending" | "running" | "succeeded" | "failed" | "result_unknown" | "cancelled";
             result_ref?: string;
+            readonly one_time_result_available?: boolean;
             error_code?: string;
             /** Format: date-time */
             created_at: string;

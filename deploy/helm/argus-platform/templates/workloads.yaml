@@ -1,7 +1,11 @@
 {{- $root := . -}}
 {{- $workloads := list
   (dict "name" "argus-server" "command" "argus-server" "args" (list) "port" 8080 "healthPort" 8080)
-  (dict "name" "argus-worker" "command" "argus-worker" "args" (list "--pool=default") "port" 8081 "healthPort" 8081)
+  (dict "name" "argus-worker-agent" "command" "argus-worker" "args" (list "--pool=agent") "pool" "agent" "port" 8081 "healthPort" 8081)
+  (dict "name" "argus-worker-action" "command" "argus-worker" "args" (list "--pool=action") "pool" "action" "port" 8081 "healthPort" 8081)
+  (dict "name" "argus-worker-compaction" "command" "argus-worker" "args" (list "--pool=compaction") "pool" "compaction" "port" 8081 "healthPort" 8081)
+  (dict "name" "argus-worker-automation" "command" "argus-worker" "args" (list "--pool=automation") "pool" "automation" "port" 8081 "healthPort" 8081)
+  (dict "name" "argus-worker-sandbox" "command" "argus-worker" "args" (list "--pool=sandbox") "pool" "sandbox" "port" 8081 "healthPort" 8081)
   (dict "name" "argus-direct-executor" "command" "argus-worker" "args" (list "--pool=direct-executor") "port" 8081 "healthPort" 8081)
   (dict "name" "argus-connector-gateway" "command" "argus-connector-gateway" "args" (list) "port" 8081 "healthPort" 8081)
   (dict "name" "argus-telemetry-ingest" "command" "argus-telemetry" "args" (list "--mode=ingest") "port" 8081 "healthPort" 8081)
@@ -18,7 +22,10 @@ metadata:
     app.kubernetes.io/part-of: argus
     argus.io/release-id: {{ $root.Values.releaseId | quote }}
 spec:
-  replicas: {{ $root.Values.replicas }}
+  replicas: {{- if hasKey $item "pool" -}}
+    {{- $pool := index $root.Values.workerPools $item.pool -}}
+    {{- if eq $root.Values.profile "production" }} {{ $pool.production.minReplicas }}{{ else }} {{ $pool.replicas }}{{ end -}}
+  {{- else if eq $root.Values.profile "production" }} {{ $root.Values.production.minReplicas }}{{ else }} {{ $root.Values.replicas }}{{ end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ $item.name }}
@@ -28,8 +35,8 @@ spec:
         app.kubernetes.io/name: {{ $item.name }}
         app.kubernetes.io/part-of: argus
     spec:
-      {{- if or (eq $item.name "argus-server") (eq $item.name "argus-connector-gateway") }}
-      serviceAccountName: {{ $item.name }}
+      {{- if or (eq $item.name "argus-server") (hasKey $item "pool") (eq $item.name "argus-connector-gateway") }}
+      serviceAccountName: {{ if hasKey $item "pool" }}argus-worker{{ else }}{{ $item.name }}{{ end }}
       {{- end }}
       {{- if eq $root.Values.profile "production" }}
       topologySpreadConstraints:
@@ -46,7 +53,7 @@ spec:
             matchLabels:
               app.kubernetes.io/name: {{ $item.name }}
       {{- end }}
-      terminationGracePeriodSeconds: {{ if eq $item.name "argus-connector-gateway" }}45{{ else }}15{{ end }}
+      terminationGracePeriodSeconds: {{ if eq $item.name "argus-connector-gateway" }}45{{ else if hasKey $item "pool" }}30{{ else }}15{{ end }}
       securityContext:
         runAsNonRoot: true
         seccompProfile: {type: RuntimeDefault}
@@ -63,15 +70,17 @@ spec:
                 name: argus-runtime-config
             - secretRef:
                 name: argus-runtime-secrets
-          {{- if or (eq $item.name "argus-server") (eq $item.name "argus-direct-executor") (eq $item.name "argus-connector-gateway") }}
+          {{- if or (eq $item.name "argus-server") (hasKey $item "pool") (eq $item.name "argus-direct-executor") (eq $item.name "argus-connector-gateway") }}
           volumeMounts:
             - name: secret-kek
               mountPath: /var/run/secrets/argus/secret-kek
               readOnly: true
+          {{- if or (eq $item.name "argus-server") (hasKey $item "pool") }}
           {{- if eq $item.name "argus-server" }}
             - name: setup-token
               mountPath: /var/run/secrets/argus/setup
               readOnly: true
+          {{- end }}
             - name: direct-executor-client
               mountPath: /var/run/secrets/argus/direct-executor-client
               readOnly: true
@@ -117,13 +126,18 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           resources:
+            {{- if hasKey $item "pool" }}
+            {{- toYaml (index $root.Values.workerPools $item.pool).resources | nindent 12 }}
+            {{- else }}
             requests: {cpu: 25m, memory: 64Mi}
             limits: {cpu: 500m, memory: 256Mi}
-      {{- if or (eq $item.name "argus-server") (eq $item.name "argus-direct-executor") (eq $item.name "argus-connector-gateway") }}
+            {{- end }}
+      {{- if or (eq $item.name "argus-server") (hasKey $item "pool") (eq $item.name "argus-direct-executor") (eq $item.name "argus-connector-gateway") }}
       volumes:
         - name: secret-kek
           secret:
             secretName: argus-secret-kek
+      {{- if or (eq $item.name "argus-server") (hasKey $item "pool") }}
       {{- if eq $item.name "argus-server" }}
         - name: setup-token
           secret:
@@ -131,6 +145,7 @@ spec:
             items:
               - {key: setup-token, path: token}
               - {key: setup-token-expires-at, path: expires-at}
+      {{- end }}
         - name: direct-executor-client
           secret:
             secretName: argus-server-direct-executor-client-tls

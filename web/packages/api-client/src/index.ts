@@ -11,9 +11,19 @@ export type {
   BastionScopePage,
   BastionPreviewCreate,
   CompletePasswordChangeRequest,
+  Automation,
+  AutomationRun,
+  AutomationWrite,
+  ApprovalDecisionCreate,
+  ActionOneTimeResult,
+  ApprovalRequestView,
   ConnectionTest,
   Connector,
   ConnectorPage,
+  Conversation,
+  ConversationCreate,
+  ConversationUpdate,
+  MessageCreate,
   EnvironmentContract,
   Host,
   HostConnectionTestCreate,
@@ -30,6 +40,8 @@ export type {
   PodLogs,
   ResourcePreviewDelete,
   ResourcePreviewUpdate,
+  Run,
+  Execution,
 } from "./generated/contracts";
 export { createMockApiClient } from "./mock";
 export type { MockApiClient, MockOptions } from "./mock";

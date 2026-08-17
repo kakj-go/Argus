@@ -14,16 +14,21 @@ import (
 	"github.com/kakj-go/Argus/internal/buildinfo"
 	actionapi "github.com/kakj-go/Argus/internal/gen/openapi/actionapi"
 	auditapi "github.com/kakj-go/Argus/internal/gen/openapi/audit"
+	automationapi "github.com/kakj-go/Argus/internal/gen/openapi/automationapi"
 	connectionapi "github.com/kakj-go/Argus/internal/gen/openapi/connectionapi"
 	connectorapi "github.com/kakj-go/Argus/internal/gen/openapi/connectorapi"
+	conversationapi "github.com/kakj-go/Argus/internal/gen/openapi/conversationapi"
 	authzapi "github.com/kakj-go/Argus/internal/gen/openapi/enterpriseauthz"
 	enterpriseapi "github.com/kakj-go/Argus/internal/gen/openapi/enterpriseidentity"
 	hostapi "github.com/kakj-go/Argus/internal/gen/openapi/hostapi"
 	kubernetesapi "github.com/kakj-go/Argus/internal/gen/openapi/kubernetesapi"
 	machineapi "github.com/kakj-go/Argus/internal/gen/openapi/machine"
+	modelapi "github.com/kakj-go/Argus/internal/gen/openapi/modelapi"
 	platformapi "github.com/kakj-go/Argus/internal/gen/openapi/platform"
+	sandboxapi "github.com/kakj-go/Argus/internal/gen/openapi/sandboxapi"
 	secretapi "github.com/kakj-go/Argus/internal/gen/openapi/secretapi"
 	setupapi "github.com/kakj-go/Argus/internal/gen/openapi/setup"
+	workflowapi "github.com/kakj-go/Argus/internal/gen/openapi/workflowapi"
 )
 
 type response struct {
@@ -54,6 +59,11 @@ type RouterOptions struct {
 	Kubernetes              *KubernetesHandler
 	Connection              *ConnectionHandler
 	ResourceAction          *ResourceActionHandler
+	Workflow                *WorkflowHandler
+	Conversation            *ConversationHandler
+	Model                   *ModelHandler
+	Automation              *AutomationHandler
+	Sandbox                 *SandboxHandler
 	Connector               *ConnectorHandler
 	AllowedOrigins          []string
 }
@@ -125,6 +135,26 @@ func NewRouterWithOptions(options RouterOptions) http.Handler {
 		strict := actionapi.NewStrictHandler(*options.ResourceAction, []actionapi.StrictMiddlewareFunc{actionRequestContext})
 		actionapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
 	}
+	if options.Workflow != nil {
+		strict := workflowapi.NewStrictHandler(*options.Workflow, []workflowapi.StrictMiddlewareFunc{workflowRequestContext})
+		workflowapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.Conversation != nil {
+		strict := conversationapi.NewStrictHandler(*options.Conversation, []conversationapi.StrictMiddlewareFunc{conversationRequestContext})
+		conversationapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.Model != nil {
+		strict := modelapi.NewStrictHandler(*options.Model, []modelapi.StrictMiddlewareFunc{modelRequestContext})
+		modelapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.Automation != nil {
+		strict := automationapi.NewStrictHandler(*options.Automation, []automationapi.StrictMiddlewareFunc{automationRequestContext})
+		automationapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.Sandbox != nil {
+		strict := sandboxapi.NewStrictHandler(*options.Sandbox, []sandboxapi.StrictMiddlewareFunc{sandboxRequestContext})
+		sandboxapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
 	if options.Connector != nil {
 		strict := connectorapi.NewStrictHandler(*options.Connector, []connectorapi.StrictMiddlewareFunc{connectorRequestContext})
 		connectorapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
@@ -167,6 +197,36 @@ func enterpriseIdentityRequestContext(next enterpriseapi.StrictHandlerFunc, _ st
 }
 
 func enterpriseAuthorizationRequestContext(next authzapi.StrictHandlerFunc, _ string) authzapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func workflowRequestContext(next workflowapi.StrictHandlerFunc, _ string) workflowapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func conversationRequestContext(next conversationapi.StrictHandlerFunc, _ string) conversationapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func modelRequestContext(next modelapi.StrictHandlerFunc, _ string) modelapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func automationRequestContext(next automationapi.StrictHandlerFunc, _ string) automationapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func sandboxRequestContext(next sandboxapi.StrictHandlerFunc, _ string) sandboxapi.StrictHandlerFunc {
 	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
 		return next(WithRequestContext(ctx, writer, request), writer, request, value)
 	}

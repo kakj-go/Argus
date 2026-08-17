@@ -1,6 +1,6 @@
 package authorization
 
-const PermissionRegistryVersion int32 = 2
+const PermissionRegistryVersion int32 = 3
 
 type BuiltinRole struct {
 	Key         string
@@ -40,16 +40,29 @@ var PermissionRegistry = map[string]string{
 	"connector.manage":       "Manage Connector lifecycle",
 	"pending_action.read":    "Read resource Pending Actions",
 	"pending_action.confirm": "Confirm resource Pending Actions",
+	"conversation.read":      "Read conversations and immutable events",
+	"conversation.use":       "Create messages and run the Model Agent",
+	"model.read":             "Read enabled AI model metadata and own availability",
+	"model.manage":           "Manage AI models and pricing",
+	"model.quota.manage":     "Manage department and user model quotas",
+	"model.usage.read":       "Read governed model usage",
+	"approval_policy.read":   "Read approval policies",
+	"approval_policy.manage": "Manage approval policies",
+	"approval.read":          "Read approval requests",
+	"approval.decide":        "Approve or reject eligible requests",
+	"execution.read":         "Read deterministic execution state",
+	"automation.read":        "Read automations and runs",
+	"automation.manage":      "Manage service-account automations",
 }
 
 var BuiltinRoles = []BuiltinRole{
 	{Key: "enterprise_admin", Name: "Enterprise Admin", Permissions: registryKeys()},
 	{Key: "iam_admin", Name: "IAM Admin", Permissions: []string{"department.read", "department.manage", "identity.read", "identity.manage", "role.read", "role.manage", "data_scope.read", "data_scope.manage", "service_account.read", "service_account.manage"}},
 	{Key: "security_auditor", Name: "Security Auditor", Permissions: []string{"department.read", "identity.read", "role.read", "data_scope.read", "service_account.read", "audit.read"}},
-	{Key: "resource_admin", Name: "Resource Admin", Permissions: []string{"data_scope.read", "host.read", "host.manage", "host.test", "kubernetes.read", "kubernetes.manage", "kubernetes.logs", "secret.read", "secret.manage", "credential.read", "credential.manage", "credential.use", "managed_account.read", "managed_account.manage", "bastion_scope.read", "bastion_scope.manage", "connector.read", "connector.manage", "pending_action.read", "pending_action.confirm"}},
-	{Key: "resource_operator", Name: "Resource Operator", Permissions: []string{"data_scope.read", "host.read", "host.test", "kubernetes.read", "kubernetes.logs", "secret.read", "credential.read", "credential.use", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read"}},
-	{Key: "resource_viewer", Name: "Resource Viewer", Permissions: []string{"data_scope.read", "host.read", "kubernetes.read", "secret.read", "credential.read", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read"}},
-	{Key: "resource_approver", Name: "Resource Approver", Permissions: []string{"data_scope.read", "host.read", "kubernetes.read", "secret.read", "credential.read", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read", "audit.read"}},
+	{Key: "resource_admin", Name: "Resource Admin", Permissions: []string{"data_scope.read", "host.read", "host.manage", "host.test", "kubernetes.read", "kubernetes.manage", "kubernetes.logs", "secret.read", "secret.manage", "credential.read", "credential.manage", "credential.use", "managed_account.read", "managed_account.manage", "bastion_scope.read", "bastion_scope.manage", "connector.read", "connector.manage", "pending_action.read", "pending_action.confirm", "conversation.read", "conversation.use", "model.read", "approval_policy.read", "approval.read", "approval.decide", "execution.read", "automation.read"}},
+	{Key: "resource_operator", Name: "Resource Operator", Permissions: []string{"data_scope.read", "host.read", "host.test", "kubernetes.read", "kubernetes.logs", "secret.read", "credential.read", "credential.use", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read", "conversation.read", "conversation.use", "model.read", "approval_policy.read", "approval.read", "approval.decide", "execution.read", "automation.read"}},
+	{Key: "resource_viewer", Name: "Resource Viewer", Permissions: []string{"data_scope.read", "host.read", "kubernetes.read", "secret.read", "credential.read", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read", "conversation.read", "conversation.use", "model.read", "execution.read"}},
+	{Key: "resource_approver", Name: "Resource Approver", Permissions: []string{"data_scope.read", "host.read", "kubernetes.read", "secret.read", "credential.read", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read", "audit.read", "approval_policy.read", "approval.read", "approval.decide", "execution.read"}},
 }
 
 func registryKeys() []string {

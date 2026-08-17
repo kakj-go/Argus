@@ -1,5 +1,6 @@
 import type {
-  ConfirmPendingActionResult,
+  ActionOneTimeResult,
+  PendingActionCommandResult,
   Execution,
   PendingActionPublic,
 } from "../generated/contracts";
@@ -22,6 +23,7 @@ export interface PendingActionFilter {
   query?: string;
 }
 
-export type ConfirmActionResult = ConfirmPendingActionResult & {
+export type ConfirmActionResult = PendingActionCommandResult & {
   execution?: Execution;
+  one_time_result?: ActionOneTimeResult;
 };

@@ -67,17 +67,20 @@ import type {
 import type {
   CollectionClaim,
   CollectorInstallState,
-  Conversation,
-  CreateConversationInput,
   CreateRemoteSessionInput,
   K8sNodeBinding,
   K8sWorkload,
   K8sWorkloadFilter,
   RemoteSession,
-  SendMessageInput,
 } from "./provisional";
 import type { TaskEvent, TaskFilter, TaskViewModel } from "./provisional";
 import type {
+  Automation,
+  AutomationRun,
+  AutomationWrite,
+  ApprovalDecisionCreate,
+  ActionOneTimeResult,
+  ApprovalRequestView,
   BastionPreviewCreate,
   BastionScope,
   BastionScopePage,
@@ -85,6 +88,8 @@ import type {
   ConnectionTest,
   Connector,
   ConnectorPage,
+  Conversation,
+  ConversationCreate,
   ConversationEvent,
   Credential,
   CredentialCreate,
@@ -105,10 +110,14 @@ import type {
   ManagedAccount,
   ManagedAccountCreate,
   ManagedAccountUpdate,
+  MessageCreate,
   PasswordUpdateRequest,
   PodLogs,
+  Run,
+  Execution,
   ResourcePreviewUpdate,
   StreamEventEnvelope,
+  SandboxUsage,
 } from "./generated/contracts";
 
 export interface CursorListQuery {
@@ -158,7 +167,7 @@ export interface ArgusApiClient {
   conversations: {
     list(query?: ListQuery): Promise<Page<Conversation>>;
     get(id: string): Promise<Conversation>;
-    create(input?: CreateConversationInput): Promise<Conversation>;
+    create(input?: ConversationCreate): Promise<Conversation>;
     archive(id: string): Promise<Conversation>;
     listEvents(conversationId: string): Promise<ConversationEvent[]>;
     /**
@@ -167,8 +176,12 @@ export interface ArgusApiClient {
      */
     sendMessage(
       conversationId: string,
-      input: SendMessageInput,
-      options?: { signal?: AbortSignal; last_event_id?: string },
+      input: MessageCreate,
+      options?: {
+        signal?: AbortSignal;
+        last_event_id?: string;
+        mock_intent?: "interactive_card.create";
+      },
     ): AsyncIterable<StreamEventEnvelope>;
     updateModel(id: string, modelId: string): Promise<Conversation>;
     /** Push immutable events for a conversation (e.g. card_action_result). */
@@ -176,6 +189,18 @@ export interface ArgusApiClient {
       conversationId: string,
       listener: (event: ConversationEvent) => void,
     ): Unsubscribe;
+  };
+
+  runs: {
+    get(runId: string): Promise<Run>;
+    cancel(runId: string): Promise<Run>;
+    compact(runId: string): Promise<Run>;
+  };
+
+  executions: {
+    list(): Promise<Page<Execution>>;
+    get(executionId: string): Promise<Execution>;
+    claimOneTimeResult(executionId: string): Promise<ActionOneTimeResult>;
   };
 
   /** Host inventory, remote sessions and host collector management. */
@@ -317,6 +342,16 @@ export interface ArgusApiClient {
     reject(actionRef: string, reason: string): Promise<PendingActionPublic>;
   };
 
+  /** Immutable approval requirement snapshots and their decisions. */
+  approvalRequests: {
+    list(): Promise<ApprovalRequestView[]>;
+    get(id: string): Promise<ApprovalRequestView>;
+    decide(
+      id: string,
+      input: ApprovalDecisionCreate,
+    ): Promise<ApprovalRequestView>;
+  };
+
   /** Enterprise OpenAI-compatible models and monthly amount governance. */
   models: {
     list(): Promise<AIModel[]>;
@@ -336,6 +371,17 @@ export interface ArgusApiClient {
       > & { monthlyAmount?: number },
     ): Promise<ModelQuota | null>;
     usage(range?: UsageRange): Promise<ModelUsageSummary>;
+  };
+
+  /** Deterministic cron jobs bound to a ServiceAccount and fixed Tool input. */
+  automations: {
+    list(): Promise<Automation[]>;
+    get(id: string): Promise<Automation>;
+    create(input: AutomationWrite): Promise<Automation>;
+    update(id: string, input: AutomationWrite): Promise<Automation>;
+    enable(id: string, expectedVersion: number): Promise<Automation>;
+    disable(id: string, expectedVersion: number): Promise<Automation>;
+    listRuns(id: string): Promise<AutomationRun[]>;
   };
 
   /** Interactive card catalog, bindings, validation and enable gates. */
@@ -505,6 +551,9 @@ export interface ArgusApiClient {
         status?: SandboxSessionMeta["status"][];
       }): Promise<SandboxSessionMeta[]>;
       terminate(id: string): Promise<SandboxSessionMeta>;
+    };
+    usage: {
+      list(): Promise<SandboxUsage[]>;
     };
     audit: {
       list(

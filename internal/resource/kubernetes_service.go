@@ -143,7 +143,7 @@ func (service Service) PreviewCreateKubernetesCluster(ctx context.Context, subje
 		return db.PendingAction{}, err
 	}
 	plan := kubernetesActionPlan{Operation: "create", ClusterID: clusterID, Input: input, Impact: impact, Version: result.RemoteVersion}
-	return service.Actions.Prepare(ctx, subject.ActorID, enterpriseID, PrepareActionInput{ActionType: "kubernetes.create", Title: "Create Kubernetes cluster",
+	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "kubernetes.create", Title: "Create Kubernetes cluster",
 		Summary: "Create a validated Kubernetes cluster", Risk: "write", ResourceType: "kubernetes_cluster", ResourceID: uuid.NullUUID{UUID: clusterID, Valid: true},
 		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"cluster_id": clusterID, "name": input.Name, "matched_data_scope_ids": matched,
 			"affected_subject_count": len(impact.AffectedSubjects)}, Diff: []map[string]string{{"kind": "add", "text": "Create Kubernetes cluster " + input.Name}},
@@ -181,7 +181,7 @@ func (service Service) PreviewUpdateKubernetesCluster(ctx context.Context, subje
 		return db.PendingAction{}, err
 	}
 	plan := kubernetesActionPlan{Operation: "update", ClusterID: clusterID, Input: input, Impact: impact, Version: version}
-	return service.Actions.Prepare(ctx, subject.ActorID, enterpriseID, PrepareActionInput{ActionType: "kubernetes.update", Title: "Update Kubernetes cluster",
+	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "kubernetes.update", Title: "Update Kubernetes cluster",
 		Summary: "Apply validated Kubernetes cluster changes", Risk: "write", ResourceType: "kubernetes_cluster", ResourceID: uuid.NullUUID{UUID: clusterID, Valid: true},
 		ExpectedResourceVersion: pgtype.Int8{Int64: input.ExpectedVersion, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
 		Preview: map[string]any{"cluster_id": clusterID, "affected_subject_count": len(impact.AffectedSubjects)},
@@ -236,7 +236,7 @@ func (service Service) PreviewDeleteKubernetesCluster(ctx context.Context, subje
 		return db.PendingAction{}, err
 	}
 	plan := kubernetesActionPlan{Operation: "delete", ClusterID: clusterID, Input: KubernetesInput{ExpectedVersion: expectedVersion}, Impact: impact}
-	return service.Actions.Prepare(ctx, subject.ActorID, enterpriseID, PrepareActionInput{ActionType: "kubernetes.delete", Title: "Delete Kubernetes cluster",
+	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "kubernetes.delete", Title: "Delete Kubernetes cluster",
 		Summary: "Logically delete Kubernetes cluster " + current.Name, Risk: "dangerous", ResourceType: "kubernetes_cluster", ResourceID: uuid.NullUUID{UUID: clusterID, Valid: true},
 		ExpectedResourceVersion: pgtype.Int8{Int64: expectedVersion, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
 		Preview: map[string]any{"cluster_id": clusterID, "affected_subject_count": len(impact.AffectedSubjects)},

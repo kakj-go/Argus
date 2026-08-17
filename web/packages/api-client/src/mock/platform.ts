@@ -420,6 +420,12 @@ export function createPlatformDomain(
         return session;
       },
     },
+    usage: {
+      async list() {
+        await platformPause();
+        return [];
+      },
+    },
     audit: {
       async list(filter, query) {
         await platformPause();
