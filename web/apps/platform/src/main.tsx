@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { ApiProvider, createConfiguredApiClient } from "@argus/api-client";
+import { usePlatformAuthStore } from "@argus/auth";
 import {
   initializeTheme,
   LocaleProvider,
@@ -34,6 +35,13 @@ async function bootstrap() {
     base_url: import.meta.env.VITE_API_BASE_URL,
     locale: () =>
       document.documentElement.lang === "en-US" ? "en-US" : "zh-CN",
+    on_authentication_invalidated: () => {
+      queryClient.clear();
+      usePlatformAuthStore.getState().clear();
+      if (window.location.pathname !== "/login") {
+        window.location.assign("/login");
+      }
+    },
   });
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

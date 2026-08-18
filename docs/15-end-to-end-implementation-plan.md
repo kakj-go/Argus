@@ -82,13 +82,13 @@
 | M3 | 资源与连接闭环 | 带 labels 的 Host/Kubernetes、Secret/Credential、Connector、Bastion Scope、Direct Executor 可真实管理 |
 | M4 | 确定性执行闭环 | Outbox/Lease/Fence、Run、单 Agent Loop、上下文投影/压缩、Tool 权限/Schema 门禁、Preview/PendingAction/Approval/Execution 可恢复执行、AutomationRevision |
 | M5 | Card 闭环 | 系统 Card 通过 CSP/MessagePort/Manifest/Binding 安全展示和触发动作，企业 Card 通过发布门禁 |
-| M6 | 人工远程访问闭环 | Grant、短期票据、SSH/WinRM、录像、终止、撤权和审计完整 |
+| M6 | 人工远程访问闭环 | Grant、短期票据、SSH PTY/HTTPS WinRS、加密录像、终止、撤权和审计完整 |
 | M7 | 遥测闭环 | Collector、Ingest/Kafka/ClickHouse/Query、可信资源身份和统一数据裁剪贯通 |
 | M8 | Production 门禁 | HA、备份恢复、供应链、容量、故障演练和完整 Kubernetes E2E 达标 |
 
 详细任务见[分阶段任务文件](./plans/README.md)。
 
-截至 2026-08-17，M0-M4 已按各自退出标准完成；下一实施阶段为 M5。M4 的最终临时集群验收运行号为 `20260817144832-31660`，脱敏证据位于 `artifacts/m4-e2e/20260817144832-31660`，结束后 Namespace、PVC 和 Lease 均为零残留。
+截至 2026-08-18，M0-M6 已按各自退出标准完成；下一实施阶段为 M7。M6 的最终临时集群验收运行号为 `20260818072400-79219`，脱敏证据位于 `artifacts/m6-e2e/20260818072400-79219`，结束后 Namespace、PVC 和 Lease 均为零残留。
 
 ## 5. 依赖关系
 
@@ -182,12 +182,12 @@ M8 结束时至少通过以下全链路场景：
 
 ## 9. 当前建议起点
 
-截至 2026-08-17，M0-M4 已完成：契约与生成门禁、显式 mock/real 前端基座、身份授权、资源/Connector，以及 Agent/审批/确定性执行均已有代码、测试和临时 Kubernetes Namespace 证据。
+截至 2026-08-18，M0-M6 已完成：契约与生成门禁、显式 mock/real 前端基座、身份授权、资源/Connector、Agent/审批/确定性执行、Card 发布/渲染/Binding，以及人工 Remote Access 均已有代码、测试和临时 Kubernetes Namespace 证据。
 
-下一步从 M5 开始：
+下一步从 M7 开始：
 
-- 在现有独立 Card Runtime、Manifest/CSP/MessagePort 基座上实现 CardVersion、发布、启用和回滚治理。
-- 让 RenderPlan、Data/Query/Action Binding 只引用已授权 Tool Result 和服务端 ActionBinding，不复制私有参数或提交 Token。
-- 完成组件、样式、i18n、认证边界和 Card Host 安全欠账。
+- 在 M3 资源/Connector 与 M4 Execution 基座上实现 Collector Profile、CollectionClaim 和安装 Preview/Commit。
+- 打通可信 Collector 身份、OTLP Ingest、Kafka、ClickHouse Writer 与统一 Query Service。
+- 保持 Remote Access 与 Telemetry 的服务、凭证、端口和数据事实分离；Production MFA/Step-up、录像恢复和安全发布门禁继续由 M8 负责。
 
 M1 完成后进入 M2，建立第一条真实 Setup → Platform → Enterprise 授权垂直闭环。这条路径是后续 Connector、Agent、Card、远程访问和遥测的共同根基。

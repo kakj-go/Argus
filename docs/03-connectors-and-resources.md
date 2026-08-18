@@ -18,7 +18,11 @@ Connector 可以使所在主机承担“类似传统堡垒机”的资源访问�
 
 ### 1.1 M3 实现边界
 
-M3 已实现 Secret/Credential、Host/Kubernetes、Bastion Scope、Connector 注册/证书/心跳、类型化只读命令、连接测试和资源专用 PendingAction。M3 ConnectorCommand 只允许 Connection Probe、Kubernetes Read、Credential Lease 和 Uninstall；任意 Shell、文件写入、Remote Access Frame、Collector 与 Telemetry 均不属于本阶段。Remote Access 在 M6 实现，Collector/Telemetry 在 M7 实现。
+M3 已实现 Secret/Credential、Host/Kubernetes、Bastion Scope、Connector 注册/证书/心跳、类型化只读命令、连接测试和资源专用 PendingAction。M3 ConnectorCommand 只允许 Connection Probe、Kubernetes Read、Credential Lease 和 Uninstall；任意 Shell、文件写入与 Collector/Telemetry 均不属于 M3。M6 已在独立协议面增加 Remote Access Frame，Collector/Telemetry 仍由 M7 实现。
+
+### 1.2 M6 实现边界
+
+M6 已实现 RemoteAccessGrant/Policy、AccessRequest/Lease、一次性 Ticket、SSH PTY、HTTPS WinRS PowerShell 行模式、跨 Gateway peer 路由和加密录像。Remote Access 继续与 Agent、Card、Automation、PendingAction 和 Execution 隔离；MFA、Step-up、Break Glass、Production 录像保留/恢复和真实 Windows Server 兼容矩阵仍由 M8 阻断。
 
 Connector PKI 由 cert-manager 签发。安装器复用同 major/minor 且 patch 不低于版本锁基线的实例，否则安装锁定版本。Server 和 Connector Gateway 都通过独立 ServiceAccount 与最小 CertificateRequest RBAC 使用同一个 namespaced Issuer；Gateway 缺少 Issuer 或权限时必须 fail closed，不能让轮换退化为继续使用旧证书。实例卸载不得删除被其他安装复用的 cert-manager CRD。
 
@@ -81,8 +85,8 @@ RemoteAccessSession
 ├── managed_account_id / credential_ref
 ├── remote_access_grant_id / access_lease_id
 ├── protocol / granted_actions / authorization_version
-├── reason / approval_ref / policy_snapshot / break_glass_ref
-├── ticket_jti / ticket_expires_at
+├── reason / approval_ref / policy_snapshot
+├── ticket_hash / ticket_expires_at
 ├── started_at / last_activity_at / ended_at
 ├── recording_ref
 └── status
@@ -424,15 +428,15 @@ Browser
 | `connector_local`                      | Connector 在堡垒机本机创建受限 PTY/ConPTY              | 本机终端                                         |
 | `via_bastion` + SSH                    | Connector 使用短期 Credential Package 建立远端 PTY     | SSH 终端                                         |
 | `direct_ssh`                           | Direct Executor 建立远端 PTY                           | SSH 终端                                         |
-| `via_bastion` + WinRM / `direct_winrm` | Connector/Direct Executor 建立持久 PowerShell Runspace | PowerShell 命令行，不宣称具备完整 PTY 或桌面语义 |
+| `via_bastion` + WinRM / `direct_winrm` | Connector/Direct Executor 通过 HTTPS WinRS 建立持久 Shell | PowerShell 行模式，不宣称具备完整 PTY、PSRP 或桌面语义 |
 
-第一版提供 SSH Web Terminal 和 WinRM PowerShell 命令行；RDP、SFTP 和通用端口转发延后。会话创建前展示目标、完整路径、登录身份、协议能力、最长时长、录像、剪贴板、文件传输和审批策略。默认规则：
+第一版提供 SSH Web Terminal 和 HTTPS WinRS PowerShell 行模式；RDP、SFTP 和通用端口转发延后。会话创建前展示目标、完整路径、登录身份、协议能力、最长时长、录像、剪贴板、文件传输和审批策略。默认规则：
 
 - 票据短期、一次性、绑定浏览器 Session、用户、企业、Host、ManagedAccount、协议、动作、DataScope 摘要、AuthorizationVersion 和 RemoteAccessSession。
 - 平台超级管理员无权进入企业远程会话。
 - AI、Card、Automation、OpenSandbox 不获得票据。
-- 录像和结构化事件写入 Artifact Store/PostgreSQL；Gateway Pod 不保存唯一录像。
-- 生产环境默认要求 MFA/Step-up；是否审批由策略决定。
+- 录像按 asciicast v2 NDJSON 保存 `i/o/r/m` 事件，AES-256-GCM 密文分片写入 Artifact Store，PostgreSQL 保存索引和 SHA-256 Hash Chain；Gateway Pod 不保存唯一录像。
+- M6 Evaluation 遇到 `step_up_mfa` obligation 时 fail closed；Production MFA/Step-up 由 M8 实现并作为发布硬阻断。
 - 剪贴板和文件传输默认关闭，开启时分别授权和审计。
 - 管理员可以终止活动会话，但不能静默接管用户身份。
 - 用户禁用、RoleBinding/DataScope/RemoteAccessGrant/Policy 撤销、授权敏感标签变化或企业停用时，未使用票据立即失效，等待连接的会话被拒绝，活动会话立即终止或进入有上限的安全结束窗口并审计。

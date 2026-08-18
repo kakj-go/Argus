@@ -25,6 +25,8 @@ import (
 var (
 	ErrUnavailable        = errors.New("action unavailable")
 	ErrInvalidated        = errors.New("action invalidated")
+	ErrBindingConsumed    = errors.New("action binding consumed")
+	ErrBindingExpired     = errors.New("action binding expired")
 	ErrApprovalIneligible = errors.New("approval actor is not eligible")
 	ErrApprovalRequired   = errors.New("approval policy is required")
 )
@@ -59,6 +61,12 @@ type Decision struct {
 	Request   db.ApprovalRequest
 	Action    db.PendingAction
 	Execution *db.Execution
+}
+
+type CardBindingInvocation struct {
+	Action        string
+	Confirmation  Confirmation
+	PendingAction db.PendingAction
 }
 
 func (service Service) StartAutomationApproval(ctx context.Context, enterpriseID uuid.UUID, actionRef string) (Confirmation, error) {
@@ -110,78 +118,125 @@ func (service Service) Confirm(ctx context.Context, actorID, requestID string, e
 	}{actionRef, authorizationVersion}
 	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actorID, "pending_action.confirm", idempotencyKey, request, 200,
 		func(q *db.Queries) (Confirmation, error) {
-			action, plan, err := service.lockAndRevalidate(ctx, q, enterpriseID, actionRef, "awaiting_confirmation", authorizationVersion)
-			if err != nil || action.CreatorSubjectType != "user" || action.CreatorSubjectID != actor {
-				return Confirmation{}, ErrInvalidated
-			}
-			if _, err := q.CreateUserConfirmation(ctx, db.CreateUserConfirmationParams{ID: newID(), PendingActionID: action.ID,
-				EnterpriseID: enterpriseID, ActorUserID: actor, AuthorizationVersion: authorizationVersion}); err != nil {
-				return Confirmation{}, err
-			}
-			bindingRef, err := randomRef("bind_")
-			if err != nil {
-				return Confirmation{}, err
-			}
-			ttl := service.BindingTTL
-			if ttl <= 0 {
-				ttl = defaultBindingTTL
-			}
-			if _, err := q.CreateActionBinding(ctx, db.CreateActionBindingParams{ID: newID(), BindingRef: bindingRef,
-				PendingActionID: action.ID, EnterpriseID: enterpriseID, ActorUserID: uuid.NullUUID{UUID: actor, Valid: true},
-				Action: "confirm", RequestID: requestID, ExpiresAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(ttl), Valid: true}}); err != nil {
-				return Confirmation{}, err
-			}
-			policies, err := q.ListMatchingApprovalPolicies(ctx, approvalPolicyQuery(enterpriseID, action, plan))
-			if err != nil {
-				return Confirmation{}, err
-			}
-			policies, err = matchingApprovalPolicies(ctx, q, action, plan, policies)
-			if err != nil {
-				return Confirmation{}, err
-			}
-			if len(policies) == 0 {
-				ready, err := q.MarkPendingActionReady(ctx, db.MarkPendingActionReadyParams{ID: action.ID, EnterpriseID: enterpriseID})
-				if err != nil {
-					return Confirmation{}, err
-				}
-				execution, err := service.createExecutionTask(ctx, q, ready, "confirm:"+idempotencyKey)
-				if err != nil {
-					return Confirmation{}, err
-				}
-				_ = plan // The plan was verified without exposing it to the response.
-				return Confirmation{PendingAction: ready, Execution: &execution}, service.audit(ctx, q, actorID, enterpriseID, "pending_action.confirm", action, "ready")
-			}
-
-			requirementHash := hashPolicies(policies)
-			action, err = q.SetPendingActionPolicySnapshot(ctx, db.SetPendingActionPolicySnapshotParams{ID: action.ID, EnterpriseID: enterpriseID, PolicySnapshotHash: requirementHash})
-			if err != nil {
-				return Confirmation{}, err
-			}
-			expiresAt := time.Now().UTC().Add(defaultApprovalTTL)
-			for _, policy := range policies {
-				candidate := time.Now().UTC().Add(time.Duration(policy.ExpiresAfterSeconds) * time.Second)
-				if candidate.Before(expiresAt) {
-					expiresAt = candidate
-				}
-			}
-			approval, err := q.CreateApprovalRequest(ctx, db.CreateApprovalRequestParams{ID: newID(), PendingActionID: action.ID,
-				EnterpriseID: enterpriseID, ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true}})
-			if err != nil {
-				return Confirmation{}, err
-			}
-			for _, policy := range policies {
-				if _, err := q.CreateApprovalRequirementSnapshot(ctx, db.CreateApprovalRequirementSnapshotParams{ID: newID(), ApprovalRequestID: approval.ID,
-					EnterpriseID: enterpriseID, PolicyID: policy.ID, PolicyVersion: policy.Version, MinimumApprovers: policy.MinimumApprovers,
-					SeparationOfDuty: policy.SeparationOfDuty, ApproverRoleIds: policy.ApproverRoleIds, PolicyHash: hashPolicy(policy)}); err != nil {
-					return Confirmation{}, err
-				}
-			}
-			action, err = q.MarkPendingActionAwaitingApproval(ctx, db.MarkPendingActionAwaitingApprovalParams{ID: action.ID, EnterpriseID: enterpriseID})
-			if err != nil {
-				return Confirmation{}, err
-			}
-			return Confirmation{PendingAction: action, ApprovalRequest: &approval}, service.audit(ctx, q, actorID, enterpriseID, "pending_action.confirm", action, "awaiting_approval")
+			return service.confirmWithQueries(ctx, q, actor, actorID, requestID, enterpriseID, authorizationVersion, actionRef, idempotencyKey, true)
 		})
+}
+
+func (service Service) InvokeCardBinding(ctx context.Context, actorID, requestID string, enterpriseID uuid.UUID, authorizationVersion int64, bindingRef, idempotencyKey string) (CardBindingInvocation, error) {
+	actor, err := uuid.Parse(actorID)
+	if err != nil {
+		return CardBindingInvocation{}, ErrUnavailable
+	}
+	request := struct {
+		BindingRef           string `json:"binding_ref"`
+		AuthorizationVersion int64  `json:"authorization_version"`
+	}{bindingRef, authorizationVersion}
+	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actorID, "card_action_binding.invoke", idempotencyKey, request, 200,
+		func(q *db.Queries) (CardBindingInvocation, error) {
+			binding, err := q.GetCardActionBindingForUpdate(ctx, db.GetCardActionBindingForUpdateParams{BindingRef: bindingRef, EnterpriseID: enterpriseID})
+			if err != nil {
+				return CardBindingInvocation{}, ErrInvalidated
+			}
+			if err := cardBindingStateError(binding.Status, binding.ExpiresAt.Time, time.Now().UTC()); err != nil {
+				return CardBindingInvocation{}, err
+			}
+			if !binding.ActorUserID.Valid || binding.ActorUserID.UUID != actor || !binding.AuthorizationVersion.Valid || binding.AuthorizationVersion.Int64 != authorizationVersion {
+				return CardBindingInvocation{}, ErrInvalidated
+			}
+			pending, err := q.GetPendingActionByIDForUpdate(ctx, db.GetPendingActionByIDForUpdateParams{ID: binding.PendingActionID, EnterpriseID: enterpriseID})
+			if err != nil || pending.CreatorSubjectType != "user" || pending.CreatorSubjectID != actor || pending.AuthorizationVersion != authorizationVersion {
+				return CardBindingInvocation{}, ErrInvalidated
+			}
+			if _, err = q.ConsumeCardActionBinding(ctx, db.ConsumeCardActionBindingParams{ID: binding.ID, EnterpriseID: enterpriseID}); err != nil {
+				return CardBindingInvocation{}, ErrInvalidated
+			}
+			if binding.Action == "cancel" {
+				cancelled, cancelErr := q.CancelPendingAction(ctx, db.CancelPendingActionParams{ActionRef: pending.ActionRef, EnterpriseID: enterpriseID, CreatorSubjectID: actor})
+				if cancelErr != nil {
+					return CardBindingInvocation{}, ErrInvalidated
+				}
+				if err := service.audit(ctx, q, actorID, enterpriseID, "pending_action.cancel", cancelled, "cancelled"); err != nil {
+					return CardBindingInvocation{}, err
+				}
+				return CardBindingInvocation{Action: "cancel", PendingAction: cancelled}, nil
+			}
+			if binding.Action != "confirm" {
+				return CardBindingInvocation{}, ErrInvalidated
+			}
+			confirmation, err := service.confirmWithQueries(ctx, q, actor, actorID, requestID, enterpriseID, authorizationVersion, pending.ActionRef, idempotencyKey, false)
+			return CardBindingInvocation{Action: "confirm", Confirmation: confirmation, PendingAction: confirmation.PendingAction}, err
+		})
+}
+
+func cardBindingStateError(status string, expiresAt, now time.Time) error {
+	if status == "consumed" {
+		return ErrBindingConsumed
+	}
+	if status == "expired" || now.After(expiresAt) {
+		return ErrBindingExpired
+	}
+	if status != "pending" {
+		return ErrInvalidated
+	}
+	return nil
+}
+
+func (service Service) confirmWithQueries(ctx context.Context, q *db.Queries, actor uuid.UUID, actorID, requestID string, enterpriseID uuid.UUID, authorizationVersion int64, actionRef, idempotencyKey string, createTextBinding bool) (Confirmation, error) {
+	action, plan, err := service.lockAndRevalidate(ctx, q, enterpriseID, actionRef, "awaiting_confirmation", authorizationVersion)
+	if err != nil || action.CreatorSubjectType != "user" || action.CreatorSubjectID != actor {
+		return Confirmation{}, ErrInvalidated
+	}
+	if _, err := q.CreateUserConfirmation(ctx, db.CreateUserConfirmationParams{ID: newID(), PendingActionID: action.ID,
+		EnterpriseID: enterpriseID, ActorUserID: actor, AuthorizationVersion: authorizationVersion}); err != nil {
+		return Confirmation{}, err
+	}
+	if createTextBinding {
+		bindingRef, err := randomRef("bind_")
+		if err != nil {
+			return Confirmation{}, err
+		}
+		ttl := service.BindingTTL
+		if ttl <= 0 {
+			ttl = defaultBindingTTL
+		}
+		binding, err := q.CreateActionBinding(ctx, db.CreateActionBindingParams{ID: newID(), BindingRef: bindingRef,
+			PendingActionID: action.ID, EnterpriseID: enterpriseID, ActorUserID: uuid.NullUUID{UUID: actor, Valid: true},
+			Action: "confirm", RequestID: requestID, ExpiresAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(ttl), Valid: true}})
+		if err != nil {
+			return Confirmation{}, err
+		}
+		if _, err := q.ConsumeActionBinding(ctx, db.ConsumeActionBindingParams{ID: binding.ID, EnterpriseID: enterpriseID}); err != nil {
+			return Confirmation{}, ErrInvalidated
+		}
+	}
+	policies, err := q.ListMatchingApprovalPolicies(ctx, approvalPolicyQuery(enterpriseID, action, plan))
+	if err != nil {
+		return Confirmation{}, err
+	}
+	policies, err = matchingApprovalPolicies(ctx, q, action, plan, policies)
+	if err != nil {
+		return Confirmation{}, err
+	}
+	if len(policies) == 0 {
+		ready, err := q.MarkPendingActionReady(ctx, db.MarkPendingActionReadyParams{ID: action.ID, EnterpriseID: enterpriseID})
+		if err != nil {
+			return Confirmation{}, err
+		}
+		execution, err := service.createExecutionTask(ctx, q, ready, "confirm:"+idempotencyKey)
+		if err != nil {
+			return Confirmation{}, err
+		}
+		return Confirmation{PendingAction: ready, Execution: &execution}, service.audit(ctx, q, actorID, enterpriseID, "pending_action.confirm", action, "ready")
+	}
+	approval, err := service.createApprovalRequest(ctx, q, action, policies)
+	if err != nil {
+		return Confirmation{}, err
+	}
+	action, err = q.MarkPendingActionAwaitingApproval(ctx, db.MarkPendingActionAwaitingApprovalParams{ID: action.ID, EnterpriseID: enterpriseID})
+	if err != nil {
+		return Confirmation{}, err
+	}
+	return Confirmation{PendingAction: action, ApprovalRequest: &approval}, service.audit(ctx, q, actorID, enterpriseID, "pending_action.confirm", action, "awaiting_approval")
 }
 
 func (service Service) Decide(ctx context.Context, actorID string, enterpriseID, requestID uuid.UUID, decision, reason, idempotencyKey string) (Decision, error) {

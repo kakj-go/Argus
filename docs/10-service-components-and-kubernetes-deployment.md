@@ -1,6 +1,6 @@
 # 服务组件与 Kubernetes 一键部署
 
-> 本文描述第一版目标部署架构。仓库已经具备可安装、可验证和可清理的 Evaluation 基座；M2 身份/IAM 与 M3 资源/Connector 页面均已接入 real API，Agent、Remote Access、Card 服务端治理和 Telemetry 仍按后续里程碑推进。实际完成度见[当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)，PostgreSQL 环境决策见[PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)。
+> 本文描述第一版目标部署架构。仓库已经具备可安装、可验证和可清理的 Evaluation 基座；M2-M6 的身份、资源/Connector、Agent、Card 和 Remote Access 均已接入 real API，Telemetry 由 M7 推进。实际完成度见[当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)，PostgreSQL 环境决策见[PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)。
 
 ## 1. 目标
 
@@ -55,7 +55,7 @@ cmd/
 | `argus-telemetry-query`   | 任意副本查询                                    | 无状态 Cursor、Enterprise/授权 Resource 条件强制注入、字段脱敏和查询预算           |
 | `otel-clickhouse-writer`  | Kafka Consumer Group                            | Partition 数、Rebalance 和 Offset 门禁                                             |
 
-具体状态所有权和扩缩容失败场景见[运行时状态、Redis 与横向扩展](./11-runtime-state-and-horizontal-scaling.md)。Migration、Bootstrap 和 DLQ 重放不是普通横向扩展工作负载，必须使用 Job/Lease 保证单一所有者。
+具体状态所有权和扩缩容失败场景见[运行时状态、Redis 与横向扩展](./11-runtime-state-and-horizontal-scaling.md)。Migration、Bootstrap、系统 Card Catalog Sync 和 DLQ 重放不是普通横向扩展工作负载，必须使用 Job/Lease 或幂等数据库约束保证单一结果。`argus-card-catalog-sync` 只同步随镜像发布的不可变系统 Card Revision，普通 Server 启动不修改目录。
 
 ### 2.2 Kubernetes 内置平台依赖
 
@@ -111,7 +111,9 @@ flowchart TB
 - Connector 仅连接 `argus-connector-gateway`，承载控制、Artifact 和独立的 Remote Session Stream，不发送遥测数据。
 - Direct Executor 只从固定出口访问经 DNS/IP 双重校验的公网 SSH/WinRM 目标，NetworkPolicy/出口防火墙拒绝集群、私网、云元数据和平台内部地址。
 - `argus-server` 通过独立内部 CA 的 mTLS gRPC 向 Direct Executor 发送持久任务派发提示；PostgreSQL 队列是权威事实并负责断连恢复，RPC 不携带任意目标参数。
-- Remote Access 入口只接受 `argus-server` 签发的短期一次性会话票据；录像写 Artifact Store，不能依赖 Gateway Pod 本地磁盘。
+- Remote Access 入口固定使用外部 WSS `9445`，只接受 `argus-server` 签发的短期一次性会话票据；Gateway peer 使用内部 mTLS `9446`，Connector 控制继续使用 `9443`，Direct Executor RPC 使用 `9444`。
+- Gateway peer 通过 Kubernetes API 获取 Ready owner Pod IP，ServiceAccount 只允许读取同 Namespace Pod；NetworkPolicy 必须允许 Kubernetes API Endpoint、DNS、Gateway peer `9446`、PostgreSQL、Redis、Direct Executor 和 ObjectStore。
+- 录像按 asciicast v2 NDJSON 加密分片写 Artifact Store，不能依赖 Gateway Pod 本地磁盘；ObjectStore 连续不可用超过 30 秒时会话 fail closed。
 - Collector 仅连接 `argus-telemetry-ingest`，不接收远程控制命令。
 - `argus-telemetry-query` 只持有 ClickHouse 只读账号。
 - `otel-clickhouse-writer` 只持有 Kafka Consumer 和 ClickHouse Insert 权限。
@@ -381,7 +383,7 @@ Writer 的 Kafka Receiver 配置 `message_marking.after: true`、`on_error: fals
 | ---------------------------------- | ------------------------- | ------------- | -------------------------------------------------------------------- |
 | `argus.example.com`                | `argus-server`/Web        | HTTPS/WSS     | 用户、API、Card Host                                                 |
 | `connector.argus.example.com`      | `argus-connector-gateway` | TLS 长连接    | Connector 控制链路                                                   |
-| `remote.argus.example.com`         | `argus-connector-gateway` | HTTPS/WSS     | 经短期票据授权的人工 SSH Web Terminal；与 Connector 入口分端口和限流 |
+| `remote.argus.example.com`         | `argus-connector-gateway` | HTTPS/WSS     | 经短期票据授权的 SSH PTY/HTTPS WinRS；与 Connector 入口分端口和限流  |
 | `otlp.argus.example.com:4317`      | `argus-telemetry-ingest`  | OTLP/gRPC TLS | 遥测推送                                                             |
 | `otlp-http.argus.example.com:4318` | `argus-telemetry-ingest`  | OTLP/HTTP TLS | 遥测推送                                                             |
 
@@ -466,7 +468,7 @@ Token 过期时间
 2. PostgreSQL/Redis/Artifact Store 读写探测。
 3. 创建并销毁一个受限 OpenSandbox Session。
 4. Connector Gateway TLS 和长连接探测。
-5. Remote Access WSS 短期票据握手、重放拒绝和录像 Artifact 写入探测。
+5. Remote Access WSS 短期票据握手、重放拒绝、SSH PTY/WinRS 模式、跨 Gateway `9446`、Drain 和录像 Artifact 写入探测。
 6. Direct Executor 验证声明固定出口，并确认私网、环回、云元数据和平台内部地址被拒绝。
 7. 向 Ingest 发送带测试 Enterprise/Resource/Collector 身份的 Metrics/Logs/Trace，并验证客户端伪造同名字段会被覆盖或拒绝。
 8. 验证 Kafka Topic 收到数据、Writer 消费成功。

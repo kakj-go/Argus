@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 M3_CONNECTOR_PIDS=()
+M3_GATEWAY_PF_PID=""
 M3_TARGET_IMAGE="argus/argus-e2e-ssh:m3-${RUN_ID}"
 M3_GATEWAY_PORT=${ARGUS_E2E_CONNECTOR_GATEWAY_PORT:-4193}
 M3_SSH_PORT=${ARGUS_E2E_SSH_PORT:-4222}
@@ -43,6 +44,34 @@ m3_confirm() {
   request "$name" 200 POST "/enterprise/pending-actions/${action_ref}/confirm" "$ENTERPRISE_JAR" - \
     --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}" \
     --header "Idempotency-Key: ${name}-${RUN_ID}"
+  if [[ "$PHASE" == "m5" || "$PHASE" == "m6" ]]; then
+    jq -e '.pending_action.status == "ready" and .execution.status == "pending"' "$RESPONSE_FILE" >/dev/null
+    local execution_id status resource_id enrollment_json result
+    execution_id=$(jq -er '.execution.execution_id' "$RESPONSE_FILE")
+    for _ in $(seq 1 120); do
+      status=$(m3_psql "SELECT status FROM executions WHERE id='${execution_id}';")
+      [[ "$status" == "succeeded" ]] && break
+      [[ "$status" == "failed" || "$status" == "cancelled" ]] && fail "${name} Execution ended as ${status}"
+      sleep 1
+    done
+    [[ "$status" == "succeeded" ]] || fail "${name} Execution did not converge"
+    resource_id=$(m3_psql "SELECT coalesce(result_resource_id::text,'') FROM pending_actions WHERE action_ref='${action_ref}';")
+    enrollment_json=null
+    if [[ "$(m3_psql "SELECT count(*) FROM execution_one_time_results WHERE execution_id='${execution_id}';")" == "1" ]]; then
+      rm -f "$ENTERPRISE_JAR"
+      enterprise_login
+      request "${name}-one-time-result" 200 POST "/enterprise/executions/${execution_id}/one-time-result" "$ENTERPRISE_JAR" - \
+        --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}" \
+        --header "Idempotency-Key: ${name}-one-time-result-${RUN_ID}"
+      enrollment_json=$(jq -c '.enrollment' "$RESPONSE_FILE")
+    fi
+    result=$(jq -nc --arg resource_id "$resource_id" --argjson enrollment "$enrollment_json" '
+      {pending_action:{status:"succeeded"}}
+      + (if $resource_id == "" then {} else {resource_ref:{resource_id:$resource_id}} end)
+      + (if $enrollment == null then {} else {enrollment:$enrollment} end)')
+    printf '%s\n' "$result" >"$RESPONSE_FILE"
+    return
+  fi
   jq -e '.pending_action.status == "succeeded"' "$RESPONSE_FILE" >/dev/null
 }
 
@@ -126,7 +155,7 @@ EOF
   }]}}}}')
   k -n "$SYSTEM_NS" patch deployment argus-direct-executor --type=strategic --patch "$direct_patch" >/dev/null
   k -n "$SYSTEM_NS" rollout status deployment/argus-direct-executor --timeout=180s >/dev/null
-  k -n "$SYSTEM_NS" port-forward service/argus-m3-ssh-target "${M3_SSH_PORT}:22" >"${ARTIFACT_DIR}/port-forward-ssh.log" 2>&1 &
+  kubectl --context "$KUBE_CONTEXT" -n "$SYSTEM_NS" port-forward service/argus-m3-ssh-target "${M3_SSH_PORT}:22" >"${ARTIFACT_DIR}/port-forward-ssh.log" 2>&1 &
   PF_PIDS+=("$!")
   for _ in $(seq 1 30); do
     nc -z 127.0.0.1 "$M3_SSH_PORT" >/dev/null 2>&1 && return
@@ -136,9 +165,15 @@ EOF
 }
 
 m3_start_gateway_forward() {
+  if [[ -n "$M3_GATEWAY_PF_PID" ]]; then
+    kill "$M3_GATEWAY_PF_PID" >/dev/null 2>&1 || true
+    wait "$M3_GATEWAY_PF_PID" >/dev/null 2>&1 || true
+    M3_GATEWAY_PF_PID=""
+  fi
   assert_port_free "$M3_GATEWAY_PORT"
-  k -n "$SYSTEM_NS" port-forward service/argus-connector-gateway "${M3_GATEWAY_PORT}:9443" >"${ARTIFACT_DIR}/port-forward-gateway.log" 2>&1 &
-  PF_PIDS+=("$!")
+  kubectl --context "$KUBE_CONTEXT" -n "$SYSTEM_NS" port-forward service/argus-connector-gateway "${M3_GATEWAY_PORT}:9443" >"${ARTIFACT_DIR}/port-forward-gateway.log" 2>&1 &
+  M3_GATEWAY_PF_PID=$!
+  PF_PIDS+=("$M3_GATEWAY_PF_PID")
   for _ in $(seq 1 60); do
     nc -z 127.0.0.1 "$M3_GATEWAY_PORT" >/dev/null 2>&1 && return
     sleep 1
@@ -380,8 +415,10 @@ run_m3_api_flow() {
     "$(jq -nc --argjson version "$M3_MANAGED_ACCOUNT_VERSION" '{privilege_level:"standard",expected_version:$version}')" \
     --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
   jq -e '.privilege_level == "standard"' "$RESPONSE_FILE" >/dev/null
+  request m3-cancel-host-current 200 GET "/enterprise/hosts/${M3_DIRECT_HOST_ID}" "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
+  M3_CANCEL_HOST_VERSION=$(jq -er '.resource_version' "$RESPONSE_FILE")
   request m3-cancel-preview 201 POST "/enterprise/hosts/${M3_DIRECT_HOST_ID}/actions/preview-update" "$ENTERPRISE_JAR" \
-    "$(jq -nc --argjson version "$(jq -er '.resource_ref.version' "${WORK_DIR}/m3-direct-host-confirm.json")" '{name:"m3-public-host",expected_version:$version}')" \
+    "$(jq -nc --argjson version "$M3_CANCEL_HOST_VERSION" '{name:"m3-public-host",expected_version:$version}')" \
     --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}" --header "Idempotency-Key: m3-cancel-preview-${RUN_ID}"
   M3_CANCEL_ACTION_REF=$(jq -er '.action_ref' "$RESPONSE_FILE")
   for attempt in first retry; do
@@ -546,6 +583,7 @@ run_m3_api_flow() {
   k -n "$SYSTEM_NS" rollout restart deployment/argus-connector-gateway >/dev/null
   k -n "$SYSTEM_NS" rollout status deployment/argus-connector-gateway --timeout=300s >/dev/null
   m3_start_gateway_forward
+  start_remote_port_forward port-forward-remote-after-m3-restart.log
   m3_wait_connector_online "$M3_BASTION_CONNECTOR_ID" "$((M3_BASTION_EPOCH + 1))"
   m3_wait_connector_online "$M3_KUBERNETES_CONNECTOR_ID" "$((M3_KUBERNETES_EPOCH + 1))"
 

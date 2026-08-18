@@ -42,7 +42,10 @@ func (compactor Compactor) Handle(ctx context.Context, task runtime.Task) error 
 	}
 	through, firstKept, ok := ChooseCompactionBoundary(events)
 	if !ok {
-		return compactor.fail(ctx, run, "CONTEXT_COMPACTION_FAILED")
+		if requiresCompactionResume(payload.Reason) {
+			return compactor.fail(ctx, run, "CONTEXT_COMPACTION_FAILED")
+		}
+		return nil
 	}
 	selected := make([]db.ConversationEvent, 0)
 	for _, event := range events {
@@ -55,6 +58,16 @@ func (compactor Compactor) Handle(ctx context.Context, task runtime.Task) error 
 		return err
 	}
 	sourceHash := sha256.Sum256(source)
+	if _, err := compactor.Store.Queries.GetContextSnapshotBySourceHash(ctx, db.GetContextSnapshotBySourceHashParams{
+		RunID: run.ID, EnterpriseID: run.EnterpriseID, SourceHash: sourceHash[:],
+	}); err == nil {
+		if requiresCompactionResume(payload.Reason) {
+			return compactor.fail(ctx, run, "CONTEXT_COMPACTION_FAILED")
+		}
+		return nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
 	summary, summaryTokens, err := compactor.generateSummary(ctx, run, selected)
 	if err != nil {
 		return compactor.fail(ctx, run, "CONTEXT_COMPACTION_FAILED")
@@ -67,6 +80,13 @@ func (compactor Compactor) Handle(ctx context.Context, task runtime.Task) error 
 		return err
 	}
 	err = compactor.Store.InTx(ctx, func(q *db.Queries) error {
+		if _, existingErr := q.GetContextSnapshotBySourceHash(ctx, db.GetContextSnapshotBySourceHashParams{
+			RunID: run.ID, EnterpriseID: run.EnterpriseID, SourceHash: sourceHash[:],
+		}); existingErr == nil {
+			return nil
+		} else if !errors.Is(existingErr, pgx.ErrNoRows) {
+			return existingErr
+		}
 		if err := q.SupersedeContextSnapshots(ctx, db.SupersedeContextSnapshotsParams{RunID: run.ID, EnterpriseID: run.EnterpriseID}); err != nil {
 			return err
 		}
@@ -87,7 +107,7 @@ func (compactor Compactor) Handle(ctx context.Context, task runtime.Task) error 
 		if getErr != nil {
 			return getErr
 		}
-		if terminalRun(current.Status) {
+		if terminalRun(current.Status) || !requiresCompactionResume(payload.Reason) || current.Status != "waiting_system" {
 			return nil
 		}
 		updated, updateErr := q.UpdateRunStatus(ctx, db.UpdateRunStatusParams{ID: run.ID, EnterpriseID: run.EnterpriseID, Status: "pending", Version: current.Version})
@@ -99,6 +119,10 @@ func (compactor Compactor) Handle(ctx context.Context, task runtime.Task) error 
 		return taskErr
 	})
 	return err
+}
+
+func requiresCompactionResume(reason string) bool {
+	return reason == "hard_limit"
 }
 
 func (compactor Compactor) generateSummary(ctx context.Context, run db.Run, events []db.ConversationEvent) (string, int, error) {

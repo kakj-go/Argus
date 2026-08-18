@@ -334,7 +334,7 @@ components:
         id: {type: string, format: uuid}
         domain: {type: string, enum: [platform, enterprise]}
         enterprise_id: {type: string, format: uuid}
-        actor_type: {type: string, enum: [platform_user, enterprise_user, service_account, connector, direct_executor, system]}
+        actor_type: {type: string, enum: [platform_user, enterprise_user, service_account, connector, direct_executor, remote_access_gateway, system]}
         actor_id: {type: string, minLength: 1}
         action: {type: string, pattern: "^[a-z][a-z0-9_.]+$"}
         resource_type: {type: string, minLength: 1, maxLength: 128}

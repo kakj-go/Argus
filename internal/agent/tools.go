@@ -2,9 +2,11 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -40,6 +42,11 @@ func (tools ResourceTools) Register(registry *mcp.Registry) error {
 		tools.preview("kubernetes.cluster.update.preview", "kubernetes.manage", clusterUpdateSchema(), validateClusterUpdate, tools.previewClusterUpdate),
 		tools.preview("kubernetes.cluster.delete.preview", "kubernetes.manage", deleteSchema("cluster_id"), validateDelete("cluster_id"), tools.previewClusterDelete),
 	}
+	for index := range registrations {
+		if registrations[index].ID == "pending_action.get" {
+			registrations[index].OutputVersion = "argus.pending_action/v1"
+		}
+	}
 	for _, resourceType := range []string{"namespace", "node", "pod", "deployment", "statefulset", "daemonset", "service"} {
 		resourceType := resourceType
 		permission := "kubernetes.read"
@@ -69,7 +76,7 @@ func (tools ResourceTools) query(id string, parallel bool, permission string, sc
 	if parallel {
 		mode = mcp.ParallelSafe
 	}
-	return mcp.Metadata{ID: id, Risk: "read", Visibility: mcp.Visible, ExecutionMode: mode, Required: []string{permission}, InputVersion: id + "/v1", OutputVersion: id + "/v1", ProjectionSchema: "argus.tool_result_projection/v1", MaxResultBytes: 4 << 20, InputSchema: schema, Authorize: tools.authorize(permission), Validate: validate, Execute: execute}
+	return tools.cardMetadata(mcp.Metadata{ID: id, Risk: "read", Visibility: mcp.Visible, ExecutionMode: mode, Required: []string{permission}, InputVersion: id + "/v1", OutputVersion: id + "/v1", ProjectionSchema: "argus.tool_result_projection/v1", MaxResultBytes: 4 << 20, InputSchema: schema, Authorize: tools.authorize(permission), Validate: validate, Execute: execute})
 }
 func (tools ResourceTools) mutation(id, permission string, schema map[string]any, validate func(map[string]any) error, execute func(context.Context, mcp.Call) (mcp.Result, error)) mcp.Metadata {
 	return mcp.Metadata{ID: id, Risk: "write", Visibility: mcp.Visible, ExecutionMode: mcp.Sequential, Required: []string{permission}, InputVersion: id + "/v1", OutputVersion: id + "/v1", ProjectionSchema: "argus.tool_result_projection/v1", MaxResultBytes: 256 << 10, InputSchema: schema, Authorize: tools.authorize(permission), Validate: validate, Execute: execute}
@@ -78,7 +85,71 @@ func (tools ResourceTools) preview(id, permission string, schema map[string]any,
 	metadata := tools.mutation(id, permission, schema, validate, execute)
 	metadata.OutputVersion = "argus.pending_action/v1"
 	metadata.ProjectionSchema = "argus.pending_action_public/v1"
+	return tools.cardMetadata(metadata)
+}
+
+func (tools ResourceTools) cardMetadata(metadata mcp.Metadata) mcp.Metadata {
+	metadata.CardSafe = true
+	metadata.ToolFamily = metadata.ID
+	metadata.OutputSchema = outputSchema(metadata.ID)
+	metadata.SemanticFields = semanticFields(metadata.ID)
+	metadata.FieldTypes = fieldTypes(metadata.ID)
+	metadata.CardProjector = func(_ context.Context, _ mcp.Call, result mcp.Result) (map[string]any, bool, error) {
+		encoded, err := json.Marshal(result.Structured)
+		if err != nil {
+			return nil, false, err
+		}
+		var projected map[string]any
+		if err := json.Unmarshal(encoded, &projected); err != nil {
+			return nil, false, err
+		}
+		return projected, result.Partial, nil
+	}
 	return metadata
+}
+
+func fieldTypes(toolID string) map[string]string {
+	if strings.HasSuffix(toolID, ".list") {
+		return map[string]string{"$.items": "array", "$.items[*].id": "string", "$.items[*].labels": "object"}
+	}
+	if strings.HasSuffix(toolID, ".preview") || strings.HasPrefix(toolID, "pending_action.") {
+		return map[string]string{"$": "object", "$.action_ref": "string", "$.status": "string"}
+	}
+	if toolID == "kubernetes.pod.logs" {
+		return map[string]string{"$": "object", "$.content": "string", "$.truncated": "boolean"}
+	}
+	return map[string]string{"$": "object", "$.id": "string", "$.labels": "object"}
+}
+
+func outputSchema(toolID string) map[string]any {
+	identifier := map[string]any{"type": "string", "format": "uuid"}
+	labels := map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}
+	resource := map[string]any{"type": "object", "properties": map[string]any{
+		"id": identifier, "name": map[string]any{"type": "string"}, "labels": labels, "resource_version": map[string]any{"type": "integer"},
+	}, "required": []string{"id", "name"}, "additionalProperties": true}
+	if strings.HasSuffix(toolID, ".list") {
+		return map[string]any{"type": "object", "properties": map[string]any{"items": map[string]any{"type": "array", "items": resource}}, "required": []string{"items"}, "additionalProperties": true}
+	}
+	if strings.HasSuffix(toolID, ".preview") || strings.HasPrefix(toolID, "pending_action.") {
+		return map[string]any{"type": "object", "properties": map[string]any{
+			"action_ref": map[string]any{"type": "string"}, "title": map[string]any{"type": "string"}, "summary": map[string]any{"type": "string"},
+			"risk": map[string]any{"type": "string"}, "status": map[string]any{"type": "string"},
+		}, "required": []string{"action_ref", "status"}, "additionalProperties": true}
+	}
+	if toolID == "kubernetes.pod.logs" {
+		return map[string]any{"type": "object", "properties": map[string]any{"content": map[string]any{"type": "string"}, "truncated": map[string]any{"type": "boolean"}}, "required": []string{"content", "truncated"}, "additionalProperties": true}
+	}
+	return resource
+}
+
+func semanticFields(toolID string) map[string]string {
+	if strings.HasSuffix(toolID, ".list") {
+		return map[string]string{"$.items": "resource_collection", "$.items[*].id": "resource_id", "$.items[*].labels": "resource_labels"}
+	}
+	if strings.HasSuffix(toolID, ".preview") || strings.HasPrefix(toolID, "pending_action.") {
+		return map[string]string{"$.action_ref": "pending_action_ref", "$.status": "pending_action_status"}
+	}
+	return map[string]string{"$.id": "resource_id", "$.labels": "resource_labels"}
 }
 
 func (tools ResourceTools) authorize(permission string) func(context.Context, mcp.Call) error {
@@ -336,11 +407,17 @@ func nullID(input map[string]any, key string) uuid.NullUUID {
 	return uuid.NullUUID{UUID: parsed, Valid: err == nil}
 }
 func idempotency(call mcp.Call) string {
-	value := stringValue(call.Input, "request_id")
-	if value == "" {
-		value = "tool-" + call.ToolID + "-" + call.Subject
+	identity := call.InvocationID
+	if identity == "" {
+		identity = call.RunID
 	}
-	return value
+	if call.CallID != "" {
+		identity += "-" + call.CallID
+	}
+	if identity == "" {
+		identity = call.Subject
+	}
+	return "tool-" + call.ToolID + "-" + identity
 }
 
 func (tools ResourceTools) listHosts(ctx context.Context, call mcp.Call) (mcp.Result, error) {

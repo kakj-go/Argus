@@ -1,0 +1,135 @@
+card_collection:
+  get:
+    operationId: listInteractiveCards
+    summary: List interactive Cards available to the enterprise.
+    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+    responses:
+      '200': {description: Card page., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardPage'}}}}
+      default: {$ref: '#/components/responses/Error'}
+card_item:
+  parameters: [{name: card_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getInteractiveCard
+    summary: Get an interactive Card and its active revision summary.
+    responses:
+      '200': {description: Card., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/InteractiveCard'}}}}
+      default: {$ref: '#/components/responses/Error'}
+card_versions:
+  parameters: [{name: card_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: listCardVersions
+    summary: List immutable versions of an interactive Card.
+    responses:
+      '200': {description: Versions., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardVersionPage'}}}}
+      default: {$ref: '#/components/responses/Error'}
+  post:
+    operationId: createCardConfigurationVersion
+    summary: Create a new immutable Card configuration revision.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardConfigurationVersionCreate'}}}}
+    responses:
+      '201': {description: Version., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardVersion'}}}}
+      default: {$ref: '#/components/responses/Error'}
+card_version:
+  parameters:
+    - {name: card_id, in: path, required: true, schema: {type: string, format: uuid}}
+    - {name: revision, in: path, required: true, schema: {type: integer, minimum: 1}}
+  get:
+    operationId: getCardVersion
+    summary: Get one immutable Card version.
+    responses:
+      '200': {description: Version., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardVersion'}}}}
+      default: {$ref: '#/components/responses/Error'}
+card_validation_runs:
+  parameters: [{name: card_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: startCardValidation
+    summary: Start browser validation for a Card version.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardValidationStart'}}}}
+    responses:
+      '201': {description: Validation run., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardValidationRun'}}}}
+      default: {$ref: '#/components/responses/Error'}
+card_validation_evidence:
+  parameters: [{name: run_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: submitCardValidationEvidence
+    summary: Submit browser validation evidence bound to a Card content hash.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardValidationEvidence'}}}}
+    responses:
+      '200': {description: Validation run., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardValidationRun'}}}}
+      default: {$ref: '#/components/responses/Error'}
+card_state:
+  parameters:
+    - {name: card_id, in: path, required: true, schema: {type: string, format: uuid}}
+    - {name: state_action, in: path, required: true, schema: {type: string, enum: [activate, disable, rollback, deprecate]}}
+  post:
+    operationId: changeInteractiveCardState
+    summary: Activate, disable, roll back, or deprecate an enterprise Card.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardStateCommand'}}}}
+    responses:
+      '200': {description: Card., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/InteractiveCard'}}}}
+      default: {$ref: '#/components/responses/Error'}
+tool_schema_catalog:
+  get:
+    operationId: listToolSchemaCatalog
+    summary: List Card-safe query and preview Tool schemas.
+    responses:
+      '200': {description: Tool schema catalog., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/ToolSchemaCatalog'}}}}
+      default: {$ref: '#/components/responses/Error'}
+card_presentations:
+  parameters: [{name: card_instance_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: createCardPresentation
+    summary: Reauthorize and materialize a Card presentation for the viewer.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardPresentationCreate'}}}}
+    responses:
+      '201': {description: Presentation., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardPresentation'}}}}
+      default: {$ref: '#/components/responses/Error'}
+card_query_invoke:
+  parameters: [{name: binding_id, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}]
+  post:
+    operationId: invokeCardQueryBinding
+    summary: Invoke a short-lived read-only Card query binding.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    responses:
+      '200': {description: Binding result., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardBindingInvokeResult'}}}}
+      default: {$ref: '#/components/responses/Error'}
+card_action_invoke:
+  parameters: [{name: binding_id, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}]
+  post:
+    operationId: invokeCardActionBinding
+    summary: Consume a short-lived Card action binding.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    responses:
+      '200': {description: Binding result., content: {application/json: {schema: {$ref: '../components/m5.yaml#/components/schemas/CardBindingInvokeResult'}}}}
+      default: {$ref: '#/components/responses/Error'}
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: '../components/common.yaml#/components/schemas/IdempotencyKey'}
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: {type: string, minLength: 32, maxLength: 256}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content: {application/json: {schema: {$ref: '../components/common.yaml#/components/schemas/ApiError'}}}

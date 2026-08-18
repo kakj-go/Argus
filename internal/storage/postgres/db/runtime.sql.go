@@ -719,6 +719,45 @@ func (q *Queries) GetArtifactByRef(ctx context.Context, arg GetArtifactByRefPara
 	return i, err
 }
 
+const getContextSnapshotBySourceHash = `-- name: GetContextSnapshotBySourceHash :one
+SELECT id, enterprise_id, conversation_id, run_id, revision, source_from_sequence, source_through_sequence, first_kept_sequence, typed_checkpoint, narrative_summary, compaction_model_id, compaction_model_revision, prompt_version, estimated_tokens_before, actual_tokens_after, source_hash, snapshot_hash, status, error_code, created_at FROM context_snapshots
+WHERE run_id = $1 AND enterprise_id = $2 AND source_hash = $3
+`
+
+type GetContextSnapshotBySourceHashParams struct {
+	RunID        uuid.UUID `json:"run_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	SourceHash   []byte    `json:"source_hash"`
+}
+
+func (q *Queries) GetContextSnapshotBySourceHash(ctx context.Context, arg GetContextSnapshotBySourceHashParams) (ContextSnapshot, error) {
+	row := q.db.QueryRow(ctx, getContextSnapshotBySourceHash, arg.RunID, arg.EnterpriseID, arg.SourceHash)
+	var i ContextSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.ConversationID,
+		&i.RunID,
+		&i.Revision,
+		&i.SourceFromSequence,
+		&i.SourceThroughSequence,
+		&i.FirstKeptSequence,
+		&i.TypedCheckpoint,
+		&i.NarrativeSummary,
+		&i.CompactionModelID,
+		&i.CompactionModelRevision,
+		&i.PromptVersion,
+		&i.EstimatedTokensBefore,
+		&i.ActualTokensAfter,
+		&i.SourceHash,
+		&i.SnapshotHash,
+		&i.Status,
+		&i.ErrorCode,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getConversation = `-- name: GetConversation :one
 SELECT id, enterprise_id, owner_user_id, title, selected_model_id, status, version, created_at, updated_at FROM conversations WHERE id = $1 AND enterprise_id = $2 AND owner_user_id = $3
 `

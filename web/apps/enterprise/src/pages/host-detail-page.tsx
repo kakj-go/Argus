@@ -24,7 +24,7 @@ import {
 import "../styles/hosts.css";
 import { ComponentsTab } from "../components/hosts/components-tab";
 import { TasksTab } from "../components/hosts/tasks-tab";
-import { TerminalTab } from "../components/hosts/terminal-tab";
+import { RealTerminalTab } from "../components/hosts/real-terminal-tab";
 import {
   collectorTone,
   collectorStatusOf,
@@ -283,9 +283,9 @@ export function HostDetailPage() {
             <TabsTrigger value="overview">
               {t("hosts.detail.tabOverview")}
             </TabsTrigger>
-            {!realMode && <TabsTrigger value="terminal">
+            <TabsTrigger value="terminal">
               {t("hosts.detail.tabTerminal")}
-            </TabsTrigger>}
+            </TabsTrigger>
             {!realMode && <TabsTrigger value="components">
               {t("hosts.detail.tabComponents")}
             </TabsTrigger>}
@@ -296,9 +296,9 @@ export function HostDetailPage() {
           <TabsContent value="overview">
             <OverviewTab host={host} />
           </TabsContent>
-          {!realMode && <TabsContent value="terminal">
-            <TerminalTab host={host} scopes={scopes} />
-          </TabsContent>}
+          <TabsContent value="terminal">
+            {realMode ? <RealTerminalTab host={host} /> : <EmptyState description={t("hosts.terminal.realOnlyDesc")} title={t("hosts.terminal.realOnly")} />}
+          </TabsContent>
           {!realMode && <TabsContent value="components">
             <div id="otlp-collector">
               <ComponentsTab

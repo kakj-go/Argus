@@ -217,6 +217,58 @@ paths:
     $ref: ./paths/m4.yaml#/sandbox_terminate
   /platform/sandbox/usage:
     $ref: ./paths/m4.yaml#/sandbox_usage_collection
+  /enterprise/interactive-cards:
+    $ref: ./paths/m5.yaml#/card_collection
+  /enterprise/interactive-cards/{card_id}:
+    $ref: ./paths/m5.yaml#/card_item
+  /enterprise/interactive-cards/{card_id}/versions:
+    $ref: ./paths/m5.yaml#/card_versions
+  /enterprise/interactive-cards/{card_id}/versions/{revision}:
+    $ref: ./paths/m5.yaml#/card_version
+  /enterprise/interactive-cards/{card_id}/validation-runs:
+    $ref: ./paths/m5.yaml#/card_validation_runs
+  /enterprise/card-validation-runs/{run_id}/evidence:
+    $ref: ./paths/m5.yaml#/card_validation_evidence
+  /enterprise/interactive-cards/{card_id}/{state_action}:
+    $ref: ./paths/m5.yaml#/card_state
+  /enterprise/tool-schema-catalog:
+    $ref: ./paths/m5.yaml#/tool_schema_catalog
+  /enterprise/card-instances/{card_instance_id}/presentations:
+    $ref: ./paths/m5.yaml#/card_presentations
+  /enterprise/card-query-bindings/{binding_id}/invoke:
+    $ref: ./paths/m5.yaml#/card_query_invoke
+  /enterprise/card-action-bindings/{binding_id}/invoke:
+    $ref: ./paths/m5.yaml#/card_action_invoke
+  /enterprise/remote-access-grants:
+    $ref: ./paths/m6.yaml#/grant_collection
+  /enterprise/remote-access-grants/{id}:
+    $ref: ./paths/m6.yaml#/grant_item
+  /enterprise/remote-access-policies:
+    $ref: ./paths/m6.yaml#/policy_collection
+  /enterprise/remote-access-policies/{id}:
+    $ref: ./paths/m6.yaml#/policy_item
+  /enterprise/remote-access-requests:
+    $ref: ./paths/m6.yaml#/request_collection
+  /enterprise/remote-access-requests/{id}:
+    $ref: ./paths/m6.yaml#/request_item
+  /enterprise/remote-access-requests/{id}/decisions:
+    $ref: ./paths/m6.yaml#/request_decisions
+  /enterprise/remote-access-leases:
+    $ref: ./paths/m6.yaml#/lease_collection
+  /enterprise/remote-access-leases/{id}/revoke:
+    $ref: ./paths/m6.yaml#/lease_revoke
+  /enterprise/remote-access-sessions:
+    $ref: ./paths/m6.yaml#/session_collection
+  /enterprise/remote-access-sessions/{id}:
+    $ref: ./paths/m6.yaml#/session_item
+  /enterprise/remote-access-sessions/{id}/tickets:
+    $ref: ./paths/m6.yaml#/session_tickets
+  /enterprise/remote-access-sessions/{id}/terminate:
+    $ref: ./paths/m6.yaml#/session_terminate
+  /enterprise/remote-access-recordings/{id}:
+    $ref: ./paths/m6.yaml#/recording_item
+  /enterprise/remote-access-recordings/{id}/events:
+    $ref: ./paths/m6.yaml#/recording_events
   /conversations/{conversation_id}/events:
     get:
       operationId: streamConversationEvents
@@ -319,6 +371,36 @@ components:
       $ref: ../schemas/card/card.schema.json#/$defs/RenderPlan
     BridgeMessage:
       $ref: ../schemas/card/card.schema.json#/$defs/BridgeMessage
+    SlotBinding:
+      $ref: ../schemas/card/card.schema.json#/$defs/SlotBinding
+    ToolSchemaCatalogEntry:
+      $ref: ../schemas/card/card.schema.json#/$defs/ToolSchemaCatalogEntry
+    InteractiveCard:
+      $ref: ./components/m5.yaml#/components/schemas/InteractiveCard
+    CardVersion:
+      $ref: ./components/m5.yaml#/components/schemas/CardVersion
+    CardVersionSummary:
+      $ref: ./components/m5.yaml#/components/schemas/CardVersionSummary
+    CardValidationRun:
+      $ref: ./components/m5.yaml#/components/schemas/CardValidationRun
+    CardInstance:
+      $ref: ./components/m5.yaml#/components/schemas/CardInstance
+    CardPresentation:
+      $ref: ./components/m5.yaml#/components/schemas/CardPresentation
+    RemoteAccessGrant:
+      $ref: ./components/m6.yaml#/components/schemas/RemoteAccessGrant
+    RemoteAccessPolicy:
+      $ref: ./components/m6.yaml#/components/schemas/RemoteAccessPolicy
+    AccessRequest:
+      $ref: ./components/m6.yaml#/components/schemas/AccessRequest
+    AccessLease:
+      $ref: ./components/m6.yaml#/components/schemas/AccessLease
+    RemoteAccessSession:
+      $ref: ./components/m6.yaml#/components/schemas/RemoteAccessSession
+    SessionTicketResult:
+      $ref: ./components/m6.yaml#/components/schemas/SessionTicketResult
+    RemoteAccessRecording:
+      $ref: ./components/m6.yaml#/components/schemas/RemoteAccessRecording
     ConversationEvent:
       $ref: ../schemas/agent/agent.schema.json#/$defs/ConversationEvent
     AgentEvent:
@@ -474,3 +556,34 @@ components:
       in: header
       required: false
       schema: {$ref: "#/components/schemas/RequestId"}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 200, default: 100}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: "#/components/schemas/IdempotencyKey"}
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: {type: string, minLength: 16, maxLength: 256}
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  responses:
+    Error:
+      description: Stable API error.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ApiError"}

@@ -33,6 +33,7 @@ export async function createConfiguredApiClient(
       locale: options.locale,
       request_id: options.request_id,
       csrf_token: options.csrf_token,
+      on_authentication_invalidated: options.on_authentication_invalidated,
     }).client;
   }
   throw new ClientConfigurationError(

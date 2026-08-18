@@ -151,6 +151,11 @@ ON CONFLICT (connector_id) DO UPDATE SET gateway_instance_id = EXCLUDED.gateway_
  capabilities = EXCLUDED.capabilities, connected_at = now(), last_heartbeat_at = now(), draining = false
 RETURNING *;
 
+-- name: GetConnectorSession :one
+SELECT * FROM connector_sessions
+WHERE connector_id=$1 AND connection_epoch=$2 AND draining=false
+  AND last_heartbeat_at > now() - interval '95 seconds';
+
 -- name: HeartbeatConnectorSession :execrows
 UPDATE connector_sessions SET last_heartbeat_at = now()
 WHERE connector_id = $1 AND enterprise_id = $2 AND connection_epoch = $3;

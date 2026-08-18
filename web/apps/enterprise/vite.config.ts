@@ -16,6 +16,8 @@ export default defineConfig({
           if (id.includes("@tanstack")) return "vendor-tanstack";
           if (id.includes("@radix-ui")) return "vendor-radix";
           if (id.includes("lucide-react")) return "vendor-icons";
+          if (id.includes("@xterm")) return "vendor-terminal";
+          if (id.includes("react-hook-form") || id.includes("@hookform") || id.includes("/zod/")) return "vendor-forms";
           return "vendor";
         },
       },

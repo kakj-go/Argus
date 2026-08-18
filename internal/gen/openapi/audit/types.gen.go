@@ -13,12 +13,13 @@ import (
 
 // Defines values for AuditEventActorType.
 const (
-	Connector      AuditEventActorType = "connector"
-	DirectExecutor AuditEventActorType = "direct_executor"
-	EnterpriseUser AuditEventActorType = "enterprise_user"
-	PlatformUser   AuditEventActorType = "platform_user"
-	ServiceAccount AuditEventActorType = "service_account"
-	System         AuditEventActorType = "system"
+	Connector           AuditEventActorType = "connector"
+	DirectExecutor      AuditEventActorType = "direct_executor"
+	EnterpriseUser      AuditEventActorType = "enterprise_user"
+	PlatformUser        AuditEventActorType = "platform_user"
+	RemoteAccessGateway AuditEventActorType = "remote_access_gateway"
+	ServiceAccount      AuditEventActorType = "service_account"
+	System              AuditEventActorType = "system"
 )
 
 // Valid indicates whether the value is a known member of the AuditEventActorType enum.
@@ -31,6 +32,8 @@ func (e AuditEventActorType) Valid() bool {
 	case EnterpriseUser:
 		return true
 	case PlatformUser:
+		return true
+	case RemoteAccessGateway:
 		return true
 	case ServiceAccount:
 		return true

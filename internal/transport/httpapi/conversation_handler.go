@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -99,8 +100,26 @@ func (handler ConversationHandler) CreateConversationMessage(ctx context.Context
 	if apiError != nil {
 		return conversationapi.CreateConversationMessagedefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
 	}
+	var command *conversation.MessageCommand
+	if request.Body.Command != nil {
+		if !slices.Contains(p.Permissions, "*") && !slices.Contains(p.Permissions, "interactive_card.create") {
+			return conversationapi.CreateConversationMessagedefaultJSONResponse{Body: conversationError(ctx, errors.New("authorization denied")), StatusCode: http.StatusForbidden}, nil
+		}
+		command = &conversation.MessageCommand{Type: string(request.Body.Command.Type)}
+		if request.Body.Command.CardId != nil {
+			value := uuid.UUID(*request.Body.Command.CardId)
+			command.CardID = &value
+		}
+		if request.Body.Command.ExpectedRevision != nil {
+			value := int32(*request.Body.Command.ExpectedRevision)
+			command.ExpectedRevision = &value
+		}
+		if command.Type == "interactive_card.revise" && (command.CardID == nil || command.ExpectedRevision == nil) {
+			return conversationapi.CreateConversationMessagedefaultJSONResponse{Body: conversationError(ctx, errors.New("invalid Card revision command")), StatusCode: http.StatusBadRequest}, nil
+		}
+	}
 	accepted, err := handler.Service.AddMessage(ctx, p.ActorID(), p.EnterpriseIDValue(), uuid.MustParse(p.ActorID()), uuid.UUID(request.ConversationId),
-		p.AuthorizationVersion(), LocaleFromContext(ctx), request.Body.Content, request.Params.IdempotencyKey)
+		p.AuthorizationVersion(), LocaleFromContext(ctx), request.Body.Content, command, request.Params.IdempotencyKey)
 	if err != nil {
 		return conversationapi.CreateConversationMessagedefaultJSONResponse{Body: conversationError(ctx, err), StatusCode: conversationStatus(err)}, nil
 	}

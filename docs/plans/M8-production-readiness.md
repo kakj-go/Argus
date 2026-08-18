@@ -9,11 +9,11 @@
 - M2 至 M7 的发布范围全部达到各自退出标准。
 - PostgreSQL HA/备份和 Sandbox Runtime ADR 已决策。
 
-M4 只达到 Evaluation：Replay Provider 仅用于带 build tag 的 E2E，模型公网出口在应用层拒绝私网但尚未形成目标生产网络证明；平台 MFA、Step-up、Break Glass、外部 KMS/HSM、CA 根轮换和灾备仍是本里程碑硬阻断项。
+M4 与 M6 只达到 Evaluation：Replay Provider 仅用于带 build tag 的 E2E，模型公网出口在应用层拒绝私网但尚未形成目标生产网络证明；Remote Access 已固定 SSH PTY、HTTPS WinRS 行模式和 asciicast v2 加密分片，但平台 MFA、Step-up、Break Glass、外部 KMS/HSM、CA 根轮换、录像不可变保留/恢复、真实 Windows 兼容矩阵和灾备仍是本里程碑硬阻断项。
 
 ## 任务
 
-- [ ] `M8-ADR-01` 完成 PostgreSQL Operator/HA/PITR、Sandbox Runtime、Card Origin、Remote Access 录像格式 ADR。
+- [ ] `M8-ADR-01` 完成 PostgreSQL Operator/HA/PITR、Sandbox Runtime、Card Origin，以及 Remote Access 录像 Production 保留、不可变性、跨故障域恢复和格式兼容 ADR；M6 已固定 asciicast v2，不重新选格式。
 - [ ] `M8-HA-01` 为无状态服务配置 HPA/PDB/TopologySpread/Drain，为状态组件配置副本与反亲和。
 - [ ] `M8-BACKUP-01` 实现 PostgreSQL、Artifact、ClickHouse 和必要配置的备份、校验、保留与恢复流程。
 - [ ] `M8-UPGRADE-01` 实现 `argusctl upgrade`、兼容 Schema 顺序、失败回滚和版本矩阵。
@@ -24,6 +24,7 @@ M4 只达到 Evaluation：Replay Provider 仅用于带 build tag 的 E2E，模�
 - [ ] `M8-IDENTITY-01` 为平台超级管理员实现强制 MFA、恢复码、凭证轮换和账号恢复演练。
 - [ ] `M8-IDENTITY-02` 为 critical 操作实现 Step-up Authentication，并把未配置平台 MFA 设为 Production Profile 安装与发布硬阻断。
 - [ ] `M8-CAPACITY-01` 完成 API、Connector、Remote Access、Kafka、Writer、ClickHouse 和 Query 容量 Benchmark。
+- [ ] `M8-REMOTE-01` 完成真实 Windows Server 版本/认证/TLS WinRS 兼容矩阵、长会话容量、ObjectStore 生命周期锁和录像恢复演练。
 - [ ] `M8-FAILURE-01` 演练 Redis 清空、Pod/Node 故障、Gateway Drain、Worker 接管、Kafka 积压、ClickHouse Replica 故障和网络分区。
 - [ ] `M8-E2E-01` 建立唯一 Run ID、集群 Lease、常驻服务缩容/恢复、诊断导出和无条件清理框架。
 - [ ] `M8-E2E-02` 自动化执行总计划第 7 节全部闭环场景。

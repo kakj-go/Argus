@@ -286,6 +286,8 @@ func hostError(ctx context.Context, err error) hostapi.ApiError {
 		base.Code, base.MessageKey = "CONNECTION_TEST_REQUIRED", "errors.connection_test.required"
 	case errors.Is(err, resource.ErrDirectTargetDenied):
 		base.Code, base.MessageKey = "DIRECT_TARGET_DENIED", "errors.direct.target_denied"
+	case errors.Is(err, resource.ErrWinRMTLSRequired):
+		base.Code, base.MessageKey = "WINRM_TLS_REQUIRED", "errors.remote_access.winrm_tls_required"
 	case errors.Is(err, resource.ErrActionInvalidated):
 		base.Code, base.MessageKey = "PENDING_ACTION_INVALIDATED", "errors.actions.pending_action_invalidated"
 	}
@@ -298,7 +300,7 @@ func resourceStatus(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, resource.ErrDirectTargetDenied):
 		return http.StatusForbidden
-	case errors.Is(err, resource.ErrConnectionTestNeeded):
+	case errors.Is(err, resource.ErrConnectionTestNeeded), errors.Is(err, resource.ErrWinRMTLSRequired):
 		return http.StatusUnprocessableEntity
 	default:
 		return http.StatusConflict

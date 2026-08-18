@@ -87,7 +87,10 @@ export function useChatStream(): ChatStreamState {
       try {
         const stream = api.conversations.sendMessage(
           conversationId,
-          { content: text },
+          {
+            content: text,
+            ...(mockIntent ? { command: { type: mockIntent } } : {}),
+          },
           { signal: controller.signal, mock_intent: mockIntent },
         );
         for await (const envelope of stream) {

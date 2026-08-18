@@ -2,46 +2,61 @@
 
 ## 目标
 
-交付与 Agent/Automation 完全隔离的人工 SSH/WinRM 访问能力，具备最小授权、短期票据、录像、撤权和强制终止。
+交付与 Agent、Card、Automation、PendingAction 和 Execution 完全隔离的人工远程访问闭环：
 
-## 前置条件
+`RemoteAccessGrant → AccessRequest/Approval → AccessLease → Session/Ticket → SSH/WinRS → 录像/终止/撤权`
 
-- M2 RoleBinding/DataScope/AuthorizationVersion 完成。
-- M3 Connector、ManagedAccount、Credential Broker 和 Direct Executor 完成。
-- M4 Approval、审计和持久化状态机完成。
+M6 只达到 Evaluation 完成标准。Production 仍由 M8 的 MFA、Step-up、备份恢复、容量、Windows 兼容矩阵和安全审计阻断。
 
-M3 ConnectorCommand 未包含 Remote Access Frame，M3 Direct Executor 也只执行连接探测和 Kubernetes 读取；本里程碑才增加人工会话 Listener、Ticket、PTY/Runspace 和录像链路。
+## 已完成任务
 
-M4 Automation、Model Agent、Sandbox 和 Action Executor 均未获得 RemoteAccessTicket 能力；M6 必须继续使用独立票据、Listener、队列和审计，不能复用 M4 的一次性 Enrollment Result 或 Commit Token。
+- [x] `M6-GRANT-01` 实现 user/department Grant、显式 Host ID/标签选择器、ManagedAccount、协议、动作、有效期和版本化管理。
+- [x] `M6-LEASE-01` 实现独立 RemoteAccessPolicy、AccessRequest、多策略 Requirement Snapshot、审批决定和 15 分钟 AccessLease。
+- [x] `M6-SESSION-01` 实现 Session 状态机、并发限制、连接窗口、闲置/最长时长、终止和 AuthorizationVersion 复核。
+- [x] `M6-TICKET-01` 实现 256 位 opaque Ticket，数据库只保存 SHA-256 Hash，并绑定 HTTP Session、用户、企业、Host、账号、协议、Lease、授权版本和 Fence。
+- [x] `M6-SSH-01` 实现 Connector/Direct SSH 完整 PTY、Host Key 校验、窗口调整、输入输出、心跳和强制关闭。
+- [x] `M6-WINRM-01` 实现 HTTPS 443/5986 WinRS PowerShell 行模式；不宣称完整 PTY、ConPTY 或 PSRP。
+- [x] `M6-GATEWAY-01` 实现外部 WSS `9445`、内部 peer mTLS `9446`、Kubernetes Pod owner 解析、跨副本路由、Redis/PostgreSQL 恢复和 30 秒 Drain。
+- [x] `M6-RECORD-01` 实现 asciicast v2 NDJSON `i/o/r/m` 事件、AES-256-GCM 分片、DEK 包裹、SHA-256 Hash Chain、授权增量读取和 90 天默认保留。
+- [x] `M6-REVOKE-01` 实现 Grant、Policy、DataScope、标签、ManagedAccount、用户和企业变化后的票据/Lease/Session 撤权。
+- [x] `M6-WEB-01` 使用 `@xterm/xterm` 和 fit addon 实现 SSH 终端、WinRS 行模式、Grant/Policy、审批、终止与录像播放器。
+- [x] `M6-DEPLOY-01` 增加 Remote WSS Service/Ingress/Certificate、ObjectStore、Origin、并发限制、NetworkPolicy、PDB、Gateway peer RBAC 和独立 Direct Executor 客户端身份。
+- [x] `M6-E2E-01` 增加 `make e2e-m6-k8s`，覆盖真实 SSH、TLS WinRS 模拟器、跨 Gateway、Drain、Redis 清空、MinIO 中断、录像、撤权和 real Playwright。
 
-## 任务
+## 已冻结实现语义
 
-- [ ] `M6-GRANT-01` 实现 RemoteAccessGrant 的显式 Host ID/标签选择器、ManagedAccount、协议、动作和有效期。
-- [ ] `M6-LEASE-01` 实现 AccessRequest/AccessLease，与单次 ActionApproval 分离。
-- [ ] `M6-SESSION-01` 实现 RemoteAccessSession 状态机、理由、MFA/JIT/审批和会话策略快照。
-- [ ] `M6-TICKET-01` 实现绑定浏览器 Session/User/Enterprise/Host/Account/Action/AuthorizationVersion 的一次性短期票据。
-- [ ] `M6-SSH-01` 实现 Connector/Direct SSH PTY、Host Key 校验、窗口调整和闲置/最长时长。
-- [ ] `M6-WINRM-01` 实现受审计 PowerShell Runspace，UI 不伪装完整 PTY。
-- [ ] `M6-GATEWAY-01` 实现 Gateway 多副本路由、Drain、背压和活动会话终止。
-- [ ] `M6-RECORD-01` 实现结构化命令事件、会话录像分片、Artifact 上传、完整性和读取授权。
-- [ ] `M6-REVOKE-01` 实现用户/Grant/DataScope/标签/企业变化对未使用票据、等待会话和活动会话的撤权。
-- [ ] `M6-WEB-01` 引入 xterm.js，完成终端、会话状态、审批、终止和录像查看。
+- AccessLease 有效 15 分钟，可重复创建 Session；每次创建都重新校验权限、DataScope、Grant、Policy 和 AuthorizationVersion。
+- Ticket 有效 60 秒且只能消费一次；URL 不携带 Ticket，浏览器只在终端组件内存中持有。
+- SSH 是完整 PTY。WinRM 路径固定为 HTTPS WinRS PowerShell 行输入输出，不提供完整 PTY/PSRP。
+- Gateway 停止新连接后等待 30 秒，再终止剩余会话；显式跟踪升级后的 WebSocket，Session 和 Recording 落盘完成后才关闭 peer gRPC 和 PostgreSQL。
+- Gateway peer 通过 Kubernetes API 获取 Ready owner Pod IP；ServiceAccount 只有同 Namespace Pod `get` 权限，peer 使用固定 mTLS 服务身份。
+- ObjectStore 单次调用有 3 秒边界；连续不可用 30 秒或缓冲超过 4 MiB 时会话 fail closed。
+- 录像只在内存中短暂缓冲，密文分片写入 S3-compatible ObjectStore；PostgreSQL 保存索引、Hash Chain 和命令哈希，不保存终端明文。
+- 剪贴板、文件、分享和端口转发均关闭；RemoteAccessTicket 永不提供给 Agent、Card、Automation 或 Sandbox。
 
-## 测试
+## 验收证据
 
-- 没有 Grant、DataScope 或 ManagedAccount 权限时不能建立会话。
-- 票据重放、跨浏览器/用户/Host/协议使用和过期均失败。
-- AI、Card、Automation、OpenSandbox 无法创建或消费人工会话票据。
-- 撤销 Grant 或授权敏感标签后，未使用票据立即失效，活动会话按策略终止并审计。
-- Gateway Pod 删除后会话行为符合协议，录像不只保存在 Pod 本地。
+2026-08-18 的最终 `make e2e-m6-k8s` 成功运行号为 `20260818072400-79219`，脱敏诊断位于 `artifacts/m6-e2e/20260818072400-79219`。
 
-## 退出标准
+该运行验证：
 
-- 授权用户可通过 SSH 或 WinRM 完成可录像、可终止的人工会话。
-- 文件上传、下载、剪贴板、分享和端口转发默认关闭且独立授权。
-- Remote Access 与自动化 Execution 在接口、票据、队列和审计上完全分离。
+- M2 三门户真实身份和 M3 资源/Connector 基线。
+- Direct SSH PTY、Direct HTTPS WinRS PowerShell 行模式、Ticket 重放拒绝和加密录像读取。
+- 非 owner Gateway WSS → owner Gateway peer → Connector 的跨副本路由，Redis 清空后的 PostgreSQL fallback，以及真实 Pod 删除后的 `gateway_drain`。
+- AuthorizationVersion 变化后旧 AccessLease 返回 `AUTHORIZATION_VERSION_STALE`，重新申请后才可创建 Session。
+- MinIO 连续中断超过 30 秒时返回 `REMOTE_ACCESS_RECORDING_UNAVAILABLE`，PVC 恢复后 Bucket 和密文事实保留。
+- `zh-CN/en-US × light/dark` 下 Grant、审批、SSH/WinRS、终止和录像页面无严重/致命 a11y 违规。
+- Redis 停止后已有 Session 与审计仍由 PostgreSQL 恢复，新登录 fail closed；恢复后撤权继续生效。
+
+退出清理确认三个临时 Namespace、PVC 和集群 Lease 均已删除。
+
+同日最终全量门禁通过：`make contract-check contract-breaking`、`go test ./...`、`go vet ./...`、`pnpm typecheck lint test build check:bundle check:real-build e2e`、`make check-production-artifacts` 和 `git diff --check`。Remote Access sqlc 查询按治理、授权和运行时拆分，项目内 Go/TypeScript/TSX 单文件均低于 2000 行。
 
 ## 不包含
 
-- RDP、SFTP 和通用端口转发。
-- 复杂逐命令审批。
+- MFA、Step-up、Break Glass。
+- RDP、SFTP、剪贴板、文件传输、分享和通用端口转发。
+- Production 录像不可变保留、跨故障域备份恢复和真实 Windows Server 兼容矩阵。
+- Production 容量基线、渗透测试和安全审计。
+
+以上项目继续由 M8 作为 Production 硬阻断项管理。

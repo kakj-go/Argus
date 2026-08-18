@@ -1,7 +1,6 @@
 export * from "./common";
 export * from "./action";
 export * from "./model";
-export * from "./interactive-card";
 export * from "./org";
 export * from "./secret";
 export * from "./audit";

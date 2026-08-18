@@ -41,6 +41,14 @@ components:
       required: [content]
       properties:
         content: {type: string, minLength: 1, maxLength: 1048576}
+        command:
+          type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type: {type: string, enum: [interactive_card.create, interactive_card.revise]}
+            card_id: {type: string, format: uuid}
+            expected_revision: {type: integer, minimum: 1}
     MessageAccepted:
       type: object
       additionalProperties: false

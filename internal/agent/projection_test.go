@@ -15,7 +15,7 @@ func TestToolResultProjectionBoundsListsAndTracksPartialState(t *testing.T) {
 		items = append(items, map[string]any{"id": index, "name": strings.Repeat("host", 20)})
 	}
 	full, _ := json.Marshal(map[string]any{"items": items})
-	encoded, partial, err := encodeToolResultProjection("result_1", pendingToolCall{ID: "call_1", Name: "host.list"}, full,
+	encoded, partial, err := encodeToolResultProjection("result_1", "01900000-0000-7000-8000-000000000001", pendingToolCall{ID: "call_1", Name: "host.list"}, full,
 		mcp.Result{Structured: map[string]any{"items": items}})
 	if err != nil {
 		t.Fatal(err)
@@ -30,6 +30,9 @@ func TestToolResultProjectionBoundsListsAndTracksPartialState(t *testing.T) {
 	if int(projection["projected_bytes"].(float64)) != len(encoded) || projection["partial"] != true {
 		t.Fatalf("projection metadata is inconsistent: %#v", projection)
 	}
+	if projection["tool_call_id"] != "01900000-0000-7000-8000-000000000001" {
+		t.Fatalf("projection must expose the persisted ToolCall id: %#v", projection["tool_call_id"])
+	}
 	summary := projection["summary"].(map[string]any)
 	if len(summary["items"].([]any)) != maxProjectedItems {
 		t.Fatalf("projected items = %d", len(summary["items"].([]any)))
@@ -41,7 +44,7 @@ func TestPodLogProjectionRedactsAndTruncates(t *testing.T) {
 	content := strings.Repeat("line\n", 10_000)
 	structured := map[string]any{"cluster_id": "cluster", "namespace": "default", "pod": "pod", "content": content, "bytes": len(content), "api_key": "argus_ak_prefix.secret"}
 	full, _ := json.Marshal(structured)
-	encoded, partial, err := encodeToolResultProjection("result_logs", pendingToolCall{ID: "call_logs", Name: "kubernetes.pod.logs"}, full, mcp.Result{Structured: structured})
+	encoded, partial, err := encodeToolResultProjection("result_logs", "01900000-0000-7000-8000-000000000002", pendingToolCall{ID: "call_logs", Name: "kubernetes.pod.logs"}, full, mcp.Result{Structured: structured})
 	if err != nil {
 		t.Fatal(err)
 	}

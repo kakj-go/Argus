@@ -945,8 +945,12 @@ func (catalog fixtureCatalog) sample(t *testing.T, raw any, documentID string, m
 		}
 		result := make([]any, 0, count)
 		for index := 0; index < count; index++ {
-			value := catalog.sample(t, node["items"], documentID, mode, stack)
-			if index > 0 {
+			itemSchema, _ := node["items"].(map[string]any)
+			value := catalog.sample(t, itemSchema, documentID, mode, stack)
+			resolvedItem, _ := catalog.resolveNode(t, itemSchema, documentID, map[string]bool{})
+			if enumValues, ok := resolvedItem["enum"].([]any); ok && index < len(enumValues) {
+				value = cloneJSON(t, enumValues[index])
+			} else if index > 0 {
 				if textValue, ok := value.(string); ok {
 					value = fmt.Sprintf("%s%d", textValue, index+1)
 				}
@@ -1147,6 +1151,7 @@ func schemaString(node map[string]any, mode fixtureMode) string {
 		{"[A-Z][A-Z0-9_]", "VALID_CODE"},
 		{"[a-zA-Z][a-zA-Z0-9_.]", "resource.cpu"},
 		{"^[a-z][a-z0-9_]*$", "field_name"},
+		{"^[a-z][a-z0-9_.-]+$", "resource.read"},
 		{"^[a-z][a-z0-9_.]+$", "resource.read"},
 		{"^[a-z][a-z0-9]*", "environment"},
 		{"^[a-z0-9]", "production"},
@@ -1155,6 +1160,7 @@ func schemaString(node map[string]any, mode fixtureMode) string {
 		{"^sha256:[a-f0-9]{64}$", "sha256:" + strings.Repeat("a", 64)},
 		{"^[a-f0-9]{64}$", strings.Repeat("a", 64)},
 		{"^argus_ak_", "argus_ak_ABC123.secret_abcdefghijklmnopqrstuvwxyz012345"},
+		{"^wss://", "wss://remote.argus.example/v1/sessions/0198b2b4-6dc0-7a2f-8d36-9f8ff244db18"},
 		{"^[a-z][a-z0-9-]{1,62}$", "example"},
 	}
 	for _, sample := range samples {

@@ -2,14 +2,17 @@ package authorization
 
 import "testing"
 
-func TestPermissionRegistryVersionAndBuiltinRolesIncludeM4(t *testing.T) {
-	if PermissionRegistryVersion != 3 {
-		t.Fatalf("permission registry version = %d, want 3", PermissionRegistryVersion)
+func TestPermissionRegistryVersionAndBuiltinRolesIncludeM6(t *testing.T) {
+	if PermissionRegistryVersion != 5 {
+		t.Fatalf("permission registry version = %d, want 5", PermissionRegistryVersion)
 	}
 
 	for _, permission := range []string{
 		"conversation.use", "model.manage", "model.quota.manage", "approval_policy.manage",
-		"approval.decide", "execution.read", "automation.manage",
+		"approval.decide", "execution.read", "automation.manage", "interactive_card.read",
+		"interactive_card.create", "interactive_card.update", "interactive_card.publish", "interactive_card.deprecate",
+		"remote_access.grant.read", "remote_access.grant.manage", "remote_access.policy.read", "remote_access.policy.manage",
+		"remote_access.request", "remote_access.session.create", "remote_access.session.approve", "remote_access.session.terminate", "remote_access.recording.read",
 	} {
 		if _, ok := PermissionRegistry[permission]; !ok {
 			t.Errorf("M4 permission %q is missing from registry", permission)
@@ -29,9 +32,11 @@ func TestPermissionRegistryVersionAndBuiltinRolesIncludeM4(t *testing.T) {
 		}
 	}
 
-	assertRolePermissions(t, "enterprise_admin", "model.manage", "model.quota.manage", "approval_policy.manage", "automation.manage")
+	assertRolePermissions(t, "enterprise_admin", "model.manage", "model.quota.manage", "approval_policy.manage", "automation.manage",
+		"interactive_card.read", "interactive_card.create", "interactive_card.update", "interactive_card.publish", "interactive_card.deprecate",
+		"remote_access.grant.manage", "remote_access.policy.manage")
 	assertRolePermissions(t, "resource_admin", "conversation.use", "model.read", "approval.decide", "automation.read")
-	assertRolePermissions(t, "resource_approver", "approval.read", "approval.decide", "execution.read")
+	assertRolePermissions(t, "resource_approver", "approval.read", "approval.decide", "execution.read", "remote_access.session.approve", "remote_access.recording.read")
 }
 
 func assertRolePermissions(t *testing.T, key string, permissions ...string) {

@@ -8,6 +8,7 @@ option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/directexe
 // source of truth; callers only send the durable connection-test identifier.
 service DirectExecutorService {
   rpc DispatchConnectionTest(DispatchConnectionTestRequest) returns (DispatchConnectionTestResponse);
+  rpc OpenRemoteAccess(stream OpenRemoteAccessRequest) returns (stream OpenRemoteAccessResponse);
 }
 
 message DispatchConnectionTestRequest {
@@ -23,3 +24,45 @@ enum DispatchStatus {
   DISPATCH_STATUS_ACCEPTED = 1;
   DISPATCH_STATUS_ALREADY_HANDLED = 2;
 }
+
+message OpenRemoteAccessRequest {
+  uint64 sequence = 1;
+  oneof frame {
+    RemoteAccessOpen open = 2;
+    RemoteAccessInput input = 3;
+    RemoteAccessResize resize = 4;
+    RemoteAccessClose close = 5;
+  }
+}
+
+message OpenRemoteAccessResponse {
+  uint64 sequence = 1;
+  oneof frame {
+    RemoteAccessReady ready = 2;
+    RemoteAccessOutput output = 3;
+    RemoteAccessState state = 4;
+  }
+}
+
+message RemoteAccessOpen {
+  string session_id = 1;
+  uint64 session_fence = 2;
+  string host_id = 3;
+  string managed_account_id = 4;
+  string credential_lease_id = 5;
+  string protocol = 6;
+  string target_host = 7;
+  uint32 target_port = 8;
+  string host_key_fingerprint = 9;
+  uint32 terminal_cols = 10;
+  uint32 terminal_rows = 11;
+  uint32 idle_timeout_seconds = 12;
+  uint32 max_duration_seconds = 13;
+}
+
+message RemoteAccessInput { bytes data = 1; }
+message RemoteAccessResize { uint32 cols = 1; uint32 rows = 2; }
+message RemoteAccessClose { string reason = 1; }
+message RemoteAccessReady { string mode = 1; }
+message RemoteAccessOutput { string stream = 1; bytes data = 2; }
+message RemoteAccessState { string status = 1; string reason = 2; }

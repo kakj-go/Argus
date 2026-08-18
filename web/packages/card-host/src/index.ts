@@ -9,8 +9,11 @@ export {
   type CardNotifyLevel,
   type CardPresentationContext,
   type CardTheme,
+  type CardValidationReport,
+  type CardValidationRequest,
   type CardToHostMessage,
   type HostToCardMessage,
+  isCardValidationReport,
 } from "./protocol";
 
 export {

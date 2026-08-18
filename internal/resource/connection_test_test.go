@@ -1,12 +1,24 @@
 package resource
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
+
+func TestWinRMConnectionTestRequiresTLS(t *testing.T) {
+	service := Service{}
+	_, _, err := service.hostConnectionPlan(context.Background(), nil, uuid.New(), "actor", HostInput{
+		Address: "host.example", Port: 5985, Platform: "windows", Username: "argus", ConnectionMode: "direct_winrm",
+	})
+	if !errors.Is(err, ErrWinRMTLSRequired) {
+		t.Fatalf("expected WINRM_TLS_REQUIRED, got %v", err)
+	}
+}
 
 func TestHostConnectionPlanBindsEverySecurityRelevantInput(t *testing.T) {
 	credentialID := uuid.MustParse("018f47e2-9a4c-7b31-8acd-02a2475e8d2f")

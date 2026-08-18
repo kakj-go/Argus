@@ -7,6 +7,7 @@ export interface HttpTransportOptions {
   locale?: () => "zh-CN" | "en-US";
   request_id?: () => string;
   csrf_token?: () => string | undefined | Promise<string | undefined>;
+  on_authentication_invalidated?: (error: ApiError) => void;
 }
 
 export interface HttpRequestOptions extends Omit<RequestInit, "body"> {
@@ -53,7 +54,10 @@ export class HttpTransport {
       headers.set("accept-language", this.options.locale?.() ?? "zh-CN");
     }
     if (!headers.has("x-request-id")) {
-      headers.set("x-request-id", this.options.request_id?.() ?? crypto.randomUUID());
+      headers.set(
+        "x-request-id",
+        this.options.request_id?.() ?? crypto.randomUUID(),
+      );
     }
     return this.fetch_impl(this.resolve(path), {
       ...init,
@@ -66,9 +70,13 @@ export class HttpTransport {
     const headers = new Headers(options.headers);
     headers.set("accept", "application/json");
     headers.set("accept-language", this.options.locale?.() ?? "zh-CN");
-    headers.set("x-request-id", this.options.request_id?.() ?? crypto.randomUUID());
+    headers.set(
+      "x-request-id",
+      this.options.request_id?.() ?? crypto.randomUUID(),
+    );
 
-    if (options.body !== undefined) headers.set("content-type", "application/json");
+    if (options.body !== undefined)
+      headers.set("content-type", "application/json");
     if (options.csrf) {
       const token = await this.options.csrf_token?.();
       if (!token) {
@@ -87,10 +95,23 @@ export class HttpTransport {
 
     const response = await this.raw(path, {
       ...options,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
       headers,
     });
-    if (!response.ok) throw new ApiError(await readError(response), response.status);
+    if (!response.ok) {
+      const error = new ApiError(await readError(response), response.status);
+      if (
+        error.code === "AUTHORIZATION_VERSION_STALE" ||
+        error.code === "SESSION_EXPIRED" ||
+        error.code === "SESSION_REVOKED" ||
+        error.code === "ENTERPRISE_SUSPENDED" ||
+        error.code === "ENTERPRISE_DISABLED"
+      ) {
+        this.options.on_authentication_invalidated?.(error);
+      }
+      throw error;
+    }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }

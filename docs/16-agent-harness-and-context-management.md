@@ -334,6 +334,7 @@ OpenAI Responses Compaction、Anthropic Server-side Compaction 或 Context Editi
 - Worker 进程内可信 Tool Registry/Gateway；`.commit` 仅注册到隐藏 Catalog 并要求 `action_executor` 身份。
 - 首批 Catalog 覆盖 Host、Connector、PendingAction、Kubernetes Cluster/Namespace/Node/Pod/Deployment/StatefulSet/DaemonSet/Service/Pod Logs 查询，以及 Host/Kubernetes create/update/delete Preview；所有输入先通过严格 Schema 和权限门禁。
 - Agent 注入可信 `run_id` 并贯穿 PendingAction/Execution；Action 终态只恢复同一 Run 的 Verify Task，浏览器和模型不能自报该关联。
+- MCP 内部调用将真实 Agent `run_id` 与可信 `invocation_id` 分开：前者只用于 Agent Run 归属和恢复，后者用于 Tool 调用幂等。Automation 使用 AutomationRun ID 作为 `invocation_id`，不得伪造 Agent Run。
 - Automation 使用不可变 Revision，AutomationRun 固定绑定触发时版本，后续编辑不改变已创建 Run。
 
 延后：

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/sync/errgroup"
 
+	cardservice "github.com/kakj-go/Argus/internal/card"
 	"github.com/kakj-go/Argus/internal/conversation"
 	"github.com/kakj-go/Argus/internal/integration/modelprovider"
 	"github.com/kakj-go/Argus/internal/mcp"
@@ -37,6 +39,7 @@ type Loop struct {
 	Store          *postgres.Store
 	Models         modelservice.Service
 	Tools          *mcp.Registry
+	Cards          cardservice.Service
 	EndpointPolicy modelprovider.PublicEndpointPolicy
 }
 
@@ -79,6 +82,9 @@ func (loop Loop) Handle(ctx context.Context, task runtime.Task) error {
 	if err != nil {
 		return err
 	}
+	if payload.Command != nil {
+		return loop.handleCardCommand(ctx, run, user, revision, provider, currentInput, *payload.Command)
+	}
 	if payload.Reason == "execution_verify" {
 		verification, verifyErr := loop.executionVerification(ctx, run, payload)
 		if verifyErr != nil {
@@ -87,11 +93,13 @@ func (loop Loop) Handle(ctx context.Context, task runtime.Task) error {
 		messages = append(messages, modelprovider.Message{Role: "user", Content: verification})
 		currentInput = verification
 	}
+	pendingActionRef := ""
 	for turn := 0; turn < maxAgentTurns; turn++ {
 		if cancelled, err := loop.cancelled(ctx, run); err != nil || cancelled {
 			return err
 		}
-		projection, err := loop.context(ctx, run, revision, messages, currentInput)
+		turnTools := selectTurnTools(loop.modelTools(), messages, currentInput)
+		projection, err := loop.context(ctx, run, revision, messages, currentInput, turnTools)
 		if err != nil {
 			return loop.waitForCompaction(ctx, run, "CONTEXT_TOO_LARGE")
 		}
@@ -119,7 +127,7 @@ func (loop Loop) Handle(ctx context.Context, task runtime.Task) error {
 			_ = loop.failStep(ctx, run, step)
 			return loop.finishRun(ctx, run, "failed", "quota_exceeded", "MODEL_QUOTA_EXCEEDED")
 		}
-		request := modelprovider.Request{Model: revision.ProviderModelID, Messages: messages, Tools: loop.modelTools(), MaxTokens: int(revision.MaxOutputTokens)}
+		request := modelprovider.Request{Model: revision.ProviderModelID, Messages: messages, Tools: turnTools, MaxTokens: int(revision.MaxOutputTokens)}
 		started := time.Now()
 		var text strings.Builder
 		var delta strings.Builder
@@ -214,6 +222,9 @@ func (loop Loop) Handle(ctx context.Context, task runtime.Task) error {
 			if err := loop.persistAssistant(ctx, run, step, text.String(), inputTokens, outputTokens); err != nil {
 				return err
 			}
+			if pendingActionRef != "" {
+				return loop.waitForAction(ctx, run, pendingActionRef)
+			}
 			return loop.finishRun(ctx, run, "succeeded", stopReason, "")
 		}
 		if !allowsToolExecution(stopReason) {
@@ -236,7 +247,11 @@ func (loop Loop) Handle(ctx context.Context, task runtime.Task) error {
 			return err
 		}
 		if actionRef := firstActionRef(toolResults); actionRef != "" {
-			return loop.waitForAction(ctx, run, actionRef)
+			pendingActionRef = actionRef
+			continue
+		}
+		if pendingActionRef != "" && slices.ContainsFunc(ordered, func(call *pendingToolCall) bool { return call.Name == "card.render" }) {
+			return loop.waitForAction(ctx, run, pendingActionRef)
 		}
 	}
 	return loop.finishRun(ctx, run, "failed", "output_limit", "RUN_STEP_LIMIT_REACHED")
@@ -351,7 +366,7 @@ func (loop Loop) executionVerification(ctx context.Context, run db.Run, task con
 	return "Verify this deterministic execution result and report it to the user: " + string(projection), nil
 }
 
-func (loop Loop) context(ctx context.Context, run db.Run, revision db.AiModelRevision, messages []modelprovider.Message, current string) (ContextProjection, error) {
+func (loop Loop) context(ctx context.Context, run db.Run, revision db.AiModelRevision, messages []modelprovider.Message, current string, tools []modelprovider.Tool) (ContextProjection, error) {
 	var checkpoint any
 	_ = json.Unmarshal(run.Checkpoint, &checkpoint)
 	var snapshot any
@@ -361,7 +376,7 @@ func (loop Loop) context(ctx context.Context, run db.Run, revision db.AiModelRev
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return ContextProjection{}, err
 	}
-	return AssembleContext(ContextInput{ContextWindow: int(revision.ContextWindowTokens), MaxOutput: int(revision.MaxOutputTokens), System: messages[0], ToolCatalog: loop.modelTools(), Checkpoint: checkpoint, Snapshot: snapshot, RecentTail: messages[1:], CurrentInput: current})
+	return AssembleContext(ContextInput{ContextWindow: int(revision.ContextWindowTokens), MaxOutput: int(revision.MaxOutputTokens), System: messages[0], ToolCatalog: tools, Checkpoint: checkpoint, Snapshot: snapshot, RecentTail: messages[1:], CurrentInput: current})
 }
 
 func (loop Loop) startStep(ctx context.Context, run db.Run, projection ContextProjection) (db.RunStep, db.Run, error) {
@@ -409,7 +424,7 @@ func (loop Loop) executeTool(ctx context.Context, run db.Run, step db.RunStep, c
 		_, _ = loop.Store.Queries.FinishToolCall(ctx, db.FinishToolCallParams{ID: record.ID, Status: "failed", ErrorCode: pgtype.Text{String: "CLIENT_OPERATION_UNAVAILABLE", Valid: true}})
 		return toolExecutionResult{}, runtime.Error{ErrorCode: "CLIENT_OPERATION_UNAVAILABLE", Cause: mcp.ErrToolNotAvailable, Permanent: true}
 	}
-	result, err := loop.Tools.Call(ctx, mcp.Call{ToolID: call.Name, Caller: "model", Enterprise: run.EnterpriseID.String(), Subject: run.ActorUserID.String(), SubjectType: "user", RunID: run.ID.String(), Input: input})
+	result, err := loop.Tools.Call(ctx, mcp.Call{ToolID: call.Name, CallID: call.ID, Caller: "model", Enterprise: run.EnterpriseID.String(), Subject: run.ActorUserID.String(), SubjectType: "user", RunID: run.ID.String(), InvocationID: run.ID.String(), Input: input})
 	if err != nil {
 		code := "TOOL_EXECUTION_FAILED"
 		if errors.Is(err, mcp.ErrPermissionDenied) {
@@ -429,7 +444,7 @@ func (loop Loop) executeTool(ctx context.Context, run db.Run, step db.RunStep, c
 	if resultRef == "" {
 		resultRef, _ = opaqueRef("result_")
 	}
-	projection, projectionPartial, err := encodeToolResultProjection(resultRef, call, full, result)
+	projection, projectionPartial, err := encodeToolResultProjection(resultRef, record.ID.String(), call, full, result)
 	if err != nil {
 		return toolExecutionResult{}, runtime.Error{ErrorCode: "TOOL_RESULT_TOO_LARGE", Cause: err, Permanent: true}
 	}
@@ -549,6 +564,117 @@ func (loop Loop) modelTools() []modelprovider.Tool {
 		result = append(result, modelprovider.Tool{Name: item.ID, Description: "Governed Argus tool", Schema: item.InputSchema})
 	}
 	return result
+}
+
+func selectTurnTools(catalog []modelprovider.Tool, messages []modelprovider.Message, current string) []modelprovider.Tool {
+	var context strings.Builder
+	context.WriteString(strings.ToLower(current))
+	for _, message := range messages {
+		encoded, _ := json.Marshal(message.Content)
+		context.WriteByte('\n')
+		context.WriteString(strings.ToLower(string(encoded)))
+	}
+	text := context.String()
+	hasOperationIntent := containsAny(text, "list", "show", "inventory", "status", "overview", "get", "detail", "inspect", "describe", "create", "add", "new", "update", "change", "edit", "label", "delete", "remove", "cancel", "log")
+	type scoredTool struct {
+		tool  modelprovider.Tool
+		score int
+	}
+	scored := make([]scoredTool, 0, len(catalog))
+	for _, tool := range catalog {
+		name := strings.ToLower(tool.Name)
+		score := 0
+		if strings.Contains(text, name) {
+			score = 100
+		}
+		parts := strings.Split(name, ".")
+		domain := parts[0]
+		domainMatched := false
+		if domain == "kubernetes" {
+			if containsAny(text, "kubernetes", "k8s", "cluster", "namespace", "pod", "deployment", "statefulset", "daemonset") {
+				domainMatched = true
+			}
+		} else if len(domain) > 2 && strings.Contains(text, domain) {
+			domainMatched = true
+		}
+		operationMatched := false
+		switch {
+		case name == "card.render":
+			if containsAny(text, "tool result", "present", "presentation", "card", "table", "detail", "overview") {
+				score += 80
+			}
+		case strings.HasSuffix(name, ".list"):
+			if containsAny(text, "list", "show", "inventory", "status", "overview") {
+				operationMatched = true
+			}
+		case strings.HasSuffix(name, ".get"):
+			if containsAny(text, "get", "detail", "inspect", "describe") {
+				operationMatched = true
+			}
+		case strings.HasSuffix(name, ".create.preview"):
+			if containsAny(text, "create", "add", "new") {
+				operationMatched = true
+			}
+		case strings.HasSuffix(name, ".update.preview"):
+			if containsAny(text, "update", "change", "edit", "label") {
+				operationMatched = true
+			}
+		case strings.HasSuffix(name, ".delete.preview"):
+			if containsAny(text, "delete", "remove") {
+				operationMatched = true
+			}
+		case strings.HasSuffix(name, ".cancel"):
+			if strings.Contains(text, "cancel") {
+				operationMatched = true
+			}
+		case strings.HasSuffix(name, ".logs"):
+			if strings.Contains(text, "log") {
+				operationMatched = true
+			}
+		}
+		if domainMatched && operationMatched {
+			score += 40
+		} else if domainMatched && !hasOperationIntent {
+			score += 20
+		}
+		if score > 0 {
+			scored = append(scored, scoredTool{tool: tool, score: score})
+		}
+	}
+	if len(scored) == 0 {
+		defaults := map[string]bool{
+			"host.list": true, "host.get": true,
+			"kubernetes.cluster.list": true, "kubernetes.cluster.get": true,
+			"connector.list": true, "connector.get": true,
+			"pending_action.list": true, "card.render": true,
+		}
+		for _, tool := range catalog {
+			if defaults[tool.Name] {
+				scored = append(scored, scoredTool{tool: tool, score: 1})
+			}
+		}
+	}
+	sort.Slice(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].tool.Name < scored[j].tool.Name
+	})
+	limit := min(8, len(scored))
+	result := make([]modelprovider.Tool, 0, limit)
+	for _, item := range scored[:limit] {
+		result = append(result, item.tool)
+	}
+	return result
+}
+
+func containsAny(value string, candidates ...string) bool {
+	for _, candidate := range candidates {
+		if strings.Contains(value, candidate) {
+			return true
+		}
+	}
+	return false
 }
 func orderedCalls(values map[string]*pendingToolCall) []*pendingToolCall {
 	keys := make([]string, 0, len(values))

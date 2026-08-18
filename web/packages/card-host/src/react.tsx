@@ -11,6 +11,8 @@ import type {
   CardLocale,
   CardNotifyLevel,
   CardTheme,
+  CardValidationReport,
+  CardValidationRequest,
 } from "./protocol";
 import {
   createCardHost,
@@ -35,6 +37,8 @@ export type SandboxCardProps = {
   onNotify?: (level: CardNotifyLevel, message: string) => void;
   onReady?: () => void;
   onProtocolViolation?: (reason: CardProtocolViolation, message: unknown) => void;
+  validation?: CardValidationRequest;
+  onValidationReport?: (report: CardValidationReport) => void;
   title?: string;
   className?: string;
   style?: CSSProperties;
@@ -86,7 +90,7 @@ export function SandboxCard(props: SandboxCardProps) {
     let active = true;
     void sha256(props.html).then((hash) => {
       if (!active) return;
-      const expected = props.manifest.entrypoint_hash.replace(/^sha256:/, "");
+      const expected = props.manifest.entrypoint_hash;
       setHashError(Boolean(expected) && expected !== hash);
       setContentHash(hash);
     });
@@ -96,7 +100,7 @@ export function SandboxCard(props: SandboxCardProps) {
   const manifest = useMemo<CardManifest>(
     () => ({
       ...props.manifest,
-      entrypoint_hash: props.manifest.entrypoint_hash || `sha256:${contentHash ?? "pending"}`,
+      entrypoint_hash: props.manifest.entrypoint_hash || contentHash || "pending",
     }),
     [props.manifest, contentHash],
   );
@@ -110,6 +114,7 @@ export function SandboxCard(props: SandboxCardProps) {
   );
   const bindingsKey = JSON.stringify(props.bindings ?? {});
   const dataKey = JSON.stringify(props.initial_data ?? {});
+  const validationKey = JSON.stringify(props.validation ?? null);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -129,19 +134,18 @@ export function SandboxCard(props: SandboxCardProps) {
       onNotify: (level, message) => callbacksRef.current.onNotify?.(level, message),
       onResize: (next) => setHeight(Math.max(minHeight, Math.min(next, maxHeight))),
       onProtocolViolation: (reason, message) => callbacksRef.current.onProtocolViolation?.(reason, message),
+      validation: callbacksRef.current.validation,
+      onValidationReport: (report) => callbacksRef.current.onValidationReport?.(report),
     });
     hostRef.current = host;
     setHeight(minHeight);
-    if (iframe.contentDocument?.readyState === "complete") {
-      iframe.dispatchEvent(new Event("load"));
-    }
     return () => {
       host.destroy();
       hostRef.current = null;
     };
     // Binding identity is represented by bindingsKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.card_origin, props.html, props.render_plan, manifest, contentHash, hashError, bindingsKey, minHeight, maxHeight]);
+  }, [props.card_origin, props.html, props.render_plan, manifest, contentHash, hashError, bindingsKey, validationKey, minHeight, maxHeight]);
 
   useEffect(() => hostRef.current?.setContext(context), [context]);
   useEffect(() => {

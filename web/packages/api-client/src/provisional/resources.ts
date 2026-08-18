@@ -1,5 +1,5 @@
 import type { ISODateString } from "../types/common";
-import type { Host, KubernetesCluster } from "../generated/contracts";
+import type { KubernetesCluster } from "../generated/contracts";
 
 export type CollectorStatus =
   | "not_installed"
@@ -8,46 +8,6 @@ export type CollectorStatus =
   | "config_stale"
   | "backlog"
   | "interrupted";
-
-export type RemoteSessionStatus =
-  | "requested"
-  | "awaiting_approval"
-  | "authorized"
-  | "connecting"
-  | "active"
-  | "terminated"
-  | "failed"
-  | "expired"
-  | "connection_lost";
-
-export interface RemoteSession {
-  id: string;
-  enterpriseId: string;
-  userId: string;
-  userName?: string;
-  hostId: string;
-  hostName?: string;
-  connectionMode: Host["connection_mode"];
-  connectorId?: string;
-  bastionScopeId?: string;
-  protocol: "ssh" | "winrm";
-  targetAccount: string;
-  reason: string;
-  approvalRef?: string;
-  status: RemoteSessionStatus;
-  startedAt?: ISODateString;
-  lastActivityAt?: ISODateString;
-  endedAt?: ISODateString;
-  recordingRef?: string;
-  createdAt: ISODateString;
-}
-
-export interface CreateRemoteSessionInput {
-  hostId: string;
-  targetAccount: string;
-  reason: string;
-  protocol?: "ssh" | "winrm";
-}
 
 export interface CollectorInstallState {
   id: string;

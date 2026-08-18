@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -74,5 +75,40 @@ func TestSelectToolUsesBase64PromptInput(t *testing.T) {
 	var input map[string]any
 	if err := json.Unmarshal([]byte(arguments), &input); err != nil || input["expected_version"] != float64(4) {
 		t.Fatalf("unexpected base64 input %q: %#v, %v", arguments, input, err)
+	}
+}
+
+func TestReplayTextBuildsCardDraftForStructuredCardSchema(t *testing.T) {
+	request := replayRequest{Messages: []message{{Role: "user", Content: `Create a host list Card.
+Tool Schema Catalog: [{"tool_id":"host.list","output_schema_version":"host.list/v1","schema_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]`}},
+		ResponseFormat: map[string]any{"json_schema": map[string]any{"schema": map[string]any{"properties": map[string]any{"entrypoint_html": map[string]any{}, "bindings": map[string]any{}}}}}}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(replayText(request)), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["slug"] != "m5-enterprise-host-list" {
+		t.Fatalf("unexpected Card draft: %#v", result)
+	}
+	manifest := result["manifest"].(map[string]any)
+	if len(manifest["entrypoint_hash"].(string)) != 64 {
+		t.Fatalf("unexpected entrypoint hash: %#v", manifest)
+	}
+}
+
+func TestSelectToolRendersACompletedToolProjectionOnce(t *testing.T) {
+	request := replayRequest{Messages: []message{
+		{Role: "assistant", Content: `Tool call: host.list {}`},
+		{Role: "user", Content: `Tool result result_1: {"tool_call_id":"01900000-0000-7000-8000-000000000001","summary":{"items":[]}}`},
+	}, Tools: []replayTool{{Name: "card.render", Parameters: map[string]any{"type": "object"}}}}
+	name, arguments, ok := selectTool(request)
+	if !ok || name != "card.render" || !strings.Contains(arguments, "01900000-0000-7000-8000-000000000001") {
+		t.Fatalf("selectTool() = %q, %q, %v", name, arguments, ok)
+	}
+	request.Messages = []message{
+		{Role: "assistant", Content: `Tool call: card.render {}`},
+		{Role: "user", Content: `Tool result result_2: {"tool_call_id":"01900000-0000-7000-8000-000000000002"}`},
+	}
+	if name, _, ok := selectTool(request); ok {
+		t.Fatalf("selectTool() repeated %q after card.render", name)
 	}
 }

@@ -28,12 +28,27 @@ type CardManifest struct {
 	DefaultLocale         interface{}   `json:"default_locale"`
 	EntrypointHash        string        `json:"entrypoint_hash"`
 	MaxMessageBytes       int           `json:"max_message_bytes"`
+	PresentationKind      interface{}   `json:"presentation_kind,omitempty"`
 	Revision              int           `json:"revision"`
 	SchemaVersion         interface{}   `json:"schema_version"`
 	Slots                 []Slot        `json:"slots"`
 	Source                interface{}   `json:"source"`
 	SupportedColorSchemes []interface{} `json:"supported_color_schemes"`
 	SupportedLocales      []interface{} `json:"supported_locales"`
+}
+
+// CardRuntimeValidationReport defines model for CardRuntimeValidationReport.
+type CardRuntimeValidationReport struct {
+	ContentHash           string      `json:"content_hash"`
+	MissingRequiredSlots  []string    `json:"missing_required_slots"`
+	Nonce                 string      `json:"nonce"`
+	ProtocolViolations    int         `json:"protocol_violations"`
+	Ready                 bool        `json:"ready"`
+	RuntimeErrors         int         `json:"runtime_errors"`
+	RuntimeVersion        string      `json:"runtime_version"`
+	Scenario              interface{} `json:"scenario"`
+	SeriousA11yViolations int         `json:"serious_a11y_violations"`
+	SizeViolation         bool        `json:"size_violation"`
 }
 
 // DataBinding defines model for DataBinding.
@@ -87,6 +102,7 @@ type RenderPlan struct {
 // Slot defines model for Slot.
 type Slot struct {
 	AiGenerated *bool       `json:"ai_generated,omitempty"`
+	Description *string     `json:"description,omitempty"`
 	Kind        interface{} `json:"kind"`
 	Name        string      `json:"name"`
 	Required    bool        `json:"required"`

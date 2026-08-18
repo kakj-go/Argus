@@ -45,6 +45,7 @@ export const settingsZh = {
         scopes: "数据权限",
         policies: "审批策略",
         access: "ServiceAccount / APIKey",
+        remote_access: "远程访问",
       },
       users: {
         invite: "邀请用户",
@@ -361,6 +362,7 @@ export const settingsEn = {
         scopes: "Data Scopes",
         policies: "Approval Policies",
         access: "ServiceAccount / APIKey",
+        remote_access: "Remote access",
       },
       users: {
         invite: "Invite user",

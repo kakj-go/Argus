@@ -36,11 +36,18 @@ type MessageAccepted struct {
 }
 
 type AgentTask struct {
-	RunID        uuid.UUID `json:"run_id"`
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-	Reason       string    `json:"reason"`
-	ExecutionRef string    `json:"execution_ref,omitempty"`
-	ActionRef    string    `json:"action_ref,omitempty"`
+	RunID        uuid.UUID       `json:"run_id"`
+	EnterpriseID uuid.UUID       `json:"enterprise_id"`
+	Reason       string          `json:"reason"`
+	Command      *MessageCommand `json:"command,omitempty"`
+	ExecutionRef string          `json:"execution_ref,omitempty"`
+	ActionRef    string          `json:"action_ref,omitempty"`
+}
+
+type MessageCommand struct {
+	Type             string     `json:"type"`
+	CardID           *uuid.UUID `json:"card_id,omitempty"`
+	ExpectedRevision *int32     `json:"expected_revision,omitempty"`
 }
 
 type ToolResultView struct {
@@ -97,11 +104,12 @@ func (service Service) Update(ctx context.Context, enterpriseID, ownerID, conver
 	return service.Store.Queries.UpdateConversation(ctx, params)
 }
 
-func (service Service) AddMessage(ctx context.Context, actorID string, enterpriseID, ownerID, conversationID uuid.UUID, authorizationVersion int64, locale, content, idempotencyKey string) (MessageAccepted, error) {
+func (service Service) AddMessage(ctx context.Context, actorID string, enterpriseID, ownerID, conversationID uuid.UUID, authorizationVersion int64, locale, content string, command *MessageCommand, idempotencyKey string) (MessageAccepted, error) {
 	input := struct {
-		ConversationID uuid.UUID `json:"conversation_id"`
-		Content        string    `json:"content"`
-	}{conversationID, content}
+		ConversationID uuid.UUID       `json:"conversation_id"`
+		Content        string          `json:"content"`
+		Command        *MessageCommand `json:"command,omitempty"`
+	}{conversationID, content, command}
 	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actorID, "conversation.message.create", idempotencyKey, input, 202,
 		func(q *db.Queries) (MessageAccepted, error) {
 			conversation, err := q.LockConversation(ctx, db.LockConversationParams{ID: conversationID, EnterpriseID: enterpriseID, OwnerUserID: ownerID})
@@ -129,13 +137,17 @@ func (service Service) AddMessage(ctx context.Context, actorID string, enterpris
 			if err != nil {
 				return MessageAccepted{}, err
 			}
+			messagePayload := map[string]any{"content": content}
+			if command != nil {
+				messagePayload["command"] = command
+			}
 			event, err := AppendEvent(ctx, q, EventInput{EnterpriseID: enterpriseID, ConversationID: conversationID,
 				RunID: uuid.NullUUID{UUID: run.ID, Valid: true}, Type: "user_message", ActorType: "user", ActorID: actorID,
-				Payload: map[string]any{"content": content}, Classification: "internal"})
+				Payload: messagePayload, Classification: "internal"})
 			if err != nil {
 				return MessageAccepted{}, err
 			}
-			payload, _ := json.Marshal(AgentTask{RunID: run.ID, EnterpriseID: enterpriseID, Reason: "user_message"})
+			payload, _ := json.Marshal(AgentTask{RunID: run.ID, EnterpriseID: enterpriseID, Reason: "user_message", Command: command})
 			if _, err := q.CreateRuntimeTask(ctx, db.CreateRuntimeTaskParams{ID: newID(), EnterpriseID: uuid.NullUUID{UUID: enterpriseID, Valid: true},
 				Queue: "agent", RunID: uuid.NullUUID{UUID: run.ID, Valid: true}, Payload: payload, MaxAttempts: 5,
 				AvailableAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}}); err != nil {

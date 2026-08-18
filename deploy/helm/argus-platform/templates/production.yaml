@@ -78,4 +78,11 @@ spec:
             pathType: Prefix
             backend:
               service: {name: argus-web, port: {name: cards}}
+    - host: {{ .Values.production.hosts.remote }}
+      http:
+        paths:
+          - path: /v1/sessions
+            pathType: Prefix
+            backend:
+              service: {name: argus-connector-gateway, port: {name: remote-wss}}
 {{- end }}

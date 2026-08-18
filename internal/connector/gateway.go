@@ -45,6 +45,7 @@ type Gateway struct {
 	HeartbeatInterval time.Duration
 	DispatchInterval  time.Duration
 	Dispatch          *DispatchHub
+	RemoteAccess      *RemoteAccessHub
 	Drain             <-chan struct{}
 }
 
@@ -90,6 +91,12 @@ func (gateway Gateway) Connect(stream connectorv1.ConnectorControlService_Connec
 	}
 
 	received := make(chan receiveResult, 1)
+	remoteOutbound := make(chan *connectorv1.ConnectResponse, 32)
+	unregisterRemote := func() {}
+	if gateway.RemoteAccess != nil {
+		unregisterRemote = gateway.RemoteAccess.Register(identity.ConnectorID, epoch, remoteOutbound)
+	}
+	defer unregisterRemote()
 	go receiveConnectorFrames(stream, received)
 	dispatchTicker := time.NewTicker(gateway.dispatchInterval())
 	defer dispatchTicker.Stop()
@@ -204,6 +211,12 @@ func (gateway Gateway) Connect(stream connectorv1.ConnectorControlService_Connec
 			if err := dispatchCommands(); err != nil {
 				return err
 			}
+		case frame := <-remoteOutbound:
+			frame.Sequence = serverSequence
+			if err := stream.Send(frame); err != nil {
+				return err
+			}
+			serverSequence++
 		}
 	}
 }
@@ -299,6 +312,11 @@ func (gateway Gateway) handleFrame(ctx context.Context, identity TrustedIdentity
 		return nil
 	case request.GetCredentialLeaseRequest() != nil:
 		return nil
+	case request.GetRemoteAccessOutput() != nil || request.GetRemoteAccessState() != nil || request.GetRemoteAccessClose() != nil:
+		if gateway.RemoteAccess == nil {
+			return ErrCommandState
+		}
+		return gateway.RemoteAccess.Deliver(identity.ConnectorID, epoch, request)
 	case request.GetCertificateRotationRequest() != nil:
 		return nil
 	default:
@@ -315,14 +333,23 @@ func (gateway Gateway) fulfillCredentialLease(ctx context.Context, identity Trus
 		return nil, secret.ErrInvalidLease
 	}
 	command, err := gateway.Service.Store.Queries.GetConnectorCommand(ctx, db.GetConnectorCommandParams{CommandID: request.GetCommandId(), ConnectorID: identity.ConnectorID, ConnectionEpoch: epoch})
-	if err != nil || !command.CredentialLeaseID.Valid || command.CredentialLeaseID.UUID != leaseID || (command.Status != "acknowledged" && command.Status != "running") {
-		return nil, secret.ErrInvalidLease
+	commandID := request.GetCommandId()
+	if err == nil {
+		if !command.CredentialLeaseID.Valid || command.CredentialLeaseID.UUID != leaseID || (command.Status != "acknowledged" && command.Status != "running") {
+			return nil, secret.ErrInvalidLease
+		}
+	} else {
+		lease, leaseErr := gateway.Service.Store.Queries.GetCredentialLease(ctx, db.GetCredentialLeaseParams{ID: leaseID, EnterpriseID: identity.EnterpriseID})
+		if leaseErr != nil || lease.TargetResourceType != "remote_access_session" || lease.OperationRef != commandID ||
+			lease.RecipientType != "connector" || lease.RecipientID != identity.ConnectorID.String() || lease.Status != "active" {
+			return nil, secret.ErrInvalidLease
+		}
 	}
 	issued, err := gateway.Credentials.FulfillLease(ctx, identity.EnterpriseID, leaseID, "connector", identity.ConnectorID.String())
 	if err != nil {
 		return nil, err
 	}
-	return &connectorv1.CredentialLeaseGrant{LeaseId: leaseID.String(), CommandId: command.CommandID, ConnectionEpoch: uint64(epoch),
+	return &connectorv1.CredentialLeaseGrant{LeaseId: leaseID.String(), CommandId: commandID, ConnectionEpoch: uint64(epoch),
 		CredentialPayload: issued.Value, ExpiresAt: timestamppb.New(issued.Lease.ExpiresAt.Time), RecipientNonce: request.GetRecipientNonce()}, nil
 }
 

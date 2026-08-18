@@ -1,0 +1,198 @@
+components:
+  schemas:
+    CardLifecycle: {type: string, enum: [draft, active, deprecated]}
+    CardAvailability: {type: string, enum: [available, disabled, dependency_pending, invalidated]}
+    CardVersionStatus: {type: string, enum: [draft, validating, validated, active, retired]}
+    DemoScenario: {type: string, enum: [default, empty, error, large, light, dark, zh-CN, en-US]}
+    InteractiveCard:
+      type: object
+      additionalProperties: false
+      required: [id, source, slug, name, description, lifecycle, enabled, availability, latest_revision, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid}
+        source: {type: string, enum: [system, enterprise]}
+        slug: {type: string, pattern: '^[a-z][a-z0-9-]{0,62}$'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 2048}
+        lifecycle: {$ref: '#/components/schemas/CardLifecycle'}
+        enabled: {type: boolean}
+        availability: {$ref: '#/components/schemas/CardAvailability'}
+        active_revision: {type: integer, minimum: 1}
+        latest_revision: {type: integer, minimum: 1}
+        version: {type: integer, format: int64, minimum: 1}
+        created_by: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CardPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/InteractiveCard'}}
+        page: {$ref: ./common.yaml#/components/schemas/CursorPage}
+    CardDemo:
+      type: object
+      additionalProperties: false
+      required: [scenario, data]
+      properties:
+        scenario: {$ref: '#/components/schemas/DemoScenario'}
+        data: {$ref: ../../schemas/common/public-json.schema.json#/$defs/PublicJsonObject}
+    CardVersionSummary:
+      type: object
+      additionalProperties: false
+      required: [card_id, revision, status, content_hash, manifest_hash, created_at]
+      properties:
+        card_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        status: {$ref: '#/components/schemas/CardVersionStatus'}
+        content_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        manifest_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        validation_run_id: {type: string, format: uuid}
+        created_by: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+    CardVersion:
+      type: object
+      additionalProperties: false
+      required: [card_id, revision, status, content_hash, manifest_hash, created_at, manifest, entrypoint_html, slot_bindings, demos]
+      properties:
+        card_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        status: {$ref: '#/components/schemas/CardVersionStatus'}
+        content_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        manifest_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        validation_run_id: {type: string, format: uuid}
+        created_by: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        manifest: {$ref: ../../schemas/card/card.schema.json#/$defs/CardManifest}
+        entrypoint_html: {type: string, maxLength: 524288}
+        slot_bindings: {type: array, maxItems: 64, items: {$ref: ../../schemas/card/card.schema.json#/$defs/SlotBinding}}
+        demos: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/CardDemo'}}
+    CardConfigurationVersionCreate:
+      type: object
+      additionalProperties: false
+      required: [base_revision, expected_version, name, description, slot_bindings, demos]
+      properties:
+        base_revision: {type: integer, minimum: 1}
+        expected_version: {type: integer, format: int64, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 2048}
+        slot_bindings: {type: array, maxItems: 64, items: {$ref: ../../schemas/card/card.schema.json#/$defs/SlotBinding}}
+        demos: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/CardDemo'}}
+    CardVersionPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/CardVersionSummary'}}}
+    CardValidationIssue:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: {type: string, pattern: '^[A-Z][A-Z0-9_]*$'}
+        message: {type: string, maxLength: 2048}
+        slot_name: {type: string}
+        scenario: {$ref: '#/components/schemas/DemoScenario'}
+    CardValidationRun:
+      type: object
+      additionalProperties: false
+      required: [id, card_id, revision, content_hash, runtime_version, nonce, status, required_scenarios, passed_scenarios, issues, expires_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        card_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        content_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        runtime_version: {type: string, minLength: 1, maxLength: 128}
+        nonce: {type: string, minLength: 16, maxLength: 128}
+        status: {type: string, enum: [pending, passed, failed, expired]}
+        required_scenarios: {type: array, minItems: 8, maxItems: 8, uniqueItems: true, items: {$ref: '#/components/schemas/DemoScenario'}}
+        passed_scenarios: {type: array, maxItems: 8, uniqueItems: true, items: {$ref: '#/components/schemas/DemoScenario'}}
+        issues: {type: array, items: {$ref: '#/components/schemas/CardValidationIssue'}}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    CardValidationStart:
+      type: object
+      additionalProperties: false
+      required: [revision, runtime_version]
+      properties:
+        revision: {type: integer, minimum: 1}
+        runtime_version: {type: string, minLength: 1, maxLength: 128}
+    CardValidationEvidence:
+      type: object
+      additionalProperties: false
+      required: [content_hash, runtime_version, nonce, scenarios]
+      properties:
+        content_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        runtime_version: {type: string, minLength: 1, maxLength: 128}
+        nonce: {type: string, minLength: 16, maxLength: 128}
+        scenarios:
+          type: array
+          minItems: 8
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required: [scenario, ready, protocol_violations, runtime_errors, serious_a11y_violations, missing_required_slots, size_violation]
+            properties:
+              scenario: {$ref: '#/components/schemas/DemoScenario'}
+              ready: {type: boolean}
+              protocol_violations: {type: integer, minimum: 0}
+              runtime_errors: {type: integer, minimum: 0}
+              serious_a11y_violations: {type: integer, minimum: 0}
+              missing_required_slots: {type: array, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9_]*$'}}
+              size_violation: {type: boolean}
+    CardStateCommand:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        revision: {type: integer, minimum: 1}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    ToolSchemaCatalog:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties: {items: {type: array, items: {$ref: ../../schemas/card/card.schema.json#/$defs/ToolSchemaCatalogEntry}}}
+    CardInstance:
+      type: object
+      additionalProperties: false
+      required: [id, conversation_id, card_id, card_revision, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        run_id: {type: string, format: uuid}
+        card_id: {type: string, format: uuid}
+        card_revision: {type: integer, minimum: 1}
+        status: {type: string, enum: [active, invalidated]}
+        created_at: {type: string, format: date-time}
+    CardPresentationCreate:
+      type: object
+      additionalProperties: false
+      required: [locale, color_scheme]
+      properties:
+        locale: {type: string, enum: [zh-CN, en-US]}
+        color_scheme: {type: string, enum: [light, dark]}
+    CardPresentation:
+      type: object
+      additionalProperties: false
+      required: [presentation_id, card_instance, manifest, render_plan, entrypoint_html, initial_data, partial, locale_fallback, expires_at]
+      properties:
+        presentation_id: {type: string, format: uuid}
+        card_instance: {$ref: '#/components/schemas/CardInstance'}
+        manifest: {$ref: ../../schemas/card/card.schema.json#/$defs/CardManifest}
+        render_plan: {$ref: ../../schemas/card/card.schema.json#/$defs/RenderPlan}
+        entrypoint_html: {type: string, maxLength: 524288}
+        initial_data: {$ref: ../../schemas/common/public-json.schema.json#/$defs/PublicJsonObject}
+        partial: {type: boolean}
+        locale_fallback: {type: boolean}
+        expires_at: {type: string, format: date-time}
+    CardBindingInvokeResult:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {type: string, enum: [succeeded, awaiting_approval, executing, failed, invalidated]}
+        data: {$ref: ../../schemas/common/public-json.schema.json#/$defs/PublicJsonValue}
+        pending_action: {$ref: ../../schemas/action/pending-action-public.schema.json}
+        approval_request: {$ref: ./m4.yaml#/components/schemas/ApprovalRequestView}
+        execution: {$ref: ../../schemas/action/workflow.schema.json#/$defs/Execution}

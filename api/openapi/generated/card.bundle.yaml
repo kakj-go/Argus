@@ -41,7 +41,7 @@ components:
             - enterprise
         entrypoint_hash:
           type: string
-          minLength: 32
+          pattern: ^[a-f0-9]{64}$
         bridge_version:
           const: argus.card_bridge/v1
         slots:
@@ -81,6 +81,13 @@ components:
           type: integer
           minimum: 1024
           maximum: 1048576
+        presentation_kind:
+          enum:
+            - table
+            - detail
+            - pending_action
+            - metric
+            - generic
     DataBinding:
       type: object
       additionalProperties: false
@@ -193,6 +200,8 @@ components:
             - query.invoke
             - action.invoke
             - card.resize
+            - card.slot_selected
+            - card.validation_report
             - binding.result
             - bridge.error
             - bridge.destroyed
@@ -243,6 +252,16 @@ components:
                     type: string
                     minLength: 16
                     maxLength: 128
+        - if:
+            properties:
+              type:
+                const: card.validation_report
+            required:
+              - type
+          then:
+            properties:
+              payload:
+                $ref: '#/components/schemas/CardRuntimeValidationReport'
     SlotType:
       enum:
         - string
@@ -274,6 +293,64 @@ components:
         ai_generated:
           type: boolean
           default: false
+        description:
+          type: string
+          maxLength: 1024
+    CardRuntimeValidationReport:
+      type: object
+      additionalProperties: false
+      required:
+        - content_hash
+        - runtime_version
+        - nonce
+        - scenario
+        - ready
+        - protocol_violations
+        - runtime_errors
+        - serious_a11y_violations
+        - missing_required_slots
+        - size_violation
+      properties:
+        content_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        runtime_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        nonce:
+          type: string
+          minLength: 16
+          maxLength: 128
+        scenario:
+          enum:
+            - default
+            - empty
+            - error
+            - large
+            - light
+            - dark
+            - zh-CN
+            - en-US
+        ready:
+          type: boolean
+        protocol_violations:
+          type: integer
+          minimum: 0
+        runtime_errors:
+          type: integer
+          minimum: 0
+        serious_a11y_violations:
+          type: integer
+          minimum: 0
+        missing_required_slots:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9_]*$
+        size_violation:
+          type: boolean
     PublicJsonValue:
       x-argus-typescript-type: unknown
       oneOf:

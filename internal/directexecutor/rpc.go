@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -48,10 +49,15 @@ func (dispatcher *Dispatcher) DispatchConnectionTest(ctx context.Context, test d
 	return err
 }
 
+func (dispatcher *Dispatcher) OpenRemoteAccess(ctx context.Context) (directv1.DirectExecutorService_OpenRemoteAccessClient, error) {
+	return dispatcher.client.OpenRemoteAccess(ctx)
+}
+
 type RPCServer struct {
 	directv1.UnimplementedDirectExecutorServiceServer
 	Executor *Executor
 	Context  context.Context
+	Logger   *slog.Logger
 }
 
 func (server RPCServer) DispatchConnectionTest(_ context.Context, request *directv1.DispatchConnectionTestRequest) (*directv1.DispatchConnectionTestResponse, error) {
@@ -81,7 +87,7 @@ func (server RPCServer) DispatchConnectionTest(_ context.Context, request *direc
 	return &directv1.DispatchConnectionTestResponse{Status: directv1.DispatchStatus_DISPATCH_STATUS_ACCEPTED}, nil
 }
 
-func LoadServerTLS(certificatePath, privateKeyPath, caPath, authorizedClientName string) (*tls.Config, error) {
+func LoadServerTLS(certificatePath, privateKeyPath, caPath string, authorizedClientNames []string) (*tls.Config, error) {
 	certificate, roots, err := loadTLSMaterial(certificatePath, privateKeyPath, caPath)
 	if err != nil {
 		return nil, err
@@ -95,12 +101,18 @@ func LoadServerTLS(certificatePath, privateKeyPath, caPath, authorizedClientName
 			if len(state.PeerCertificates) == 0 {
 				return errors.New("Direct Executor client certificate is missing")
 			}
-			if err := state.PeerCertificates[0].VerifyHostname(authorizedClientName); err != nil {
-				return fmt.Errorf("unauthorized Direct Executor client: %w", err)
-			}
-			return nil
+			return authorizeClientCertificate(state.PeerCertificates[0], authorizedClientNames)
 		},
 	}, nil
+}
+
+func authorizeClientCertificate(certificate *x509.Certificate, authorizedClientNames []string) error {
+	for _, name := range authorizedClientNames {
+		if name != "" && certificate.VerifyHostname(name) == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("unauthorized Direct Executor client identity")
 }
 
 func loadClientTLS(certificatePath, privateKeyPath, caPath, serverName string) (*tls.Config, error) {

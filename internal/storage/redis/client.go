@@ -71,6 +71,12 @@ type ConnectorDispatch struct {
 	ConnectionEpoch int64  `json:"connection_epoch"`
 }
 
+type RemoteAccessTermination struct {
+	SessionID    string `json:"session_id"`
+	SessionFence int64  `json:"session_fence"`
+	Reason       string `json:"reason"`
+}
+
 func (client *Client) SetConnectorRegistry(ctx context.Context, connectorID string, entry ConnectorRegistryEntry, ttl time.Duration) error {
 	if client == nil || client.Raw == nil {
 		return errors.New("connector registry: Redis client is unavailable")
@@ -141,6 +147,52 @@ func (client *Client) SubscribeConnectorDispatch(ctx context.Context, gatewayIns
 				}
 				select {
 				case output <- dispatch:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	return output, pubsub.Close, nil
+}
+
+func (client *Client) PublishRemoteAccessTermination(ctx context.Context, gatewayInstanceID string, termination RemoteAccessTermination) error {
+	if client == nil || client.Raw == nil {
+		return errors.New("remote access termination: Redis client is unavailable")
+	}
+	value, err := json.Marshal(termination)
+	if err != nil {
+		return err
+	}
+	return client.Raw.Publish(ctx, "argus:remote-access:terminate:"+gatewayInstanceID, value).Err()
+}
+
+func (client *Client) SubscribeRemoteAccessTermination(ctx context.Context, gatewayInstanceID string) (<-chan RemoteAccessTermination, func() error, error) {
+	if client == nil || client.Raw == nil {
+		return nil, nil, errors.New("remote access termination: Redis client is unavailable")
+	}
+	pubsub := client.Raw.Subscribe(ctx, "argus:remote-access:terminate:"+gatewayInstanceID)
+	if _, err := pubsub.Receive(ctx); err != nil {
+		_ = pubsub.Close()
+		return nil, nil, err
+	}
+	output := make(chan RemoteAccessTermination, 64)
+	go func() {
+		defer close(output)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case message, ok := <-pubsub.Channel():
+				if !ok {
+					return
+				}
+				var termination RemoteAccessTermination
+				if json.Unmarshal([]byte(message.Payload), &termination) != nil || termination.SessionID == "" || termination.SessionFence < 1 {
+					continue
+				}
+				select {
+				case output <- termination:
 				case <-ctx.Done():
 					return
 				}

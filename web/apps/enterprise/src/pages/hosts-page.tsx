@@ -193,8 +193,8 @@ export function HostsPage() {
   });
   const activeSessionsQuery = useQuery({
     queryKey: ["remote-sessions", "active"],
-    queryFn: () => api.hosts.listSessions({ status: ["active"] }),
-    enabled: !realMode,
+    queryFn: () => api.remoteAccess.listSessions(),
+    enabled: realMode,
   });
 
   const hosts = useMemo(
@@ -214,7 +214,7 @@ export function HostsPage() {
     () => connectorsQuery.data?.items ?? [],
     [connectorsQuery.data],
   );
-  const activeSessions = activeSessionsQuery.data ?? [];
+  const activeSessions = (activeSessionsQuery.data?.items ?? []).filter((session) => session.status === "active");
 
   const invalidateAll = () => {
     void queryClient.invalidateQueries({ queryKey: ["hosts"] });
@@ -382,7 +382,7 @@ export function HostsPage() {
           const bastionHost = bastionHostOf(scope);
           const connector = connectorOf(scope);
           const sessionCount = activeSessions.filter(
-            (session) => session.bastionScopeId === scope.id,
+            (session) => members.some((host) => host.id === session.host_id),
           ).length;
 
           if (scope.status === "pending") {

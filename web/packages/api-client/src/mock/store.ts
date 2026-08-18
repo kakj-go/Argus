@@ -3,7 +3,6 @@ import type {
   ApiKey,
   ApprovalPolicy,
   AuditEvent,
-  InteractiveCard,
   DataScope,
   Enterprise,
   EnterpriseAdmin,
@@ -29,7 +28,6 @@ import type {
   CollectionClaim,
   CollectorInstallState,
   K8sNodeBinding,
-  RemoteSession,
   TaskViewModel,
 } from "../provisional";
 import type { MockChatMessage } from "./chat-types";
@@ -37,6 +35,7 @@ import type {
   MockActionPlanRecord,
   MockConversationRecord,
   MockEnterpriseUserRecord,
+  MockInteractiveCard,
 } from "./internal-types";
 import type {
   ConnectorEnrollmentToken,
@@ -70,7 +69,6 @@ export interface MockDb {
   bastionScopes: MockBastionScope[];
   enrollmentTokens: ConnectorEnrollmentToken[];
   uninstallCommands: ConnectorUninstallCommand[];
-  remoteSessions: RemoteSession[];
   clusters: MockKubernetesCluster[];
   nodeBindings: K8sNodeBinding[];
   collectionClaims: CollectionClaim[];
@@ -83,7 +81,7 @@ export interface MockDb {
   models: AIModel[];
   modelQuotas: ModelQuota[];
   usagePoints: ModelUsagePoint[];
-  interactiveCards: InteractiveCard[];
+  interactiveCards: MockInteractiveCard[];
   auditEvents: AuditEvent[];
   sandboxBackends: SandboxBackend[];
   sandboxImages: SandboxImage[];

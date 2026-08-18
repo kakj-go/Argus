@@ -22,6 +22,7 @@ var (
 	ErrResourceDenied        = errors.New("resource is outside data scope")
 	ErrConnectionTestNeeded  = errors.New("successful connection test required")
 	ErrInvalidConnectionMode = errors.New("invalid connection mode")
+	ErrWinRMTLSRequired      = errors.New("WINRM_TLS_REQUIRED")
 	ErrVersionConflict       = errors.New("resource version conflict")
 	ErrKubernetesUnavailable = errors.New("kubernetes reader unavailable")
 )
@@ -210,6 +211,9 @@ func (service Service) CreateHostConnectionTest(ctx context.Context, subject Sub
 func (service Service) hostConnectionPlan(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, actorID string, input HostInput) (connectionPlan, db.CreateConnectionTestParams, error) {
 	if input.ConnectionMode != "via_bastion" && input.ConnectionMode != "direct_ssh" && input.ConnectionMode != "direct_winrm" {
 		return connectionPlan{}, db.CreateConnectionTestParams{}, ErrInvalidConnectionMode
+	}
+	if (input.ConnectionMode == "direct_winrm" || (input.ConnectionMode == "via_bastion" && input.Platform == "windows")) && input.Port != 443 && input.Port != 5986 {
+		return connectionPlan{}, db.CreateConnectionTestParams{}, ErrWinRMTLSRequired
 	}
 	plan := connectionPlan{TargetType: "host", Address: input.Address, Port: input.Port, Platform: input.Platform, Username: input.Username,
 		ConnectionMode: input.ConnectionMode, BastionScopeID: input.BastionScopeID}

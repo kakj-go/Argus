@@ -22,3 +22,15 @@ func TestChooseCompactionBoundaryRejectsIncompleteGroups(t *testing.T) {
 		t.Fatal("incomplete event groups must not be compacted")
 	}
 }
+
+func TestOnlyHardLimitCompactionMayResumeOrFailRun(t *testing.T) {
+	t.Parallel()
+	if !requiresCompactionResume("hard_limit") {
+		t.Fatal("hard-limit compaction must own waiting_system recovery")
+	}
+	for _, reason := range []string{"soft_limit", "manual", "compaction_completed"} {
+		if requiresCompactionResume(reason) {
+			t.Fatalf("%s compaction must not mutate the Run lifecycle", reason)
+		}
+	}
+}

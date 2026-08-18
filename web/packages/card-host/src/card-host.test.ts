@@ -34,7 +34,7 @@ const MANIFEST: CardManifest = {
   card_id: "card-1",
   revision: 1,
   source: "system",
-  entrypoint_hash: "sha256:abc",
+  entrypoint_hash: "a".repeat(64),
   bridge_version: CARD_BRIDGE_VERSION,
   slots: [],
   allowed_resources: [],
@@ -116,6 +116,7 @@ describe("createCardHost", () => {
       context: { locale: "zh-CN", color_scheme: "dark", design_tokens: {} },
       onQueryInvoke,
     });
+    expect(post).not.toHaveBeenCalled();
     iframe.dispatchEvent(new Event("load"));
     expect(post).toHaveBeenCalledTimes(1);
     expect(post.mock.calls[0]?.[1]).toBe("https://cards.example.test");
@@ -127,6 +128,50 @@ describe("createCardHost", () => {
     expect(onQueryInvoke).toHaveBeenCalledWith("query-1");
     expect(post).toHaveBeenCalledTimes(1);
     host.destroy();
+  });
+
+  it("accepts validation evidence only for its bound identity", () => {
+    const iframe = document.createElement("iframe");
+    document.body.append(iframe);
+    const post = vi.spyOn(iframe.contentWindow!, "postMessage");
+    const onValidationReport = vi.fn();
+    const violations = vi.fn();
+    createCardHost(iframe, {
+      card_origin: "https://cards.example.test/runtime",
+      manifest: MANIFEST,
+      render_plan: PLAN,
+      html: "<p>card</p>",
+      nonce: NONCE,
+      context: { locale: "zh-CN", color_scheme: "dark", design_tokens: {} },
+      validation: {
+        content_hash: "a".repeat(64),
+        runtime_version: "argus-card-runtime/v1",
+        scenario: "default",
+        nonce: NONCE,
+      },
+      onValidationReport,
+      onProtocolViolation: violations,
+    });
+    iframe.dispatchEvent(new Event("load"));
+    const calls = post.mock.calls as unknown as Array<[unknown, string, FakePort[]]>;
+    const runtimePort = calls[0]?.[2]?.[0] as FakePort;
+    const report = {
+      content_hash: "a".repeat(64),
+      runtime_version: "argus-card-runtime/v1",
+      nonce: NONCE,
+      scenario: "default",
+      ready: true,
+      protocol_violations: 0,
+      runtime_errors: 0,
+      serious_a11y_violations: 0,
+      missing_required_slots: [],
+      size_violation: false,
+    };
+    runtimePort.postMessage(message("card.validation_report", 1, { ...report, content_hash: "b".repeat(64) }));
+    expect(onValidationReport).not.toHaveBeenCalled();
+    expect(violations).toHaveBeenCalledWith("malformed_message", expect.anything());
+    runtimePort.postMessage(message("card.validation_report", 2, report));
+    expect(onValidationReport).toHaveBeenCalledWith(report);
   });
 
   it("rejects bad nonce, duplicate/out-of-order sequences, forged binding, oversized, and post-destroy messages", () => {

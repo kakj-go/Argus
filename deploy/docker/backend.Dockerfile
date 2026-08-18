@@ -16,7 +16,7 @@ COPY internal ./internal
 COPY migrations ./migrations
 
 RUN mkdir -p /out && \
-    for name in argus-server argus-worker argus-connector-gateway argus-telemetry argus-connector argusctl argus-migrate; do \
+    for name in argus-server argus-worker argus-connector-gateway argus-telemetry argus-connector argusctl argus-migrate argus-card-catalog-sync; do \
       CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
 		-tags "$GO_BUILD_TAGS" \
         -trimpath \

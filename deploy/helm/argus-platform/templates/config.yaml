@@ -23,7 +23,21 @@ data:
   ARGUS_DIRECT_DENIED_CIDRS: {{ join "," .Values.runtime.directDeniedCidrs | quote }}
   ARGUS_DIRECT_EXECUTOR_ENDPOINT: {{ default (printf "argus-direct-executor.%s.svc:9444" .Values.namespaces.system) .Values.runtime.directExecutorEndpoint | quote }}
   ARGUS_DIRECT_EXECUTOR_SERVER_NAME: {{ default (printf "argus-direct-executor.%s.svc" .Values.namespaces.system) .Values.runtime.directExecutorServerName | quote }}
-  ARGUS_DIRECT_EXECUTOR_CLIENT_NAME: argus-server
+  ARGUS_DIRECT_EXECUTOR_CLIENT_NAMES: argus-server,argus-connector-gateway
+  ARGUS_CARD_PRESENTATION_TTL: {{ .Values.runtime.cardPresentationTtl | quote }}
+  ARGUS_CARD_VALIDATION_TTL: {{ .Values.runtime.cardValidationTtl | quote }}
+  ARGUS_CARD_RUNTIME_VERSION: {{ .Values.runtime.cardRuntimeVersion | quote }}
+  ARGUS_CARD_MAX_PRESENTATION_BYTES: {{ .Values.runtime.cardMaxPresentationBytes | int | quote }}
+  ARGUS_REMOTE_ORIGIN: {{ if eq .Values.profile "production" }}{{ printf "https://%s" .Values.production.hosts.remote | quote }}{{ else }}{{ .Values.runtime.remoteOrigin | quote }}{{ end }}
+  ARGUS_REMOTE_USER_LIMIT: {{ .Values.runtime.remoteUserLimit | int | quote }}
+  ARGUS_REMOTE_HOST_LIMIT: {{ .Values.runtime.remoteHostLimit | int | quote }}
+  ARGUS_REMOTE_ENTERPRISE_LIMIT: {{ .Values.runtime.remoteEnterpriseLimit | int | quote }}
+  ARGUS_REMOTE_PEER_SERVER_NAME: argus-connector-gateway
+  ARGUS_REMOTE_PEER_HEADLESS_SUFFIX: {{ printf "argus-connector-gateway-headless.%s.svc" .Values.namespaces.system | quote }}
+  ARGUS_REMOTE_PEER_PORT: "9446"
+  ARGUS_OBJECT_STORE_URL: {{ required "runtime.objectStoreUrl is required" .Values.runtime.objectStoreUrl | quote }}
+  ARGUS_OBJECT_STORE_BUCKET: {{ required "runtime.objectStoreBucket is required" .Values.runtime.objectStoreBucket | quote }}
+  ARGUS_DIRECT_EXECUTOR_RECIPIENT_ID: argus-direct-executor
 ---
 apiVersion: v1
 kind: Secret
@@ -40,6 +54,8 @@ stringData:
   ARGUS_IDEMPOTENCY_ENCRYPTION_KEY: {{ required "runtime.idempotencyEncryptionKey is required" .Values.runtime.idempotencyEncryptionKey | quote }}
   ARGUS_CURSOR_SIGNING_KEY: {{ required "runtime.cursorSigningKey is required" .Values.runtime.cursorSigningKey | quote }}
   ARGUS_PENDING_ACTION_ENCRYPTION_KEY: {{ required "runtime.pendingActionEncryptionKey is required" .Values.runtime.pendingActionEncryptionKey | quote }}
+  ARGUS_OBJECT_STORE_ACCESS_KEY: {{ required "runtime.objectStoreAccessKey is required" .Values.runtime.objectStoreAccessKey | quote }}
+  ARGUS_OBJECT_STORE_SECRET_KEY: {{ required "runtime.objectStoreSecretKey is required" .Values.runtime.objectStoreSecretKey | quote }}
 ---
 apiVersion: v1
 kind: Secret

@@ -2,8 +2,12 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -28,29 +32,39 @@ const (
 )
 
 type Metadata struct {
-	ID               string
-	Risk             string
-	Visibility       Visibility
-	ExecutionMode    ExecutionMode
-	Required         []string
-	InputVersion     string
-	OutputVersion    string
-	ProjectionSchema string
-	MaxResultBytes   int
-	InputSchema      map[string]any
-	Authorize        func(context.Context, Call) error
-	Validate         func(map[string]any) error
-	Execute          func(context.Context, Call) (Result, error)
+	ID                       string
+	ToolFamily               string
+	Risk                     string
+	Visibility               Visibility
+	ExecutionMode            ExecutionMode
+	Required                 []string
+	InputVersion             string
+	OutputVersion            string
+	ProjectionSchema         string
+	MaxResultBytes           int
+	InputSchema              map[string]any
+	OutputSchema             map[string]any
+	OutputSchemaHash         string
+	CompatibleOutputVersions []string
+	SemanticFields           map[string]string
+	FieldTypes               map[string]string
+	CardSafe                 bool
+	CardProjector            func(context.Context, Call, Result) (map[string]any, bool, error)
+	Authorize                func(context.Context, Call) error
+	Validate                 func(map[string]any) error
+	Execute                  func(context.Context, Call) (Result, error)
 }
 
 type Call struct {
-	ToolID      string
-	Caller      string
-	Enterprise  string
-	Subject     string
-	SubjectType string
-	RunID       string
-	Input       map[string]any
+	ToolID       string
+	CallID       string
+	Caller       string
+	Enterprise   string
+	Subject      string
+	SubjectType  string
+	RunID        string
+	InvocationID string
+	Input        map[string]any
 }
 
 type Result struct {
@@ -75,6 +89,21 @@ func (registry *Registry) Register(metadata Metadata) error {
 		metadata.Visibility = Hidden
 		metadata.ExecutionMode = Sequential
 	}
+	if metadata.OutputSchema != nil && metadata.OutputSchemaHash == "" {
+		encoded, err := json.Marshal(metadata.OutputSchema)
+		if err != nil {
+			return fmt.Errorf("marshal output schema for %s: %w", metadata.ID, err)
+		}
+		hash := sha256.Sum256(encoded)
+		metadata.OutputSchemaHash = hex.EncodeToString(hash[:])
+	}
+	if metadata.ToolFamily == "" {
+		metadata.ToolFamily = metadata.ID
+	}
+	if metadata.OutputVersion != "" && !slices.Contains(metadata.CompatibleOutputVersions, metadata.OutputVersion) {
+		metadata.CompatibleOutputVersions = append(metadata.CompatibleOutputVersions, metadata.OutputVersion)
+	}
+	sort.Strings(metadata.CompatibleOutputVersions)
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	if _, exists := registry.tools[metadata.ID]; exists {
@@ -82,6 +111,36 @@ func (registry *Registry) Register(metadata Metadata) error {
 	}
 	registry.tools[metadata.ID] = metadata
 	return nil
+}
+
+// CardCatalog returns only model-visible read/preview Tools with an authoritative
+// output schema and a server-side Card-safe projector.
+func (registry *Registry) CardCatalog() []Metadata {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	result := make([]Metadata, 0, len(registry.tools))
+	for _, metadata := range registry.tools {
+		if metadata.Visibility != Visible || !metadata.CardSafe || metadata.OutputSchema == nil || metadata.CardProjector == nil || strings.HasSuffix(metadata.ID, ".commit") {
+			continue
+		}
+		metadata.Execute = nil
+		metadata.Authorize = nil
+		metadata.Validate = nil
+		metadata.CardProjector = nil
+		result = append(result, metadata)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
+	return result
+}
+
+func (registry *Registry) ProjectForCard(ctx context.Context, call Call, result Result) (map[string]any, bool, error) {
+	registry.mu.RLock()
+	metadata, exists := registry.tools[call.ToolID]
+	registry.mu.RUnlock()
+	if !exists || !metadata.CardSafe || metadata.CardProjector == nil {
+		return nil, false, ErrToolNotAvailable
+	}
+	return metadata.CardProjector(ctx, call, result)
 }
 
 func (registry *Registry) ModelCatalog() []Metadata {

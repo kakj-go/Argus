@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.argus.local/remote-access/bridge.schema.json",
+  "title": "Argus Remote Access WebSocket Protocol",
+  "oneOf": [
+    {"$ref": "#/$defs/ClientHello"}, {"$ref": "#/$defs/ClientInput"}, {"$ref": "#/$defs/ClientResize"},
+    {"$ref": "#/$defs/ClientPing"}, {"$ref": "#/$defs/ClientClose"}, {"$ref": "#/$defs/ServerReady"},
+    {"$ref": "#/$defs/ServerOutput"}, {"$ref": "#/$defs/ServerState"}, {"$ref": "#/$defs/ServerError"}
+  ],
+  "$defs": {
+    "ClientHello": {"type":"object","additionalProperties":false,"required":["protocol","type","sequence","ticket","nonce","cols","rows"],"properties":{"protocol":{"const":"argus.remote_access/v1"},"type":{"const":"client_hello"},"sequence":{"const":1},"ticket":{"type":"string","minLength":43,"maxLength":256},"nonce":{"type":"string","minLength":16,"maxLength":128},"cols":{"type":"integer","minimum":20,"maximum":1000},"rows":{"type":"integer","minimum":5,"maximum":500}}},
+    "ClientInput": {"type":"object","additionalProperties":false,"required":["protocol","type","sequence","data"],"properties":{"protocol":{"const":"argus.remote_access/v1"},"type":{"const":"input"},"sequence":{"type":"integer","minimum":2},"data":{"type":"string","minLength":1,"maxLength":65536}}},
+    "ClientResize": {"type":"object","additionalProperties":false,"required":["protocol","type","sequence","cols","rows"],"properties":{"protocol":{"const":"argus.remote_access/v1"},"type":{"const":"resize"},"sequence":{"type":"integer","minimum":2},"cols":{"type":"integer","minimum":20,"maximum":1000},"rows":{"type":"integer","minimum":5,"maximum":500}}},
+    "ClientPing": {"type":"object","additionalProperties":false,"required":["protocol","type","sequence"],"properties":{"protocol":{"const":"argus.remote_access/v1"},"type":{"const":"ping"},"sequence":{"type":"integer","minimum":2}}},
+    "ClientClose": {"type":"object","additionalProperties":false,"required":["protocol","type","sequence"],"properties":{"protocol":{"const":"argus.remote_access/v1"},"type":{"const":"close"},"sequence":{"type":"integer","minimum":2},"reason":{"type":"string","maxLength":256}}},
+    "ServerReady": {"type":"object","additionalProperties":false,"required":["protocol","type","sequence","session_id","mode","idle_timeout_seconds","max_duration_seconds"],"properties":{"protocol":{"const":"argus.remote_access/v1"},"type":{"const":"server_ready"},"sequence":{"type":"integer","minimum":1},"session_id":{"type":"string","format":"uuid"},"mode":{"enum":["ssh_pty","winrs_line"]},"idle_timeout_seconds":{"type":"integer","minimum":60},"max_duration_seconds":{"type":"integer","minimum":60}}},
+    "ServerOutput": {"type":"object","additionalProperties":false,"required":["protocol","type","sequence","stream","data"],"properties":{"protocol":{"const":"argus.remote_access/v1"},"type":{"const":"output"},"sequence":{"type":"integer","minimum":1},"stream":{"enum":["stdout","stderr"]},"data":{"type":"string","maxLength":65536}}},
+    "ServerState": {"type":"object","additionalProperties":false,"required":["protocol","type","sequence","status"],"properties":{"protocol":{"const":"argus.remote_access/v1"},"type":{"const":"state"},"sequence":{"type":"integer","minimum":1},"status":{"enum":["connecting","active","terminating","terminated","failed","connection_lost","invalidated"]},"reason":{"type":"string","maxLength":256}}},
+    "ServerError": {"type":"object","additionalProperties":false,"required":["protocol","type","sequence","code","message","terminal"],"properties":{"protocol":{"const":"argus.remote_access/v1"},"type":{"const":"error"},"sequence":{"type":"integer","minimum":1},"code":{"type":"string","pattern":"^[A-Z][A-Z0-9_]*$"},"message":{"type":"string","maxLength":2048},"terminal":{"type":"boolean"}}}
+  }
+}

@@ -1,0 +1,46 @@
+openapi: 3.1.0
+info: {title: Argus Remote Access API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/remote-access-grants: {$ref: ../argus.yaml#/paths/~1enterprise~1remote-access-grants}
+  "/enterprise/remote-access-grants/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-grants~1{id}"}
+  /enterprise/remote-access-policies: {$ref: ../argus.yaml#/paths/~1enterprise~1remote-access-policies}
+  "/enterprise/remote-access-policies/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-policies~1{id}"}
+  /enterprise/remote-access-requests: {$ref: ../argus.yaml#/paths/~1enterprise~1remote-access-requests}
+  "/enterprise/remote-access-requests/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-requests~1{id}"}
+  "/enterprise/remote-access-requests/{id}/decisions": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-requests~1{id}~1decisions"}
+  /enterprise/remote-access-leases: {$ref: ../argus.yaml#/paths/~1enterprise~1remote-access-leases}
+  "/enterprise/remote-access-leases/{id}/revoke": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-leases~1{id}~1revoke"}
+  /enterprise/remote-access-sessions: {$ref: ../argus.yaml#/paths/~1enterprise~1remote-access-sessions}
+  "/enterprise/remote-access-sessions/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-sessions~1{id}"}
+  "/enterprise/remote-access-sessions/{id}/tickets": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-sessions~1{id}~1tickets"}
+  "/enterprise/remote-access-sessions/{id}/terminate": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-sessions~1{id}~1terminate"}
+  "/enterprise/remote-access-recordings/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-recordings~1{id}"}
+  "/enterprise/remote-access-recordings/{id}/events": {$ref: "../argus.yaml#/paths/~1enterprise~1remote-access-recordings~1{id}~1events"}
+components:
+  securitySchemes: {sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}}
+  schemas:
+    RemoteAccessGrant: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessGrant}
+    RemoteAccessGrantWrite: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessGrantWrite}
+    RemoteAccessGrantUpdate: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessGrantUpdate}
+    RemoteAccessGrantPage: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessGrantPage}
+    RemoteAccessPolicy: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessPolicy}
+    RemoteAccessPolicyWrite: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessPolicyWrite}
+    RemoteAccessPolicyUpdate: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessPolicyUpdate}
+    RemoteAccessPolicyPage: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessPolicyPage}
+    RemoteAccessRequirement: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessRequirement}
+    RemoteAccessDecision: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessDecision}
+    RemoteAccessDecisionCreate: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessDecisionCreate}
+    AccessRequestCreate: {$ref: ../components/m6.yaml#/components/schemas/AccessRequestCreate}
+    AccessRequest: {$ref: ../components/m6.yaml#/components/schemas/AccessRequest}
+    AccessRequestPage: {$ref: ../components/m6.yaml#/components/schemas/AccessRequestPage}
+    AccessLease: {$ref: ../components/m6.yaml#/components/schemas/AccessLease}
+    AccessLeasePage: {$ref: ../components/m6.yaml#/components/schemas/AccessLeasePage}
+    RemoteAccessSessionCreate: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessSessionCreate}
+    RemoteAccessSession: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessSession}
+    RemoteAccessSessionPage: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessSessionPage}
+    SessionTicketResult: {$ref: ../components/m6.yaml#/components/schemas/SessionTicketResult}
+    SessionTerminate: {$ref: ../components/m6.yaml#/components/schemas/SessionTerminate}
+    RemoteAccessRecording: {$ref: ../components/m6.yaml#/components/schemas/RemoteAccessRecording}
+    RecordingEventPage: {$ref: ../components/m6.yaml#/components/schemas/RecordingEventPage}

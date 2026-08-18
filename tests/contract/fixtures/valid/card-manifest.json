@@ -3,7 +3,7 @@
   "card_id": "card_host_list",
   "revision": 1,
   "source": "system",
-  "entrypoint_hash": "0123456789abcdef0123456789abcdef",
+  "entrypoint_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "bridge_version": "argus.card_bridge/v1",
   "slots": [{"name": "hosts", "kind": "data", "value_type": "array", "required": true}],
   "allowed_resources": ["inline_style", "inline_script"],

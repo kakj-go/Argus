@@ -1,0 +1,1671 @@
+openapi: 3.1.0
+info:
+  title: Argus Remote Access API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/remote-access-grants:
+    get:
+      operationId: listRemoteAccessGrants
+      summary: List remote access grants.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Grant page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessGrantPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createRemoteAccessGrant
+      summary: Create a remote access grant.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteAccessGrantWrite'
+      responses:
+        '201':
+          description: Grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessGrant'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-grants/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getRemoteAccessGrant
+      summary: Get a remote access grant.
+      responses:
+        '200':
+          description: Grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessGrant'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      operationId: updateRemoteAccessGrant
+      summary: Update a remote access grant with optimistic concurrency.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteAccessGrantUpdate'
+      responses:
+        '200':
+          description: Grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessGrant'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: disableRemoteAccessGrant
+      summary: Disable a remote access grant.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Grant disabled.
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-policies:
+    get:
+      operationId: listRemoteAccessPolicies
+      summary: List remote access approval policies.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Policy page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessPolicyPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createRemoteAccessPolicy
+      summary: Create a remote access approval policy.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteAccessPolicyWrite'
+      responses:
+        '201':
+          description: Policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessPolicy'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-policies/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getRemoteAccessPolicy
+      summary: Get a remote access approval policy.
+      responses:
+        '200':
+          description: Policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessPolicy'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      operationId: updateRemoteAccessPolicy
+      summary: Update a remote access approval policy with optimistic concurrency.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteAccessPolicyUpdate'
+      responses:
+        '200':
+          description: Policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessPolicy'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: disableRemoteAccessPolicy
+      summary: Disable a remote access approval policy.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Policy disabled.
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-requests:
+    get:
+      operationId: listRemoteAccessRequests
+      summary: List remote access requests visible to the current user.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Request page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequestPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createRemoteAccessRequest
+      summary: Request remote access for the current user.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRequestCreate'
+      responses:
+        '201':
+          description: Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-requests/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getRemoteAccessRequest
+      summary: Get a remote access request and approval status.
+      responses:
+        '200':
+          description: Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-requests/{id}/decisions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: decideRemoteAccessRequest
+      summary: Approve or reject one remote access requirement.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteAccessDecisionCreate'
+      responses:
+        '200':
+          description: Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-leases:
+    get:
+      operationId: listRemoteAccessLeases
+      summary: List active and historical remote access leases.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Lease page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessLeasePage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-leases/{id}/revoke:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: revokeRemoteAccessLease
+      summary: Revoke a remote access lease and its sessions.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Revoked lease.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessLease'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-sessions:
+    get:
+      operationId: listRemoteAccessSessions
+      summary: List remote access sessions.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Session page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessSessionPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createRemoteAccessSession
+      summary: Create a session from an authorized access lease.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteAccessSessionCreate'
+      responses:
+        '201':
+          description: Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessSession'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-sessions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getRemoteAccessSession
+      summary: Get a remote access session.
+      responses:
+        '200':
+          description: Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessSession'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-sessions/{id}/tickets:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: createRemoteAccessSessionTicket
+      summary: Issue a one-time short-lived WebSocket ticket.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '201':
+          description: One-time ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTicketResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-sessions/{id}/terminate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: terminateRemoteAccessSession
+      summary: Terminate an active remote access session.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionTerminate'
+      responses:
+        '200':
+          description: Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessSession'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-recordings/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getRemoteAccessRecording
+      summary: Get authorized recording metadata.
+      responses:
+        '200':
+          description: Recording metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRecording'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-recordings/{id}/events:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4096
+    get:
+      operationId: listRemoteAccessRecordingEvents
+      summary: Read an authorized page of asciicast recording events.
+      responses:
+        '200':
+          description: Authorized recording event page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingEventPage'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    RemoteAccessGrant:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - subject_type
+        - subject_id
+        - host_ids
+        - managed_account_ids
+        - protocols
+        - actions
+        - valid_from
+        - valid_until
+        - enabled
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        subject_type:
+          $ref: '#/components/schemas/RemoteAccessSubjectType'
+        subject_id:
+          type: string
+          format: uuid
+        host_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 256
+          items:
+            type: string
+            format: uuid
+        host_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        managed_account_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        protocols:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessProtocol'
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessAction'
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RemoteAccessGrantWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - subject_type
+        - subject_id
+        - host_ids
+        - managed_account_ids
+        - protocols
+        - actions
+        - valid_from
+        - valid_until
+        - enabled
+      properties:
+        subject_type:
+          $ref: '#/components/schemas/RemoteAccessSubjectType'
+        subject_id:
+          type: string
+          format: uuid
+        host_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 256
+          items:
+            type: string
+            format: uuid
+        host_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        managed_account_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        protocols:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessProtocol'
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessAction'
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+    RemoteAccessGrantUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - subject_type
+        - subject_id
+        - host_ids
+        - managed_account_ids
+        - protocols
+        - actions
+        - valid_from
+        - valid_until
+        - enabled
+        - expected_version
+      properties:
+        subject_type:
+          $ref: '#/components/schemas/RemoteAccessSubjectType'
+        subject_id:
+          type: string
+          format: uuid
+        host_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 256
+          items:
+            type: string
+            format: uuid
+        host_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        managed_account_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        protocols:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessProtocol'
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessAction'
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    RemoteAccessGrantPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAccessGrant'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RemoteAccessPolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - name
+        - enabled
+        - priority
+        - protocols
+        - minimum_approvals
+        - separation_of_duties
+        - require_mfa
+        - max_session_seconds
+        - idle_timeout_seconds
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        protocols:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessProtocol'
+        host_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        approver_role_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 64
+          items:
+            type: string
+            format: uuid
+        minimum_approvals:
+          type: integer
+          minimum: 1
+          maximum: 16
+        separation_of_duties:
+          type: boolean
+        require_mfa:
+          type: boolean
+        max_session_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+        idle_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 900
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RemoteAccessPolicyWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - enabled
+        - priority
+        - protocols
+        - minimum_approvals
+        - separation_of_duties
+        - require_mfa
+        - max_session_seconds
+        - idle_timeout_seconds
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        protocols:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessProtocol'
+        host_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        approver_role_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 64
+          items:
+            type: string
+            format: uuid
+        minimum_approvals:
+          type: integer
+          minimum: 1
+          maximum: 16
+        separation_of_duties:
+          type: boolean
+        require_mfa:
+          type: boolean
+        max_session_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+        idle_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 900
+    RemoteAccessPolicyUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - enabled
+        - priority
+        - protocols
+        - minimum_approvals
+        - separation_of_duties
+        - require_mfa
+        - max_session_seconds
+        - idle_timeout_seconds
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        protocols:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessProtocol'
+        host_selector:
+          $ref: '#/components/schemas/LabelSelector'
+        approver_role_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 64
+          items:
+            type: string
+            format: uuid
+        minimum_approvals:
+          type: integer
+          minimum: 1
+          maximum: 16
+        separation_of_duties:
+          type: boolean
+        require_mfa:
+          type: boolean
+        max_session_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+        idle_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 900
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    RemoteAccessPolicyPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAccessPolicy'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RemoteAccessRequirement:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - policy_id
+        - policy_version
+        - minimum_approvals
+        - separation_of_duties
+        - require_mfa
+        - status
+        - approved_count
+      properties:
+        id:
+          type: string
+          format: uuid
+        policy_id:
+          type: string
+          format: uuid
+        policy_version:
+          type: integer
+          format: int64
+          minimum: 1
+        minimum_approvals:
+          type: integer
+          minimum: 1
+        separation_of_duties:
+          type: boolean
+        require_mfa:
+          type: boolean
+        status:
+          type: string
+          enum:
+            - pending
+            - satisfied
+            - rejected
+            - invalidated
+        approved_count:
+          type: integer
+          minimum: 0
+    RemoteAccessDecision:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - request_id
+        - requirement_id
+        - decision
+        - decided_by
+        - decided_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        request_id:
+          type: string
+          format: uuid
+        requirement_id:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum:
+            - approve
+            - reject
+        comment:
+          type: string
+          maxLength: 2048
+        decided_by:
+          type: string
+          format: uuid
+        decided_at:
+          type: string
+          format: date-time
+    RemoteAccessDecisionCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - requirement_id
+        - decision
+      properties:
+        requirement_id:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum:
+            - approve
+            - reject
+        comment:
+          type: string
+          maxLength: 2048
+    AccessRequestCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - host_id
+        - managed_account_id
+        - protocol
+        - action
+        - reason
+      properties:
+        host_id:
+          type: string
+          format: uuid
+        managed_account_id:
+          type: string
+          format: uuid
+        protocol:
+          $ref: '#/components/schemas/RemoteAccessProtocol'
+        action:
+          $ref: '#/components/schemas/RemoteAccessAction'
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2048
+    AccessRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - requester_id
+        - grant_id
+        - host_id
+        - managed_account_id
+        - protocol
+        - action
+        - reason
+        - status
+        - requirements
+        - decisions
+        - authorization_version
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        requester_id:
+          type: string
+          format: uuid
+          readOnly: true
+        grant_id:
+          type: string
+          format: uuid
+        host_id:
+          type: string
+          format: uuid
+        managed_account_id:
+          type: string
+          format: uuid
+        protocol:
+          $ref: '#/components/schemas/RemoteAccessProtocol'
+        action:
+          $ref: '#/components/schemas/RemoteAccessAction'
+        reason:
+          type: string
+          maxLength: 2048
+        status:
+          $ref: '#/components/schemas/RemoteAccessRequestStatus'
+        requirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAccessRequirement'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAccessDecision'
+        authorization_version:
+          type: integer
+          format: int64
+          minimum: 1
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AccessRequestPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequest'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    AccessLease:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - request_id
+        - enterprise_id
+        - user_id
+        - grant_id
+        - host_id
+        - managed_account_id
+        - protocol
+        - action
+        - authorization_version
+        - issued_at
+        - expires_at
+        - revoked
+      properties:
+        id:
+          type: string
+          format: uuid
+        request_id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        user_id:
+          type: string
+          format: uuid
+          readOnly: true
+        grant_id:
+          type: string
+          format: uuid
+        host_id:
+          type: string
+          format: uuid
+        managed_account_id:
+          type: string
+          format: uuid
+        protocol:
+          $ref: '#/components/schemas/RemoteAccessProtocol'
+        action:
+          $ref: '#/components/schemas/RemoteAccessAction'
+        authorization_version:
+          type: integer
+          format: int64
+          minimum: 1
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        revoked:
+          type: boolean
+        revoked_at:
+          type: string
+          format: date-time
+    AccessLeasePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessLease'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RemoteAccessSessionCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - lease_id
+        - terminal_cols
+        - terminal_rows
+      properties:
+        lease_id:
+          type: string
+          format: uuid
+        terminal_cols:
+          type: integer
+          minimum: 20
+          maximum: 1000
+        terminal_rows:
+          type: integer
+          minimum: 5
+          maximum: 500
+    RemoteAccessSession:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - user_id
+        - lease_id
+        - host_id
+        - managed_account_id
+        - protocol
+        - connection_mode
+        - status
+        - session_fence
+        - recording_id
+        - idle_timeout_seconds
+        - max_duration_seconds
+        - connect_before
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        user_id:
+          type: string
+          format: uuid
+          readOnly: true
+        lease_id:
+          type: string
+          format: uuid
+        host_id:
+          type: string
+          format: uuid
+        managed_account_id:
+          type: string
+          format: uuid
+        protocol:
+          $ref: '#/components/schemas/RemoteAccessProtocol'
+        connection_mode:
+          type: string
+          enum:
+            - via_bastion
+            - connector_local
+            - direct_ssh
+            - direct_winrm
+        status:
+          $ref: '#/components/schemas/RemoteAccessSessionStatus'
+        session_fence:
+          type: integer
+          format: int64
+          minimum: 1
+          readOnly: true
+        recording_id:
+          type: string
+          format: uuid
+        idle_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 900
+        max_duration_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+        connect_before:
+          type: string
+          format: date-time
+        connected_at:
+          type: string
+          format: date-time
+        terminated_at:
+          type: string
+          format: date-time
+        termination_reason:
+          type: string
+          maxLength: 256
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RemoteAccessSessionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAccessSession'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    SessionTicketResult:
+      type: object
+      additionalProperties: false
+      required:
+        - session_id
+        - ticket
+        - websocket_url
+        - protocol_version
+        - expires_at
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        ticket:
+          type: string
+          minLength: 43
+          maxLength: 256
+          writeOnly: true
+        websocket_url:
+          type: string
+          pattern: ^wss://[^[:space:]]+$
+        protocol_version:
+          type: string
+          const: argus.remote_access/v1
+        expires_at:
+          type: string
+          format: date-time
+    SessionTerminate:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 256
+    RemoteAccessRecording:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - session_id
+        - status
+        - format
+        - encrypted
+        - chunk_count
+        - event_count
+        - size_bytes
+        - retention_until
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        session_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - recording
+            - available
+            - incomplete
+            - failed
+            - expired
+        format:
+          type: string
+          const: asciicast_v2
+        encrypted:
+          type: boolean
+          const: true
+        chunk_count:
+          type: integer
+          minimum: 0
+        event_count:
+          type: integer
+          minimum: 0
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        final_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        retention_until:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    RecordingEventPage:
+      type: object
+      additionalProperties: false
+      required:
+        - recording
+        - events
+        - next_cursor
+        - complete
+      properties:
+        recording:
+          $ref: '#/components/schemas/RemoteAccessRecording'
+        events:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - time
+              - type
+              - data
+            properties:
+              time:
+                type: number
+                minimum: 0
+              type:
+                type: string
+                enum:
+                  - i
+                  - o
+                  - r
+                  - m
+              data: {}
+        next_cursor:
+          type: string
+          maxLength: 4096
+        complete:
+          type: boolean
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    RemoteAccessSubjectType:
+      type: string
+      enum:
+        - user
+        - department
+    UserLabelKey:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+    SystemLabelKey:
+      type: string
+      maxLength: 72
+      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+      readOnly: true
+    LabelValue:
+      type: string
+      minLength: 1
+      maxLength: 63
+      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
+    LabelRequirement:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+            - values
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              const: eq
+            values:
+              type: array
+              minItems: 1
+              maxItems: 1
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/LabelValue'
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+            - values
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              const: in
+            values:
+              type: array
+              minItems: 1
+              maxItems: 32
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/LabelValue'
+        - type: object
+          additionalProperties: false
+          required:
+            - key
+            - operator
+          properties:
+            key:
+              anyOf:
+                - $ref: '#/components/schemas/UserLabelKey'
+                - $ref: '#/components/schemas/SystemLabelKey'
+            operator:
+              enum:
+                - exists
+                - not_exists
+    LabelSelector:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - requirements
+      properties:
+        schema_version:
+          const: argus.label_selector/v1
+        requirements:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/LabelRequirement'
+    RemoteAccessProtocol:
+      type: string
+      enum:
+        - ssh
+        - winrs
+    RemoteAccessAction:
+      type: string
+      enum:
+        - terminal
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    RemoteAccessRequestStatus:
+      type: string
+      enum:
+        - requested
+        - awaiting_approval
+        - authorized
+        - rejected
+        - expired
+        - invalidated
+    RemoteAccessSessionStatus:
+      type: string
+      enum:
+        - requested
+        - awaiting_approval
+        - authorized
+        - connecting
+        - active
+        - terminating
+        - terminated
+        - failed
+        - expired
+        - connection_lost
+        - invalidated
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

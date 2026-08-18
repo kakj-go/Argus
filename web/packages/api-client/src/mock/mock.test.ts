@@ -543,35 +543,79 @@ describe("interactive cards", () => {
   it("enforces binding validation and keeps system cards read-only", async () => {
     const client = makeClient();
     await login(client, "chenxi");
-    const card = await client.interactiveCards.create({
-      slug: "host-table-test",
-      name: "主机表",
-      description: "test",
-      htmlTemplate: '<div data-slot="items"></div>',
-      slots: [{ name: "items", type: "array", required: true }],
-      demoData: { items: [] },
-    });
-    await expect(client.interactiveCards.enable(card.id)).rejects.toThrow(
-      "validation gate",
-    );
-    await client.interactiveCards.updateBindings(card.id, [
+    const cards = await client.interactiveCards.list();
+    const card = cards.find((item) => item.source === "enterprise")!;
+    const catalog = await client.interactiveCards.listToolSchemas();
+    const tool = catalog.items[0]!;
+    const demos = [
+      "default",
+      "empty",
+      "error",
+      "large",
+      "light",
+      "dark",
+      "zh-CN",
+      "en-US",
+    ] as const;
+    const version = await client.interactiveCards.createConfigurationVersion(
+      card.id,
       {
-        slotName: "items",
-        mode: "strict",
-        toolName: "host.list",
-        schemaVersion: "2026-08-01",
-        fieldPath: "items",
+        base_revision: card.latest_revision,
+        expected_version: card.version,
+        name: card.name,
+        description: card.description,
+        slot_bindings: [
+          {
+            slot_name: "items",
+            slot_kind: "data",
+            mode: "strict",
+            tool_id: tool.tool_id,
+            output_schema_version: tool.output_schema_version,
+            schema_hash: tool.schema_hash,
+            path: tool.fields[0]!.path,
+            value_type: "array",
+          },
+        ],
+        demos: demos.map((scenario) => ({ scenario, data: {} })),
       },
-    ]);
-    expect((await client.interactiveCards.validate(card.id)).valid).toBe(true);
-    expect((await client.interactiveCards.enable(card.id)).enabled).toBe(true);
-
-    const system = (
-      await client.interactiveCards.list({ source: "system" })
-    )[0]!;
-    await expect(client.interactiveCards.disable(system.id)).rejects.toThrow(
-      "read-only",
     );
+    const run = await client.interactiveCards.startValidation(card.id, {
+      revision: version.revision,
+      runtime_version: "argus-card-runtime/v1",
+    });
+    const validated = await client.interactiveCards.submitValidationEvidence(
+      run.id,
+      {
+        nonce: run.nonce,
+        content_hash: run.content_hash,
+        runtime_version: run.runtime_version,
+        scenarios: demos.map((scenario) => ({
+          scenario,
+          ready: true,
+          protocol_violations: 0,
+          runtime_errors: 0,
+          serious_a11y_violations: 0,
+          missing_required_slots: [],
+          size_violation: false,
+        })),
+      },
+    );
+    expect(validated.status).toBe("passed");
+    expect(
+      (
+        await client.interactiveCards.changeState(card.id, "activate", {
+          expected_version: version.revision,
+          revision: version.revision,
+        })
+      ).enabled,
+    ).toBe(true);
+
+    const system = cards.find((item) => item.source === "system")!;
+    await expect(
+      client.interactiveCards.changeState(system.id, "disable", {
+        expected_version: system.version,
+      }),
+    ).rejects.toThrow("read-only");
   });
 });
 

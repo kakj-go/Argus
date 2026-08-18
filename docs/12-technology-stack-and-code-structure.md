@@ -22,7 +22,7 @@ Argus 主应用统一使用：
 | 表格         | TanStack Table + TanStack Virtual               | 远程过滤、排序和翻页必须走服务端 Query Binding                                                                             |
 | 表单         | React Hook Form + Zod                           | 前端校验只改善交互，服务端仍执行最终 Schema 和业务校验                                                                     |
 | 图表         | Apache ECharts                                  | 用于 Metrics、Trace、拓扑和时间序列；查询必须经过 Telemetry Query                                                          |
-| 远程命令行   | xterm.js（SSH PTY / WinRM PowerShell Runspace） | 只渲染 Remote Access Gateway 转发的人工会话；WinRM 不伪装成完整 PTY，命令行不得暴露 Credential 或允许 AI/Card 获取会话票据 |
+| 远程命令行   | `@xterm/xterm` + fit addon                      | SSH 使用完整 PTY；WinRM 使用 HTTPS WinRS PowerShell 行模式，不伪装成完整 PTY/PSRP，且不得暴露 Credential 或允许 AI/Card 获取 Ticket |
 | 国际化       | i18next                                         | 第一版必须完整支持 `zh-CN` 与 `en-US`；文案使用稳定 Key，不得散落在不可检索的组件常量中                                    |
 | 实时更新     | SSE 为主、WebSocket 为辅                        | 模型输出、Run 和 Card 状态使用可恢复游标；断线后重新校验 Session、固定企业、DataScope 和 AuthorizationVersion              |
 
@@ -104,7 +104,7 @@ M1 Runtime 对 Card 脚本暴露的唯一浏览器对象是 `window.argusCard`�
 | 语言                 | Go                                   | 四个服务端程序、Connector 和 `argusctl` 使用同一工具链并固定 Go 版本                                                                                                 |
 | HTTP                 | `net/http` + `chi`                   | 保持传输层轻量，领域复杂度不放入 Web 框架                                                                                                                            |
 | 外部 API             | REST + OpenAPI 3.1                   | 使用 `oapi-codegen` 生成 Go 类型/接口，使用 `openapi-typescript` 生成 TypeScript 契约；前端 Adapter 在生成契约之上封装                                               |
-| 内部 RPC             | gRPC + protobuf                      | 使用 Buf 管理 lint、生成和 breaking change；Connector 使用双向流；Server 到 Direct Executor 使用独立 CA 的内部 mTLS unary RPC，PostgreSQL 队列保留权威状态与恢复能力 |
+| 内部 RPC             | gRPC + protobuf                      | 使用 Buf 管理 lint、生成和 breaking change；Connector、Gateway peer 与 Remote Access 使用类型化双向流，Server/Connector Gateway 到 Direct Executor 使用独立 CA 的内部 mTLS RPC |
 | MCP                  | Argus 进程内 Tool Registry/Gateway；独立服务时使用官方 Go MCP SDK | M4 小内核避免额外网络跳；权限、私有 Token 分流、投影和 `.commit` 身份门禁由 Argus 实现。未来拆分后只允许内部 mTLS，不经公共 Ingress |
 | Agent Harness        | Go 小内核，语义参考 Pi agent-core    | Provider-neutral Message/Event、可插拔 ContextAssembler、顺序优先的 Tool Loop；不引入第二套 Workflow Runtime                                                         |
 | PostgreSQL           | `pgx` + `sqlc`                       | 使用显式 SQL 实现事务、条件更新、Lease、Fence Token 和 Outbox，不使用重 ORM；查询与生成文件按领域拆分并遵守 2000 行上限                                              |
@@ -113,7 +113,9 @@ M1 Runtime 对 Card 脚本暴露的唯一浏览器对象是 `window.argusCard`�
 | Kafka                | `franz-go`                           | Ingest Producer、必要时的最小 Writer 和管理工具共用                                                                                                                  |
 | ClickHouse           | `clickhouse-go/v2`                   | 只由 Telemetry Query、Schema Migration 和受控 Writer 使用                                                                                                            |
 | Kubernetes           | `client-go` + Helm Go SDK            | 资源管理、Collector 安装和 `argusctl` 安装编排                                                                                                                       |
-| 对象存储             | MinIO Go SDK/S3 Adapter              | 上层只依赖 Artifact Store 接口                                                                                                                                       |
+| SSH                  | `golang.org/x/crypto/ssh`            | Direct/Connector 共用受控 SSH PTY、Host Key、resize、输入输出和超时边界，不形成任意 Shell Tool                                                                       |
+| WinRS                | `github.com/masterzen/winrm`         | 只允许 HTTPS 443/5986，使用持久 WinRS Shell 承载 PowerShell 行输入输出，不声明完整 PTY、ConPTY 或 PSRP                                                                |
+| 对象存储             | MinIO Go SDK/S3 Adapter              | 上层只依赖 Artifact Store 接口；录像单次调用有短超时，连续不可用超过 30 秒时会话 fail closed                                                                          |
 | 可观测性             | OpenTelemetry Go + `slog`            | Trace、Metric、结构化日志统一携带 enterprise/run/tool/execution 标识                                                                                                 |
 
 第一版不引入 Temporal、Celery 或另一套权威工作流系统。Run、Step、Task、Lease 和 Execution 继续以 PostgreSQL 为事实来源，Redis 只降低调度延迟。
@@ -234,6 +236,9 @@ Argus/
 │   ├── argus-connector-gateway/
 │   ├── argus-telemetry/
 │   ├── argus-connector/
+│   ├── argus-migrate/
+│   ├── argus-card-catalog-sync/
+│   ├── argus-replay-model/       # 仅 E2E build tag
 │   └── argusctl/
 ├── internal/
 ├── api/

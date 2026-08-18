@@ -1,2 +1,3 @@
-// Package card contains card skills, versions, render plans, instances, and bindings.
+// Package card owns interactive Card versioning, validation, selection,
+// presentation materialization, and short-lived bindings.
 package card

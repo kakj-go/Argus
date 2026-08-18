@@ -281,6 +281,8 @@ export const hostsZh = {
       connectedAs: "{{account}}@{{host}}",
       needAccount: "请填写登录账号",
       needReason: "请填写事由",
+      realOnly: "远程访问仅在真实 API 模式可用",
+      realOnlyDesc: "Mock 模式不生成远程访问授权、票据或录像。",
     },
     components: {
       connectorTitle: "接入服务（Connector）",
@@ -651,6 +653,8 @@ export const hostsEn = {
       connectedAs: "{{account}}@{{host}}",
       needAccount: "Account is required",
       needReason: "Reason is required",
+      realOnly: "Remote access requires real API mode",
+      realOnlyDesc: "Mock mode does not issue grants, tickets, or recordings.",
     },
     components: {
       connectorTitle: "Connector",

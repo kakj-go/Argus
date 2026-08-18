@@ -1,5 +1,4 @@
 import type {
-  InteractiveCard,
   PendingActionPublic,
   ModelUsagePoint,
 } from "../types";
@@ -7,6 +6,7 @@ import type { TaskViewModel } from "../provisional";
 import { calculateModelAmount } from "../types";
 import { createOrgSeed } from "./seed-org";
 import type { MockDb } from "./store";
+import type { MockInteractiveCard } from "./internal-types";
 import type { MockHost } from "./resource-models";
 
 const DAY = 86_400_000;
@@ -488,9 +488,9 @@ export function createSeedDb(now: number = Date.now()): MockDb {
   ];
 
   const interactiveCard = (
-    partial: Pick<InteractiveCard, "id" | "slug" | "name"> &
-      Partial<Omit<InteractiveCard, "id" | "slug" | "name">>,
-  ): InteractiveCard => {
+    partial: Pick<MockInteractiveCard, "id" | "slug" | "name"> &
+      Partial<Omit<MockInteractiveCard, "id" | "slug" | "name">>,
+  ): MockInteractiveCard => {
     const source = partial.source ?? "system";
     const enterprise = source === "enterprise";
     const body =
@@ -886,47 +886,6 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       },
     ],
     uninstallCommands: [],
-    remoteSessions: [
-      {
-        id: "rs-0001",
-        enterpriseId: "ent-acme",
-        userId: "u-wanglei",
-        userName: "王磊",
-        hostId: "host-db-master-01",
-        hostName: "db-master-01",
-        connectionMode: "via_bastion",
-        connectorId: "conn-sh-01",
-        bastionScopeId: "scope-sh",
-        protocol: "ssh",
-        targetAccount: "ops",
-        reason: "排查主库连接数突增",
-        status: "active",
-        startedAt: ago(25 * MINUTE),
-        lastActivityAt: ago(2 * MINUTE),
-        recordingRef: "rec-rs-0001",
-        createdAt: ago(26 * MINUTE),
-      },
-      {
-        id: "rs-0002",
-        enterpriseId: "ent-acme",
-        userId: "u-chenxi",
-        userName: "陈曦",
-        hostId: "host-web-11",
-        hostName: "host-web-11",
-        connectionMode: "via_bastion",
-        connectorId: "conn-sh-01",
-        bastionScopeId: "scope-sh",
-        protocol: "ssh",
-        targetAccount: "deploy",
-        reason: "发布前检查",
-        status: "terminated",
-        startedAt: ago(30 * HOUR),
-        lastActivityAt: ago(29 * HOUR),
-        endedAt: ago(29 * HOUR),
-        recordingRef: "rec-rs-0002",
-        createdAt: ago(30 * HOUR),
-      },
-    ],
     clusters: [
       {
         id: "k8s-prod-east",

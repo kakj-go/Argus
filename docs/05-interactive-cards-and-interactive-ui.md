@@ -84,3 +84,9 @@ Card 脚本只通过 `window.argusCard` 使用浏览器 Bridge：
 ## 8. 测试要求
 
 必须覆盖管理员命令创建、默认禁用、系统卡片只读、严格/优先绑定、Schema 类型错误、必填绑定缺失、全部 Demo 门禁、启用后自动选择，以及 iframe 懒加载、自适应高度、完整展开和 Slot 点击定位。安全测试还必须覆盖 CSP 逃逸、错误 Origin、重复/乱序消息、伪造 Binding ID、销毁后消息、消息大小上限，以及浏览器网络与 DOM 中搜索不到私有 Token/参数。
+
+## 9. 当前实现状态
+
+截至 2026-08-17，M5 已实现本文定义的 CardVersion、系统目录、企业 Chat 创建/修订、静态门禁、八场景浏览器证据、原子激活/回滚、`card.render`、CardPresentation、Data/Query/Action Binding 和历史实例重新鉴权物化。系统目录使用不可变 Revision，同一公开 PendingAction Schema 版本连接 Preview 与 PendingAction Card；Telemetry Overview 已验证但保持 `dependency_pending`，等待 M7 注册兼容 Tool Schema 后进入候选集。
+
+最终临时 Kubernetes 验收运行号为 `20260817211415-4363`。该运行证明 Redis 清空和 Server Pod 重启后仍可从 PostgreSQL 恢复目录、历史实例与幂等动作，脱敏状态证据位于 `artifacts/m5-e2e/20260817211415-4363`，且临时 Namespace、PVC 和 Lease 清理完成。

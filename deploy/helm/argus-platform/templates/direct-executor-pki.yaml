@@ -73,3 +73,23 @@ spec:
   issuerRef:
     name: argus-direct-executor-ca
     kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-connector-gateway-direct-executor-client
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  secretName: argus-connector-gateway-direct-executor-client-tls
+  duration: 2160h
+  renewBefore: 360h
+  dnsNames:
+    - argus-connector-gateway
+  usages:
+    - client auth
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: argus-direct-executor-ca
+    kind: Issuer

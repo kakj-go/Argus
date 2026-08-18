@@ -75,6 +75,7 @@ components:
             - service_account
             - connector
             - direct_executor
+            - remote_access_gateway
             - system
         actor_id:
           type: string

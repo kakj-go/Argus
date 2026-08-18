@@ -8,20 +8,40 @@ import (
 )
 
 type ConnectorGateway struct {
-	GRPCAddress       string
-	HealthAddress     string
-	DatabaseURL       string
-	RedisURL          string
-	InstanceID        string
-	TLSCertificate    string
-	TLSPrivateKey     string
-	ClientCABundle    string
-	SecretKEKPath     string
-	KubeconfigPath    string
-	SystemNamespace   string
-	IssuerName        string
-	IssuerGeneration  int32
-	HeartbeatInterval time.Duration
+	GRPCAddress               string
+	RemoteWSSAddress          string
+	RemoteRPCAddress          string
+	RemotePeerServerName      string
+	RemotePeerHeadlessSuffix  string
+	RemotePeerPort            string
+	HealthAddress             string
+	DatabaseURL               string
+	RedisURL                  string
+	InstanceID                string
+	TLSCertificate            string
+	TLSPrivateKey             string
+	ClientCABundle            string
+	SecretKEKPath             string
+	KubeconfigPath            string
+	SystemNamespace           string
+	IssuerName                string
+	IssuerGeneration          int32
+	HeartbeatInterval         time.Duration
+	RemoteOrigin              string
+	RemoteAllowedOrigins      []string
+	DirectExecutorEndpoint    string
+	DirectExecutorServerName  string
+	DirectExecutorTLSCert     string
+	DirectExecutorTLSKey      string
+	DirectExecutorCABundle    string
+	DirectExecutorRecipientID string
+	ObjectStoreURL            string
+	ObjectStoreBucket         string
+	ObjectStoreAccess         string
+	ObjectStoreSecret         string
+	RemoteUserLimit           int
+	RemoteHostLimit           int
+	RemoteTenantLimit         int
 }
 
 func LoadConnectorGateway() ConnectorGateway {
@@ -31,20 +51,40 @@ func LoadConnectorGateway() ConnectorGateway {
 	}
 	issuerGeneration, _ := strconv.ParseInt(valueOrDefault("ARGUS_CONNECTOR_ISSUER_GENERATION", "1"), 10, 32)
 	return ConnectorGateway{
-		GRPCAddress:       valueOrDefault("ARGUS_CONNECTOR_GRPC_ADDRESS", ":9443"),
-		HealthAddress:     LoadHealthAddress(),
-		DatabaseURL:       os.Getenv("ARGUS_DATABASE_URL"),
-		RedisURL:          os.Getenv("ARGUS_REDIS_URL"),
-		InstanceID:        instanceID,
-		TLSCertificate:    valueOrDefault("ARGUS_CONNECTOR_TLS_CERT_PATH", "/var/run/secrets/argus/connector-gateway/tls.crt"),
-		TLSPrivateKey:     valueOrDefault("ARGUS_CONNECTOR_TLS_KEY_PATH", "/var/run/secrets/argus/connector-gateway/tls.key"),
-		ClientCABundle:    valueOrDefault("ARGUS_CONNECTOR_CLIENT_CA_PATH", "/var/run/secrets/argus/connector-ca/ca.crt"),
-		SecretKEKPath:     valueOrDefault("ARGUS_SECRET_KEK_PATH", "/var/run/secrets/argus/secret-kek/keyring.json"),
-		KubeconfigPath:    os.Getenv("ARGUS_KUBECONFIG"),
-		SystemNamespace:   valueOrDefault("ARGUS_SYSTEM_NAMESPACE", "argus-system"),
-		IssuerName:        valueOrDefault("ARGUS_CONNECTOR_ISSUER_NAME", "argus-connector-ca"),
-		IssuerGeneration:  int32(issuerGeneration),
-		HeartbeatInterval: 30 * time.Second,
+		GRPCAddress:               valueOrDefault("ARGUS_CONNECTOR_GRPC_ADDRESS", ":9443"),
+		RemoteWSSAddress:          valueOrDefault("ARGUS_REMOTE_WSS_ADDRESS", ":9445"),
+		RemoteRPCAddress:          valueOrDefault("ARGUS_REMOTE_RPC_ADDRESS", ":9446"),
+		RemotePeerServerName:      valueOrDefault("ARGUS_REMOTE_PEER_SERVER_NAME", "argus-connector-gateway"),
+		RemotePeerHeadlessSuffix:  valueOrDefault("ARGUS_REMOTE_PEER_HEADLESS_SUFFIX", "argus-connector-gateway-headless."+valueOrDefault("ARGUS_SYSTEM_NAMESPACE", "argus-system")+".svc"),
+		RemotePeerPort:            valueOrDefault("ARGUS_REMOTE_PEER_PORT", "9446"),
+		HealthAddress:             LoadHealthAddress(),
+		DatabaseURL:               os.Getenv("ARGUS_DATABASE_URL"),
+		RedisURL:                  os.Getenv("ARGUS_REDIS_URL"),
+		InstanceID:                instanceID,
+		TLSCertificate:            valueOrDefault("ARGUS_CONNECTOR_TLS_CERT_PATH", "/var/run/secrets/argus/connector-gateway/tls.crt"),
+		TLSPrivateKey:             valueOrDefault("ARGUS_CONNECTOR_TLS_KEY_PATH", "/var/run/secrets/argus/connector-gateway/tls.key"),
+		ClientCABundle:            valueOrDefault("ARGUS_CONNECTOR_CLIENT_CA_PATH", "/var/run/secrets/argus/connector-ca/ca.crt"),
+		SecretKEKPath:             valueOrDefault("ARGUS_SECRET_KEK_PATH", "/var/run/secrets/argus/secret-kek/keyring.json"),
+		KubeconfigPath:            os.Getenv("ARGUS_KUBECONFIG"),
+		SystemNamespace:           valueOrDefault("ARGUS_SYSTEM_NAMESPACE", "argus-system"),
+		IssuerName:                valueOrDefault("ARGUS_CONNECTOR_ISSUER_NAME", "argus-connector-ca"),
+		IssuerGeneration:          int32(issuerGeneration),
+		HeartbeatInterval:         30 * time.Second,
+		RemoteOrigin:              os.Getenv("ARGUS_REMOTE_ORIGIN"),
+		RemoteAllowedOrigins:      splitList(os.Getenv("ARGUS_ALLOWED_ORIGINS")),
+		DirectExecutorEndpoint:    os.Getenv("ARGUS_DIRECT_EXECUTOR_ENDPOINT"),
+		DirectExecutorServerName:  os.Getenv("ARGUS_DIRECT_EXECUTOR_SERVER_NAME"),
+		DirectExecutorTLSCert:     valueOrDefault("ARGUS_DIRECT_EXECUTOR_CLIENT_CERT_PATH", "/var/run/secrets/argus/direct-executor-client/tls.crt"),
+		DirectExecutorTLSKey:      valueOrDefault("ARGUS_DIRECT_EXECUTOR_CLIENT_KEY_PATH", "/var/run/secrets/argus/direct-executor-client/tls.key"),
+		DirectExecutorCABundle:    valueOrDefault("ARGUS_DIRECT_EXECUTOR_CA_PATH", "/var/run/secrets/argus/direct-executor-ca/ca.crt"),
+		DirectExecutorRecipientID: valueOrDefault("ARGUS_DIRECT_EXECUTOR_RECIPIENT_ID", "argus-direct-executor"),
+		ObjectStoreURL:            os.Getenv("ARGUS_OBJECT_STORE_URL"),
+		ObjectStoreBucket:         os.Getenv("ARGUS_OBJECT_STORE_BUCKET"),
+		ObjectStoreAccess:         os.Getenv("ARGUS_OBJECT_STORE_ACCESS_KEY"),
+		ObjectStoreSecret:         os.Getenv("ARGUS_OBJECT_STORE_SECRET_KEY"),
+		RemoteUserLimit:           intOrDefault("ARGUS_REMOTE_USER_LIMIT", 3),
+		RemoteHostLimit:           intOrDefault("ARGUS_REMOTE_HOST_LIMIT", 5),
+		RemoteTenantLimit:         intOrDefault("ARGUS_REMOTE_ENTERPRISE_LIMIT", 50),
 	}
 }
 
@@ -57,6 +97,18 @@ func (cfg ConnectorGateway) Validate() error {
 	}
 	if cfg.SystemNamespace == "" || cfg.IssuerName == "" || cfg.IssuerGeneration < 1 {
 		return errors.New("connector gateway cert-manager issuer configuration is required")
+	}
+	if cfg.RemoteWSSAddress == "" || cfg.RemoteRPCAddress == "" || cfg.RemoteOrigin == "" || cfg.RemotePeerServerName == "" || cfg.RemotePeerHeadlessSuffix == "" || cfg.RemotePeerPort == "" {
+		return errors.New("remote access WSS, internal RPC, and Origin configuration are required")
+	}
+	if len(cfg.RemoteAllowedOrigins) == 0 || cfg.DirectExecutorEndpoint == "" || cfg.DirectExecutorServerName == "" || cfg.DirectExecutorTLSCert == "" || cfg.DirectExecutorTLSKey == "" || cfg.DirectExecutorCABundle == "" || cfg.DirectExecutorRecipientID == "" {
+		return errors.New("remote access Origin allowlist and Direct Executor mTLS configuration are required")
+	}
+	if cfg.ObjectStoreURL == "" || cfg.ObjectStoreBucket == "" || cfg.ObjectStoreAccess == "" || cfg.ObjectStoreSecret == "" {
+		return errors.New("remote access ObjectStore configuration is required")
+	}
+	if cfg.RemoteUserLimit < 1 || cfg.RemoteHostLimit < 1 || cfg.RemoteTenantLimit < 1 {
+		return errors.New("remote access capacity limits must be positive")
 	}
 	return nil
 }

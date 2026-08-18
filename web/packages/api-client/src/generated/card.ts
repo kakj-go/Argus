@@ -19,6 +19,8 @@ export interface components {
             default_locale: "zh-CN" | "en-US";
             supported_color_schemes: ("light" | "dark")[];
             max_message_bytes: number;
+            /** @enum {unknown} */
+            presentation_kind?: "table" | "detail" | "pending_action" | "metric" | "generic";
         };
         DataBinding: {
             slot_name: string;
@@ -58,9 +60,9 @@ export interface components {
             sequence: number;
             nonce: string;
             /** @enum {unknown} */
-            type: "host.hello" | "card.ready" | "host.context" | "data.update" | "query.invoke" | "action.invoke" | "card.resize" | "binding.result" | "bridge.error" | "bridge.destroyed";
+            type: "host.hello" | "card.ready" | "host.context" | "data.update" | "query.invoke" | "action.invoke" | "card.resize" | "card.slot_selected" | "card.validation_report" | "binding.result" | "bridge.error" | "bridge.destroyed";
             payload: components["schemas"]["PublicJsonObject"];
-        } & (unknown & unknown);
+        } & (unknown & unknown & unknown);
         /** @enum {unknown} */
         SlotType: "string" | "number" | "boolean" | "array" | "object";
         Slot: {
@@ -71,6 +73,20 @@ export interface components {
             required: boolean;
             /** @default false */
             ai_generated: boolean;
+            description?: string;
+        };
+        CardRuntimeValidationReport: {
+            content_hash: string;
+            runtime_version: string;
+            nonce: string;
+            /** @enum {unknown} */
+            scenario: "default" | "empty" | "error" | "large" | "light" | "dark" | "zh-CN" | "en-US";
+            ready: boolean;
+            protocol_violations: number;
+            runtime_errors: number;
+            serious_a11y_violations: number;
+            missing_required_slots: string[];
+            size_violation: boolean;
         };
         PublicJsonValue: unknown;
         PublicJsonObject: unknown;

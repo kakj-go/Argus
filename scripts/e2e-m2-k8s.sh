@@ -17,6 +17,7 @@ ENTERPRISE_PORT=${ARGUS_E2E_ENTERPRISE_PORT:-4173}
 PLATFORM_PORT=${ARGUS_E2E_PLATFORM_PORT:-4174}
 SETUP_PORT=${ARGUS_E2E_SETUP_PORT:-4175}
 CARD_PORT=${ARGUS_E2E_CARD_PORT:-4176}
+REMOTE_PORT=${ARGUS_E2E_REMOTE_PORT:-4195}
 CONNECTOR_GATEWAY_ADDRESS=${ARGUS_E2E_CONNECTOR_GATEWAY_ADDRESS:-grpcs://argus-connector-gateway.${SYSTEM_NS}.svc:9443}
 API_URL="http://127.0.0.1:${API_PORT}/api/v1"
 PLATFORM_ORIGIN="http://127.0.0.1:${PLATFORM_PORT}"
@@ -70,13 +71,17 @@ diagnostics() {
   } 2>&1 | redact >"${ARTIFACT_DIR}/cluster.txt"
   k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus --all-containers=true --prefix=true --tail=1000 2>&1 \
     | redact >"${ARTIFACT_DIR}/argus.log" || true
-  if [[ "$PHASE" == "m3" || "$PHASE" == "m4" ]]; then
+  if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" ]]; then
     k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus-m3-e2e --all-containers=true --prefix=true --tail=1000 2>&1 \
       | redact >"${ARTIFACT_DIR}/m3-workloads.log" || true
   fi
   if declare -F diagnostics_m4 >/dev/null; then
     diagnostics_m4
   fi
+  if declare -F diagnostics_m5 >/dev/null; then
+    diagnostics_m5
+  fi
+  if declare -F diagnostics_m6 >/dev/null; then diagnostics_m6; fi
   k -n "$SYSTEM_NS" logs statefulset/argus-postgresql --tail=300 2>&1 \
     | redact >"${ARTIFACT_DIR}/postgresql.log" || true
   k -n "$SYSTEM_NS" logs statefulset/argus-redis --tail=300 2>&1 \
@@ -87,12 +92,17 @@ cleanup() {
   status=$?
   set +e
   diagnostics
+  unset POSTGRES_PASSWORD REDIS_PASSWORD
   if declare -F cleanup_m3 >/dev/null; then
     cleanup_m3
   fi
   if declare -F cleanup_m4 >/dev/null; then
     cleanup_m4
   fi
+  if declare -F cleanup_m5 >/dev/null; then
+    cleanup_m5
+  fi
+  if declare -F cleanup_m6 >/dev/null; then cleanup_m6; fi
   if declare -F cleanup_cert_manager_dependency >/dev/null; then
     cleanup_cert_manager_dependency
   fi
@@ -109,6 +119,25 @@ cleanup() {
   if [[ "$LEASE_ACQUIRED" == true ]]; then
     k -n default delete lease "$LEASE_NAME" --ignore-not-found=true >/dev/null 2>&1 || true
   fi
+  {
+    for ns in "$SYSTEM_NS" "$SANDBOX_NS" "$OBSERVABILITY_NS"; do
+      if k get namespace "$ns" >/dev/null 2>&1; then
+        printf 'namespace|%s|residual\n' "$ns"
+      else
+        printf 'namespace|%s|deleted\n' "$ns"
+      fi
+    done
+    if k get pvc -A -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name --no-headers 2>/dev/null | rg -q "$RUN_ID"; then
+      printf 'pvc|%s|residual\n' "$RUN_ID"
+    else
+      printf 'pvc|%s|deleted\n' "$RUN_ID"
+    fi
+    if k -n default get lease "$LEASE_NAME" >/dev/null 2>&1; then
+      printf 'lease|%s|residual\n' "$LEASE_NAME"
+    else
+      printf 'lease|%s|deleted\n' "$LEASE_NAME"
+    fi
+  } >"${ARTIFACT_DIR}/cleanup.txt"
   if [[ "$KUBE_CONTEXT" == "docker-desktop" ]]; then
     node=$(k get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
     if [[ -n "$node" ]]; then
@@ -126,7 +155,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 require_commands() {
-  for command in kubectl helm docker jq curl pnpm openssl go; do
+  for command in kubectl helm docker jq curl nc pnpm openssl go; do
     command -v "$command" >/dev/null 2>&1 || fail "required command is missing: ${command}"
   done
   k cluster-info >/dev/null
@@ -134,7 +163,7 @@ require_commands() {
 
 assert_port_free() {
   port=$1
-  if curl --noproxy '*' --silent --max-time 1 "http://127.0.0.1:${port}" >/dev/null 2>&1; then
+  if nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
     fail "port ${port} is already in use"
   fi
 }
@@ -166,9 +195,9 @@ create_namespaces() {
 
 build_images() {
   log "building backend image ${BACKEND_IMAGE}"
-  backend_args=()
-  if [[ "$PHASE" == "m4" ]]; then
-    backend_args+=(--build-arg GO_BUILD_TAGS=m4e2e)
+  backend_args=(--build-arg GO_BUILD_TAGS=)
+  if [[ "$PHASE" == "m4" || "$PHASE" == "m5" ]]; then
+    backend_args=(--build-arg GO_BUILD_TAGS=m4e2e)
   fi
   retry 3 docker build --quiet -f deploy/docker/backend.Dockerfile -t "$BACKEND_IMAGE" "${backend_args[@]}" . >/dev/null
   log "building real-mode web image ${WEB_IMAGE}"
@@ -197,6 +226,8 @@ install_dependencies() {
   PENDING_ACTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
   SECRET_KEK=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
   SECRET_KEK_KEYRING=$(jq -nc --arg key "$SECRET_KEK" '{current_version:1,keys:{"1":$key}}')
+  OBJECT_STORE_ACCESS=$(openssl rand -hex 12)
+  OBJECT_STORE_SECRET=$(openssl rand -hex 24)
   SETUP_EXPIRES=$(date -u -v+24H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%SZ)
 
   k -n "$SYSTEM_NS" create secret generic argus-data-credentials \
@@ -275,12 +306,70 @@ spec:
   volumeClaimTemplates:
     - metadata: {name: data}
       spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 256Mi}}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: argus-minio, namespace: ${SYSTEM_NS}}
+spec:
+  selector: {app.kubernetes.io/name: argus-minio}
+  ports: [{name: api, port: 9000, targetPort: 9000}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: data-argus-minio, namespace: ${SYSTEM_NS}}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: argus-minio, namespace: ${SYSTEM_NS}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: argus-minio}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: argus-minio, app.kubernetes.io/part-of: argus}}
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+          args: [server, /data]
+          env:
+            - {name: MINIO_ROOT_USER, value: "${OBJECT_STORE_ACCESS}"}
+            - {name: MINIO_ROOT_PASSWORD, value: "${OBJECT_STORE_SECRET}"}
+          ports: [{name: api, containerPort: 9000}]
+          readinessProbe: {httpGet: {path: /minio/health/ready, port: api}, initialDelaySeconds: 2, periodSeconds: 2}
+          volumeMounts: [{name: data, mountPath: /data}]
+      volumes: [{name: data, persistentVolumeClaim: {claimName: data-argus-minio}}]
+---
+apiVersion: batch/v1
+kind: Job
+metadata: {name: argus-minio-bucket, namespace: ${SYSTEM_NS}}
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-bucket
+          image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+          command: [sh, -c]
+          args: ['until mc alias set argus http://argus-minio:9000 "\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD"; do sleep 2; done; mc mb --ignore-existing argus/argus-remote-recordings']
+          env:
+            - {name: MINIO_ROOT_USER, value: "${OBJECT_STORE_ACCESS}"}
+            - {name: MINIO_ROOT_PASSWORD, value: "${OBJECT_STORE_SECRET}"}
 EOF
   k -n "$SYSTEM_NS" rollout status statefulset/argus-postgresql --timeout=300s
   k -n "$SYSTEM_NS" rollout status statefulset/argus-redis --timeout=300s
+  k -n "$SYSTEM_NS" rollout status deployment/argus-minio --timeout=300s
+  k -n "$SYSTEM_NS" wait --for=condition=complete job/argus-minio-bucket --timeout=180s
 }
 
 install_argus() {
+  local kubernetes_api_ip kubernetes_api_endpoint kubernetes_api_cidr kubernetes_api_endpoint_cidr
+  kubernetes_api_ip=$(k -n default get service kubernetes -o jsonpath='{.spec.clusterIP}')
+  kubernetes_api_endpoint=$(k -n default get endpoints kubernetes -o jsonpath='{.subsets[0].addresses[0].ip}')
+  if [[ "$kubernetes_api_ip" == *:* ]]; then kubernetes_api_cidr="${kubernetes_api_ip}/128"; else kubernetes_api_cidr="${kubernetes_api_ip}/32"; fi
+  if [[ "$kubernetes_api_endpoint" == *:* ]]; then kubernetes_api_endpoint_cidr="${kubernetes_api_endpoint}/128"; else kubernetes_api_endpoint_cidr="${kubernetes_api_endpoint}/32"; fi
   helm upgrade --install "${RELEASE_ID}-platform" deploy/helm/argus-platform \
     --kube-context "$KUBE_CONTEXT" --namespace "$SYSTEM_NS" --wait --wait-for-jobs --timeout 10m \
     --set-string releaseId="$RELEASE_ID" \
@@ -299,18 +388,24 @@ install_argus() {
     --set-json runtime.secretKEKKeyring="$SECRET_KEK_KEYRING" \
     --set-string runtime.connectorEnrollmentURL="http://localhost:${API_PORT}" \
     --set-string runtime.connectorGatewayAddress="$CONNECTOR_GATEWAY_ADDRESS" \
+    --set-json "runtime.kubernetesApiCidrs=[\"${kubernetes_api_cidr}\",\"${kubernetes_api_endpoint_cidr}\"]" \
     --set-json "runtime.allowedOrigins=[\"${ENTERPRISE_ORIGIN}\",\"${PLATFORM_ORIGIN}\",\"${SETUP_ORIGIN}\"]" \
+    --set-string runtime.remoteOrigin="http://127.0.0.1:${REMOTE_PORT}" \
+    --set-string runtime.objectStoreUrl="http://argus-minio.${SYSTEM_NS}.svc:9000" \
+    --set-string runtime.objectStoreAccessKey="$OBJECT_STORE_ACCESS" \
+    --set-string runtime.objectStoreSecretKey="$OBJECT_STORE_SECRET" \
     --set-string runtime.secureCookies=false >/dev/null
   k -n "$SYSTEM_NS" get job argus-postgresql-migration -o jsonpath='{.status.succeeded}' | grep -q '^1$'
 }
 
 start_port_forwards() {
   start_api_port_forward
-  k -n "$SYSTEM_NS" port-forward service/argus-web \
+  kubectl --context "$KUBE_CONTEXT" -n "$SYSTEM_NS" port-forward service/argus-web \
     "${ENTERPRISE_PORT}:8080" "${PLATFORM_PORT}:8081" "${SETUP_PORT}:8082" "${CARD_PORT}:8083" \
     >"${ARTIFACT_DIR}/port-forward-web.log" 2>&1 &
   WEB_PF_PID=$!
   PF_PIDS+=("$WEB_PF_PID")
+  start_remote_port_forward port-forward-remote.log
   for url in "http://127.0.0.1:${API_PORT}/readyz" "${ENTERPRISE_ORIGIN}/healthz" "${PLATFORM_ORIGIN}/healthz" "${SETUP_ORIGIN}/healthz" "http://127.0.0.1:${CARD_PORT}/healthz"; do
     for _ in $(seq 1 120); do
       curl --noproxy '*' --silent --fail --max-time 3 "$url" >/dev/null 2>&1 && break
@@ -320,8 +415,26 @@ start_port_forwards() {
   done
 }
 
+start_remote_port_forward() {
+  local log_name=${1:-port-forward-remote.log}
+  if [[ -n "${REMOTE_PF_PID:-}" ]]; then
+    kill "$REMOTE_PF_PID" >/dev/null 2>&1 || true
+    wait "$REMOTE_PF_PID" >/dev/null 2>&1 || true
+    REMOTE_PF_PID=""
+  fi
+  assert_port_free "$REMOTE_PORT"
+  kubectl --context "$KUBE_CONTEXT" -n "$SYSTEM_NS" port-forward service/argus-connector-gateway "${REMOTE_PORT}:9445" >"${ARTIFACT_DIR}/${log_name}" 2>&1 &
+  REMOTE_PF_PID=$!
+  PF_PIDS+=("$REMOTE_PF_PID")
+  for _ in $(seq 1 30); do
+    nc -z 127.0.0.1 "$REMOTE_PORT" >/dev/null 2>&1 && return
+    sleep 1
+  done
+  fail "Remote Access WSS port-forward did not become ready"
+}
+
 start_api_port_forward() {
-  k -n "$SYSTEM_NS" port-forward service/argus-server "${API_PORT}:8080" >>"${ARTIFACT_DIR}/port-forward-api.log" 2>&1 &
+  kubectl --context "$KUBE_CONTEXT" -n "$SYSTEM_NS" port-forward service/argus-server "${API_PORT}:8080" >>"${ARTIFACT_DIR}/port-forward-api.log" 2>&1 &
   API_PF_PID=$!
   PF_PIDS+=("$API_PF_PID")
 }
@@ -508,6 +621,10 @@ run_api_flow() {
   if declare -F run_m4_api_flow >/dev/null; then
     run_m4_api_flow
   fi
+  if declare -F run_m5_api_flow >/dev/null; then
+    run_m5_api_flow
+  fi
+  if declare -F run_m6_api_flow >/dev/null; then run_m6_api_flow; fi
 
   log "stopping Redis to verify PostgreSQL authority"
   k -n "$SYSTEM_NS" scale statefulset/argus-redis --replicas=0 >/dev/null
@@ -547,7 +664,7 @@ run_api_flow() {
   jq -e '.code == "ENTERPRISE_SUSPENDED" or .code == "SESSION_REVOKED"' "$RESPONSE_FILE" >/dev/null
   request disabled-api-key 403 GET /enterprise/departments - - --header "Authorization: Bearer ${SUSPEND_API_KEY}"
 
-  unset PLATFORM_PASSWORD ENTERPRISE_PASSWORD OTHER_ENTERPRISE_PASSWORD PLATFORM_CSRF ENTERPRISE_CSRF OTHER_ENTERPRISE_CSRF SUSPEND_API_KEY SETUP_TOKEN POSTGRES_PASSWORD REDIS_PASSWORD IDEMPOTENCY_KEY CURSOR_KEY PENDING_ACTION_KEY SECRET_KEK SECRET_KEK_KEYRING
+  unset PLATFORM_PASSWORD ENTERPRISE_PASSWORD OTHER_ENTERPRISE_PASSWORD PLATFORM_CSRF ENTERPRISE_CSRF OTHER_ENTERPRISE_CSRF SUSPEND_API_KEY SETUP_TOKEN IDEMPOTENCY_KEY CURSOR_KEY PENDING_ACTION_KEY SECRET_KEK SECRET_KEK_KEYRING
 }
 
 run_real_playwright() {
@@ -562,7 +679,7 @@ run_real_playwright() {
 main() {
   cd "$ROOT_DIR"
   require_commands
-  for port in "$API_PORT" "$ENTERPRISE_PORT" "$PLATFORM_PORT" "$SETUP_PORT" "$CARD_PORT"; do assert_port_free "$port"; done
+  for port in "$API_PORT" "$ENTERPRISE_PORT" "$PLATFORM_PORT" "$SETUP_PORT" "$CARD_PORT" "$REMOTE_PORT"; do assert_port_free "$port"; done
   acquire_lease
   create_namespaces
   build_images
@@ -576,6 +693,10 @@ main() {
   if declare -F prepare_m4_dependencies >/dev/null; then
     prepare_m4_dependencies
   fi
+  if declare -F prepare_m5_dependencies >/dev/null; then
+    prepare_m5_dependencies
+  fi
+  if declare -F prepare_m6_dependencies >/dev/null; then prepare_m6_dependencies; fi
   install_argus
   start_port_forwards
   run_api_flow
@@ -583,14 +704,18 @@ main() {
   log "${phase_label} Kubernetes E2E passed; diagnostics: ${ARTIFACT_DIR}"
 }
 
-if [[ "$PHASE" == "m3" || "$PHASE" == "m4" ]]; then
+if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" ]]; then
   source "${ROOT_DIR}/scripts/e2e-cert-manager.sh"
 fi
-if [[ "$PHASE" == "m3" ]]; then
+if [[ "$PHASE" == "m3" || "$PHASE" == "m5" || "$PHASE" == "m6" ]]; then
   source "${ROOT_DIR}/scripts/e2e-m3-flow.sh"
 fi
-if [[ "$PHASE" == "m4" ]]; then
+if [[ "$PHASE" == "m4" || "$PHASE" == "m5" ]]; then
   source "${ROOT_DIR}/scripts/e2e-m4-flow.sh"
 fi
+if [[ "$PHASE" == "m5" ]]; then
+  source "${ROOT_DIR}/scripts/e2e-m5-flow.sh"
+fi
+if [[ "$PHASE" == "m6" ]]; then source "${ROOT_DIR}/scripts/e2e-m6-flow.sh"; fi
 
 main "$@"

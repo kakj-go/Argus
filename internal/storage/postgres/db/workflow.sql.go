@@ -47,7 +47,7 @@ func (q *Queries) ClaimExecution(ctx context.Context, arg ClaimExecutionParams) 
 const consumeActionBinding = `-- name: ConsumeActionBinding :one
 UPDATE action_bindings SET status = 'consumed', consumed_at = now()
 WHERE id = $1 AND enterprise_id = $2 AND status = 'pending' AND expires_at > now()
-RETURNING id, binding_ref, pending_action_id, enterprise_id, actor_user_id, action, request_id, status, expires_at, consumed_at, created_at
+RETURNING id, binding_ref, pending_action_id, enterprise_id, actor_user_id, action, request_id, status, expires_at, consumed_at, created_at, card_instance_id, conversation_id, authorization_version, binding_source
 `
 
 type ConsumeActionBindingParams struct {
@@ -70,6 +70,10 @@ func (q *Queries) ConsumeActionBinding(ctx context.Context, arg ConsumeActionBin
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.CreatedAt,
+		&i.CardInstanceID,
+		&i.ConversationID,
+		&i.AuthorizationVersion,
+		&i.BindingSource,
 	)
 	return i, err
 }
@@ -138,7 +142,7 @@ func (q *Queries) CountEligibleApprovalDecisions(ctx context.Context, arg CountE
 
 const createActionBinding = `-- name: CreateActionBinding :one
 INSERT INTO action_bindings (id, binding_ref, pending_action_id, enterprise_id, actor_user_id, action, request_id, expires_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, binding_ref, pending_action_id, enterprise_id, actor_user_id, action, request_id, status, expires_at, consumed_at, created_at
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, binding_ref, pending_action_id, enterprise_id, actor_user_id, action, request_id, status, expires_at, consumed_at, created_at, card_instance_id, conversation_id, authorization_version, binding_source
 `
 
 type CreateActionBindingParams struct {
@@ -176,6 +180,10 @@ func (q *Queries) CreateActionBinding(ctx context.Context, arg CreateActionBindi
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.CreatedAt,
+		&i.CardInstanceID,
+		&i.ConversationID,
+		&i.AuthorizationVersion,
+		&i.BindingSource,
 	)
 	return i, err
 }

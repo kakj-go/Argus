@@ -24,6 +24,7 @@ runtime:
   directAdvertisedEgress: []
   directVerificationUrl: ""
   directDeniedCidrs: []
+  kubernetesApiCidrs: []
   sandboxAllowedCidrs: []
   directExecutorEndpoint: ""
   directExecutorServerName: ""
@@ -32,6 +33,18 @@ runtime:
     - http://localhost:4174
     - http://localhost:4175
   secureCookies: false
+  cardPresentationTtl: 10m
+  cardValidationTtl: 30m
+  cardRuntimeVersion: argus-card-runtime/v1
+  cardMaxPresentationBytes: 1048576
+  remoteOrigin: ws://localhost:9445
+  remoteUserLimit: 3
+  remoteHostLimit: 5
+  remoteEnterpriseLimit: 50
+  objectStoreUrl: ""
+  objectStoreBucket: argus-remote-recordings
+  objectStoreAccessKey: ""
+  objectStoreSecretKey: ""
 replicas: 1
 workerPools:
   agent:
@@ -64,6 +77,7 @@ production:
     setup: setup.argus.example.com
     cards: cards.argus.example.com
     connector: connector.argus.example.com
+    remote: remote.argus.example.com
   connectorService:
     type: LoadBalancer
     annotations: {}

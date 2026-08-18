@@ -171,7 +171,7 @@ test("card runtime executes a cross-origin bridge and enforces CSP", async ({
           type: "host.hello",
           payload: {
             html,
-            entrypoint_hash: `sha256:${hash}`,
+            entrypoint_hash: hash,
             allowed_resources: ["inline_script"],
             max_message_bytes: 1024 * 1024,
             locale: "zh-CN",
@@ -312,7 +312,7 @@ test("card runtime rejects a wrong parent origin and entrypoint hash", async ({
     };
     ignoredChannel.port1.start();
     wrongOrigin.contentWindow!.postMessage(
-      hello(`sha256:${"0".repeat(64)}`),
+      hello("0".repeat(64)),
       "http://127.0.0.1:4176",
       [ignoredChannel.port2],
     );
@@ -337,7 +337,7 @@ test("card runtime rejects a wrong parent origin and entrypoint hash", async ({
       };
       hashChannel.port1.start();
       wrongHash.contentWindow!.postMessage(
-        hello(`sha256:${"0".repeat(64)}`),
+        hello("0".repeat(64)),
         "http://127.0.0.1:4176",
         [hashChannel.port2],
       );

@@ -17,6 +17,12 @@ export type TerminalLine = {
 
 export type TerminalState = "connected" | "connecting" | "disconnected";
 
+type TerminalInstance = {
+  clear(): void;
+  dispose(): void;
+  writeln(value: string): void;
+};
+
 function formatDuration(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(total / 60);
@@ -37,6 +43,9 @@ export function TerminalEmulator({
   clearLabel,
   height = 320,
   className,
+  mode = "line",
+  onData,
+  onResize,
 }: {
   /** Full output buffer; the source of truth for playback and live output. */
   lines?: TerminalLine[];
@@ -53,9 +62,15 @@ export function TerminalEmulator({
   clearLabel?: string;
   height?: number;
   className?: string;
+  /** PTY mode uses xterm and emits raw input; line mode preserves WinRS semantics. */
+  mode?: "line" | "pty";
+  onData?: (data: string) => void;
+  onResize?: (cols: number, rows: number) => void;
 }) {
   const text = useUiText();
   const outputRef = useRef<HTMLDivElement>(null);
+  const xtermRef = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<TerminalInstance | null>(null);
   const [typed, setTyped] = useState<TerminalLine[]>([]);
   const [draft, setDraft] = useState("");
   // Number of prop lines hidden by the last clear action.
@@ -74,6 +89,51 @@ export function TerminalEmulator({
     const element = outputRef.current;
     if (element) element.scrollTop = element.scrollHeight;
   }, [visible.length]);
+
+  useEffect(() => {
+    if (mode !== "pty" || !xtermRef.current) return;
+    const element = xtermRef.current;
+    let disposed = false;
+    let disposeTerminal: (() => void) | undefined;
+    void Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit"), import("@xterm/xterm/css/xterm.css")]).then(([xterm, fitModule]) => {
+      if (disposed) return;
+      const terminal = new xterm.Terminal({
+        convertEol: true,
+        cursorBlink: !readOnly,
+        disableStdin: Boolean(readOnly),
+        fontFamily: "var(--font-mono)",
+        fontSize: 13,
+        scrollback: 5000,
+        theme: { background: "#11100e", foreground: "#f4f1ea" },
+      });
+      const fit = new fitModule.FitAddon();
+      terminal.loadAddon(fit);
+      terminal.open(element);
+      fit.fit();
+      terminalRef.current = terminal;
+      const data = terminal.onData((value) => onData?.(value));
+      const resize = terminal.onResize(({ cols, rows }) => onResize?.(cols, rows));
+      const observer = new ResizeObserver(() => fit.fit());
+      observer.observe(element);
+      disposeTerminal = () => {
+        observer.disconnect();
+        data.dispose();
+        resize.dispose();
+        terminal.dispose();
+        terminalRef.current = null;
+      };
+    });
+    return () => {
+      disposed = true;
+      disposeTerminal?.();
+    };
+  }, [mode, onData, onResize, readOnly]);
+
+  useEffect(() => {
+    if (mode !== "pty" || !terminalRef.current) return;
+    terminalRef.current.clear();
+    for (const line of lines) terminalRef.current.writeln(line.content);
+  }, [lines, mode]);
 
   const stateText: Record<TerminalState, string> = {
     connected: text("已连接", "Connected"),
@@ -129,7 +189,7 @@ export function TerminalEmulator({
         </Button>
       </header>
 
-      <div
+      {mode === "pty" ? <div className="argus-terminal__xterm" ref={xtermRef} style={{ height }} /> : <div
         className="argus-terminal__output"
         ref={outputRef}
         style={{ height }}
@@ -146,9 +206,9 @@ export function TerminalEmulator({
             <span>{line.content}</span>
           </div>
         ))}
-      </div>
+      </div>}
 
-      {!readOnly && (
+      {!readOnly && mode === "line" && (
         <div className="argus-terminal__input">
           <span className="argus-terminal__prompt">{prompt}</span>
           <input

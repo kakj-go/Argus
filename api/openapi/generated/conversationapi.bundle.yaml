@@ -360,6 +360,23 @@ components:
           type: string
           minLength: 1
           maxLength: 1048576
+        command:
+          type: object
+          additionalProperties: false
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              enum:
+                - interactive_card.create
+                - interactive_card.revise
+            card_id:
+              type: string
+              format: uuid
+            expected_revision:
+              type: integer
+              minimum: 1
     MessageAccepted:
       type: object
       additionalProperties: false
@@ -571,6 +588,9 @@ components:
             - user_confirmation
             - approval_update
             - execution_update
+            - card_draft_created
+            - card_instance_created
+            - card_presentation_invalidated
             - card_action_result
             - run_state_changed
             - context_compacted

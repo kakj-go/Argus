@@ -5,6 +5,7 @@ import {
   MAX_MESSAGE_BYTES,
   buildCardCsp,
   createCardApi,
+  createCardRuntimeSession,
   expectedSha256,
   isHelloPayload,
   isTrustedParentMessage,
@@ -13,7 +14,7 @@ import {
   type HelloPayload,
 } from "./runtime";
 
-const HASH = `sha256:${"a".repeat(64)}`;
+const HASH = "a".repeat(64);
 const NONCE = "nonce-1234567890";
 
 function hello(): HelloPayload {
@@ -70,12 +71,12 @@ describe("card runtime handshake", () => {
 
   it("requires a canonical sha256 entrypoint hash", () => {
     expect(expectedSha256(HASH)).toBe("a".repeat(64));
-    expect(expectedSha256("a".repeat(64))).toBeNull();
+    expect(expectedSha256(`sha256:${"a".repeat(64)}`)).toBeNull();
     expect(expectedSha256(`sha256:${"z".repeat(64)}`)).toBeNull();
   });
 
   it("rejects an entrypoint whose content does not match the declared hash", async () => {
-    const validHash = `sha256:${await sha256("<p>trusted</p>")}`;
+    const validHash = await sha256("<p>trusted</p>");
     await expect(verifyEntrypointHash("<p>trusted</p>", validHash)).resolves.toBe(true);
     await expect(verifyEntrypointHash("<p>changed</p>", validHash)).resolves.toBe(false);
   });
@@ -115,6 +116,34 @@ describe("card runtime bridge", () => {
     });
     await expect(pending).resolves.toEqual({ ok: true });
     await expect(api.action("forged")).rejects.toThrow("not available");
+    channel.port1.close();
+    channel.port2.close();
+  });
+
+  it("emits validation evidence unchanged inside the authenticated envelope", async () => {
+    const channel = new MessageChannel();
+    const received = new Promise<Record<string, unknown>>((resolve) => {
+      channel.port2.onmessage = (event) => resolve(event.data as Record<string, unknown>);
+      channel.port2.start();
+    });
+    const session = createCardRuntimeSession(hello(), channel.port1);
+    const report = {
+      content_hash: "a".repeat(64),
+      runtime_version: "argus-card-runtime/v1",
+      nonce: NONCE,
+      scenario: "default" as const,
+      ready: true,
+      protocol_violations: 0,
+      runtime_errors: 0,
+      serious_a11y_violations: 0,
+      missing_required_slots: [],
+      size_violation: false,
+    };
+    session.reportValidation(report);
+    const envelope = await received;
+    expect(envelope.type).toBe("card.validation_report");
+    expect(envelope.nonce).toBe(NONCE);
+    expect(envelope.payload).toEqual(report);
     channel.port1.close();
     channel.port2.close();
   });

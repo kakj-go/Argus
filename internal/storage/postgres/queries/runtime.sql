@@ -156,6 +156,10 @@ RETURNING *;
 -- name: GetActiveContextSnapshot :one
 SELECT * FROM context_snapshots WHERE run_id = $1 AND enterprise_id = $2 AND status = 'active';
 
+-- name: GetContextSnapshotBySourceHash :one
+SELECT * FROM context_snapshots
+WHERE run_id = $1 AND enterprise_id = $2 AND source_hash = $3;
+
 -- name: NextContextSnapshotRevision :one
 SELECT COALESCE(MAX(revision), 0)::integer + 1 FROM context_snapshots WHERE run_id = $1 AND enterprise_id = $2;
 

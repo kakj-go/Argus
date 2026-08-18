@@ -7,7 +7,7 @@ import {
   type QueryInvokeHandler,
 } from "@argus/card-host";
 import { Badge, useTheme } from "@argus/ui";
-import { cardOrigin, provisionalCardContract } from "../../lib/card-contract";
+import { cardOrigin } from "../../lib/card-contract";
 import type { CardInstance } from "./chat-view-model";
 
 /**
@@ -19,71 +19,62 @@ export function SandboxCardFrame({ card }: { card: CardInstance }) {
   const { resolvedTheme } = useTheme();
   const locale = i18n.language === "en-US" ? "en-US" : "zh-CN";
   const api = useApi();
-  const { data: skill } = useQuery({
-    queryKey: ["interactiveCards", card.interactiveCardId],
-    queryFn: () => api.interactiveCards.get(card.interactiveCardId),
-  });
-
-  // mock 侧没有按 queryBindingId 注册的查询处理器（翻页/刷新）；
-  // 这里回传卡片当前数据作为占位，接入真实后端后按 binding 路由到对应查询。
-  const handleQueryInvoke: QueryInvokeHandler = () => skill?.demoData ?? {};
-
-  // 卡片内 Action Slot：若绑定的是 PendingActionPublic 的 actionBindingId，
-  // 触发确认流程（等价于确认卡片的 [确认执行]，不经过模型）。
-  const handleActionInvoke: ActionInvokeHandler = async (bindingId) => {
-    if (card.pendingActionRef && card.actionBindingId === bindingId) {
-      const result = await api.approvals.confirm(card.pendingActionRef);
-      return {
-        status: result.pending_action.status,
-        execution_ref: result.execution?.execution_id,
-      };
-    }
-    return { ignored: true };
-  };
-
-  const title = card.title ?? skill?.name ?? t("chat.card.untitled");
-  const contract = skill
-    ? provisionalCardContract({
-        card_id: skill.id,
-        revision: skill.revision,
-        card_instance_id: card.id,
-        action_binding_ids: card.actionBindingId ? [card.actionBindingId] : [],
+  const presentation = useQuery({
+    queryKey: ["card-presentation", card.id, locale, resolvedTheme],
+    queryFn: () =>
+      api.interactiveCards.createPresentation(card.id, {
         locale,
         color_scheme: resolvedTheme,
-      })
-    : null;
+      }),
+    retry: false,
+  });
+
+  const handleQueryInvoke: QueryInvokeHandler = (bindingId) =>
+    api.interactiveCards.invokeQueryBinding(bindingId);
+
+  const handleActionInvoke: ActionInvokeHandler = (bindingId) =>
+    api.interactiveCards.invokeActionBinding(bindingId);
+
+  const value = presentation.data;
+  const title = card.title ?? t("chat.card.untitled");
 
   return (
     <div className="argus-chat-card" data-testid="sandbox-card-frame">
       <header className="argus-chat-card__head">
         <span>{title}</span>
         <small>v{card.version}</small>
-        <Badge tone={skill?.source === "system" ? "info" : "accent"}>
-          {skill?.source === "system"
+        <Badge tone={value?.manifest.source === "system" ? "info" : "accent"}>
+          {value?.manifest.source === "system"
             ? t("chat.card.system")
             : t("chat.card.aiGenerated")}
         </Badge>
       </header>
       <div className="argus-chat-card__body">
-        {skill && contract ? (
+        {value ? (
           <SandboxCard
             bindings={{
-              query_binding_ids: [],
-              action_binding_ids: card.actionBindingId
-                ? [card.actionBindingId]
-                : [],
+              query_binding_ids: Object.values(
+                value.render_plan.query_binding_ids,
+              ),
+              action_binding_ids: Object.values(
+                value.render_plan.action_binding_ids,
+              ),
             }}
             card_origin={cardOrigin}
             color_scheme={resolvedTheme}
-            html={skill.htmlTemplate}
-            initial_data={skill.demoData}
+            html={value.entrypoint_html}
+            initial_data={value.initial_data as Record<string, unknown>}
             locale={locale}
-            manifest={contract.manifest}
+            manifest={value.manifest}
             onActionInvoke={handleActionInvoke}
             onQueryInvoke={handleQueryInvoke}
-            render_plan={contract.render_plan}
+            render_plan={value.render_plan}
             title={title}
           />
+        ) : presentation.isError ? (
+          <div className="argus-chat-card__loading" role="alert">
+            {t("chat.card.unavailable")}
+          </div>
         ) : (
           <div className="argus-chat-card__loading">
             {t("chat.card.loading")}

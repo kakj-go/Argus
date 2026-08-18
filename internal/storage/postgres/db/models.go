@@ -10,17 +10,21 @@ import (
 )
 
 type ActionBinding struct {
-	ID              uuid.UUID          `json:"id"`
-	BindingRef      string             `json:"binding_ref"`
-	PendingActionID uuid.UUID          `json:"pending_action_id"`
-	EnterpriseID    uuid.UUID          `json:"enterprise_id"`
-	ActorUserID     uuid.NullUUID      `json:"actor_user_id"`
-	Action          string             `json:"action"`
-	RequestID       string             `json:"request_id"`
-	Status          string             `json:"status"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-	ConsumedAt      pgtype.Timestamptz `json:"consumed_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ID                   uuid.UUID          `json:"id"`
+	BindingRef           string             `json:"binding_ref"`
+	PendingActionID      uuid.UUID          `json:"pending_action_id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	ActorUserID          uuid.NullUUID      `json:"actor_user_id"`
+	Action               string             `json:"action"`
+	RequestID            string             `json:"request_id"`
+	Status               string             `json:"status"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt           pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	CardInstanceID       uuid.NullUUID      `json:"card_instance_id"`
+	ConversationID       uuid.NullUUID      `json:"conversation_id"`
+	AuthorizationVersion pgtype.Int8        `json:"authorization_version"`
+	BindingSource        string             `json:"binding_source"`
 }
 
 type AiModel struct {
@@ -250,6 +254,128 @@ type BastionScope struct {
 	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CardDataSource struct {
+	ID                  uuid.UUID          `json:"id"`
+	CardInstanceID      uuid.UUID          `json:"card_instance_id"`
+	SlotName            string             `json:"slot_name"`
+	ToolCallID          uuid.UUID          `json:"tool_call_id"`
+	ResultRef           string             `json:"result_ref"`
+	FieldPath           string             `json:"field_path"`
+	OutputSchemaVersion string             `json:"output_schema_version"`
+	SourceHash          []byte             `json:"source_hash"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type CardDemoScenario struct {
+	ID            uuid.UUID          `json:"id"`
+	CardVersionID uuid.UUID          `json:"card_version_id"`
+	Scenario      string             `json:"scenario"`
+	Data          []byte             `json:"data"`
+	ByteSize      int32              `json:"byte_size"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type CardInstance struct {
+	ID               uuid.UUID          `json:"id"`
+	EnterpriseID     uuid.UUID          `json:"enterprise_id"`
+	ConversationID   uuid.UUID          `json:"conversation_id"`
+	RunID            uuid.NullUUID      `json:"run_id"`
+	CardID           uuid.UUID          `json:"card_id"`
+	CardVersionID    uuid.UUID          `json:"card_version_id"`
+	ActorUserID      uuid.UUID          `json:"actor_user_id"`
+	PresentationKind string             `json:"presentation_kind"`
+	RenderSpec       []byte             `json:"render_spec"`
+	RenderSpecHash   []byte             `json:"render_spec_hash"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type CardPresentation struct {
+	ID                   uuid.UUID          `json:"id"`
+	CardInstanceID       uuid.UUID          `json:"card_instance_id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	ViewerUserID         uuid.UUID          `json:"viewer_user_id"`
+	AuthorizationVersion int64              `json:"authorization_version"`
+	Locale               string             `json:"locale"`
+	ColorScheme          string             `json:"color_scheme"`
+	LocaleFallback       bool               `json:"locale_fallback"`
+	InitialData          []byte             `json:"initial_data"`
+	Partial              bool               `json:"partial"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type CardQueryBinding struct {
+	ID                   uuid.UUID          `json:"id"`
+	BindingRef           string             `json:"binding_ref"`
+	PresentationID       uuid.UUID          `json:"presentation_id"`
+	BindingSpecID        uuid.UUID          `json:"binding_spec_id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	ViewerUserID         uuid.UUID          `json:"viewer_user_id"`
+	AuthorizationVersion int64              `json:"authorization_version"`
+	Status               string             `json:"status"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	LastInvokedAt        pgtype.Timestamptz `json:"last_invoked_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type CardQueryBindingSpec struct {
+	ID                  uuid.UUID          `json:"id"`
+	CardInstanceID      uuid.UUID          `json:"card_instance_id"`
+	SlotName            string             `json:"slot_name"`
+	ToolID              string             `json:"tool_id"`
+	FixedInput          []byte             `json:"fixed_input"`
+	InputHash           []byte             `json:"input_hash"`
+	OutputSchemaVersion string             `json:"output_schema_version"`
+	SchemaHash          []byte             `json:"schema_hash"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type CardSlotBinding struct {
+	ID                  uuid.UUID          `json:"id"`
+	CardVersionID       uuid.UUID          `json:"card_version_id"`
+	SlotName            string             `json:"slot_name"`
+	SlotKind            string             `json:"slot_kind"`
+	Mode                string             `json:"mode"`
+	ToolID              string             `json:"tool_id"`
+	OutputSchemaVersion string             `json:"output_schema_version"`
+	SchemaHash          []byte             `json:"schema_hash"`
+	FieldPath           string             `json:"field_path"`
+	ValueType           string             `json:"value_type"`
+	SemanticType        pgtype.Text        `json:"semantic_type"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type CardValidationRun struct {
+	ID                uuid.UUID          `json:"id"`
+	CardVersionID     uuid.UUID          `json:"card_version_id"`
+	EnterpriseID      uuid.UUID          `json:"enterprise_id"`
+	ActorUserID       uuid.UUID          `json:"actor_user_id"`
+	ContentHash       []byte             `json:"content_hash"`
+	RuntimeVersion    string             `json:"runtime_version"`
+	NonceHash         []byte             `json:"nonce_hash"`
+	Status            string             `json:"status"`
+	RequiredScenarios []string           `json:"required_scenarios"`
+	PassedScenarios   []string           `json:"passed_scenarios"`
+	Issues            []byte             `json:"issues"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type CardVersion struct {
+	ID             uuid.UUID          `json:"id"`
+	CardID         uuid.UUID          `json:"card_id"`
+	Revision       int32              `json:"revision"`
+	Status         string             `json:"status"`
+	Manifest       []byte             `json:"manifest"`
+	EntrypointHtml []byte             `json:"entrypoint_html"`
+	ContentHash    []byte             `json:"content_hash"`
+	ManifestHash   []byte             `json:"manifest_hash"`
+	CreatedBy      uuid.NullUUID      `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type ConnectionTest struct {
@@ -577,6 +703,24 @@ type IdempotencyRecord struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
+type InteractiveCard struct {
+	ID              uuid.UUID          `json:"id"`
+	EnterpriseID    uuid.NullUUID      `json:"enterprise_id"`
+	Source          string             `json:"source"`
+	Slug            string             `json:"slug"`
+	Name            string             `json:"name"`
+	Description     string             `json:"description"`
+	Lifecycle       string             `json:"lifecycle"`
+	Enabled         bool               `json:"enabled"`
+	Availability    string             `json:"availability"`
+	ActiveVersionID uuid.NullUUID      `json:"active_version_id"`
+	LatestRevision  int32              `json:"latest_revision"`
+	Version         int64              `json:"version"`
+	CreatedBy       uuid.NullUUID      `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type KubernetesCluster struct {
 	ID                uuid.UUID          `json:"id"`
 	EnterpriseID      uuid.UUID          `json:"enterprise_id"`
@@ -798,6 +942,203 @@ type PlatformUser struct {
 	Version     int64              `json:"version"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RemoteAccessCommandEvent struct {
+	ID          uuid.UUID          `json:"id"`
+	SessionID   uuid.UUID          `json:"session_id"`
+	Sequence    int64              `json:"sequence"`
+	EventType   string             `json:"event_type"`
+	CommandHash []byte             `json:"command_hash"`
+	OccurredAt  pgtype.Timestamptz `json:"occurred_at"`
+}
+
+type RemoteAccessDecision struct {
+	ID            uuid.UUID          `json:"id"`
+	RequestID     uuid.UUID          `json:"request_id"`
+	RequirementID uuid.UUID          `json:"requirement_id"`
+	Decision      string             `json:"decision"`
+	Comment       string             `json:"comment"`
+	DecidedBy     uuid.UUID          `json:"decided_by"`
+	DecidedAt     pgtype.Timestamptz `json:"decided_at"`
+}
+
+type RemoteAccessGrant struct {
+	ID                uuid.UUID          `json:"id"`
+	EnterpriseID      uuid.UUID          `json:"enterprise_id"`
+	SubjectType       string             `json:"subject_type"`
+	SubjectID         uuid.UUID          `json:"subject_id"`
+	HostIds           []uuid.UUID        `json:"host_ids"`
+	HostSelector      []byte             `json:"host_selector"`
+	HostSelectorHash  []byte             `json:"host_selector_hash"`
+	ManagedAccountIds []uuid.UUID        `json:"managed_account_ids"`
+	Protocols         []string           `json:"protocols"`
+	Actions           []string           `json:"actions"`
+	ValidFrom         pgtype.Timestamptz `json:"valid_from"`
+	ValidUntil        pgtype.Timestamptz `json:"valid_until"`
+	Enabled           bool               `json:"enabled"`
+	Version           int64              `json:"version"`
+	CreatedBy         uuid.UUID          `json:"created_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RemoteAccessLease struct {
+	ID                   uuid.UUID          `json:"id"`
+	RequestID            uuid.UUID          `json:"request_id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	UserID               uuid.UUID          `json:"user_id"`
+	GrantID              uuid.UUID          `json:"grant_id"`
+	HostID               uuid.UUID          `json:"host_id"`
+	ManagedAccountID     uuid.UUID          `json:"managed_account_id"`
+	Protocol             string             `json:"protocol"`
+	Action               string             `json:"action"`
+	AuthorizationVersion int64              `json:"authorization_version"`
+	PolicySnapshotHash   []byte             `json:"policy_snapshot_hash"`
+	IssuedAt             pgtype.Timestamptz `json:"issued_at"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
+	RevokeReason         pgtype.Text        `json:"revoke_reason"`
+}
+
+type RemoteAccessPolicy struct {
+	ID                 uuid.UUID          `json:"id"`
+	EnterpriseID       uuid.UUID          `json:"enterprise_id"`
+	Name               string             `json:"name"`
+	Enabled            bool               `json:"enabled"`
+	Priority           int32              `json:"priority"`
+	Protocols          []string           `json:"protocols"`
+	HostSelector       []byte             `json:"host_selector"`
+	HostSelectorHash   []byte             `json:"host_selector_hash"`
+	ApproverRoleIds    []uuid.UUID        `json:"approver_role_ids"`
+	MinimumApprovals   int32              `json:"minimum_approvals"`
+	SeparationOfDuties bool               `json:"separation_of_duties"`
+	RequireMfa         bool               `json:"require_mfa"`
+	MaxSessionSeconds  int32              `json:"max_session_seconds"`
+	IdleTimeoutSeconds int32              `json:"idle_timeout_seconds"`
+	Version            int64              `json:"version"`
+	CreatedBy          uuid.UUID          `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RemoteAccessRecording struct {
+	ID             uuid.UUID          `json:"id"`
+	EnterpriseID   uuid.UUID          `json:"enterprise_id"`
+	SessionID      uuid.UUID          `json:"session_id"`
+	Status         string             `json:"status"`
+	Format         string             `json:"format"`
+	KeyProvider    string             `json:"key_provider"`
+	KeyID          string             `json:"key_id"`
+	KeyVersion     int32              `json:"key_version"`
+	WrappedDek     []byte             `json:"wrapped_dek"`
+	ChunkCount     int32              `json:"chunk_count"`
+	EventCount     int64              `json:"event_count"`
+	SizeBytes      int64              `json:"size_bytes"`
+	DurationMs     int64              `json:"duration_ms"`
+	FinalHash      []byte             `json:"final_hash"`
+	RetentionUntil pgtype.Timestamptz `json:"retention_until"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
+}
+
+type RemoteAccessRecordingChunk struct {
+	RecordingID    uuid.UUID          `json:"recording_id"`
+	Sequence       int64              `json:"sequence"`
+	ObjectKey      string             `json:"object_key"`
+	Nonce          []byte             `json:"nonce"`
+	CiphertextSize int64              `json:"ciphertext_size"`
+	EventCount     int32              `json:"event_count"`
+	StartedAt      pgtype.Timestamptz `json:"started_at"`
+	EndedAt        pgtype.Timestamptz `json:"ended_at"`
+	PreviousHash   []byte             `json:"previous_hash"`
+	ChunkHash      []byte             `json:"chunk_hash"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type RemoteAccessRequest struct {
+	ID                   uuid.UUID          `json:"id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	RequesterID          uuid.UUID          `json:"requester_id"`
+	GrantID              uuid.UUID          `json:"grant_id"`
+	HostID               uuid.UUID          `json:"host_id"`
+	ManagedAccountID     uuid.UUID          `json:"managed_account_id"`
+	Protocol             string             `json:"protocol"`
+	Action               string             `json:"action"`
+	Reason               string             `json:"reason"`
+	Status               string             `json:"status"`
+	AuthorizationVersion int64              `json:"authorization_version"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RemoteAccessRequirementSnapshot struct {
+	ID                 uuid.UUID          `json:"id"`
+	RequestID          uuid.UUID          `json:"request_id"`
+	PolicyID           uuid.UUID          `json:"policy_id"`
+	PolicyVersion      int64              `json:"policy_version"`
+	ApproverRoleIds    []uuid.UUID        `json:"approver_role_ids"`
+	MinimumApprovals   int32              `json:"minimum_approvals"`
+	SeparationOfDuties bool               `json:"separation_of_duties"`
+	RequireMfa         bool               `json:"require_mfa"`
+	MaxSessionSeconds  int32              `json:"max_session_seconds"`
+	IdleTimeoutSeconds int32              `json:"idle_timeout_seconds"`
+	Status             string             `json:"status"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type RemoteAccessRoute struct {
+	SessionID       uuid.UUID          `json:"session_id"`
+	GatewayInstance string             `json:"gateway_instance"`
+	ConnectorID     uuid.NullUUID      `json:"connector_id"`
+	ConnectorEpoch  pgtype.Int8        `json:"connector_epoch"`
+	SessionFence    int64              `json:"session_fence"`
+	LeaseExpiresAt  pgtype.Timestamptz `json:"lease_expires_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RemoteAccessSession struct {
+	ID                   uuid.UUID          `json:"id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	UserID               uuid.UUID          `json:"user_id"`
+	HttpSessionID        uuid.UUID          `json:"http_session_id"`
+	LeaseID              uuid.UUID          `json:"lease_id"`
+	HostID               uuid.UUID          `json:"host_id"`
+	ManagedAccountID     uuid.UUID          `json:"managed_account_id"`
+	Protocol             string             `json:"protocol"`
+	ConnectionMode       string             `json:"connection_mode"`
+	ConnectorID          uuid.NullUUID      `json:"connector_id"`
+	ConnectorEpoch       pgtype.Int8        `json:"connector_epoch"`
+	Status               string             `json:"status"`
+	SessionFence         int64              `json:"session_fence"`
+	AuthorizationVersion int64              `json:"authorization_version"`
+	IdleTimeoutSeconds   int32              `json:"idle_timeout_seconds"`
+	MaxDurationSeconds   int32              `json:"max_duration_seconds"`
+	ConnectBefore        pgtype.Timestamptz `json:"connect_before"`
+	ConnectedAt          pgtype.Timestamptz `json:"connected_at"`
+	TerminatedAt         pgtype.Timestamptz `json:"terminated_at"`
+	TerminationReason    pgtype.Text        `json:"termination_reason"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RemoteAccessTicket struct {
+	ID                   uuid.UUID          `json:"id"`
+	SessionID            uuid.UUID          `json:"session_id"`
+	TicketHash           []byte             `json:"ticket_hash"`
+	HttpSessionID        uuid.UUID          `json:"http_session_id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	UserID               uuid.UUID          `json:"user_id"`
+	HostID               uuid.UUID          `json:"host_id"`
+	ManagedAccountID     uuid.UUID          `json:"managed_account_id"`
+	Protocol             string             `json:"protocol"`
+	LeaseID              uuid.UUID          `json:"lease_id"`
+	AuthorizationVersion int64              `json:"authorization_version"`
+	SessionFence         int64              `json:"session_fence"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt           pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
 type Role struct {

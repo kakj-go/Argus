@@ -42,6 +42,18 @@ type Server struct {
 	DirectExecutorCABundle    string
 	SessionIdleTTL            time.Duration
 	SessionAbsoluteTTL        time.Duration
+	CardPresentationTTL       time.Duration
+	CardValidationTTL         time.Duration
+	CardRuntimeVersion        string
+	CardMaxPresentationBytes  int
+	RemoteOrigin              string
+	RemoteUserLimit           int
+	RemoteHostLimit           int
+	RemoteEnterpriseLimit     int
+	ObjectStoreURL            string
+	ObjectStoreBucket         string
+	ObjectStoreAccess         string
+	ObjectStoreSecret         string
 }
 
 func LoadServer() Server {
@@ -84,6 +96,18 @@ func LoadServer() Server {
 		DirectExecutorCABundle:    valueOrDefault("ARGUS_DIRECT_EXECUTOR_CA_PATH", "/var/run/secrets/argus/direct-executor-ca/ca.crt"),
 		SessionIdleTTL:            30 * time.Minute,
 		SessionAbsoluteTTL:        12 * time.Hour,
+		CardPresentationTTL:       durationOrDefault("ARGUS_CARD_PRESENTATION_TTL", 10*time.Minute),
+		CardValidationTTL:         durationOrDefault("ARGUS_CARD_VALIDATION_TTL", 30*time.Minute),
+		CardRuntimeVersion:        valueOrDefault("ARGUS_CARD_RUNTIME_VERSION", "argus-card-runtime/v1"),
+		CardMaxPresentationBytes:  intOrDefault("ARGUS_CARD_MAX_PRESENTATION_BYTES", 1024*1024),
+		RemoteOrigin:              os.Getenv("ARGUS_REMOTE_ORIGIN"),
+		RemoteUserLimit:           intOrDefault("ARGUS_REMOTE_USER_LIMIT", 3),
+		RemoteHostLimit:           intOrDefault("ARGUS_REMOTE_HOST_LIMIT", 5),
+		RemoteEnterpriseLimit:     intOrDefault("ARGUS_REMOTE_ENTERPRISE_LIMIT", 50),
+		ObjectStoreURL:            os.Getenv("ARGUS_OBJECT_STORE_URL"),
+		ObjectStoreBucket:         os.Getenv("ARGUS_OBJECT_STORE_BUCKET"),
+		ObjectStoreAccess:         os.Getenv("ARGUS_OBJECT_STORE_ACCESS_KEY"),
+		ObjectStoreSecret:         os.Getenv("ARGUS_OBJECT_STORE_SECRET_KEY"),
 	}
 }
 
@@ -118,7 +142,40 @@ func (cfg Server) Validate() error {
 	if cfg.DirectExecutorEndpoint == "" || cfg.DirectExecutorServerName == "" || cfg.DirectExecutorTLSCert == "" || cfg.DirectExecutorTLSKey == "" || cfg.DirectExecutorCABundle == "" {
 		return errors.New("Direct Executor endpoint and mTLS configuration are required")
 	}
+	if cfg.CardPresentationTTL <= 0 || cfg.CardPresentationTTL > time.Hour || cfg.CardValidationTTL <= 0 || cfg.CardValidationTTL > 24*time.Hour || cfg.CardRuntimeVersion == "" || cfg.CardMaxPresentationBytes <= 0 || cfg.CardMaxPresentationBytes > 1024*1024 {
+		return errors.New("Card presentation, validation, runtime, and size configuration is invalid")
+	}
+	if cfg.RemoteOrigin == "" || cfg.RemoteUserLimit < 1 || cfg.RemoteHostLimit < 1 || cfg.RemoteEnterpriseLimit < 1 {
+		return errors.New("remote access Origin and capacity limits are required")
+	}
+	if cfg.ObjectStoreURL == "" || cfg.ObjectStoreBucket == "" || cfg.ObjectStoreAccess == "" || cfg.ObjectStoreSecret == "" {
+		return errors.New("remote access ObjectStore configuration is required")
+	}
 	return nil
+}
+
+func durationOrDefault(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		return 0
+	}
+	return parsed
+}
+
+func intOrDefault(key string, fallback int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0
+	}
+	return parsed
 }
 
 func valueOrDefault(key, fallback string) string {

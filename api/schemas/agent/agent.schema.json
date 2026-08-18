@@ -77,7 +77,7 @@
         "conversation_id": {"type": "string", "minLength": 1},
         "run_id": {"type": "string", "minLength": 1},
         "step_id": {"type": "string", "minLength": 1},
-        "event_type": {"enum": ["user_message", "assistant_message", "model_usage", "tool_call_requested", "tool_call_started", "tool_call_result", "pending_action_created", "user_confirmation", "approval_update", "execution_update", "card_action_result", "run_state_changed", "context_compacted"]},
+        "event_type": {"enum": ["user_message", "assistant_message", "model_usage", "tool_call_requested", "tool_call_started", "tool_call_result", "pending_action_created", "user_confirmation", "approval_update", "execution_update", "card_draft_created", "card_instance_created", "card_presentation_invalidated", "card_action_result", "run_state_changed", "context_compacted"]},
         "actor_type": {"enum": ["user", "model", "service", "worker", "system"]},
         "actor_id": {"type": "string"},
         "occurred_at": {"type": "string", "format": "date-time"},
@@ -271,7 +271,7 @@
         "sequence": {"type": "integer", "minimum": 1},
         "run_id": {"type": "string"},
         "message_id": {"type": "string"},
-        "event_type": {"enum": ["run_started", "message_started", "message_delta", "message_completed", "tool_call_started", "tool_call_completed", "pending_action_created", "waiting_input", "waiting_approval", "context_compaction_started", "context_compaction_completed", "context_compaction_failed", "run_completed", "run_failed"]},
+        "event_type": {"enum": ["run_started", "message_started", "message_delta", "message_completed", "tool_call_started", "tool_call_completed", "pending_action_created", "card_draft_created", "card_instance_created", "card_presentation_invalidated", "waiting_input", "waiting_approval", "context_compaction_started", "context_compaction_completed", "context_compaction_failed", "run_completed", "run_failed"]},
         "occurred_at": {"type": "string", "format": "date-time"},
         "payload": {"$ref": "../common/public-json.schema.json#/$defs/PublicJsonObject"}
       }

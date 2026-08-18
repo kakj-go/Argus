@@ -978,6 +978,33 @@ func (q *Queries) GetConnectorCommandByID(ctx context.Context, id uuid.UUID) (Co
 	return i, err
 }
 
+const getConnectorSession = `-- name: GetConnectorSession :one
+SELECT connector_id, enterprise_id, gateway_instance_id, connection_epoch, capabilities, connected_at, last_heartbeat_at, draining FROM connector_sessions
+WHERE connector_id=$1 AND connection_epoch=$2 AND draining=false
+  AND last_heartbeat_at > now() - interval '95 seconds'
+`
+
+type GetConnectorSessionParams struct {
+	ConnectorID     uuid.UUID `json:"connector_id"`
+	ConnectionEpoch int64     `json:"connection_epoch"`
+}
+
+func (q *Queries) GetConnectorSession(ctx context.Context, arg GetConnectorSessionParams) (ConnectorSession, error) {
+	row := q.db.QueryRow(ctx, getConnectorSession, arg.ConnectorID, arg.ConnectionEpoch)
+	var i ConnectorSession
+	err := row.Scan(
+		&i.ConnectorID,
+		&i.EnterpriseID,
+		&i.GatewayInstanceID,
+		&i.ConnectionEpoch,
+		&i.Capabilities,
+		&i.ConnectedAt,
+		&i.LastHeartbeatAt,
+		&i.Draining,
+	)
+	return i, err
+}
+
 const getEnrollmentTokenForUpdate = `-- name: GetEnrollmentTokenForUpdate :one
 SELECT id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, status, expires_at, consumed_at, consumed_device_hash, registered_connector_id, created_by, created_at FROM connector_enrollment_tokens WHERE token_hash = $1 FOR UPDATE
 `

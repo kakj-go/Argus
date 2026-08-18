@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package argus.remoteaccess.v1;
+
+option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/remoteaccess/v1;remoteaccessv1";
+
+// GatewayPeerService forwards a remote access stream to the Gateway replica
+// that owns the target Connector connection. It is exposed only over mTLS.
+service GatewayPeerService {
+  rpc OpenRemoteAccess(stream OpenRemoteAccessRequest) returns (stream OpenRemoteAccessResponse);
+}
+
+message OpenRemoteAccessRequest {
+  uint64 sequence = 1;
+  oneof frame {
+    GatewayPeerOpen open = 2;
+    GatewayPeerInput input = 3;
+    GatewayPeerResize resize = 4;
+    GatewayPeerClose close = 5;
+  }
+}
+
+message OpenRemoteAccessResponse {
+  uint64 sequence = 1;
+  oneof frame {
+    GatewayPeerReady ready = 2;
+    GatewayPeerOutput output = 3;
+    GatewayPeerState state = 4;
+  }
+}
+
+message GatewayPeerOpen {
+  string session_id = 1;
+  uint64 session_fence = 2;
+  string connector_id = 3;
+  uint64 connection_epoch = 4;
+  string credential_lease_id = 5;
+  uint32 terminal_cols = 6;
+  uint32 terminal_rows = 7;
+}
+
+message GatewayPeerInput { bytes data = 1; }
+message GatewayPeerResize { uint32 cols = 1; uint32 rows = 2; }
+message GatewayPeerClose { string reason = 1; }
+message GatewayPeerReady { string mode = 1; }
+message GatewayPeerOutput { string stream = 1; bytes data = 2; }
+message GatewayPeerState { string status = 1; string reason = 2; }

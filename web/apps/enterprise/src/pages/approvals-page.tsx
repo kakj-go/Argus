@@ -20,6 +20,7 @@ import {
 import "../i18n/governance";
 import "../styles/governance.css";
 import { ApprovalDetail } from "../components/governance/approval-detail";
+import { RemoteAccessApprovals } from "../components/governance/remote-access-approvals";
 import {
   DONE_PENDING_STATUSES,
   formatCountdown,
@@ -105,6 +106,7 @@ export function ApprovalsPage() {
       description={t("governance.approvals.description")}
       title={t("governance.approvals.title")}
     >
+      <RemoteAccessApprovals />
       <div className="argus-gov-stats">
         <StatCard
           label={t("governance.approvals.stats.mine")}

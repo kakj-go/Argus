@@ -4,13 +4,8 @@ import type {
   ApprovalPolicy,
   AuditEvent,
   AuditFilter,
-  InteractiveCard,
-  InteractiveCardDemoRender,
-  InteractiveCardFilter,
-  InteractiveCardValidationResult,
   ConfirmActionResult,
   ConnectionTestResult,
-  CreateInteractiveCardInput,
   CreateEnterpriseAdminInput,
   CreateEnterpriseInput,
   CreateApiKeyInput,
@@ -54,9 +49,7 @@ import type {
   Unsubscribe,
   TestAndCreateAIModelInput,
   TestAndCreateAIModelResult,
-  ToolOutputSchema,
   UpdateAIModelInput,
-  UpdateInteractiveCardInput,
   UpdateEnterpriseInput,
   UpdateEnterpriseUserInput,
   UpdateRoleBindingInput,
@@ -67,11 +60,9 @@ import type {
 import type {
   CollectionClaim,
   CollectorInstallState,
-  CreateRemoteSessionInput,
   K8sNodeBinding,
   K8sWorkload,
   K8sWorkloadFilter,
-  RemoteSession,
 } from "./provisional";
 import type { TaskEvent, TaskFilter, TaskViewModel } from "./provisional";
 import type {
@@ -118,6 +109,33 @@ import type {
   ResourcePreviewUpdate,
   StreamEventEnvelope,
   SandboxUsage,
+  InteractiveCard,
+  CardVersion,
+  CardVersionSummary,
+  CardValidationRun,
+  CardValidationStart,
+  CardValidationEvidence,
+  CardConfigurationVersionCreate,
+  CardStateCommand,
+  CardPresentation,
+  CardPresentationCreate,
+  CardBindingInvokeResult,
+  ToolSchemaCatalog,
+  RemoteAccessGrant,
+  RemoteAccessGrantWrite,
+  RemoteAccessGrantUpdate,
+  RemoteAccessPolicy,
+  RemoteAccessPolicyWrite,
+  RemoteAccessPolicyUpdate,
+  AccessRequest,
+  AccessRequestCreate,
+  RemoteAccessDecisionCreate,
+  AccessLease,
+  RemoteAccessSession,
+  RemoteAccessSessionCreate,
+  SessionTicketResult,
+  RemoteAccessRecording,
+  RecordingEventPage,
 } from "./generated/contracts";
 
 export interface CursorListQuery {
@@ -203,7 +221,7 @@ export interface ArgusApiClient {
     claimOneTimeResult(executionId: string): Promise<ActionOneTimeResult>;
   };
 
-  /** Host inventory, remote sessions and host collector management. */
+  /** Host inventory and host collector management. */
   hosts: {
     list(filter?: HostListFilter): Promise<HostPage>;
     get(id: string): Promise<Host>;
@@ -228,14 +246,31 @@ export interface ArgusApiClient {
       hostId: string,
       input: { profile: string; telemetryRoute: string },
     ): Promise<PendingActionPublic>;
-    /** Human remote access sessions (never exposed to AI/cards). */
-    listSessions(filter?: {
-      hostId?: string;
-      status?: RemoteSession["status"][];
-    }): Promise<RemoteSession[]>;
-    createSession(input: CreateRemoteSessionInput): Promise<RemoteSession>;
-    getSession(id: string): Promise<RemoteSession>;
-    terminateSession(id: string): Promise<RemoteSession>;
+  };
+
+  /** Human-only remote access. Tickets never cross into Agent, Card, or Automation APIs. */
+  remoteAccess: {
+    listGrants(query?: CursorListQuery): Promise<Page<RemoteAccessGrant>>;
+    createGrant(input: RemoteAccessGrantWrite): Promise<RemoteAccessGrant>;
+    updateGrant(id: string, input: RemoteAccessGrantUpdate): Promise<RemoteAccessGrant>;
+    disableGrant(id: string): Promise<void>;
+    listPolicies(query?: CursorListQuery): Promise<Page<RemoteAccessPolicy>>;
+    createPolicy(input: RemoteAccessPolicyWrite): Promise<RemoteAccessPolicy>;
+    updatePolicy(id: string, input: RemoteAccessPolicyUpdate): Promise<RemoteAccessPolicy>;
+    disablePolicy(id: string): Promise<void>;
+    listRequests(query?: CursorListQuery): Promise<Page<AccessRequest>>;
+    createRequest(input: AccessRequestCreate): Promise<AccessRequest>;
+    getRequest(id: string): Promise<AccessRequest>;
+    decideRequest(id: string, input: RemoteAccessDecisionCreate): Promise<AccessRequest>;
+    listLeases(query?: CursorListQuery): Promise<Page<AccessLease>>;
+    revokeLease(id: string): Promise<AccessLease>;
+    listSessions(query?: CursorListQuery): Promise<Page<RemoteAccessSession>>;
+    createSession(input: RemoteAccessSessionCreate): Promise<RemoteAccessSession>;
+    getSession(id: string): Promise<RemoteAccessSession>;
+    createTicket(id: string): Promise<SessionTicketResult>;
+    terminateSession(id: string, reason: string): Promise<RemoteAccessSession>;
+    getRecording(id: string): Promise<RemoteAccessRecording>;
+    listRecordingEvents(id: string, cursor?: string): Promise<RecordingEventPage>;
   };
 
   /** Connectors and Bastion Scopes. */
@@ -386,24 +421,34 @@ export interface ArgusApiClient {
 
   /** Interactive card catalog, bindings, validation and enable gates. */
   interactiveCards: {
-    list(filter?: InteractiveCardFilter): Promise<InteractiveCard[]>;
+    list(): Promise<InteractiveCard[]>;
     get(id: string): Promise<InteractiveCard>;
-    create(input: CreateInteractiveCardInput): Promise<InteractiveCard>;
-    update(
+    listVersions(id: string): Promise<CardVersionSummary[]>;
+    getVersion(id: string, revision: number): Promise<CardVersion>;
+    createConfigurationVersion(
       id: string,
-      patch: UpdateInteractiveCardInput,
-    ): Promise<InteractiveCard>;
-    delete(id: string): Promise<void>;
-    updateBindings(
+      input: CardConfigurationVersionCreate,
+    ): Promise<CardVersion>;
+    startValidation(
       id: string,
-      bindings: import("./types").SlotBinding[],
+      input: CardValidationStart,
+    ): Promise<CardValidationRun>;
+    submitValidationEvidence(
+      runId: string,
+      input: CardValidationEvidence,
+    ): Promise<CardValidationRun>;
+    changeState(
+      id: string,
+      action: "activate" | "disable" | "rollback" | "deprecate",
+      input: CardStateCommand,
     ): Promise<InteractiveCard>;
-    validate(id: string): Promise<InteractiveCardValidationResult>;
-    renderDemo(id: string): Promise<InteractiveCardDemoRender>;
-    enable(id: string): Promise<InteractiveCard>;
-    disable(id: string): Promise<InteractiveCard>;
-    deprecate(id: string): Promise<InteractiveCard>;
-    listToolSchemas(): Promise<ToolOutputSchema[]>;
+    listToolSchemas(): Promise<ToolSchemaCatalog>;
+    createPresentation(
+      cardInstanceId: string,
+      input: CardPresentationCreate,
+    ): Promise<CardPresentation>;
+    invokeQueryBinding(bindingId: string): Promise<CardBindingInvokeResult>;
+    invokeActionBinding(bindingId: string): Promise<CardBindingInvokeResult>;
   };
 
   /** Organization: users, departments, roles, bindings, data scopes, policies, API keys. */

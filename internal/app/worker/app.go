@@ -19,6 +19,7 @@ import (
 	"github.com/kakj-go/Argus/internal/agent"
 	"github.com/kakj-go/Argus/internal/app/component"
 	"github.com/kakj-go/Argus/internal/automation"
+	cardservice "github.com/kakj-go/Argus/internal/card"
 	"github.com/kakj-go/Argus/internal/config"
 	connectorservice "github.com/kakj-go/Argus/internal/connector"
 	"github.com/kakj-go/Argus/internal/directexecutor"
@@ -105,10 +106,15 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		return err
 	}
 	modelDomain := modelservice.Service{Store: store, Keyring: keyring}
+	cardDomain := cardservice.Service{Store: store, Idempotency: postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey}, Tools: registry,
+		PresentationTTL: cfg.CardPresentationTTL, ValidationTTL: cfg.CardValidationTTL, RuntimeVersion: cfg.CardRuntimeVersion, MaxPresentation: cfg.CardMaxPresentationBytes}
+	if err := cardDomain.RegisterRenderTool(registry); err != nil {
+		return err
+	}
 	workflowDomain := action.Service{Store: store, Idempotency: postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey}, Resources: resourceDomain,
 		OneTimeResultKey: cfg.PendingActionKey}
 	handlers := map[string]runtime.Handler{
-		PoolAgent:      agent.Loop{Store: store, Models: modelDomain, Tools: registry},
+		PoolAgent:      agent.Loop{Store: store, Models: modelDomain, Tools: registry, Cards: cardDomain},
 		PoolAction:     action.Executor{Store: store, Resources: resourceDomain, OneTimeResultKey: cfg.PendingActionKey},
 		PoolCompaction: agent.Compactor{Store: store, Models: modelDomain},
 		PoolAutomation: automation.Runner{Store: store, Tools: registry, Workflow: workflowDomain},
@@ -196,7 +202,7 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	defer store.Close()
-	tlsConfig, err := directexecutor.LoadServerTLS(cfg.TLSCertificate, cfg.TLSPrivateKey, cfg.ClientCABundle, cfg.AuthorizedClientName)
+	tlsConfig, err := directexecutor.LoadServerTLS(cfg.TLSCertificate, cfg.TLSPrivateKey, cfg.ClientCABundle, cfg.AuthorizedClientNames)
 	if err != nil {
 		return err
 	}
@@ -209,7 +215,7 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 		Validator: resource.DirectTargetValidator{DeniedCIDRs: denied}, InstanceID: cfg.InstanceID, Concurrency: 8}
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)),
 		grpc.MaxRecvMsgSize(64*1024), grpc.MaxSendMsgSize(64*1024))
-	directv1.RegisterDirectExecutorServiceServer(grpcServer, directexecutor.RPCServer{Executor: executor, Context: ctx})
+	directv1.RegisterDirectExecutorServiceServer(grpcServer, directexecutor.RPCServer{Executor: executor, Context: ctx, Logger: logger})
 	health := &http.Server{Addr: cfg.HealthAddress, Handler: component.HealthHandler("argus-worker-direct-executor"), ReadHeaderTimeout: 5 * time.Second}
 	errorsChannel := make(chan error, 3)
 	go func() {

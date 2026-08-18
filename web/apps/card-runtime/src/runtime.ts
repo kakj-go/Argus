@@ -1,4 +1,8 @@
-import type { BridgeMessage, RenderPlan } from "@argus/api-client/contracts";
+import type {
+  BridgeMessage,
+  CardRuntimeValidationReport,
+  RenderPlan,
+} from "@argus/api-client/contracts";
 
 export const BRIDGE_VERSION = "argus.card_bridge/v1" as const;
 export const MAX_MESSAGE_BYTES = 1024 * 1024;
@@ -31,12 +35,20 @@ export type HelloPayload = {
     color_scheme: "light" | "dark";
     render_plan: RenderPlan;
     initial_data: Record<string, unknown>;
+    validation?: Pick<
+      CardRuntimeValidationReport,
+      "content_hash" | "runtime_version" | "scenario"
+    > & { required_slots: string[] };
   };
 };
 
 export interface ArgusCardApi {
   readonly context: CardRuntimeContext;
   readonly data: Record<string, unknown>;
+  readonly bindings: {
+    query: Readonly<Record<string, string>>;
+    action: Readonly<Record<string, string>>;
+  };
   query(bindingId: string): Promise<unknown>;
   action(bindingId: string): Promise<unknown>;
   onContext(listener: (context: CardRuntimeContext) => void): () => void;
@@ -77,8 +89,7 @@ export async function verifyEntrypointHash(
 }
 
 export function expectedSha256(value: string): string | null {
-  const match = /^sha256:([0-9a-f]{64})$/.exec(value);
-  return match?.[1] ?? null;
+  return /^[0-9a-f]{64}$/.test(value) ? value : null;
 }
 
 export function buildCardCsp(allowed: string[]): string {
@@ -118,6 +129,7 @@ export function isHelloPayload(value: unknown): value is HelloPayload {
     !isRecord(value.payload)
   ) return false;
   const payload = value.payload;
+  const validation = payload.validation;
   return (
     typeof payload.html === "string" &&
     typeof payload.entrypoint_hash === "string" &&
@@ -135,7 +147,14 @@ export function isHelloPayload(value: unknown): value is HelloPayload {
     (payload.color_scheme === "light" || payload.color_scheme === "dark") &&
     isRecord(payload.render_plan) &&
     payload.render_plan.schema_version === "argus.render_plan/v1" &&
-    isRecord(payload.initial_data)
+    isRecord(payload.initial_data) &&
+    (validation === undefined || (
+      isRecord(validation) &&
+      typeof validation.content_hash === "string" && /^[a-f0-9]{64}$/.test(validation.content_hash) &&
+      typeof validation.runtime_version === "string" && validation.runtime_version.length > 0 &&
+      ["default", "empty", "error", "large", "light", "dark", "zh-CN", "en-US"].includes(String(validation.scenario)) &&
+      Array.isArray(validation.required_slots) && validation.required_slots.every((slot) => typeof slot === "string")
+    ))
   );
 }
 
@@ -174,18 +193,28 @@ function requestError(value: unknown): Error {
   );
 }
 
-export function createCardApi(
+export type CardRuntimeSession = {
+  api: ArgusCardApi;
+  ready(): void;
+  reportValidation(report: CardRuntimeValidationReport): void;
+};
+
+export function createCardRuntimeSession(
   hello: HelloPayload,
   port: MessagePort,
-): ArgusCardApi {
+): CardRuntimeSession {
   const maxBytes = Math.min(hello.payload.max_message_bytes, MAX_MESSAGE_BYTES);
   const queryBindings = new Set(Object.values(hello.payload.render_plan.query_binding_ids));
   const actionBindings = new Set(Object.values(hello.payload.render_plan.action_binding_ids));
+  const publicBindings = Object.freeze({
+    query: Object.freeze({ ...hello.payload.render_plan.query_binding_ids }),
+    action: Object.freeze({ ...hello.payload.render_plan.action_binding_ids }),
+  });
   const pending = new Map<string, { resolve(value: unknown): void; reject(reason: unknown): void }>();
   const contextListeners = new Set<(context: CardRuntimeContext) => void>();
   const dataListeners = new Set<(data: Record<string, unknown>) => void>();
   let incoming = 1;
-  let outgoing = 1;
+  let outgoing = 0;
   let destroyed = false;
   let context: CardRuntimeContext = {
     locale: hello.payload.locale,
@@ -271,6 +300,7 @@ export function createCardApi(
   const api: ArgusCardApi = {
     get context() { return context; },
     get data() { return data; },
+    get bindings() { return publicBindings; },
     query: (bindingId) => invoke("query", bindingId),
     action: (bindingId) => invoke("action", bindingId),
     onContext(listener) {
@@ -286,7 +316,18 @@ export function createCardApi(
     },
   };
   applyContext(context);
-  return api;
+  return {
+    api,
+    ready: () => send("card.ready", {}),
+    reportValidation: (report) => send("card.validation_report", report as unknown as Record<string, unknown>),
+  };
+}
+
+export function createCardApi(
+  hello: HelloPayload,
+  port: MessagePort,
+): ArgusCardApi {
+  return createCardRuntimeSession(hello, port).api;
 }
 
 export function applyContext(context: CardRuntimeContext): void {

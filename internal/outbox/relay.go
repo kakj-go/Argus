@@ -2,9 +2,13 @@ package outbox
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kakj-go/Argus/internal/storage/postgres"
@@ -60,7 +64,28 @@ func (relay Relay) flush(ctx context.Context) {
 }
 
 func (relay Relay) publish(ctx context.Context, event db.OutboxEvent) error {
-	return relay.Redis.PublishOutbox(ctx, event.ID.String(), event.Topic, event.AggregateType, event.AggregateID, event.Payload)
+	if err := relay.Redis.PublishOutbox(ctx, event.ID.String(), event.Topic, event.AggregateType, event.AggregateID, event.Payload); err != nil {
+		return err
+	}
+	if event.Topic != "remote_access.session.terminate" {
+		return nil
+	}
+	sessionID, err := uuid.Parse(event.AggregateID)
+	if err != nil {
+		return err
+	}
+	route, err := relay.Store.Queries.GetRemoteAccessRoute(ctx, sessionID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var termination redisstore.RemoteAccessTermination
+	if err := json.Unmarshal(event.Payload, &termination); err != nil || termination.SessionID != sessionID.String() || termination.SessionFence < 1 {
+		return errors.New("invalid remote access termination payload")
+	}
+	return relay.Redis.PublishRemoteAccessTermination(ctx, route.GatewayInstance, termination)
 }
 
 func (relay Relay) logError(message string, err error) {

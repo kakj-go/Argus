@@ -58,9 +58,11 @@ import { HttpTransport, type HttpTransportOptions } from "../transport/http";
 import { SseTransport } from "../transport/sse";
 import { WebSocketTransport } from "../transport/websocket";
 import { installAgentDomains } from "./real/agent";
+import { installCardDomains } from "./real/card";
 import type { RealDomainContext } from "./real/context";
 import { installSandboxDomains } from "./real/sandbox";
 import { installWorkflowDomains } from "./real/workflow";
+import { installRemoteAccessDomains } from "./real/remote-access";
 
 export type Portal = "setup" | "platform" | "enterprise";
 
@@ -431,6 +433,8 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
   client.org = createOrganizationClient(http, versions, remember);
   installWorkflowDomains(domainContext);
   installAgentDomains(domainContext);
+  installCardDomains(domainContext);
+  installRemoteAccessDomains(domainContext);
 
   client.audit = {
     list: (filter, query) =>
@@ -1130,10 +1134,29 @@ function createUnavailableClient(): ArgusApiClient {
       getCollector: () => unavailable("hosts.getCollector"),
       previewCollectorInstall: () =>
         unavailable("hosts.previewCollectorInstall"),
-      listSessions: () => unavailable("hosts.listSessions"),
-      createSession: () => unavailable("hosts.createSession"),
-      getSession: () => unavailable("hosts.getSession"),
-      terminateSession: () => unavailable("hosts.terminateSession"),
+    },
+    remoteAccess: {
+      listGrants: () => unavailable("remoteAccess.listGrants"),
+      createGrant: () => unavailable("remoteAccess.createGrant"),
+      updateGrant: () => unavailable("remoteAccess.updateGrant"),
+      disableGrant: () => unavailable("remoteAccess.disableGrant"),
+      listPolicies: () => unavailable("remoteAccess.listPolicies"),
+      createPolicy: () => unavailable("remoteAccess.createPolicy"),
+      updatePolicy: () => unavailable("remoteAccess.updatePolicy"),
+      disablePolicy: () => unavailable("remoteAccess.disablePolicy"),
+      listRequests: () => unavailable("remoteAccess.listRequests"),
+      createRequest: () => unavailable("remoteAccess.createRequest"),
+      getRequest: () => unavailable("remoteAccess.getRequest"),
+      decideRequest: () => unavailable("remoteAccess.decideRequest"),
+      listLeases: () => unavailable("remoteAccess.listLeases"),
+      revokeLease: () => unavailable("remoteAccess.revokeLease"),
+      listSessions: () => unavailable("remoteAccess.listSessions"),
+      createSession: () => unavailable("remoteAccess.createSession"),
+      getSession: () => unavailable("remoteAccess.getSession"),
+      createTicket: () => unavailable("remoteAccess.createTicket"),
+      terminateSession: () => unavailable("remoteAccess.terminateSession"),
+      getRecording: () => unavailable("remoteAccess.getRecording"),
+      listRecordingEvents: () => unavailable("remoteAccess.listRecordingEvents"),
     },
     connectors: {
       list: () => unavailable("connectors.list"),
@@ -1220,16 +1243,21 @@ function createUnavailableClient(): ArgusApiClient {
     interactiveCards: {
       list: () => unavailable("interactiveCards.list"),
       get: () => unavailable("interactiveCards.get"),
-      create: () => unavailable("interactiveCards.create"),
-      update: () => unavailable("interactiveCards.update"),
-      delete: () => unavailable("interactiveCards.delete"),
-      updateBindings: () => unavailable("interactiveCards.updateBindings"),
-      validate: () => unavailable("interactiveCards.validate"),
-      renderDemo: () => unavailable("interactiveCards.renderDemo"),
-      enable: () => unavailable("interactiveCards.enable"),
-      disable: () => unavailable("interactiveCards.disable"),
-      deprecate: () => unavailable("interactiveCards.deprecate"),
+      listVersions: () => unavailable("interactiveCards.listVersions"),
+      getVersion: () => unavailable("interactiveCards.getVersion"),
+      createConfigurationVersion: () =>
+        unavailable("interactiveCards.createConfigurationVersion"),
+      startValidation: () => unavailable("interactiveCards.startValidation"),
+      submitValidationEvidence: () =>
+        unavailable("interactiveCards.submitValidationEvidence"),
+      changeState: () => unavailable("interactiveCards.changeState"),
       listToolSchemas: () => unavailable("interactiveCards.listToolSchemas"),
+      createPresentation: () =>
+        unavailable("interactiveCards.createPresentation"),
+      invokeQueryBinding: () =>
+        unavailable("interactiveCards.invokeQueryBinding"),
+      invokeActionBinding: () =>
+        unavailable("interactiveCards.invokeActionBinding"),
     },
     org: {
       listUsers: () => unavailable("org.listUsers"),

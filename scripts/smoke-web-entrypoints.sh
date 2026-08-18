@@ -32,6 +32,10 @@ helm template argus deploy/helm/argus-platform \
 rg -q 'host: cards\.argus\.example\.com' "$rendered"
 rg -q 'name: cards' "$rendered"
 rg -q 'containerPort: 8083' "$rendered"
+rg -q 'ARGUS_DIRECT_EXECUTOR_CLIENT_NAMES: argus-server,argus-connector-gateway' "$rendered"
+rg -q 'secretName: argus-server-direct-executor-client-tls' "$rendered"
+rg -q 'secretName: argus-connector-gateway-direct-executor-client-tls' "$rendered"
+rg -q 'name: argus-connector-gateway-remote-access' "$rendered"
 
 docker build \
   --file deploy/docker/web.Dockerfile \

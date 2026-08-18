@@ -15,14 +15,14 @@ const (
 	maxProjectedLog   = 32 << 10
 )
 
-func encodeToolResultProjection(resultRef string, call pendingToolCall, full []byte, result mcp.Result) ([]byte, bool, error) {
+func encodeToolResultProjection(resultRef, toolCallID string, call pendingToolCall, full []byte, result mcp.Result) ([]byte, bool, error) {
 	clean, _ := sanitize(result.Structured).(map[string]any)
 	summary, refs, partial := projectStructuredResult(call.Name, clean)
 	partial = partial || result.Partial
 	payload := map[string]any{
 		"schema_version":            "argus.tool_result_projection/v1",
 		"projection_schema_version": "v1",
-		"tool_call_id":              call.ID,
+		"tool_call_id":              toolCallID,
 		"result_ref":                resultRef,
 		"result_hash":               fmt.Sprintf("%x", sha256.Sum256(full)),
 		"original_bytes":            len(full),

@@ -10,7 +10,8 @@
     "test": "vitest run src"
   },
   "dependencies": {
-    "@argus/api-client": "workspace:*"
+    "@argus/api-client": "workspace:*",
+    "axe-core": "^4.13.0"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

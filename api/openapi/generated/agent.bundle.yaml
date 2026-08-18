@@ -56,6 +56,9 @@ components:
             - user_confirmation
             - approval_update
             - execution_update
+            - card_draft_created
+            - card_instance_created
+            - card_presentation_invalidated
             - card_action_result
             - run_state_changed
             - context_compacted
@@ -116,6 +119,9 @@ components:
             - tool_call_started
             - tool_call_completed
             - pending_action_created
+            - card_draft_created
+            - card_instance_created
+            - card_presentation_invalidated
             - waiting_input
             - waiting_approval
             - context_compaction_started

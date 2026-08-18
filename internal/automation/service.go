@@ -192,8 +192,8 @@ func (runner Runner) Handle(ctx context.Context, task runtime.Task) error {
 	if !ok || validateAutomationTool(revision.ToolID, metadata) != nil {
 		return runner.fail(ctx, run, "CLIENT_OPERATION_UNAVAILABLE")
 	}
-	result, err := runner.Tools.Call(ctx, mcp.Call{ToolID: revision.ToolID, Caller: "automation", Enterprise: payload.EnterpriseID.String(),
-		Subject: account.ID.String(), SubjectType: "service_account", Input: input})
+	result, err := runner.Tools.Call(ctx, mcp.Call{ToolID: revision.ToolID, CallID: "automation", Caller: "automation", Enterprise: payload.EnterpriseID.String(),
+		Subject: account.ID.String(), SubjectType: "service_account", InvocationID: run.ID.String(), Input: input})
 	if err != nil {
 		code := "TOOL_EXECUTION_FAILED"
 		if errors.Is(err, mcp.ErrPermissionDenied) {

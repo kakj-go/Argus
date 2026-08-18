@@ -1,0 +1,1517 @@
+openapi: 3.1.0
+info:
+  title: Argus Card API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /enterprise/interactive-cards:
+    get:
+      operationId: listInteractiveCards
+      summary: List interactive Cards available to the enterprise.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Card page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/interactive-cards/{card_id}:
+    parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getInteractiveCard
+      summary: Get an interactive Card and its active revision summary.
+      responses:
+        '200':
+          description: Card.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InteractiveCard'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/interactive-cards/{card_id}/versions:
+    parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listCardVersions
+      summary: List immutable versions of an interactive Card.
+      responses:
+        '200':
+          description: Versions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardVersionPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createCardConfigurationVersion
+      summary: Create a new immutable Card configuration revision.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardConfigurationVersionCreate'
+      responses:
+        '201':
+          description: Version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardVersion'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/interactive-cards/{card_id}/versions/{revision}:
+    parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: revision
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: getCardVersion
+      summary: Get one immutable Card version.
+      responses:
+        '200':
+          description: Version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardVersion'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/interactive-cards/{card_id}/validation-runs:
+    parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: startCardValidation
+      summary: Start browser validation for a Card version.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardValidationStart'
+      responses:
+        '201':
+          description: Validation run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardValidationRun'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/card-validation-runs/{run_id}/evidence:
+    parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: submitCardValidationEvidence
+      summary: Submit browser validation evidence bound to a Card content hash.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardValidationEvidence'
+      responses:
+        '200':
+          description: Validation run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardValidationRun'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/interactive-cards/{card_id}/{state_action}:
+    parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: state_action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - activate
+            - disable
+            - rollback
+            - deprecate
+    post:
+      operationId: changeInteractiveCardState
+      summary: Activate, disable, roll back, or deprecate an enterprise Card.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardStateCommand'
+      responses:
+        '200':
+          description: Card.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InteractiveCard'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/tool-schema-catalog:
+    get:
+      operationId: listToolSchemaCatalog
+      summary: List Card-safe query and preview Tool schemas.
+      responses:
+        '200':
+          description: Tool schema catalog.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolSchemaCatalog'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/card-instances/{card_instance_id}/presentations:
+    parameters:
+      - name: card_instance_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: createCardPresentation
+      summary: Reauthorize and materialize a Card presentation for the viewer.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardPresentationCreate'
+      responses:
+        '201':
+          description: Presentation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardPresentation'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/card-query-bindings/{binding_id}/invoke:
+    parameters:
+      - name: binding_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    post:
+      operationId: invokeCardQueryBinding
+      summary: Invoke a short-lived read-only Card query binding.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Binding result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardBindingInvokeResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/card-action-bindings/{binding_id}/invoke:
+    parameters:
+      - name: binding_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    post:
+      operationId: invokeCardActionBinding
+      summary: Consume a short-lived Card action binding.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Binding result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardBindingInvokeResult'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    InteractiveCard:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - source
+        - slug
+        - name
+        - description
+        - lifecycle
+        - enabled
+        - availability
+        - latest_revision
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+            - system
+            - enterprise
+        slug:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2048
+        lifecycle:
+          $ref: '#/components/schemas/CardLifecycle'
+        enabled:
+          type: boolean
+        availability:
+          $ref: '#/components/schemas/CardAvailability'
+        active_revision:
+          type: integer
+          minimum: 1
+        latest_revision:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CardPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InteractiveCard'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    CardVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - card_id
+        - revision
+        - status
+        - content_hash
+        - manifest_hash
+        - created_at
+        - manifest
+        - entrypoint_html
+        - slot_bindings
+        - demos
+      properties:
+        card_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/CardVersionStatus'
+        content_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        manifest_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        validation_run_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        manifest:
+          $ref: '#/components/schemas/CardManifest'
+        entrypoint_html:
+          type: string
+          maxLength: 524288
+        slot_bindings:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/SlotBinding'
+        demos:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/CardDemo'
+    CardVersionSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - card_id
+        - revision
+        - status
+        - content_hash
+        - manifest_hash
+        - created_at
+      properties:
+        card_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/CardVersionStatus'
+        content_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        manifest_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        validation_run_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+    CardVersionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardVersionSummary'
+    CardConfigurationVersionCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - base_revision
+        - expected_version
+        - name
+        - description
+        - slot_bindings
+        - demos
+      properties:
+        base_revision:
+          type: integer
+          minimum: 1
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2048
+        slot_bindings:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/SlotBinding'
+        demos:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/CardDemo'
+    CardValidationRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - card_id
+        - revision
+        - content_hash
+        - runtime_version
+        - nonce
+        - status
+        - required_scenarios
+        - passed_scenarios
+        - issues
+        - expires_at
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        card_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        content_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        runtime_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        nonce:
+          type: string
+          minLength: 16
+          maxLength: 128
+        status:
+          type: string
+          enum:
+            - pending
+            - passed
+            - failed
+            - expired
+        required_scenarios:
+          type: array
+          minItems: 8
+          maxItems: 8
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/DemoScenario'
+        passed_scenarios:
+          type: array
+          maxItems: 8
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/DemoScenario'
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardValidationIssue'
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    CardValidationStart:
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - runtime_version
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        runtime_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+    CardValidationEvidence:
+      type: object
+      additionalProperties: false
+      required:
+        - content_hash
+        - runtime_version
+        - nonce
+        - scenarios
+      properties:
+        content_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        runtime_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        nonce:
+          type: string
+          minLength: 16
+          maxLength: 128
+        scenarios:
+          type: array
+          minItems: 8
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - scenario
+              - ready
+              - protocol_violations
+              - runtime_errors
+              - serious_a11y_violations
+              - missing_required_slots
+              - size_violation
+            properties:
+              scenario:
+                $ref: '#/components/schemas/DemoScenario'
+              ready:
+                type: boolean
+              protocol_violations:
+                type: integer
+                minimum: 0
+              runtime_errors:
+                type: integer
+                minimum: 0
+              serious_a11y_violations:
+                type: integer
+                minimum: 0
+              missing_required_slots:
+                type: array
+                uniqueItems: true
+                items:
+                  type: string
+                  pattern: ^[a-z][a-z0-9_]*$
+              size_violation:
+                type: boolean
+    CardStateCommand:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    ToolSchemaCatalog:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSchemaCatalogEntry'
+    CardInstance:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - conversation_id
+        - card_id
+        - card_revision
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        card_id:
+          type: string
+          format: uuid
+        card_revision:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum:
+            - active
+            - invalidated
+        created_at:
+          type: string
+          format: date-time
+    CardPresentationCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - locale
+        - color_scheme
+      properties:
+        locale:
+          type: string
+          enum:
+            - zh-CN
+            - en-US
+        color_scheme:
+          type: string
+          enum:
+            - light
+            - dark
+    CardPresentation:
+      type: object
+      additionalProperties: false
+      required:
+        - presentation_id
+        - card_instance
+        - manifest
+        - render_plan
+        - entrypoint_html
+        - initial_data
+        - partial
+        - locale_fallback
+        - expires_at
+      properties:
+        presentation_id:
+          type: string
+          format: uuid
+        card_instance:
+          $ref: '#/components/schemas/CardInstance'
+        manifest:
+          $ref: '#/components/schemas/CardManifest'
+        render_plan:
+          $ref: '#/components/schemas/RenderPlan'
+        entrypoint_html:
+          type: string
+          maxLength: 524288
+        initial_data:
+          $ref: '#/components/schemas/PublicJsonObject'
+        partial:
+          type: boolean
+        locale_fallback:
+          type: boolean
+        expires_at:
+          type: string
+          format: date-time
+    CardBindingInvokeResult:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - succeeded
+            - awaiting_approval
+            - executing
+            - failed
+            - invalidated
+        data:
+          $ref: '#/components/schemas/PublicJsonValue'
+        pending_action:
+          $ref: '#/components/schemas/pending-action-public.schema'
+        approval_request:
+          $ref: '#/components/schemas/ApprovalRequestView'
+        execution:
+          $ref: '#/components/schemas/Execution'
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    CardLifecycle:
+      type: string
+      enum:
+        - draft
+        - active
+        - deprecated
+    CardAvailability:
+      type: string
+      enum:
+        - available
+        - disabled
+        - dependency_pending
+        - invalidated
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    CardVersionStatus:
+      type: string
+      enum:
+        - draft
+        - validating
+        - validated
+        - active
+        - retired
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    SlotType:
+      enum:
+        - string
+        - number
+        - boolean
+        - array
+        - object
+    SlotBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - slot_name
+        - slot_kind
+        - mode
+        - tool_id
+        - output_schema_version
+        - schema_hash
+        - path
+        - value_type
+      properties:
+        slot_name:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+        slot_kind:
+          enum:
+            - data
+            - query
+            - action
+        mode:
+          enum:
+            - strict
+            - preferred
+        tool_id:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]+$
+        output_schema_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        schema_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        path:
+          type: string
+          pattern: ^\$(?:\.[a-zA-Z_][a-zA-Z0-9_]*|\[(?:[0-9]+|\*)\])*$
+        value_type:
+          $ref: '#/components/schemas/SlotType'
+        semantic_type:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]*$
+          maxLength: 128
+    DemoScenario:
+      type: string
+      enum:
+        - default
+        - empty
+        - error
+        - large
+        - light
+        - dark
+        - zh-CN
+        - en-US
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    CardDemo:
+      type: object
+      additionalProperties: false
+      required:
+        - scenario
+        - data
+      properties:
+        scenario:
+          $ref: '#/components/schemas/DemoScenario'
+        data:
+          $ref: '#/components/schemas/PublicJsonObject'
+    Slot:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - kind
+        - value_type
+        - required
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+        kind:
+          enum:
+            - data
+            - query
+            - action
+        value_type:
+          $ref: '#/components/schemas/SlotType'
+        required:
+          type: boolean
+        ai_generated:
+          type: boolean
+          default: false
+        description:
+          type: string
+          maxLength: 1024
+    CardManifest:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - card_id
+        - revision
+        - source
+        - entrypoint_hash
+        - bridge_version
+        - slots
+        - allowed_resources
+        - supported_locales
+        - default_locale
+        - supported_color_schemes
+        - max_message_bytes
+      properties:
+        schema_version:
+          const: argus.card_manifest/v1
+        card_id:
+          type: string
+          minLength: 1
+        revision:
+          type: integer
+          minimum: 1
+        source:
+          enum:
+            - system
+            - enterprise
+        entrypoint_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        bridge_version:
+          const: argus.card_bridge/v1
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Slot'
+        allowed_resources:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - inline_style
+              - inline_script
+              - image_data
+              - font_data
+        supported_locales:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            enum:
+              - zh-CN
+              - en-US
+        default_locale:
+          enum:
+            - zh-CN
+            - en-US
+        supported_color_schemes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            enum:
+              - light
+              - dark
+        max_message_bytes:
+          type: integer
+          minimum: 1024
+          maximum: 1048576
+        presentation_kind:
+          enum:
+            - table
+            - detail
+            - pending_action
+            - metric
+            - generic
+    CardValidationIssue:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message:
+          type: string
+          maxLength: 2048
+        slot_name:
+          type: string
+        scenario:
+          $ref: '#/components/schemas/DemoScenario'
+    ToolSchemaCatalogEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - tool_id
+        - tool_family
+        - risk
+        - execution_mode
+        - output_schema_version
+        - compatible_output_versions
+        - schema_hash
+        - output_schema
+        - fields
+      properties:
+        tool_id:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]+$
+        tool_family:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]+$
+        risk:
+          enum:
+            - read
+            - write
+            - dangerous
+            - critical
+        execution_mode:
+          enum:
+            - sequential
+            - parallel_safe
+        output_schema_version:
+          type: string
+        compatible_output_versions:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        schema_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        output_schema:
+          $ref: '#/components/schemas/PublicJsonObject'
+        fields:
+          type: array
+          maxItems: 512
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - path
+              - value_type
+            properties:
+              path:
+                type: string
+              value_type:
+                $ref: '#/components/schemas/SlotType'
+              semantic_type:
+                type: string
+              description:
+                type: string
+    DataBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - slot_name
+        - tool_call_id
+        - path
+        - schema_version
+      properties:
+        slot_name:
+          type: string
+        tool_call_id:
+          type: string
+        path:
+          type: string
+          pattern: ^\$
+        schema_version:
+          type: string
+    RenderPlan:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - card_id
+        - card_revision
+        - card_instance_id
+        - data_bindings
+        - query_binding_ids
+        - action_binding_ids
+        - locale
+        - color_scheme
+      properties:
+        schema_version:
+          const: argus.render_plan/v1
+        card_id:
+          type: string
+        card_revision:
+          type: integer
+          minimum: 1
+        card_instance_id:
+          type: string
+        data_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataBinding'
+        query_binding_ids:
+          type: object
+          additionalProperties:
+            type: string
+        action_binding_ids:
+          type: object
+          additionalProperties:
+            type: string
+        locale:
+          enum:
+            - zh-CN
+            - en-US
+        color_scheme:
+          enum:
+            - light
+            - dark
+    pending-action-public.schema:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      $id: https://argus.io/schemas/v1/action/pending-action-public.schema.json
+      title: PendingActionPublic
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - action_ref
+        - title
+        - summary
+        - risk
+        - preview
+        - diff
+        - status
+        - available_actions
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        schema_version:
+          const: argus.pending_action/v1
+        action_ref:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        risk:
+          enum:
+            - read
+            - write
+            - dangerous
+            - critical
+        preview:
+          $ref: '#/components/schemas/PublicJsonObject'
+        diff:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - kind
+              - text
+            properties:
+              kind:
+                enum:
+                  - add
+                  - remove
+                  - change
+                  - note
+              text:
+                type: string
+                maxLength: 2048
+        status:
+          enum:
+            - prepared
+            - awaiting_confirmation
+            - awaiting_approval
+            - ready
+            - executing
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+            - expired
+            - rejected
+            - invalidated
+        available_actions:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - confirm
+              - cancel
+              - approve
+              - reject
+        approval:
+          type: object
+          additionalProperties: false
+          required:
+            - required
+            - minimum_approvers
+            - approved_count
+            - separation_of_duty
+          properties:
+            required:
+              type: boolean
+            policy_ref:
+              type: string
+            minimum_approvers:
+              type: integer
+              minimum: 0
+            approved_count:
+              type: integer
+              minimum: 0
+            separation_of_duty:
+              type: boolean
+        execution_ref:
+          type: string
+          minLength: 1
+        result_summary:
+          type: string
+          maxLength: 4096
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ApprovalRequirement:
+      type: object
+      additionalProperties: false
+      required:
+        - policy_id
+        - policy_version
+        - minimum_approvers
+        - separation_of_duty
+        - approved_count
+        - status
+      properties:
+        policy_id:
+          type: string
+          format: uuid
+        policy_version:
+          type: integer
+          format: int64
+          minimum: 1
+        minimum_approvers:
+          type: integer
+          minimum: 1
+        separation_of_duty:
+          type: boolean
+        approved_count:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+            - invalidated
+    ApprovalDecision:
+      type: object
+      additionalProperties: false
+      required:
+        - decision_id
+        - actor_user_id
+        - decision
+        - decided_at
+      properties:
+        decision_id:
+          type: string
+        actor_user_id:
+          type: string
+        decision:
+          enum:
+            - approved
+            - rejected
+        reason:
+          type: string
+          maxLength: 4096
+        decided_at:
+          type: string
+          format: date-time
+    ApprovalRequestView:
+      type: object
+      additionalProperties: false
+      required:
+        - approval_request_id
+        - action_ref
+        - requirements
+        - decisions
+        - status
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        approval_request_id:
+          type: string
+          format: uuid
+        action_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+        requirements:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApprovalRequirement'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalDecision'
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+            - expired
+            - invalidated
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Execution:
+      type: object
+      additionalProperties: false
+      required:
+        - execution_id
+        - action_ref
+        - status
+        - created_at
+        - updated_at
+      properties:
+        execution_id:
+          type: string
+        action_ref:
+          type: string
+        status:
+          enum:
+            - pending
+            - running
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+        result_ref:
+          type: string
+        one_time_result_available:
+          type: boolean
+          readOnly: true
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

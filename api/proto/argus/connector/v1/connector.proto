@@ -24,7 +24,11 @@ message ConnectRequest {
     CredentialLeaseRequest credential_lease_request = 7;
     CommandReconcileResult command_reconcile_result = 8;
     CertificateRotationRequest certificate_rotation_request = 9;
+    RemoteAccessOutput remote_access_output = 10;
+    RemoteAccessState remote_access_state = 12;
+    RemoteAccessClose remote_access_close = 13;
   }
+  reserved 11;
 }
 
 message ConnectResponse {
@@ -40,6 +44,9 @@ message ConnectResponse {
     CredentialLeaseGrant credential_lease_grant = 9;
     CommandReconcileRequest command_reconcile_request = 10;
     CertificateRotationGrant certificate_rotation_grant = 11;
+    RemoteAccessInput remote_access_input = 12;
+    RemoteAccessResize remote_access_resize = 13;
+    RemoteAccessState remote_access_state = 14;
   }
 }
 
@@ -85,16 +92,74 @@ message RemoteAccessOpen {
   string protocol = 4;
   google.protobuf.Timestamp expires_at = 5;
   uint32 max_frame_bytes = 6;
+  uint64 connection_epoch = 7;
+  uint64 session_fence = 8;
+  string target_host = 9;
+  uint32 target_port = 10;
+  string host_key_fingerprint = 11;
+  string credential_lease_id = 12;
+  uint32 terminal_cols = 13;
+  uint32 terminal_rows = 14;
+  google.protobuf.Duration idle_timeout = 15;
+  google.protobuf.Duration max_duration = 16;
+  string username = 17;
 }
 
+// Deprecated: M6 peers use typed input/output/resize/state frames.
 message RemoteAccessData {
+  option deprecated = true;
   string stream_id = 1;
   uint64 stream_sequence = 2;
   bytes data = 3;
   bool end_of_stream = 4;
 }
 
+message RemoteAccessInput {
+  string stream_id = 1;
+  uint64 stream_sequence = 2;
+  bytes data = 3;
+}
+
+message RemoteAccessOutput {
+  string stream_id = 1;
+  uint64 stream_sequence = 2;
+  RemoteAccessOutputStream stream = 3;
+  bytes data = 4;
+}
+
+enum RemoteAccessOutputStream {
+  REMOTE_ACCESS_OUTPUT_STREAM_UNSPECIFIED = 0;
+  REMOTE_ACCESS_OUTPUT_STREAM_STDOUT = 1;
+  REMOTE_ACCESS_OUTPUT_STREAM_STDERR = 2;
+}
+
+message RemoteAccessResize {
+  string stream_id = 1;
+  uint64 stream_sequence = 2;
+  uint32 cols = 3;
+  uint32 rows = 4;
+}
+
+message RemoteAccessState {
+  string stream_id = 1;
+  uint64 stream_sequence = 2;
+  RemoteAccessStateValue state = 3;
+  string reason = 4;
+}
+
+enum RemoteAccessStateValue {
+  REMOTE_ACCESS_STATE_VALUE_UNSPECIFIED = 0;
+  REMOTE_ACCESS_STATE_VALUE_CONNECTING = 1;
+  REMOTE_ACCESS_STATE_VALUE_ACTIVE = 2;
+  REMOTE_ACCESS_STATE_VALUE_TERMINATING = 3;
+  REMOTE_ACCESS_STATE_VALUE_TERMINATED = 4;
+  REMOTE_ACCESS_STATE_VALUE_FAILED = 5;
+  REMOTE_ACCESS_STATE_VALUE_CONNECTION_LOST = 6;
+  REMOTE_ACCESS_STATE_VALUE_INVALIDATED = 7;
+}
+
 message RemoteAccessClose {
   string stream_id = 1;
   argus.common.v1.StreamClose close = 2;
+  uint64 stream_sequence = 3;
 }

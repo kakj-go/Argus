@@ -148,7 +148,11 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 	clientSequence, serverSequence := uint64(1), uint64(1)
 	epoch := welcome.GetConnectionEpoch()
 	pending := map[string]pendingLease{}
+	remoteSessions := map[string]*localRemoteSession{}
+	remotePending := map[string]*localRemoteSession{}
+	remoteDone := make(chan string, 16)
 	var active atomic.Int32
+	var activeRemote atomic.Int32
 	var rotationKey []byte
 	var stopAfterAcknowledgement uint64
 	if welcome.GetCertificateRotationRequested() || certificateNeedsRotation(client.store) {
@@ -180,7 +184,7 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 			return nil
 		case <-heartbeatChannel:
 			if err := send(outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_Heartbeat{Heartbeat: &connectorv1.ConnectorHeartbeat{
-				ConnectionEpoch: epoch, SentAt: timestamppb.Now(), ActiveCommands: uint32(active.Load())}}}}); err != nil {
+				ConnectionEpoch: epoch, SentAt: timestamppb.Now(), ActiveCommands: uint32(active.Load()), ActiveRemoteAccessStreams: uint32(activeRemote.Load())}}}}); err != nil {
 				return err
 			}
 		case item := <-outgoingChannel:
@@ -195,13 +199,19 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 			}
 			results[execution.command.GetCommandId()] = record
 			outgoing <- outboundFrame{value: commandResultFrame(execution.command, epoch, execution.outcome), stop: execution.outcome.stop}
+		case streamID := <-remoteDone:
+			if session, ok := remoteSessions[streamID]; ok {
+				session.stop("completed")
+				delete(remoteSessions, streamID)
+				delete(remotePending, session.open.GetSessionId())
+				activeRemote.Add(-1)
+			}
 		case receivedItem := <-received:
 			if receivedItem.err != nil {
 				return receivedItem.err
 			}
 			message := receivedItem.value
-			if message.GetSequence() != serverSequence+1 || message.GetWelcome() != nil || message.GetRemoteAccessOpen() != nil ||
-				message.GetRemoteAccessData() != nil || message.GetRemoteAccessClose() != nil {
+			if message.GetSequence() != serverSequence+1 || message.GetWelcome() != nil || message.GetRemoteAccessData() != nil {
 				return errors.New("Connector server sequence or frame is invalid")
 			}
 			serverSequence = message.GetSequence()
@@ -221,15 +231,24 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 				outgoing <- outboundFrame{value: reconcileFrame(message.GetCommandReconcileRequest(), epoch, results)}
 			case message.GetCredentialLeaseGrant() != nil:
 				grant := message.GetCredentialLeaseGrant()
-				value, ok := pending[grant.GetCommandId()]
-				if !ok || grant.GetConnectionEpoch() != epoch || grant.GetLeaseId() != value.command.GetCredentialLeaseId() ||
-					!strings.EqualFold(hex.EncodeToString(grant.GetRecipientNonce()), hex.EncodeToString(value.nonce)) || grant.GetExpiresAt() == nil || time.Now().After(grant.GetExpiresAt().AsTime()) {
-					return errors.New("Connector credential lease grant is invalid")
+				if value, ok := pending[grant.GetCommandId()]; ok {
+					if grant.GetConnectionEpoch() != epoch || grant.GetLeaseId() != value.command.GetCredentialLeaseId() ||
+						!strings.EqualFold(hex.EncodeToString(grant.GetRecipientNonce()), hex.EncodeToString(value.nonce)) || grant.GetExpiresAt() == nil || time.Now().After(grant.GetExpiresAt().AsTime()) {
+						return errors.New("Connector credential lease grant is invalid")
+					}
+					delete(pending, grant.GetCommandId())
+					credential := append([]byte(nil), grant.GetCredentialPayload()...)
+					active.Add(1)
+					go executeConnectorCommand(ctx, value.command, credential, completed)
+					continue
 				}
-				delete(pending, grant.GetCommandId())
-				credential := append([]byte(nil), grant.GetCredentialPayload()...)
-				active.Add(1)
-				go executeConnectorCommand(ctx, value.command, credential, completed)
+				remote, ok := remotePending[grant.GetCommandId()]
+				if !ok || !remote.acceptGrant(grant, epoch) {
+					return errors.New("Connector remote access credential lease grant is invalid")
+				}
+				delete(remotePending, grant.GetCommandId())
+				activeRemote.Add(1)
+				go remote.run(ctx, append([]byte(nil), grant.GetCredentialPayload()...), outgoing, remoteDone)
 			case message.GetCertificateRotationGrant() != nil:
 				if len(rotationKey) == 0 {
 					return errors.New("unexpected Connector certificate rotation grant")
@@ -266,6 +285,25 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 				} else {
 					active.Add(1)
 					go executeConnectorCommand(ctx, command, nil, completed)
+				}
+			case message.GetRemoteAccessOpen() != nil:
+				open := message.GetRemoteAccessOpen()
+				if open.GetConnectionEpoch() != epoch || open.GetStreamId() == "" || open.GetSessionId() == "" || open.GetCredentialLeaseId() == "" ||
+					open.GetExpiresAt() == nil || time.Now().After(open.GetExpiresAt().AsTime()) || remoteSessions[open.GetStreamId()] != nil {
+					return errors.New("Connector remote access open frame is invalid")
+				}
+				remote, err := newLocalRemoteSession(open)
+				if err != nil {
+					return err
+				}
+				remoteSessions[open.GetStreamId()] = remote
+				remotePending[open.GetSessionId()] = remote
+				outgoing <- outboundFrame{value: remote.leaseRequest(epoch)}
+			case message.GetRemoteAccessInput() != nil || message.GetRemoteAccessResize() != nil || message.GetRemoteAccessClose() != nil:
+				streamID := remoteServerStreamID(message)
+				remote := remoteSessions[streamID]
+				if remote == nil || !remote.deliver(message) {
+					return errors.New("Connector remote access stream frame is invalid")
 				}
 			default:
 				return errors.New("unsupported Connector server frame")

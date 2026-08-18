@@ -1,0 +1,34 @@
+openapi: 3.1.0
+info: {title: Argus Card API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /enterprise/interactive-cards: {$ref: ../argus.yaml#/paths/~1enterprise~1interactive-cards}
+  "/enterprise/interactive-cards/{card_id}": {$ref: "../argus.yaml#/paths/~1enterprise~1interactive-cards~1{card_id}"}
+  "/enterprise/interactive-cards/{card_id}/versions": {$ref: "../argus.yaml#/paths/~1enterprise~1interactive-cards~1{card_id}~1versions"}
+  "/enterprise/interactive-cards/{card_id}/versions/{revision}": {$ref: "../argus.yaml#/paths/~1enterprise~1interactive-cards~1{card_id}~1versions~1{revision}"}
+  "/enterprise/interactive-cards/{card_id}/validation-runs": {$ref: "../argus.yaml#/paths/~1enterprise~1interactive-cards~1{card_id}~1validation-runs"}
+  "/enterprise/card-validation-runs/{run_id}/evidence": {$ref: "../argus.yaml#/paths/~1enterprise~1card-validation-runs~1{run_id}~1evidence"}
+  "/enterprise/interactive-cards/{card_id}/{state_action}": {$ref: "../argus.yaml#/paths/~1enterprise~1interactive-cards~1{card_id}~1{state_action}"}
+  /enterprise/tool-schema-catalog: {$ref: ../argus.yaml#/paths/~1enterprise~1tool-schema-catalog}
+  "/enterprise/card-instances/{card_instance_id}/presentations": {$ref: "../argus.yaml#/paths/~1enterprise~1card-instances~1{card_instance_id}~1presentations"}
+  "/enterprise/card-query-bindings/{binding_id}/invoke": {$ref: "../argus.yaml#/paths/~1enterprise~1card-query-bindings~1{binding_id}~1invoke"}
+  "/enterprise/card-action-bindings/{binding_id}/invoke": {$ref: "../argus.yaml#/paths/~1enterprise~1card-action-bindings~1{binding_id}~1invoke"}
+components:
+  securitySchemes: {sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}}
+  schemas:
+    InteractiveCard: {$ref: ../components/m5.yaml#/components/schemas/InteractiveCard}
+    CardPage: {$ref: ../components/m5.yaml#/components/schemas/CardPage}
+    CardVersion: {$ref: ../components/m5.yaml#/components/schemas/CardVersion}
+    CardVersionSummary: {$ref: ../components/m5.yaml#/components/schemas/CardVersionSummary}
+    CardVersionPage: {$ref: ../components/m5.yaml#/components/schemas/CardVersionPage}
+    CardConfigurationVersionCreate: {$ref: ../components/m5.yaml#/components/schemas/CardConfigurationVersionCreate}
+    CardValidationRun: {$ref: ../components/m5.yaml#/components/schemas/CardValidationRun}
+    CardValidationStart: {$ref: ../components/m5.yaml#/components/schemas/CardValidationStart}
+    CardValidationEvidence: {$ref: ../components/m5.yaml#/components/schemas/CardValidationEvidence}
+    CardStateCommand: {$ref: ../components/m5.yaml#/components/schemas/CardStateCommand}
+    ToolSchemaCatalog: {$ref: ../components/m5.yaml#/components/schemas/ToolSchemaCatalog}
+    CardInstance: {$ref: ../components/m5.yaml#/components/schemas/CardInstance}
+    CardPresentationCreate: {$ref: ../components/m5.yaml#/components/schemas/CardPresentationCreate}
+    CardPresentation: {$ref: ../components/m5.yaml#/components/schemas/CardPresentation}
+    CardBindingInvokeResult: {$ref: ../components/m5.yaml#/components/schemas/CardBindingInvokeResult}

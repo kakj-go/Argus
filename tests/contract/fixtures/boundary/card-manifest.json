@@ -3,7 +3,7 @@
   "card_id": "card_boundary",
   "revision": 1,
   "source": "enterprise",
-  "entrypoint_hash": "0123456789abcdef0123456789abcdef",
+  "entrypoint_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "bridge_version": "argus.card_bridge/v1",
   "slots": [],
   "allowed_resources": [],

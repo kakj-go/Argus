@@ -9,12 +9,12 @@
 | M2（已完成） | [初始化、身份与授权](./M2-bootstrap-identity-rbac.md) | Setup、平台/企业身份、Department、RoleBinding/DataScope、Session、审计                  |
 | M3（已完成） | [资源与 Connector](./M3-resource-and-connector.md)    | Host/Kubernetes labels、Secret/Credential、Bastion Scope、Connector、Direct Executor    |
 | M4（已完成） | [执行、Agent 与 Tool](./M4-action-agent-workflow.md)  | Outbox/Lease/Fence、单 Agent Loop、上下文投影/压缩、Preview/Commit、Approval、Execution |
-| M5           | [交互卡片](./M5-interactive-card.md)                  | Manifest、CSP、MessagePort、RenderPlan、Binding、发布门禁                               |
-| M6           | [远程访问](./M6-remote-access.md)                     | Grant、Ticket、SSH/WinRM、录像、终止与撤权                                              |
+| M5（已完成） | [交互卡片](./M5-interactive-card.md)                  | Manifest、CSP、MessagePort、RenderPlan、Binding、发布门禁                               |
+| M6（已完成） | [远程访问](./M6-remote-access.md)                     | Grant、Ticket、SSH PTY/HTTPS WinRS、加密录像、终止与撤权                                |
 | M7           | [遥测](./M7-telemetry.md)                             | Collector、Ingest、Kafka、ClickHouse、Query 和统一权限裁剪                              |
 | M8           | [Production 就绪](./M8-production-readiness.md)       | HA、备份恢复、供应链、容量、故障演练、完整 E2E                                          |
 
-截至 2026-08-17，M0-M4 已完成。M4 最终 `make e2e-m4-k8s` 成功运行号为 `20260817144832-31660`，脱敏诊断保存在本地 `artifacts/m4-e2e/20260817144832-31660`，清理后临时 Namespace、PVC 和 Lease 均为零残留。下一实施阶段为 M5 Card 服务端治理闭环。
+截至 2026-08-18，M0-M6 已完成。M6 最终 `make e2e-m6-k8s` 成功运行号为 `20260818072400-79219`，脱敏诊断保存在本地 `artifacts/m6-e2e/20260818072400-79219`，清理后临时 Namespace、PVC 和 Lease 均为零残留。下一实施阶段为 M7 Telemetry；M8 继续负责 MFA、Step-up、录像 Production 保留/恢复、容量和安全发布阻断。
 
 ## 状态规则
 

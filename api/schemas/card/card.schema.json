@@ -13,7 +13,8 @@
         "kind": {"enum": ["data", "query", "action"]},
         "value_type": {"$ref": "#/$defs/SlotType"},
         "required": {"type": "boolean"},
-        "ai_generated": {"type": "boolean", "default": false}
+        "ai_generated": {"type": "boolean", "default": false},
+        "description": {"type": "string", "maxLength": 1024}
       }
     },
     "CardManifest": {
@@ -25,14 +26,15 @@
         "card_id": {"type": "string", "minLength": 1},
         "revision": {"type": "integer", "minimum": 1},
         "source": {"enum": ["system", "enterprise"]},
-        "entrypoint_hash": {"type": "string", "minLength": 32},
+        "entrypoint_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
         "bridge_version": {"const": "argus.card_bridge/v1"},
         "slots": {"type": "array", "items": {"$ref": "#/$defs/Slot"}},
         "allowed_resources": {"type": "array", "uniqueItems": true, "items": {"enum": ["inline_style", "inline_script", "image_data", "font_data"]}},
         "supported_locales": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["zh-CN", "en-US"]}},
         "default_locale": {"enum": ["zh-CN", "en-US"]},
         "supported_color_schemes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["light", "dark"]}},
-        "max_message_bytes": {"type": "integer", "minimum": 1024, "maximum": 1048576}
+        "max_message_bytes": {"type": "integer", "minimum": 1024, "maximum": 1048576},
+        "presentation_kind": {"enum": ["table", "detail", "pending_action", "metric", "generic"]}
       }
     },
     "DataBinding": {
@@ -54,6 +56,69 @@
         "binding_id": {"type": "string", "minLength": 1},
         "status": {"enum": ["active", "consumed", "expired", "invalidated"]},
         "expires_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "SlotBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot_name", "slot_kind", "mode", "tool_id", "output_schema_version", "schema_hash", "path", "value_type"],
+      "properties": {
+        "slot_name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "slot_kind": {"enum": ["data", "query", "action"]},
+        "mode": {"enum": ["strict", "preferred"]},
+        "tool_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
+        "output_schema_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "schema_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "path": {"type": "string", "pattern": "^\\$(?:\\.[a-zA-Z_][a-zA-Z0-9_]*|\\[(?:[0-9]+|\\*)\\])*$"},
+        "value_type": {"$ref": "#/$defs/SlotType"},
+        "semantic_type": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]*$", "maxLength": 128}
+      }
+    },
+    "ToolSchemaCatalogEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool_id", "tool_family", "risk", "execution_mode", "output_schema_version", "compatible_output_versions", "schema_hash", "output_schema", "fields"],
+      "properties": {
+        "tool_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
+        "tool_family": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
+        "risk": {"enum": ["read", "write", "dangerous", "critical"]},
+        "execution_mode": {"enum": ["sequential", "parallel_safe"]},
+        "output_schema_version": {"type": "string"},
+        "compatible_output_versions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "schema_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "output_schema": {"$ref": "../common/public-json.schema.json#/$defs/PublicJsonObject"},
+        "fields": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "value_type"],
+            "properties": {
+              "path": {"type": "string"},
+              "value_type": {"$ref": "#/$defs/SlotType"},
+              "semantic_type": {"type": "string"},
+              "description": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "CardRuntimeValidationReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content_hash", "runtime_version", "nonce", "scenario", "ready", "protocol_violations", "runtime_errors", "serious_a11y_violations", "missing_required_slots", "size_violation"],
+      "properties": {
+        "content_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "runtime_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "nonce": {"type": "string", "minLength": 16, "maxLength": 128},
+        "scenario": {"enum": ["default", "empty", "error", "large", "light", "dark", "zh-CN", "en-US"]},
+        "ready": {"type": "boolean"},
+        "protocol_violations": {"type": "integer", "minimum": 0},
+        "runtime_errors": {"type": "integer", "minimum": 0},
+        "serious_a11y_violations": {"type": "integer", "minimum": 0},
+        "missing_required_slots": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
+        "size_violation": {"type": "boolean"}
       }
     },
     "RenderPlan": {
@@ -81,7 +146,7 @@
         "message_id": {"type": "string", "minLength": 1},
         "sequence": {"type": "integer", "minimum": 0},
         "nonce": {"type": "string", "minLength": 16},
-        "type": {"enum": ["host.hello", "card.ready", "host.context", "data.update", "query.invoke", "action.invoke", "card.resize", "binding.result", "bridge.error", "bridge.destroyed"]},
+        "type": {"enum": ["host.hello", "card.ready", "host.context", "data.update", "query.invoke", "action.invoke", "card.resize", "card.slot_selected", "card.validation_report", "binding.result", "bridge.error", "bridge.destroyed"]},
         "payload": {"$ref": "../common/public-json.schema.json#/$defs/PublicJsonObject"}
       },
       "allOf": [
@@ -116,6 +181,10 @@
               }
             }
           }
+        },
+        {
+          "if": {"properties": {"type": {"const": "card.validation_report"}}, "required": ["type"]},
+          "then": {"properties": {"payload": {"$ref": "#/$defs/CardRuntimeValidationReport"}}}
         }
       ]
     }

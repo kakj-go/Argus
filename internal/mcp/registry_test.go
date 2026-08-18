@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 )
 
@@ -64,5 +65,28 @@ func TestRegistryEnforcesAuthorizationAndInputValidation(t *testing.T) {
 	catalog := registry.ModelCatalog()
 	if len(catalog) != 1 || catalog[0].InputSchema == nil || catalog[0].Authorize != nil || catalog[0].Validate != nil {
 		t.Fatalf("unsafe model catalog: %#v", catalog)
+	}
+}
+
+func TestCardCatalogRequiresSchemaAndProjector(t *testing.T) {
+	t.Parallel()
+	registry := NewRegistry()
+	execute := func(context.Context, Call) (Result, error) {
+		return Result{Structured: map[string]any{"ok": true}}, nil
+	}
+	project := func(_ context.Context, _ Call, result Result) (map[string]any, bool, error) {
+		return result.Structured, result.Partial, nil
+	}
+	if err := registry.Register(Metadata{ID: "host.list", Visibility: Visible, ExecutionMode: ParallelSafe, MaxResultBytes: 1024,
+		OutputVersion: "host.list/v1", OutputSchema: map[string]any{"type": "object"}, CardSafe: true, CardProjector: project, Execute: execute}); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(Metadata{ID: "unsafe.list", Visibility: Visible, ExecutionMode: ParallelSafe, MaxResultBytes: 1024, Execute: execute}); err != nil {
+		t.Fatal(err)
+	}
+	catalog := registry.CardCatalog()
+	if len(catalog) != 1 || catalog[0].ID != "host.list" || catalog[0].ToolFamily != "host.list" ||
+		!slices.Contains(catalog[0].CompatibleOutputVersions, "host.list/v1") || catalog[0].OutputSchemaHash == "" || catalog[0].CardProjector != nil {
+		t.Fatalf("unexpected Card catalog: %#v", catalog)
 	}
 }

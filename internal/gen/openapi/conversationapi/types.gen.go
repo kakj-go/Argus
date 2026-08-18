@@ -47,6 +47,24 @@ func (e ConversationUpdateStatus) Valid() bool {
 	}
 }
 
+// Defines values for MessageCreateCommandType.
+const (
+	InteractiveCardCreate MessageCreateCommandType = "interactive_card.create"
+	InteractiveCardRevise MessageCreateCommandType = "interactive_card.revise"
+)
+
+// Valid indicates whether the value is a known member of the MessageCreateCommandType enum.
+func (e MessageCreateCommandType) Valid() bool {
+	switch e {
+	case InteractiveCardCreate:
+		return true
+	case InteractiveCardRevise:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PartialMetadataReasons.
 const (
 	AuthorizationFiltered PartialMetadataReasons = "authorization_filtered"
@@ -203,8 +221,16 @@ type MessageAccepted struct {
 
 // MessageCreate defines model for MessageCreate.
 type MessageCreate struct {
+	Command *struct {
+		CardId           *openapi_types.UUID      `json:"card_id,omitempty"`
+		ExpectedRevision *int                     `json:"expected_revision,omitempty"`
+		Type             MessageCreateCommandType `json:"type"`
+	} `json:"command,omitempty"`
 	Content string `json:"content"`
 }
+
+// MessageCreateCommandType defines model for MessageCreate.Command.Type.
+type MessageCreateCommandType string
 
 // PartialMetadata defines model for PartialMetadata.
 type PartialMetadata struct {

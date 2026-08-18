@@ -12,7 +12,7 @@ export interface components {
             run_id?: string;
             step_id?: string;
             /** @enum {unknown} */
-            event_type: "user_message" | "assistant_message" | "model_usage" | "tool_call_requested" | "tool_call_started" | "tool_call_result" | "pending_action_created" | "user_confirmation" | "approval_update" | "execution_update" | "card_action_result" | "run_state_changed" | "context_compacted";
+            event_type: "user_message" | "assistant_message" | "model_usage" | "tool_call_requested" | "tool_call_started" | "tool_call_result" | "pending_action_created" | "user_confirmation" | "approval_update" | "execution_update" | "card_draft_created" | "card_instance_created" | "card_presentation_invalidated" | "card_action_result" | "run_state_changed" | "context_compacted";
             /** @enum {unknown} */
             actor_type?: "user" | "model" | "service" | "worker" | "system";
             actor_id?: string;
@@ -32,7 +32,7 @@ export interface components {
             run_id: string;
             message_id?: string;
             /** @enum {unknown} */
-            event_type: "run_started" | "message_started" | "message_delta" | "message_completed" | "tool_call_started" | "tool_call_completed" | "pending_action_created" | "waiting_input" | "waiting_approval" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "run_completed" | "run_failed";
+            event_type: "run_started" | "message_started" | "message_delta" | "message_completed" | "tool_call_started" | "tool_call_completed" | "pending_action_created" | "card_draft_created" | "card_instance_created" | "card_presentation_invalidated" | "waiting_input" | "waiting_approval" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "run_completed" | "run_failed";
             /** Format: date-time */
             occurred_at: string;
             payload: components["schemas"]["PublicJsonObject"];

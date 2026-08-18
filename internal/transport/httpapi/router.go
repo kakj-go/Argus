@@ -15,6 +15,7 @@ import (
 	actionapi "github.com/kakj-go/Argus/internal/gen/openapi/actionapi"
 	auditapi "github.com/kakj-go/Argus/internal/gen/openapi/audit"
 	automationapi "github.com/kakj-go/Argus/internal/gen/openapi/automationapi"
+	cardapi "github.com/kakj-go/Argus/internal/gen/openapi/cardapi"
 	connectionapi "github.com/kakj-go/Argus/internal/gen/openapi/connectionapi"
 	connectorapi "github.com/kakj-go/Argus/internal/gen/openapi/connectorapi"
 	conversationapi "github.com/kakj-go/Argus/internal/gen/openapi/conversationapi"
@@ -25,6 +26,7 @@ import (
 	machineapi "github.com/kakj-go/Argus/internal/gen/openapi/machine"
 	modelapi "github.com/kakj-go/Argus/internal/gen/openapi/modelapi"
 	platformapi "github.com/kakj-go/Argus/internal/gen/openapi/platform"
+	remoteaccessapi "github.com/kakj-go/Argus/internal/gen/openapi/remoteaccessapi"
 	sandboxapi "github.com/kakj-go/Argus/internal/gen/openapi/sandboxapi"
 	secretapi "github.com/kakj-go/Argus/internal/gen/openapi/secretapi"
 	setupapi "github.com/kakj-go/Argus/internal/gen/openapi/setup"
@@ -65,6 +67,8 @@ type RouterOptions struct {
 	Automation              *AutomationHandler
 	Sandbox                 *SandboxHandler
 	Connector               *ConnectorHandler
+	Card                    *CardHandler
+	RemoteAccess            *RemoteAccessHandler
 	AllowedOrigins          []string
 }
 
@@ -158,6 +162,14 @@ func NewRouterWithOptions(options RouterOptions) http.Handler {
 	if options.Connector != nil {
 		strict := connectorapi.NewStrictHandler(*options.Connector, []connectorapi.StrictMiddlewareFunc{connectorRequestContext})
 		connectorapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.Card != nil {
+		strict := cardapi.NewStrictHandler(*options.Card, []cardapi.StrictMiddlewareFunc{cardRequestContext})
+		cardapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.RemoteAccess != nil {
+		strict := remoteaccessapi.NewStrictHandler(*options.RemoteAccess, []remoteaccessapi.StrictMiddlewareFunc{remoteAccessRequestContext})
+		remoteaccessapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
 	}
 	return router
 }
@@ -275,6 +287,18 @@ func actionRequestContext(next actionapi.StrictHandlerFunc, _ string) actionapi.
 }
 
 func connectorRequestContext(next connectorapi.StrictHandlerFunc, _ string) connectorapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func cardRequestContext(next cardapi.StrictHandlerFunc, _ string) cardapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
+}
+
+func remoteAccessRequestContext(next remoteaccessapi.StrictHandlerFunc, _ string) remoteaccessapi.StrictHandlerFunc {
 	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
 		return next(WithRequestContext(ctx, writer, request), writer, request, value)
 	}

@@ -26,10 +26,10 @@ describe("configured adapter", () => {
       mode: "real",
       base_url: "https://api.example.test",
     });
-    await expect(client.interactiveCards.list()).rejects.toBeInstanceOf(
+    await expect(client.hosts.getCollector("host-1")).rejects.toBeInstanceOf(
       ClientOperationUnavailableError,
     );
-    await expect(client.interactiveCards.list()).rejects.toMatchObject({
+    await expect(client.hosts.getCollector("host-1")).rejects.toMatchObject({
       code: "CLIENT_OPERATION_UNAVAILABLE",
     });
   });
@@ -80,9 +80,12 @@ describe("configured adapter", () => {
     });
 
     const events = [];
-    for await (const event of client.conversations.sendMessage("conversation-1", {
-      content: "status",
-    })) {
+    for await (const event of client.conversations.sendMessage(
+      "conversation-1",
+      {
+        content: "status",
+      },
+    )) {
       events.push(event);
     }
 
@@ -482,6 +485,36 @@ describe("HttpTransport", () => {
       code: "FORBIDDEN",
       status: 403,
       request_id: "request-2",
+    });
+  });
+
+  it("notifies the portal when an authenticated session is invalidated", async () => {
+    const invalidated = vi.fn();
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "AUTHORIZATION_VERSION_STALE",
+          message_key: "errors.auth.authorization_version_stale",
+          request_id: "request-stale",
+          retryable: false,
+        }),
+        { status: 409 },
+      ),
+    );
+    const transport = new HttpTransport({
+      base_url: "https://api.example.test",
+      fetch,
+      on_authentication_invalidated: invalidated,
+    });
+
+    await expect(
+      transport.request("enterprise/executions"),
+    ).rejects.toMatchObject({
+      code: "AUTHORIZATION_VERSION_STALE",
+    });
+    expect(invalidated).toHaveBeenCalledOnce();
+    expect(invalidated.mock.calls[0]?.[0]).toMatchObject({
+      code: "AUTHORIZATION_VERSION_STALE",
     });
   });
 });

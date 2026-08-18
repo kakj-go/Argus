@@ -657,6 +657,12 @@
   padding: var(--space-px-12) var(--space-px-14);
   font: 11.var(--font-size-5)/1.7 var(--font-mono);
 }
+
+.argus-terminal__xterm {
+  min-height: 240px;
+  padding: var(--space-3);
+  overflow: hidden;
+}
 .argus-terminal__line {
   display: flex;
   gap: var(--space-px-8);

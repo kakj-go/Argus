@@ -42,6 +42,20 @@ export type {
   ResourcePreviewUpdate,
   Run,
   Execution,
+  RemoteAccessGrant,
+  RemoteAccessGrantWrite,
+  RemoteAccessGrantUpdate,
+  RemoteAccessPolicy,
+  RemoteAccessPolicyWrite,
+  RemoteAccessPolicyUpdate,
+  AccessRequest,
+  AccessRequestCreate,
+  AccessLease,
+  RemoteAccessSession,
+  RemoteAccessSessionCreate,
+  SessionTicketResult,
+  RemoteAccessRecording,
+  RecordingEventPage,
 } from "./generated/contracts";
 export { createMockApiClient } from "./mock";
 export type { MockApiClient, MockOptions } from "./mock";
@@ -61,6 +75,8 @@ export type {
   WebSocketCloseState,
   WebSocketTransportOptions,
 } from "./transport/websocket";
+export { RemoteAccessConnection } from "./transport/remote-access";
+export type { RemoteAccessServerFrame } from "./transport/remote-access";
 export {
   ApiError,
   ClientConfigurationError,

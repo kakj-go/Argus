@@ -292,3 +292,28 @@
   color: var(--danger);
   font: 500 var(--font-size-12)/1.4 var(--font-sans);
 }
+.argus-remote-approval-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.argus-remote-approval {
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: grid;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+}
+
+.argus-remote-approval > div,
+.argus-remote-approval__requirement {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.argus-remote-approval__requirement {
+  background: var(--color-surface-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}

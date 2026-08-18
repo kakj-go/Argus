@@ -252,11 +252,10 @@ func (executor *Executor) probeSSH(ctx context.Context, plan connectionPlan, add
 }
 
 func (executor *Executor) probeWinRM(ctx context.Context, plan connectionPlan, addresses []netip.Addr, username string, credential []byte) (resource.ConnectionTestResult, error) {
-	scheme := "http"
-	if plan.Port == 5986 || plan.Port == 443 {
-		scheme = "https"
+	if plan.Port != 5986 && plan.Port != 443 {
+		return resource.ConnectionTestResult{}, resource.ErrWinRMTLSRequired
 	}
-	target := &url.URL{Scheme: scheme, Host: net.JoinHostPort(plan.Address, fmt.Sprint(plan.Port)), Path: "/wsman"}
+	target := &url.URL{Scheme: "https", Host: net.JoinHostPort(plan.Address, fmt.Sprint(plan.Port)), Path: "/wsman"}
 	transport := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, ServerName: plan.Address},
 		DialContext: fixedDialer(addresses[0], plan.Port)}
 	client := &http.Client{Transport: transport, Timeout: executor.Timeout, CheckRedirect: rejectRedirect}

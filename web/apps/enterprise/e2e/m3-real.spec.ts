@@ -35,11 +35,9 @@ test.describe("M3 real resource flow", () => {
     page,
   }) => {
     await page.goto("/settings/secrets");
-    const section = page
-      .locator("section.argus-settings-section")
-      .filter({
-        has: page.getByRole("heading", { name: /托管账号|Managed accounts/i }),
-      });
+    const section = page.locator("section.argus-settings-section").filter({
+      has: page.getByRole("heading", { name: /托管账号|Managed accounts/i }),
+    });
     await expect(section).toBeVisible();
     await section
       .getByRole("button", { name: /新建托管账号|New managed account/i })
@@ -136,6 +134,7 @@ test.describe("M3 real resource flow", () => {
   test("shows a new in-cluster install command exactly once", async ({
     page,
   }) => {
+    test.setTimeout(120_000);
     await page.goto("/kubernetes");
     await page
       .getByRole("button", { name: /添加集群|Add cluster/i })
@@ -171,13 +170,27 @@ test.describe("M3 real resource flow", () => {
         response.request().method() === "POST",
     );
     await drawer.getByRole("button", { name: /确认执行|Confirm/i }).click();
-    expect((await confirmResponse).status()).toBe(200);
+    const confirmedResponse = await confirmResponse;
+    expect(confirmedResponse.status()).toBe(200);
+    const confirmed = (await confirmedResponse.json()) as {
+      execution?: { execution_id?: string };
+    };
+    const executionId = confirmed.execution?.execution_id ?? "";
+    expect(executionId).not.toBe("");
+
+    await expect(page).toHaveURL(/\/login/, { timeout: 90_000 });
+    await login(page);
+    await page.goto("/tasks");
+    const executionRow = page.locator("tr").filter({ hasText: executionId });
+    const claim = executionRow.getByRole("button", {
+      name: /领取安装命令|Claim install command/i,
+    });
+    await expect(claim).toBeVisible({ timeout: 120_000 });
+    await claim.click();
     await expect(
-      drawer.getByText(
-        /一次性集群 Connector 安装命令|One-time cluster Connector command/i,
-      ),
+      page.getByText(/安装命令仅显示一次|Install command shown once/i),
     ).toBeVisible();
-    const command = await drawer.locator(".argus-code code").textContent();
+    const command = await page.locator(".argus-code code").textContent();
     expect(command).toContain("argus-connector");
     const browserState = await page.evaluate(() =>
       JSON.stringify({
@@ -187,10 +200,8 @@ test.describe("M3 real resource flow", () => {
       }),
     );
     expect(browserState).not.toContain(command);
-    await drawer
-      .getByRole("button", { name: /我已保存，关闭|I saved it, close/i })
-      .click();
-    await expect(drawer).toHaveCount(0);
+    await page.getByRole("button", { name: /关闭命令|Close command/i }).click();
+    await expect(claim).toHaveCount(0);
   });
 });
 

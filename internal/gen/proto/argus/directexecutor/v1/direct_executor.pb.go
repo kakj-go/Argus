@@ -158,6 +158,662 @@ func (x *DispatchConnectionTestResponse) GetStatus() DispatchStatus {
 	return DispatchStatus_DISPATCH_STATUS_UNSPECIFIED
 }
 
+type OpenRemoteAccessRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Sequence uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	// Types that are valid to be assigned to Frame:
+	//
+	//	*OpenRemoteAccessRequest_Open
+	//	*OpenRemoteAccessRequest_Input
+	//	*OpenRemoteAccessRequest_Resize
+	//	*OpenRemoteAccessRequest_Close
+	Frame         isOpenRemoteAccessRequest_Frame `protobuf_oneof:"frame"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenRemoteAccessRequest) Reset() {
+	*x = OpenRemoteAccessRequest{}
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenRemoteAccessRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenRemoteAccessRequest) ProtoMessage() {}
+
+func (x *OpenRemoteAccessRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenRemoteAccessRequest.ProtoReflect.Descriptor instead.
+func (*OpenRemoteAccessRequest) Descriptor() ([]byte, []int) {
+	return file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *OpenRemoteAccessRequest) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *OpenRemoteAccessRequest) GetFrame() isOpenRemoteAccessRequest_Frame {
+	if x != nil {
+		return x.Frame
+	}
+	return nil
+}
+
+func (x *OpenRemoteAccessRequest) GetOpen() *RemoteAccessOpen {
+	if x != nil {
+		if x, ok := x.Frame.(*OpenRemoteAccessRequest_Open); ok {
+			return x.Open
+		}
+	}
+	return nil
+}
+
+func (x *OpenRemoteAccessRequest) GetInput() *RemoteAccessInput {
+	if x != nil {
+		if x, ok := x.Frame.(*OpenRemoteAccessRequest_Input); ok {
+			return x.Input
+		}
+	}
+	return nil
+}
+
+func (x *OpenRemoteAccessRequest) GetResize() *RemoteAccessResize {
+	if x != nil {
+		if x, ok := x.Frame.(*OpenRemoteAccessRequest_Resize); ok {
+			return x.Resize
+		}
+	}
+	return nil
+}
+
+func (x *OpenRemoteAccessRequest) GetClose() *RemoteAccessClose {
+	if x != nil {
+		if x, ok := x.Frame.(*OpenRemoteAccessRequest_Close); ok {
+			return x.Close
+		}
+	}
+	return nil
+}
+
+type isOpenRemoteAccessRequest_Frame interface {
+	isOpenRemoteAccessRequest_Frame()
+}
+
+type OpenRemoteAccessRequest_Open struct {
+	Open *RemoteAccessOpen `protobuf:"bytes,2,opt,name=open,proto3,oneof"`
+}
+
+type OpenRemoteAccessRequest_Input struct {
+	Input *RemoteAccessInput `protobuf:"bytes,3,opt,name=input,proto3,oneof"`
+}
+
+type OpenRemoteAccessRequest_Resize struct {
+	Resize *RemoteAccessResize `protobuf:"bytes,4,opt,name=resize,proto3,oneof"`
+}
+
+type OpenRemoteAccessRequest_Close struct {
+	Close *RemoteAccessClose `protobuf:"bytes,5,opt,name=close,proto3,oneof"`
+}
+
+func (*OpenRemoteAccessRequest_Open) isOpenRemoteAccessRequest_Frame() {}
+
+func (*OpenRemoteAccessRequest_Input) isOpenRemoteAccessRequest_Frame() {}
+
+func (*OpenRemoteAccessRequest_Resize) isOpenRemoteAccessRequest_Frame() {}
+
+func (*OpenRemoteAccessRequest_Close) isOpenRemoteAccessRequest_Frame() {}
+
+type OpenRemoteAccessResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Sequence uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	// Types that are valid to be assigned to Frame:
+	//
+	//	*OpenRemoteAccessResponse_Ready
+	//	*OpenRemoteAccessResponse_Output
+	//	*OpenRemoteAccessResponse_State
+	Frame         isOpenRemoteAccessResponse_Frame `protobuf_oneof:"frame"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenRemoteAccessResponse) Reset() {
+	*x = OpenRemoteAccessResponse{}
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenRemoteAccessResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenRemoteAccessResponse) ProtoMessage() {}
+
+func (x *OpenRemoteAccessResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenRemoteAccessResponse.ProtoReflect.Descriptor instead.
+func (*OpenRemoteAccessResponse) Descriptor() ([]byte, []int) {
+	return file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *OpenRemoteAccessResponse) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *OpenRemoteAccessResponse) GetFrame() isOpenRemoteAccessResponse_Frame {
+	if x != nil {
+		return x.Frame
+	}
+	return nil
+}
+
+func (x *OpenRemoteAccessResponse) GetReady() *RemoteAccessReady {
+	if x != nil {
+		if x, ok := x.Frame.(*OpenRemoteAccessResponse_Ready); ok {
+			return x.Ready
+		}
+	}
+	return nil
+}
+
+func (x *OpenRemoteAccessResponse) GetOutput() *RemoteAccessOutput {
+	if x != nil {
+		if x, ok := x.Frame.(*OpenRemoteAccessResponse_Output); ok {
+			return x.Output
+		}
+	}
+	return nil
+}
+
+func (x *OpenRemoteAccessResponse) GetState() *RemoteAccessState {
+	if x != nil {
+		if x, ok := x.Frame.(*OpenRemoteAccessResponse_State); ok {
+			return x.State
+		}
+	}
+	return nil
+}
+
+type isOpenRemoteAccessResponse_Frame interface {
+	isOpenRemoteAccessResponse_Frame()
+}
+
+type OpenRemoteAccessResponse_Ready struct {
+	Ready *RemoteAccessReady `protobuf:"bytes,2,opt,name=ready,proto3,oneof"`
+}
+
+type OpenRemoteAccessResponse_Output struct {
+	Output *RemoteAccessOutput `protobuf:"bytes,3,opt,name=output,proto3,oneof"`
+}
+
+type OpenRemoteAccessResponse_State struct {
+	State *RemoteAccessState `protobuf:"bytes,4,opt,name=state,proto3,oneof"`
+}
+
+func (*OpenRemoteAccessResponse_Ready) isOpenRemoteAccessResponse_Frame() {}
+
+func (*OpenRemoteAccessResponse_Output) isOpenRemoteAccessResponse_Frame() {}
+
+func (*OpenRemoteAccessResponse_State) isOpenRemoteAccessResponse_Frame() {}
+
+type RemoteAccessOpen struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	SessionId          string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionFence       uint64                 `protobuf:"varint,2,opt,name=session_fence,json=sessionFence,proto3" json:"session_fence,omitempty"`
+	HostId             string                 `protobuf:"bytes,3,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
+	ManagedAccountId   string                 `protobuf:"bytes,4,opt,name=managed_account_id,json=managedAccountId,proto3" json:"managed_account_id,omitempty"`
+	CredentialLeaseId  string                 `protobuf:"bytes,5,opt,name=credential_lease_id,json=credentialLeaseId,proto3" json:"credential_lease_id,omitempty"`
+	Protocol           string                 `protobuf:"bytes,6,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	TargetHost         string                 `protobuf:"bytes,7,opt,name=target_host,json=targetHost,proto3" json:"target_host,omitempty"`
+	TargetPort         uint32                 `protobuf:"varint,8,opt,name=target_port,json=targetPort,proto3" json:"target_port,omitempty"`
+	HostKeyFingerprint string                 `protobuf:"bytes,9,opt,name=host_key_fingerprint,json=hostKeyFingerprint,proto3" json:"host_key_fingerprint,omitempty"`
+	TerminalCols       uint32                 `protobuf:"varint,10,opt,name=terminal_cols,json=terminalCols,proto3" json:"terminal_cols,omitempty"`
+	TerminalRows       uint32                 `protobuf:"varint,11,opt,name=terminal_rows,json=terminalRows,proto3" json:"terminal_rows,omitempty"`
+	IdleTimeoutSeconds uint32                 `protobuf:"varint,12,opt,name=idle_timeout_seconds,json=idleTimeoutSeconds,proto3" json:"idle_timeout_seconds,omitempty"`
+	MaxDurationSeconds uint32                 `protobuf:"varint,13,opt,name=max_duration_seconds,json=maxDurationSeconds,proto3" json:"max_duration_seconds,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *RemoteAccessOpen) Reset() {
+	*x = RemoteAccessOpen{}
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteAccessOpen) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteAccessOpen) ProtoMessage() {}
+
+func (x *RemoteAccessOpen) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteAccessOpen.ProtoReflect.Descriptor instead.
+func (*RemoteAccessOpen) Descriptor() ([]byte, []int) {
+	return file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RemoteAccessOpen) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *RemoteAccessOpen) GetSessionFence() uint64 {
+	if x != nil {
+		return x.SessionFence
+	}
+	return 0
+}
+
+func (x *RemoteAccessOpen) GetHostId() string {
+	if x != nil {
+		return x.HostId
+	}
+	return ""
+}
+
+func (x *RemoteAccessOpen) GetManagedAccountId() string {
+	if x != nil {
+		return x.ManagedAccountId
+	}
+	return ""
+}
+
+func (x *RemoteAccessOpen) GetCredentialLeaseId() string {
+	if x != nil {
+		return x.CredentialLeaseId
+	}
+	return ""
+}
+
+func (x *RemoteAccessOpen) GetProtocol() string {
+	if x != nil {
+		return x.Protocol
+	}
+	return ""
+}
+
+func (x *RemoteAccessOpen) GetTargetHost() string {
+	if x != nil {
+		return x.TargetHost
+	}
+	return ""
+}
+
+func (x *RemoteAccessOpen) GetTargetPort() uint32 {
+	if x != nil {
+		return x.TargetPort
+	}
+	return 0
+}
+
+func (x *RemoteAccessOpen) GetHostKeyFingerprint() string {
+	if x != nil {
+		return x.HostKeyFingerprint
+	}
+	return ""
+}
+
+func (x *RemoteAccessOpen) GetTerminalCols() uint32 {
+	if x != nil {
+		return x.TerminalCols
+	}
+	return 0
+}
+
+func (x *RemoteAccessOpen) GetTerminalRows() uint32 {
+	if x != nil {
+		return x.TerminalRows
+	}
+	return 0
+}
+
+func (x *RemoteAccessOpen) GetIdleTimeoutSeconds() uint32 {
+	if x != nil {
+		return x.IdleTimeoutSeconds
+	}
+	return 0
+}
+
+func (x *RemoteAccessOpen) GetMaxDurationSeconds() uint32 {
+	if x != nil {
+		return x.MaxDurationSeconds
+	}
+	return 0
+}
+
+type RemoteAccessInput struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoteAccessInput) Reset() {
+	*x = RemoteAccessInput{}
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteAccessInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteAccessInput) ProtoMessage() {}
+
+func (x *RemoteAccessInput) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteAccessInput.ProtoReflect.Descriptor instead.
+func (*RemoteAccessInput) Descriptor() ([]byte, []int) {
+	return file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RemoteAccessInput) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type RemoteAccessResize struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cols          uint32                 `protobuf:"varint,1,opt,name=cols,proto3" json:"cols,omitempty"`
+	Rows          uint32                 `protobuf:"varint,2,opt,name=rows,proto3" json:"rows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoteAccessResize) Reset() {
+	*x = RemoteAccessResize{}
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteAccessResize) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteAccessResize) ProtoMessage() {}
+
+func (x *RemoteAccessResize) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteAccessResize.ProtoReflect.Descriptor instead.
+func (*RemoteAccessResize) Descriptor() ([]byte, []int) {
+	return file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RemoteAccessResize) GetCols() uint32 {
+	if x != nil {
+		return x.Cols
+	}
+	return 0
+}
+
+func (x *RemoteAccessResize) GetRows() uint32 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+type RemoteAccessClose struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reason        string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoteAccessClose) Reset() {
+	*x = RemoteAccessClose{}
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteAccessClose) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteAccessClose) ProtoMessage() {}
+
+func (x *RemoteAccessClose) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteAccessClose.ProtoReflect.Descriptor instead.
+func (*RemoteAccessClose) Descriptor() ([]byte, []int) {
+	return file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RemoteAccessClose) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type RemoteAccessReady struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mode          string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoteAccessReady) Reset() {
+	*x = RemoteAccessReady{}
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteAccessReady) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteAccessReady) ProtoMessage() {}
+
+func (x *RemoteAccessReady) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteAccessReady.ProtoReflect.Descriptor instead.
+func (*RemoteAccessReady) Descriptor() ([]byte, []int) {
+	return file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RemoteAccessReady) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+type RemoteAccessOutput struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Stream        string                 `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
+	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoteAccessOutput) Reset() {
+	*x = RemoteAccessOutput{}
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteAccessOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteAccessOutput) ProtoMessage() {}
+
+func (x *RemoteAccessOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteAccessOutput.ProtoReflect.Descriptor instead.
+func (*RemoteAccessOutput) Descriptor() ([]byte, []int) {
+	return file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RemoteAccessOutput) GetStream() string {
+	if x != nil {
+		return x.Stream
+	}
+	return ""
+}
+
+func (x *RemoteAccessOutput) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type RemoteAccessState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoteAccessState) Reset() {
+	*x = RemoteAccessState{}
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteAccessState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteAccessState) ProtoMessage() {}
+
+func (x *RemoteAccessState) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_directexecutor_v1_direct_executor_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteAccessState.ProtoReflect.Descriptor instead.
+func (*RemoteAccessState) Descriptor() ([]byte, []int) {
+	return file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RemoteAccessState) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *RemoteAccessState) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 var File_argus_directexecutor_v1_direct_executor_proto protoreflect.FileDescriptor
 
 const file_argus_directexecutor_v1_direct_executor_proto_rawDesc = "" +
@@ -166,13 +822,60 @@ const file_argus_directexecutor_v1_direct_executor_proto_rawDesc = "" +
 	"\x1dDispatchConnectionTestRequest\x12,\n" +
 	"\x12connection_test_id\x18\x01 \x01(\tR\x10connectionTestId\"a\n" +
 	"\x1eDispatchConnectionTestResponse\x12?\n" +
-	"\x06status\x18\x01 \x01(\x0e2'.argus.directexecutor.v1.DispatchStatusR\x06status*t\n" +
+	"\x06status\x18\x01 \x01(\x0e2'.argus.directexecutor.v1.DispatchStatusR\x06status\"\xce\x02\n" +
+	"\x17OpenRemoteAccessRequest\x12\x1a\n" +
+	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12?\n" +
+	"\x04open\x18\x02 \x01(\v2).argus.directexecutor.v1.RemoteAccessOpenH\x00R\x04open\x12B\n" +
+	"\x05input\x18\x03 \x01(\v2*.argus.directexecutor.v1.RemoteAccessInputH\x00R\x05input\x12E\n" +
+	"\x06resize\x18\x04 \x01(\v2+.argus.directexecutor.v1.RemoteAccessResizeH\x00R\x06resize\x12B\n" +
+	"\x05close\x18\x05 \x01(\v2*.argus.directexecutor.v1.RemoteAccessCloseH\x00R\x05closeB\a\n" +
+	"\x05frame\"\x8e\x02\n" +
+	"\x18OpenRemoteAccessResponse\x12\x1a\n" +
+	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12B\n" +
+	"\x05ready\x18\x02 \x01(\v2*.argus.directexecutor.v1.RemoteAccessReadyH\x00R\x05ready\x12E\n" +
+	"\x06output\x18\x03 \x01(\v2+.argus.directexecutor.v1.RemoteAccessOutputH\x00R\x06output\x12B\n" +
+	"\x05state\x18\x04 \x01(\v2*.argus.directexecutor.v1.RemoteAccessStateH\x00R\x05stateB\a\n" +
+	"\x05frame\"\x8b\x04\n" +
+	"\x10RemoteAccessOpen\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12#\n" +
+	"\rsession_fence\x18\x02 \x01(\x04R\fsessionFence\x12\x17\n" +
+	"\ahost_id\x18\x03 \x01(\tR\x06hostId\x12,\n" +
+	"\x12managed_account_id\x18\x04 \x01(\tR\x10managedAccountId\x12.\n" +
+	"\x13credential_lease_id\x18\x05 \x01(\tR\x11credentialLeaseId\x12\x1a\n" +
+	"\bprotocol\x18\x06 \x01(\tR\bprotocol\x12\x1f\n" +
+	"\vtarget_host\x18\a \x01(\tR\n" +
+	"targetHost\x12\x1f\n" +
+	"\vtarget_port\x18\b \x01(\rR\n" +
+	"targetPort\x120\n" +
+	"\x14host_key_fingerprint\x18\t \x01(\tR\x12hostKeyFingerprint\x12#\n" +
+	"\rterminal_cols\x18\n" +
+	" \x01(\rR\fterminalCols\x12#\n" +
+	"\rterminal_rows\x18\v \x01(\rR\fterminalRows\x120\n" +
+	"\x14idle_timeout_seconds\x18\f \x01(\rR\x12idleTimeoutSeconds\x120\n" +
+	"\x14max_duration_seconds\x18\r \x01(\rR\x12maxDurationSeconds\"'\n" +
+	"\x11RemoteAccessInput\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\"<\n" +
+	"\x12RemoteAccessResize\x12\x12\n" +
+	"\x04cols\x18\x01 \x01(\rR\x04cols\x12\x12\n" +
+	"\x04rows\x18\x02 \x01(\rR\x04rows\"+\n" +
+	"\x11RemoteAccessClose\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"'\n" +
+	"\x11RemoteAccessReady\x12\x12\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\"@\n" +
+	"\x12RemoteAccessOutput\x12\x16\n" +
+	"\x06stream\x18\x01 \x01(\tR\x06stream\x12\x12\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\"C\n" +
+	"\x11RemoteAccessState\x12\x16\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason*t\n" +
 	"\x0eDispatchStatus\x12\x1f\n" +
 	"\x1bDISPATCH_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18DISPATCH_STATUS_ACCEPTED\x10\x01\x12#\n" +
-	"\x1fDISPATCH_STATUS_ALREADY_HANDLED\x10\x022\xa3\x01\n" +
+	"\x1fDISPATCH_STATUS_ALREADY_HANDLED\x10\x022\xa0\x02\n" +
 	"\x15DirectExecutorService\x12\x89\x01\n" +
-	"\x16DispatchConnectionTest\x126.argus.directexecutor.v1.DispatchConnectionTestRequest\x1a7.argus.directexecutor.v1.DispatchConnectionTestResponseBVZTgithub.com/kakj-go/Argus/internal/gen/proto/argus/directexecutor/v1;directexecutorv1b\x06proto3"
+	"\x16DispatchConnectionTest\x126.argus.directexecutor.v1.DispatchConnectionTestRequest\x1a7.argus.directexecutor.v1.DispatchConnectionTestResponse\x12{\n" +
+	"\x10OpenRemoteAccess\x120.argus.directexecutor.v1.OpenRemoteAccessRequest\x1a1.argus.directexecutor.v1.OpenRemoteAccessResponse(\x010\x01BVZTgithub.com/kakj-go/Argus/internal/gen/proto/argus/directexecutor/v1;directexecutorv1b\x06proto3"
 
 var (
 	file_argus_directexecutor_v1_direct_executor_proto_rawDescOnce sync.Once
@@ -187,21 +890,39 @@ func file_argus_directexecutor_v1_direct_executor_proto_rawDescGZIP() []byte {
 }
 
 var file_argus_directexecutor_v1_direct_executor_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_argus_directexecutor_v1_direct_executor_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_argus_directexecutor_v1_direct_executor_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_argus_directexecutor_v1_direct_executor_proto_goTypes = []any{
 	(DispatchStatus)(0),                    // 0: argus.directexecutor.v1.DispatchStatus
 	(*DispatchConnectionTestRequest)(nil),  // 1: argus.directexecutor.v1.DispatchConnectionTestRequest
 	(*DispatchConnectionTestResponse)(nil), // 2: argus.directexecutor.v1.DispatchConnectionTestResponse
+	(*OpenRemoteAccessRequest)(nil),        // 3: argus.directexecutor.v1.OpenRemoteAccessRequest
+	(*OpenRemoteAccessResponse)(nil),       // 4: argus.directexecutor.v1.OpenRemoteAccessResponse
+	(*RemoteAccessOpen)(nil),               // 5: argus.directexecutor.v1.RemoteAccessOpen
+	(*RemoteAccessInput)(nil),              // 6: argus.directexecutor.v1.RemoteAccessInput
+	(*RemoteAccessResize)(nil),             // 7: argus.directexecutor.v1.RemoteAccessResize
+	(*RemoteAccessClose)(nil),              // 8: argus.directexecutor.v1.RemoteAccessClose
+	(*RemoteAccessReady)(nil),              // 9: argus.directexecutor.v1.RemoteAccessReady
+	(*RemoteAccessOutput)(nil),             // 10: argus.directexecutor.v1.RemoteAccessOutput
+	(*RemoteAccessState)(nil),              // 11: argus.directexecutor.v1.RemoteAccessState
 }
 var file_argus_directexecutor_v1_direct_executor_proto_depIdxs = []int32{
-	0, // 0: argus.directexecutor.v1.DispatchConnectionTestResponse.status:type_name -> argus.directexecutor.v1.DispatchStatus
-	1, // 1: argus.directexecutor.v1.DirectExecutorService.DispatchConnectionTest:input_type -> argus.directexecutor.v1.DispatchConnectionTestRequest
-	2, // 2: argus.directexecutor.v1.DirectExecutorService.DispatchConnectionTest:output_type -> argus.directexecutor.v1.DispatchConnectionTestResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0,  // 0: argus.directexecutor.v1.DispatchConnectionTestResponse.status:type_name -> argus.directexecutor.v1.DispatchStatus
+	5,  // 1: argus.directexecutor.v1.OpenRemoteAccessRequest.open:type_name -> argus.directexecutor.v1.RemoteAccessOpen
+	6,  // 2: argus.directexecutor.v1.OpenRemoteAccessRequest.input:type_name -> argus.directexecutor.v1.RemoteAccessInput
+	7,  // 3: argus.directexecutor.v1.OpenRemoteAccessRequest.resize:type_name -> argus.directexecutor.v1.RemoteAccessResize
+	8,  // 4: argus.directexecutor.v1.OpenRemoteAccessRequest.close:type_name -> argus.directexecutor.v1.RemoteAccessClose
+	9,  // 5: argus.directexecutor.v1.OpenRemoteAccessResponse.ready:type_name -> argus.directexecutor.v1.RemoteAccessReady
+	10, // 6: argus.directexecutor.v1.OpenRemoteAccessResponse.output:type_name -> argus.directexecutor.v1.RemoteAccessOutput
+	11, // 7: argus.directexecutor.v1.OpenRemoteAccessResponse.state:type_name -> argus.directexecutor.v1.RemoteAccessState
+	1,  // 8: argus.directexecutor.v1.DirectExecutorService.DispatchConnectionTest:input_type -> argus.directexecutor.v1.DispatchConnectionTestRequest
+	3,  // 9: argus.directexecutor.v1.DirectExecutorService.OpenRemoteAccess:input_type -> argus.directexecutor.v1.OpenRemoteAccessRequest
+	2,  // 10: argus.directexecutor.v1.DirectExecutorService.DispatchConnectionTest:output_type -> argus.directexecutor.v1.DispatchConnectionTestResponse
+	4,  // 11: argus.directexecutor.v1.DirectExecutorService.OpenRemoteAccess:output_type -> argus.directexecutor.v1.OpenRemoteAccessResponse
+	10, // [10:12] is the sub-list for method output_type
+	8,  // [8:10] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_argus_directexecutor_v1_direct_executor_proto_init() }
@@ -209,13 +930,24 @@ func file_argus_directexecutor_v1_direct_executor_proto_init() {
 	if File_argus_directexecutor_v1_direct_executor_proto != nil {
 		return
 	}
+	file_argus_directexecutor_v1_direct_executor_proto_msgTypes[2].OneofWrappers = []any{
+		(*OpenRemoteAccessRequest_Open)(nil),
+		(*OpenRemoteAccessRequest_Input)(nil),
+		(*OpenRemoteAccessRequest_Resize)(nil),
+		(*OpenRemoteAccessRequest_Close)(nil),
+	}
+	file_argus_directexecutor_v1_direct_executor_proto_msgTypes[3].OneofWrappers = []any{
+		(*OpenRemoteAccessResponse_Ready)(nil),
+		(*OpenRemoteAccessResponse_Output)(nil),
+		(*OpenRemoteAccessResponse_State)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_argus_directexecutor_v1_direct_executor_proto_rawDesc), len(file_argus_directexecutor_v1_direct_executor_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

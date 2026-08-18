@@ -120,7 +120,7 @@ PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。
 
 M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证了 Connector 注册竞争/证书轮换、双 Gateway 路由、Bastion Replacement、Direct SSRF 边界、Kubernetes 三种接入、DataScope 撤权、Secret 轮换、Redis 清空和 Server/Gateway 重启恢复；M3 Namespace、PVC 与 Lease 均已清理。
 
-人工 SSH/WinRM 会话、RemoteAccessGrant、AccessLease、短期会话票据、MFA/JIT、录像和终止属于 M6。Collector 安装、CollectionClaim、Telemetry Route 与 OTLP 链路属于 M7。M3 ConnectorCommand 明确禁止任意 Shell、文件写入、Remote Access Frame 和 Collector 命令。
+人工 SSH/WinRS 会话、RemoteAccessGrant、AccessLease、短期会话票据、录像和终止已由 M6 完成；MFA、Step-up 和 Break Glass 仍由 M8 负责。Collector 安装、CollectionClaim、Telemetry Route 与 OTLP 链路属于 M7。M3 ConnectorCommand 仍明确禁止任意 Shell、文件写入、Remote Access Frame 和 Collector 命令，M6 使用独立类型化会话协议。
 
 ## 7. 第三阶段：Chatbox 与 MCP
 
@@ -149,7 +149,18 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 
 完成标准：同一 Tool Result 可以被不同 交互卡片 展示，一张 交互卡片 可以组合多个 Tool Result；用户点击 Action Slot 可在不经过模型的情况下安全调用第二阶段 Tool。
 
-## 9. 第五阶段：OpenTelemetry 监控链路（M7）
+## 9. 第五阶段：人工远程访问（M6）
+
+- RemoteAccessGrant 限定 user/department、显式 Host ID/标签选择器、ManagedAccount、协议、动作和有效期；审批只能收窄，不能补齐缺失权限。
+- AccessRequest/Lease 与 M4 Action Approval 分离，多策略全部满足；MFA obligation 在 Evaluation 中 fail closed。
+- Ticket 为 60 秒一次性 opaque Token，绑定 HTTP Session、用户、企业、Host、ManagedAccount、协议、Lease、AuthorizationVersion 和 Session Fence。
+- SSH 提供完整 PTY；WinRM 只提供 HTTPS WinRS PowerShell 行模式，不宣称完整 PTY、PSRP 或桌面能力。
+- 录像采用 asciicast v2 NDJSON、AES-256-GCM 分片和 SHA-256 Hash Chain；ObjectStore 连续不可用 30 秒或内存缓冲超过 4 MiB 时终止会话。
+- Gateway 外部 WSS、内部 peer mTLS、Connector gRPC 和 Direct Executor RPC 使用独立端口与身份；Redis 丢失后从 PostgreSQL 和 Connector 心跳恢复。
+
+完成标准：已于 2026-08-18 达成。最终 `make e2e-m6-k8s` 运行号为 `20260818072400-79219`，验证真实 SSH、TLS WinRS 模拟器、跨 Gateway Drain、Ticket 重放、AuthorizationVersion 撤权、MinIO fail closed、录像和 real Playwright，清理后 Namespace、PVC 与 Lease 零残留。Production 仍被 M8 MFA、Step-up、备份恢复、容量和安全审计阻断。
+
+## 10. 第六阶段：OpenTelemetry 监控链路（M7）
 
 - 在 M3 资源、Connector 和 Credential Broker 以及 M4 Execution 基座上，实现 Collector 安装、路由、存储和查询链路；M3 不预先实现 Collector 命令。
 - 第一批只实现独立主机 `direct_argus` 与 Bastion Scope 的 `bastion_gateway`；Standalone Edge Gateway/Telemetry Group 延后到基础链路稳定后。
@@ -164,7 +175,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 
 完成标准：Bastion Scope 成员只能直推或使用所属堡垒机 Gateway，第一批独立主机只允许直推 Argus；Leaf 数据可靠归属到具体企业和资源，跨企业、超出 DataScope 的查询及跨 Scope 路由被拒绝；同一 Kubernetes Node 的 Host/DaemonSet Claim 冲突在提交前被阻止或形成有期限迁移计划；安装和配置均经过两阶段确认并支持失败回滚。
 
-## 10. 第六阶段：Agentic AIOps
+## 11. 第七阶段：Agentic AIOps
 
 - 持久化 Run 和多步骤任务。
 - 复杂诊断计划、上下文压缩治理和长任务恢复。
@@ -179,7 +190,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 
 第一版不把通用子 Agent 作为完成条件。Card Render 作为同一 Run 的受限声明式步骤；只有单 Agent Harness、上下文投影和恢复语义稳定后，才评估子 Agent、Agent 间消息和动态委派。
 
-## 11. 第一版建议收敛
+## 12. 第一版建议收敛
 
 第一版产品目标建议定义为：
 
@@ -200,7 +211,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 
 初始化、平台/企业权限边界、`AIModel` 调用快照、额度结算和 Sandbox Profile 同样应在第一版固化，因为它们决定部署、运营和企业隔离方式。
 
-## 12. 权限 E2E 发布门禁
+## 13. 权限 E2E 发布门禁
 
 权限能力必须通过 Kubernetes 临时 Namespace 的端到端测试，测试结束后删除 Namespace。至少覆盖：
 

@@ -4,11 +4,14 @@ import {
   CARD_MAX_MESSAGE_BYTES,
   encodedMessageBytes,
   isCardBridgeEnvelope,
+  isCardValidationReport,
   type CardBridgeBindings,
   type CardBridgeError,
   type CardBridgeMessage,
   type CardNotifyLevel,
   type CardPresentationContext,
+  type CardValidationReport,
+  type CardValidationRequest,
 } from "./protocol";
 
 export type QueryInvokeHandler = (binding_id: string) => unknown | Promise<unknown>;
@@ -40,6 +43,8 @@ export type CardHostOptions = {
   onNotify?: NotifyHandler;
   onResize?: (height: number) => void;
   onProtocolViolation?: ProtocolViolationHandler;
+  validation?: CardValidationRequest;
+  onValidationReport?: (report: CardValidationReport) => void;
 };
 
 export type CardHost = {
@@ -141,6 +146,15 @@ export function createCardHost(iframe: HTMLIFrameElement, options: CardHostOptio
     } else if (message.type === "card.resize") {
       const height = Number(payload.height);
       if (Number.isFinite(height) && height > 0) options.onResize?.(Math.min(Math.ceil(height), maxHeight));
+    } else if (message.type === "card.validation_report") {
+      if (!options.validation || !isCardValidationReport(payload)) return violate("malformed_message", message);
+      if (
+        payload.nonce !== nonce ||
+        payload.content_hash !== options.validation.content_hash ||
+        payload.runtime_version !== options.validation.runtime_version ||
+        payload.scenario !== options.validation.scenario
+      ) return violate("malformed_message", message);
+      options.onValidationReport?.(payload);
     }
   };
 
@@ -168,6 +182,12 @@ export function createCardHost(iframe: HTMLIFrameElement, options: CardHostOptio
         color_scheme: context.color_scheme,
         render_plan: options.render_plan,
         initial_data: options.initial_data ?? {},
+        ...(options.validation ? { validation: {
+          content_hash: options.validation.content_hash,
+          runtime_version: options.validation.runtime_version,
+          scenario: options.validation.scenario,
+          required_slots: options.manifest.slots.filter((slot) => slot.required).map((slot) => slot.name),
+        } } : {}),
       },
     };
     iframe.contentWindow.postMessage(hello, targetOrigin, [channel.port2]);

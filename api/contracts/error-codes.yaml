@@ -90,3 +90,33 @@ codes:
   AUTOMATION_OVERLAP_SKIPPED: {http_status: 409, message_key: errors.automation.overlap_skipped, retryable: true}
   SANDBOX_PROFILE_UNAVAILABLE: {http_status: 503, message_key: errors.sandbox.profile_unavailable, retryable: true}
   SANDBOX_QUOTA_EXCEEDED: {http_status: 429, message_key: errors.sandbox.quota_exceeded, retryable: false}
+  CARD_NOT_FOUND: {http_status: 404, message_key: errors.card.not_found, retryable: false}
+  CARD_VERSION_NOT_FOUND: {http_status: 404, message_key: errors.card.version_not_found, retryable: false}
+  CARD_SOURCE_READ_ONLY: {http_status: 409, message_key: errors.card.source_read_only, retryable: false}
+  CARD_VERSION_CONFLICT: {http_status: 409, message_key: errors.card.version_conflict, retryable: true}
+  CARD_CONTENT_TOO_LARGE: {http_status: 422, message_key: errors.card.content_too_large, retryable: false}
+  CARD_MANIFEST_INVALID: {http_status: 422, message_key: errors.card.manifest_invalid, retryable: false}
+  CARD_CONTENT_HASH_MISMATCH: {http_status: 422, message_key: errors.card.content_hash_mismatch, retryable: false}
+  CARD_STATIC_VALIDATION_FAILED: {http_status: 422, message_key: errors.card.static_validation_failed, retryable: false}
+  CARD_RUNTIME_VALIDATION_REQUIRED: {http_status: 409, message_key: errors.card.runtime_validation_required, retryable: false}
+  CARD_RUNTIME_VALIDATION_FAILED: {http_status: 422, message_key: errors.card.runtime_validation_failed, retryable: false}
+  CARD_BINDING_INVALID: {http_status: 422, message_key: errors.card.binding_invalid, retryable: false}
+  CARD_SCHEMA_INCOMPATIBLE: {http_status: 409, message_key: errors.card.schema_incompatible, retryable: false}
+  CARD_NOT_ENABLED: {http_status: 409, message_key: errors.card.not_enabled, retryable: false}
+  CARD_DEPENDENCY_UNAVAILABLE: {http_status: 503, message_key: errors.card.dependency_unavailable, retryable: true}
+  CARD_NO_COMPATIBLE_RENDERER: {http_status: 404, message_key: errors.card.no_compatible_renderer, retryable: false}
+  CARD_PRESENTATION_INVALIDATED: {http_status: 409, message_key: errors.card.presentation_invalidated, retryable: false}
+  CARD_BINDING_EXPIRED: {http_status: 410, message_key: errors.card.binding_expired, retryable: false}
+  CARD_BINDING_CONSUMED: {http_status: 409, message_key: errors.card.binding_consumed, retryable: false}
+  CARD_ACTION_INVALIDATED: {http_status: 409, message_key: errors.card.action_invalidated, retryable: false}
+  REMOTE_ACCESS_GRANT_REQUIRED: {http_status: 403, message_key: errors.remote_access.grant_required, retryable: false}
+  REMOTE_ACCESS_SCOPE_DENIED: {http_status: 403, message_key: errors.remote_access.scope_denied, retryable: false}
+  REMOTE_ACCESS_APPROVAL_REQUIRED: {http_status: 409, message_key: errors.remote_access.approval_required, retryable: false}
+  REMOTE_ACCESS_MFA_REQUIRED: {http_status: 403, message_key: errors.remote_access.mfa_required, retryable: false}
+  REMOTE_ACCESS_LEASE_EXPIRED: {http_status: 410, message_key: errors.remote_access.lease_expired, retryable: false}
+  REMOTE_ACCESS_TICKET_EXPIRED: {http_status: 410, message_key: errors.remote_access.ticket_expired, retryable: false}
+  REMOTE_ACCESS_TICKET_CONSUMED: {http_status: 409, message_key: errors.remote_access.ticket_consumed, retryable: false}
+  REMOTE_ACCESS_CAPACITY_EXCEEDED: {http_status: 429, message_key: errors.remote_access.capacity_exceeded, retryable: true}
+  REMOTE_ACCESS_RECORDING_UNAVAILABLE: {http_status: 503, message_key: errors.remote_access.recording_unavailable, retryable: true}
+  REMOTE_ACCESS_CONNECTION_LOST: {http_status: 409, message_key: errors.remote_access.connection_lost, retryable: true}
+  WINRM_TLS_REQUIRED: {http_status: 422, message_key: errors.remote_access.winrm_tls_required, retryable: false}
