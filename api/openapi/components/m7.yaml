@@ -1,0 +1,359 @@
+components:
+  schemas:
+    TelemetrySignal: {type: string, enum: [metrics, logs, traces]}
+    CollectorPlatform: {type: string, enum: [linux_arm64, windows_amd64]}
+    CollectorSupportStatus: {type: string, enum: [supported, validation_pending, retired]}
+    CollectorRole: {type: string, enum: [direct, leaf, edge_gateway, daemonset, kubernetes_gateway]}
+    CollectorStatus: {type: string, enum: [pending_install, installing, converged, degraded, backlog, result_unknown, uninstalling, uninstalled]}
+    ConfigRevisionStatus: {type: string, enum: [prepared, applying, effective, failed, rolled_back, superseded]}
+    TelemetryRouteKind: {type: string, enum: [direct_argus, bastion_gateway]}
+    CollectorArtifact:
+      type: object
+      additionalProperties: false
+      required: [platform, uri, sha256, signature, signing_key_id, byte_size]
+      properties:
+        platform: {$ref: '#/components/schemas/CollectorPlatform'}
+        uri: {type: string, format: uri, readOnly: true}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        signature: {type: string, minLength: 32, maxLength: 2048, readOnly: true}
+        signing_key_id: {type: string, minLength: 1, maxLength: 128, readOnly: true}
+        byte_size: {type: integer, format: int64, minimum: 1}
+    CollectorDistributionVersion:
+      type: object
+      additionalProperties: false
+      required: [id, name, version, collector_version, config_schema_version, support_status, components, artifacts, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128}
+        version: {type: string, minLength: 1, maxLength: 64}
+        collector_version: {type: string, minLength: 1, maxLength: 64}
+        config_schema_version: {type: string, minLength: 1, maxLength: 64}
+        support_status: {$ref: '#/components/schemas/CollectorSupportStatus'}
+        components: {type: array, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 128}}
+        artifacts: {type: array, items: {$ref: '#/components/schemas/CollectorArtifact'}}
+        created_at: {type: string, format: date-time}
+    CollectionProfile:
+      type: object
+      additionalProperties: false
+      required: [id, key, version, name, description, signals, required_components, supported_platforms, claim_types, config_schema_version, support_status]
+      properties:
+        id: {type: string, format: uuid}
+        key: {type: string, pattern: '^[a-z][a-z0-9-]{0,62}$'}
+        version: {type: string, minLength: 1, maxLength: 64}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        signals: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/TelemetrySignal'}}
+        required_components: {type: array, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 128}}
+        supported_platforms: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/CollectorPlatform'}}
+        claim_types: {type: array, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 128}}
+        config_schema_version: {type: string, minLength: 1, maxLength: 64}
+        support_status: {$ref: '#/components/schemas/CollectorSupportStatus'}
+    CollectorConfigRevision:
+      type: object
+      additionalProperties: false
+      required: [id, collector_id, revision, profile_ids, config_hash, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        collector_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1}
+        profile_ids: {type: array, uniqueItems: true, items: {type: string, format: uuid}}
+        config_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        status: {$ref: '#/components/schemas/ConfigRevisionStatus'}
+        failure_code: {type: string, maxLength: 128}
+        created_at: {type: string, format: date-time}
+        applied_at: {type: string, format: date-time}
+    TelemetryRoute:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, collector_id, kind, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        collector_id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/TelemetryRouteKind'}
+        gateway_collector_id: {type: string, format: uuid}
+        status: {type: string, enum: [pending, testing, active, degraded, invalidated]}
+        last_tested_at: {type: string, format: date-time}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CollectorInstance:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, resource_type, resource_id, distribution_version_id, platform, role, status, desired_revision, effective_revision, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        resource_type: {type: string, enum: [host, kubernetes_cluster]}
+        resource_id: {type: string, format: uuid}
+        distribution_version_id: {type: string, format: uuid}
+        platform: {$ref: '#/components/schemas/CollectorPlatform'}
+        role: {$ref: '#/components/schemas/CollectorRole'}
+        status: {$ref: '#/components/schemas/CollectorStatus'}
+        desired_revision: {type: integer, format: int64, minimum: 0}
+        effective_revision: {type: integer, format: int64, minimum: 0}
+        route: {$ref: '#/components/schemas/TelemetryRoute'}
+        last_seen_at: {type: string, format: date-time}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CollectorEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [collector_id, csr_pem]
+      properties:
+        collector_id: {type: string, format: uuid}
+        csr_pem: {type: string, minLength: 128, maxLength: 16384, writeOnly: true}
+    CollectorCertificateResult:
+      type: object
+      additionalProperties: false
+      required: [collector_id, certificate_pem, ca_bundle_pem, ingest_grpc_endpoint, ingest_http_endpoint, certificate_expires_at]
+      properties:
+        collector_id: {type: string, format: uuid}
+        certificate_pem: {type: string, minLength: 128, maxLength: 32768, writeOnly: true}
+        ca_bundle_pem: {type: string, minLength: 128, maxLength: 32768}
+        ingest_grpc_endpoint: {type: string, format: uri, readOnly: true}
+        ingest_http_endpoint: {type: string, format: uri, readOnly: true}
+        certificate_expires_at: {type: string, format: date-time}
+    CollectionClaim:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, physical_resource_ref, collector_id, claim_type, signal, selector_hash, ownership, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        physical_resource_ref: {type: string, minLength: 1, maxLength: 256}
+        collector_id: {type: string, format: uuid}
+        profile_id: {type: string, format: uuid}
+        claim_type: {type: string, minLength: 1, maxLength: 128}
+        signal: {$ref: '#/components/schemas/TelemetrySignal'}
+        selector_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        ownership: {type: string, enum: [primary, supplemental, migration]}
+        status: {type: string, enum: [active, released, conflict, expired]}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    KubernetesNodeHostBinding:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, kubernetes_cluster_id, node_uid, node_name, matched_by, evidence_hash, confidence, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        kubernetes_cluster_id: {type: string, format: uuid}
+        node_uid: {type: string, minLength: 1, maxLength: 256}
+        node_name: {type: string, minLength: 1, maxLength: 253}
+        host_id: {type: string, format: uuid}
+        matched_by: {type: string, enum: [system_uuid, provider_id, machine_id, collector_host_id, ip, manual]}
+        evidence_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        confidence: {type: integer, minimum: 0, maximum: 100}
+        status: {type: string, enum: [proposed, verified, rejected, stale]}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    NodeHostBindingPreview:
+      type: object
+      additionalProperties: false
+      required: [host_id, expected_version]
+      properties:
+        host_id: {type: string, format: uuid}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    CollectorPreview:
+      type: object
+      additionalProperties: false
+      required: [distribution_version_id, profile_ids, route_kind]
+      properties:
+        distribution_version_id: {type: string, format: uuid}
+        profile_ids: {type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: {type: string, format: uuid}}
+        route_kind: {$ref: '#/components/schemas/TelemetryRouteKind'}
+        gateway_collector_id: {type: string, format: uuid}
+        expected_version: {type: integer, format: int64, minimum: 0}
+    TelemetryRetentionPolicy:
+      type: object
+      additionalProperties: false
+      required: [metrics_days, logs_days, traces_days, version]
+      properties:
+        metrics_days: {type: integer, minimum: 1, maximum: 3650}
+        logs_days: {type: integer, minimum: 1, maximum: 3650}
+        traces_days: {type: integer, minimum: 1, maximum: 3650}
+        version: {type: integer, format: int64, minimum: 1}
+    TelemetryUsage:
+      type: object
+      additionalProperties: false
+      required: [period_start, period_end, ingested_bytes, metric_points, log_records, spans, estimated_storage_bytes]
+      properties:
+        period_start: {type: string, format: date-time}
+        period_end: {type: string, format: date-time}
+        ingested_bytes: {type: integer, format: int64, minimum: 0}
+        metric_points: {type: integer, format: int64, minimum: 0}
+        log_records: {type: integer, format: int64, minimum: 0}
+        spans: {type: integer, format: int64, minimum: 0}
+        estimated_storage_bytes: {type: integer, format: int64, minimum: 0}
+    TelemetryQueryCommon:
+      type: object
+      additionalProperties: false
+      required: [resource_ids, from, to]
+      properties:
+        resource_ids: {type: array, minItems: 1, maxItems: 1000, uniqueItems: true, items: {type: string, format: uuid}}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        limit: {type: integer, minimum: 1, maximum: 100000, default: 50000}
+        cursor: {type: string, maxLength: 4096}
+    MetricsQuery:
+      type: object
+      additionalProperties: false
+      required: [resource_ids, from, to, metric_name, aggregation]
+      properties:
+        resource_ids: {type: array, minItems: 1, maxItems: 1000, uniqueItems: true, items: {type: string, format: uuid}}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        limit: {type: integer, minimum: 1, maximum: 100000, default: 50000}
+        cursor: {type: string, maxLength: 4096}
+        metric_name: {type: string, minLength: 1, maxLength: 256}
+        aggregation: {type: string, enum: [avg, min, max, sum, count, rate, p50, p95, p99]}
+        step_seconds: {type: integer, minimum: 10, maximum: 86400, default: 60}
+    LogsQuery:
+      type: object
+      additionalProperties: false
+      required: [resource_ids, from, to]
+      properties:
+        resource_ids: {type: array, minItems: 1, maxItems: 1000, uniqueItems: true, items: {type: string, format: uuid}}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        limit: {type: integer, minimum: 1, maximum: 100000, default: 50000}
+        cursor: {type: string, maxLength: 4096}
+        service_name: {type: string, maxLength: 256}
+        severity: {type: array, uniqueItems: true, items: {type: string, maxLength: 32}}
+        text: {type: string, maxLength: 512}
+    TracesQuery:
+      type: object
+      additionalProperties: false
+      required: [resource_ids, from, to]
+      properties:
+        resource_ids: {type: array, minItems: 1, maxItems: 1000, uniqueItems: true, items: {type: string, format: uuid}}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        limit: {type: integer, minimum: 1, maximum: 100000, default: 50000}
+        cursor: {type: string, maxLength: 4096}
+        service_name: {type: string, maxLength: 256}
+        operation: {type: string, maxLength: 256}
+        status: {type: string, enum: [unset, ok, error]}
+        min_duration_ms: {type: integer, minimum: 0}
+    TelemetryOverviewQuery:
+      type: object
+      additionalProperties: false
+      required: [resource_ids, lookback_seconds]
+      properties:
+        resource_ids: {type: array, minItems: 1, maxItems: 1000, uniqueItems: true, items: {type: string, format: uuid}}
+        lookback_seconds: {type: integer, minimum: 300, maximum: 604800, default: 3600}
+    MetricPoint:
+      type: object
+      additionalProperties: false
+      required: [timestamp, value]
+      properties:
+        timestamp: {type: string, format: date-time}
+        value: {type: number}
+    MetricSeries:
+      type: object
+      additionalProperties: false
+      required: [resource_id, metric_name, points]
+      properties:
+        resource_id: {type: string, format: uuid}
+        metric_name: {type: string}
+        unit: {type: string}
+        points: {type: array, items: {$ref: '#/components/schemas/MetricPoint'}}
+    LogRecord:
+      type: object
+      additionalProperties: false
+      required: [timestamp, resource_id, severity, body]
+      properties:
+        timestamp: {type: string, format: date-time}
+        resource_id: {type: string, format: uuid}
+        service_name: {type: string}
+        severity: {type: string}
+        body: {type: string, maxLength: 262144}
+        trace_id: {type: string, minLength: 32, maxLength: 32, pattern: '^[a-f0-9]{32}$'}
+    TraceSummary:
+      type: object
+      additionalProperties: false
+      required: [trace_id, resource_id, service_name, root_span_name, started_at, duration_ms, span_count, status]
+      properties:
+        trace_id: {type: string, minLength: 32, maxLength: 32, pattern: '^[a-f0-9]{32}$'}
+        resource_id: {type: string, format: uuid}
+        service_name: {type: string}
+        root_span_name: {type: string}
+        started_at: {type: string, format: date-time}
+        duration_ms: {type: number, minimum: 0}
+        span_count: {type: integer, minimum: 1}
+        status: {type: string, enum: [unset, ok, error]}
+    TelemetryQueryMeta:
+      type: object
+      additionalProperties: false
+      required: [schema_version, partial, partial_reasons, applied_resource_count, scanned_bytes, elapsed_ms]
+      properties:
+        schema_version: {type: string, const: argus.telemetry_result/v1}
+        partial: {type: boolean}
+        partial_reasons: {type: array, uniqueItems: true, items: {type: string, enum: [unauthorized_resources, row_limit, scan_budget, timeout, data_lag]}}
+        applied_resource_count: {type: integer, minimum: 0}
+        scanned_bytes: {type: integer, format: int64, minimum: 0}
+        elapsed_ms: {type: integer, format: int64, minimum: 0}
+        next_cursor: {type: string, maxLength: 4096}
+    MetricsResult:
+      type: object
+      additionalProperties: false
+      required: [series, meta]
+      properties:
+        series: {type: array, items: {$ref: '#/components/schemas/MetricSeries'}}
+        meta: {$ref: '#/components/schemas/TelemetryQueryMeta'}
+    LogsResult:
+      type: object
+      additionalProperties: false
+      required: [records, meta]
+      properties:
+        records: {type: array, items: {$ref: '#/components/schemas/LogRecord'}}
+        meta: {$ref: '#/components/schemas/TelemetryQueryMeta'}
+    TracesResult:
+      type: object
+      additionalProperties: false
+      required: [traces, meta]
+      properties:
+        traces: {type: array, items: {$ref: '#/components/schemas/TraceSummary'}}
+        meta: {$ref: '#/components/schemas/TelemetryQueryMeta'}
+    TelemetryOverview:
+      type: object
+      additionalProperties: false
+      required: [resource_count, healthy_collectors, degraded_collectors, metric_points, log_records, spans, window_seconds, partial]
+      properties:
+        resource_count: {type: integer, minimum: 0}
+        healthy_collectors: {type: integer, minimum: 0}
+        degraded_collectors: {type: integer, minimum: 0}
+        metric_points: {type: integer, format: int64, minimum: 0}
+        log_records: {type: integer, format: int64, minimum: 0}
+        spans: {type: integer, format: int64, minimum: 0}
+        window_seconds: {type: integer, minimum: 300}
+        partial: {type: boolean}
+    CollectorPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/CollectorInstance'}}
+        page: {$ref: ./common.yaml#/components/schemas/CursorPage}
+    RouteTestCreate:
+      type: object
+      additionalProperties: false
+      required: [collector_id, route_kind]
+      properties:
+        collector_id: {type: string, format: uuid}
+        route_kind: {$ref: '#/components/schemas/TelemetryRouteKind'}
+        gateway_collector_id: {type: string, format: uuid}
+    RouteTestResult:
+      type: object
+      additionalProperties: false
+      required: [id, status, started_at, expires_at]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [pending, running, succeeded, failed, expired]}
+        error_code: {type: string, maxLength: 128}
+        started_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}

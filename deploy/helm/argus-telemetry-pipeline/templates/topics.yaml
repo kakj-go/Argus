@@ -1,4 +1,4 @@
-{{- range $topic := list "otlp-logs" "otlp-metrics" "otlp-spans" "otlp-logs-dlq" "otlp-metrics-dlq" "otlp-spans-dlq" }}
+{{- range $topic := list "otlp-logs" "otlp-metrics" "otlp-traces" }}
 ---
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
@@ -10,8 +10,25 @@ metadata:
     app.kubernetes.io/part-of: argus
     argus.io/release-id: {{ $.Values.releaseId | quote }}
 spec:
-  partitions: 1
+  partitions: 3
   replicas: 1
   config:
-    retention.ms: 3600000
+    retention.ms: 86400000
+{{- end }}
+{{- range $topic := list "otlp-logs-dlq" "otlp-metrics-dlq" "otlp-traces-dlq" }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ $topic }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    strimzi.io/cluster: argus-kafka
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ $.Values.releaseId | quote }}
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
 {{- end }}

@@ -16,13 +16,19 @@ COPY internal ./internal
 COPY migrations ./migrations
 
 RUN mkdir -p /out && \
-    for name in argus-server argus-worker argus-connector-gateway argus-telemetry argus-connector argusctl argus-migrate argus-card-catalog-sync; do \
+    for name in argus-server argus-worker argus-connector-gateway argus-telemetry argus-telemetry-dlq-replay argus-connector argusctl argus-migrate argus-card-catalog-sync argus-telemetry-catalog-sync; do \
       CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
 		-tags "$GO_BUILD_TAGS" \
         -trimpath \
         -ldflags "-s -w -X github.com/kakj-go/Argus/internal/buildinfo.Version=$VERSION -X github.com/kakj-go/Argus/internal/buildinfo.Commit=$COMMIT -X github.com/kakj-go/Argus/internal/buildinfo.Date=$BUILD_DATE" \
         -o /out/$name ./cmd/$name; \
     done
+
+RUN if [ -n "$GO_BUILD_TAGS" ]; then \
+      CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
+		-tags "$GO_BUILD_TAGS" -trimpath -ldflags "-s -w" \
+		-o /out/argus-telemetry-e2e ./cmd/argus-telemetry-e2e; \
+    fi
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/ /usr/local/bin/

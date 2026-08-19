@@ -715,6 +715,36 @@ test("kubernetes collector statuses install or open monitoring directly", async 
   );
 });
 
+test("telemetry views expose accessible Metrics, Logs, Traces, usage, and partial states", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/kubernetes/k8s-prod-east");
+
+  await page.getByRole("tab", { name: "指标" }).click();
+  await expect(page.getByText("结果已裁剪")).toBeVisible();
+  await expect(page.getByRole("img", { name: /指标时间序列/ })).toBeVisible();
+  await page.getByText("查看数据表").click();
+  await expect(page.getByRole("columnheader", { name: "序列" })).toBeVisible();
+
+  await page.getByRole("tab", { name: "日志" }).click();
+  await expect(page.getByRole("region", { name: /条日志/ })).toBeVisible();
+  await expect(page.getByText("credential=[REDACTED]")).toBeVisible();
+
+  await page.getByRole("tab", { name: "链路" }).click();
+  await expect(page.getByRole("list", { name: /条 Trace/ })).toBeVisible();
+
+  await page.goto("/settings/org");
+  await page.getByRole("tab", { name: "遥测" }).click();
+  await expect(page.getByText("Evaluation 保留期")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "近月用量" })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "windows_amd64", exact: true }).first(),
+  ).toBeVisible();
+  await expect(page.getByText("待实体验证").first()).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
 test("chat administrator can create a disabled interactive card", async ({
   page,
 }) => {

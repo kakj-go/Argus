@@ -1,0 +1,1277 @@
+export interface paths {
+    "/telemetry/collectors/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange a one-time Collector Enrollment Token and CSR for a Telemetry client certificate. */
+        post: operations["enrollTelemetryCollector"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/distributions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List supported Collector distributions. */
+        get: operations["listCollectorDistributions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List versioned Collection Profiles. */
+        get: operations["listCollectionProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/collectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List authorized Collector instances. */
+        get: operations["listCollectorInstances"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/collectors/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get an authorized Collector instance. */
+        get: operations["getCollectorInstance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List authorized Telemetry routes. */
+        get: operations["listTelemetryRoutes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/routes/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start an authorized route test. */
+        post: operations["createTelemetryRouteTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/collection-claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List authorized Collection Claims. */
+        get: operations["listCollectionClaims"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/node-host-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Node to Host bindings. */
+        get: operations["listKubernetesNodeHostBindings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/node-host-bindings/{id}/actions/preview-confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview confirmation of a Node to Host binding. */
+        post: operations["previewKubernetesNodeHostBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get authorized Telemetry usage. */
+        get: operations["getTelemetryUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/query/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Query authorized Metrics. */
+        post: operations["queryTelemetryMetrics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/query/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Query authorized Logs. */
+        post: operations["queryTelemetryLogs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/query/traces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Query authorized Traces. */
+        post: operations["queryTelemetryTraces"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/telemetry/query/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Query the Card-safe Telemetry overview. */
+        post: operations["queryTelemetryOverview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/hosts/{id}/collector": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get the Collector installed on a Host. */
+        get: operations["getHostCollector"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/hosts/{id}/collector/actions/preview-{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                action: "install" | "configure" | "upgrade" | "repair" | "uninstall";
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview a deterministic Host Collector action. */
+        post: operations["previewHostCollectorAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/kubernetes-clusters/{id}/collector": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get the Collector installed on a Kubernetes cluster. */
+        get: operations["getKubernetesCollector"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/kubernetes-clusters/{id}/collector/actions/preview-{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                action: "install" | "configure" | "upgrade" | "repair" | "uninstall";
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview a deterministic Kubernetes Collector action. */
+        post: operations["previewKubernetesCollectorAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+}
+export type webhooks = Record<string, never>;
+export interface components {
+    schemas: {
+        CollectorDistributionVersion: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            version: string;
+            collector_version: string;
+            config_schema_version: string;
+            support_status: components["schemas"]["CollectorSupportStatus"];
+            components: string[];
+            artifacts: components["schemas"]["CollectorArtifact"][];
+            /** Format: date-time */
+            created_at: string;
+        };
+        CollectionProfile: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            version: string;
+            name: string;
+            description: string;
+            signals: components["schemas"]["TelemetrySignal"][];
+            required_components: string[];
+            supported_platforms: components["schemas"]["CollectorPlatform"][];
+            claim_types: string[];
+            config_schema_version: string;
+            support_status: components["schemas"]["CollectorSupportStatus"];
+        };
+        CollectorInstance: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            readonly enterprise_id: string;
+            /** @enum {string} */
+            resource_type: "host" | "kubernetes_cluster";
+            /** Format: uuid */
+            resource_id: string;
+            /** Format: uuid */
+            distribution_version_id: string;
+            platform: components["schemas"]["CollectorPlatform"];
+            role: components["schemas"]["CollectorRole"];
+            status: components["schemas"]["CollectorStatus"];
+            /** Format: int64 */
+            desired_revision: number;
+            /** Format: int64 */
+            effective_revision: number;
+            route?: components["schemas"]["TelemetryRoute"];
+            /** Format: date-time */
+            last_seen_at?: string;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        CollectorEnrollmentRequest: {
+            /** Format: uuid */
+            collector_id: string;
+            csr_pem: string;
+        };
+        CollectorCertificateResult: {
+            /** Format: uuid */
+            collector_id: string;
+            certificate_pem: string;
+            ca_bundle_pem: string;
+            /** Format: uri */
+            readonly ingest_grpc_endpoint: string;
+            /** Format: uri */
+            readonly ingest_http_endpoint: string;
+            /** Format: date-time */
+            certificate_expires_at: string;
+        };
+        CollectorConfigRevision: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            collector_id: string;
+            /** Format: int64 */
+            revision: number;
+            profile_ids: string[];
+            config_hash: string;
+            status: components["schemas"]["ConfigRevisionStatus"];
+            failure_code?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            applied_at?: string;
+        };
+        TelemetryRoute: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            readonly enterprise_id: string;
+            /** Format: uuid */
+            collector_id: string;
+            kind: components["schemas"]["TelemetryRouteKind"];
+            /** Format: uuid */
+            gateway_collector_id?: string;
+            /** @enum {string} */
+            status: "pending" | "testing" | "active" | "degraded" | "invalidated";
+            /** Format: date-time */
+            last_tested_at?: string;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        CollectionClaim: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            readonly enterprise_id: string;
+            physical_resource_ref: string;
+            /** Format: uuid */
+            collector_id: string;
+            /** Format: uuid */
+            profile_id?: string;
+            claim_type: string;
+            signal: components["schemas"]["TelemetrySignal"];
+            selector_hash: string;
+            /** @enum {string} */
+            ownership: "primary" | "supplemental" | "migration";
+            /** @enum {string} */
+            status: "active" | "released" | "conflict" | "expired";
+            /** Format: date-time */
+            expires_at?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        KubernetesNodeHostBinding: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            readonly enterprise_id: string;
+            /** Format: uuid */
+            kubernetes_cluster_id: string;
+            node_uid: string;
+            node_name: string;
+            /** Format: uuid */
+            host_id?: string;
+            /** @enum {string} */
+            matched_by: "system_uuid" | "provider_id" | "machine_id" | "collector_host_id" | "ip" | "manual";
+            evidence_hash: string;
+            confidence: number;
+            /** @enum {string} */
+            status: "proposed" | "verified" | "rejected" | "stale";
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        NodeHostBindingPreview: {
+            /** Format: uuid */
+            host_id: string;
+            /** Format: int64 */
+            expected_version: number;
+        };
+        CollectorPreview: {
+            /** Format: uuid */
+            distribution_version_id: string;
+            profile_ids: string[];
+            route_kind: components["schemas"]["TelemetryRouteKind"];
+            /** Format: uuid */
+            gateway_collector_id?: string;
+            /** Format: int64 */
+            expected_version?: number;
+        };
+        TelemetryRetentionPolicy: {
+            metrics_days: number;
+            logs_days: number;
+            traces_days: number;
+            /** Format: int64 */
+            version: number;
+        };
+        TelemetryUsage: {
+            /** Format: date-time */
+            period_start: string;
+            /** Format: date-time */
+            period_end: string;
+            /** Format: int64 */
+            ingested_bytes: number;
+            /** Format: int64 */
+            metric_points: number;
+            /** Format: int64 */
+            log_records: number;
+            /** Format: int64 */
+            spans: number;
+            /** Format: int64 */
+            estimated_storage_bytes: number;
+        };
+        MetricsQuery: {
+            resource_ids: string[];
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            /** @default 50000 */
+            limit: number;
+            cursor?: string;
+            metric_name: string;
+            /** @enum {string} */
+            aggregation: "avg" | "min" | "max" | "sum" | "count" | "rate" | "p50" | "p95" | "p99";
+            /** @default 60 */
+            step_seconds: number;
+        };
+        LogsQuery: {
+            resource_ids: string[];
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            /** @default 50000 */
+            limit: number;
+            cursor?: string;
+            service_name?: string;
+            severity?: string[];
+            text?: string;
+        };
+        TracesQuery: {
+            resource_ids: string[];
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            /** @default 50000 */
+            limit: number;
+            cursor?: string;
+            service_name?: string;
+            operation?: string;
+            /** @enum {string} */
+            status?: "unset" | "ok" | "error";
+            min_duration_ms?: number;
+        };
+        TelemetryOverviewQuery: {
+            resource_ids: string[];
+            /** @default 3600 */
+            lookback_seconds: number;
+        };
+        MetricsResult: {
+            series: components["schemas"]["MetricSeries"][];
+            meta: components["schemas"]["TelemetryQueryMeta"];
+        };
+        LogsResult: {
+            records: components["schemas"]["LogRecord"][];
+            meta: components["schemas"]["TelemetryQueryMeta"];
+        };
+        TracesResult: {
+            traces: components["schemas"]["TraceSummary"][];
+            meta: components["schemas"]["TelemetryQueryMeta"];
+        };
+        TelemetryOverview: {
+            resource_count: number;
+            healthy_collectors: number;
+            degraded_collectors: number;
+            /** Format: int64 */
+            metric_points: number;
+            /** Format: int64 */
+            log_records: number;
+            /** Format: int64 */
+            spans: number;
+            window_seconds: number;
+            partial: boolean;
+        };
+        CollectorPage: {
+            items: components["schemas"]["CollectorInstance"][];
+            page: components["schemas"]["CursorPage"];
+        };
+        RouteTestCreate: {
+            /** Format: uuid */
+            collector_id: string;
+            route_kind: components["schemas"]["TelemetryRouteKind"];
+            /** Format: uuid */
+            gateway_collector_id?: string;
+        };
+        RouteTestResult: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "succeeded" | "failed" | "expired";
+            error_code?: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            completed_at?: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        RequestId: string;
+        ApiError: {
+            code: string;
+            message_key: string;
+            params?: {
+                [key: string]: string | number | boolean;
+            };
+            message?: string;
+            request_id: components["schemas"]["RequestId"];
+            trace_id?: string;
+            /** @default false */
+            retryable: boolean;
+        };
+        /** @enum {string} */
+        CollectorSupportStatus: "supported" | "validation_pending" | "retired";
+        /** @enum {string} */
+        CollectorPlatform: "linux_arm64" | "windows_amd64";
+        CollectorArtifact: {
+            platform: components["schemas"]["CollectorPlatform"];
+            /** Format: uri */
+            readonly uri: string;
+            sha256: string;
+            readonly signature: string;
+            readonly signing_key_id: string;
+            /** Format: int64 */
+            byte_size: number;
+        };
+        /** @enum {string} */
+        TelemetrySignal: "metrics" | "logs" | "traces";
+        /** @enum {string} */
+        CollectorRole: "direct" | "leaf" | "edge_gateway" | "daemonset" | "kubernetes_gateway";
+        /** @enum {string} */
+        CollectorStatus: "pending_install" | "installing" | "converged" | "degraded" | "backlog" | "result_unknown" | "uninstalling" | "uninstalled";
+        /** @enum {string} */
+        TelemetryRouteKind: "direct_argus" | "bastion_gateway";
+        PartialMetadata: {
+            partial: boolean;
+            reasons: ("authorization_filtered" | "budget_truncated" | "source_timeout" | "source_unavailable")[];
+        };
+        CursorPage: {
+            next_cursor: string | null;
+            has_more: boolean;
+            partial: components["schemas"]["PartialMetadata"];
+        };
+        IdempotencyKey: string;
+        PublicJsonValue: unknown;
+        PublicJsonObject: unknown;
+        /** PendingActionPublic */
+        "pending-action-public.schema": {
+            /** @constant */
+            schema_version: "argus.pending_action/v1";
+            action_ref: string;
+            title: string;
+            summary: string;
+            /** @enum {unknown} */
+            risk: "read" | "write" | "dangerous" | "critical";
+            preview: components["schemas"]["PublicJsonObject"];
+            diff: {
+                /** @enum {unknown} */
+                kind: "add" | "remove" | "change" | "note";
+                text: string;
+            }[];
+            /** @enum {unknown} */
+            status: "prepared" | "awaiting_confirmation" | "awaiting_approval" | "ready" | "executing" | "succeeded" | "failed" | "result_unknown" | "cancelled" | "expired" | "rejected" | "invalidated";
+            available_actions: ("confirm" | "cancel" | "approve" | "reject")[];
+            approval?: {
+                required: boolean;
+                policy_ref?: string;
+                minimum_approvers: number;
+                approved_count: number;
+                separation_of_duty: boolean;
+            };
+            execution_ref?: string;
+            result_summary?: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MetricPoint: {
+            /** Format: date-time */
+            timestamp: string;
+            value: number;
+        };
+        MetricSeries: {
+            /** Format: uuid */
+            resource_id: string;
+            metric_name: string;
+            unit?: string;
+            points: components["schemas"]["MetricPoint"][];
+        };
+        TelemetryQueryMeta: {
+            /** @constant */
+            schema_version: "argus.telemetry_result/v1";
+            partial: boolean;
+            partial_reasons: ("unauthorized_resources" | "row_limit" | "scan_budget" | "timeout" | "data_lag")[];
+            applied_resource_count: number;
+            /** Format: int64 */
+            scanned_bytes: number;
+            /** Format: int64 */
+            elapsed_ms: number;
+            next_cursor?: string;
+        };
+        LogRecord: {
+            /** Format: date-time */
+            timestamp: string;
+            /** Format: uuid */
+            resource_id: string;
+            service_name?: string;
+            severity: string;
+            body: string;
+            trace_id?: string;
+        };
+        TraceSummary: {
+            trace_id: string;
+            /** Format: uuid */
+            resource_id: string;
+            service_name: string;
+            root_span_name: string;
+            /** Format: date-time */
+            started_at: string;
+            duration_ms: number;
+            span_count: number;
+            /** @enum {string} */
+            status: "unset" | "ok" | "error";
+        };
+        /** @enum {string} */
+        ConfigRevisionStatus: "prepared" | "applying" | "effective" | "failed" | "rolled_back" | "superseded";
+    };
+    responses: {
+        /** @description Stable Argus API error. */
+        Error: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
+    };
+    parameters: {
+        Cursor: string;
+        Limit: number;
+        IdempotencyKey: components["schemas"]["IdempotencyKey"];
+        CsrfToken: string;
+    };
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
+}
+export type $defs = Record<string, never>;
+export interface operations {
+    enrollTelemetryCollector: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Argus-Telemetry-Enrollment-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorEnrollmentRequest"];
+            };
+        };
+        responses: {
+            /** @description One-time Collector certificate result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorCertificateResult"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listCollectorDistributions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Distribution catalog. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorDistributionVersion"][];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listCollectionProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Profile catalog. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionProfile"][];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listCollectorInstances: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+                resource_type?: "host" | "kubernetes_cluster";
+                resource_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collector page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorPage"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getCollectorInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collector. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorInstance"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listTelemetryRoutes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Routes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelemetryRoute"][];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    createTelemetryRouteTest: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouteTestCreate"];
+            };
+        };
+        responses: {
+            /** @description Route test. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RouteTestResult"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listCollectionClaims: {
+        parameters: {
+            query?: {
+                resource_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Claims. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionClaim"][];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listKubernetesNodeHostBindings: {
+        parameters: {
+            query: {
+                kubernetes_cluster_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bindings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KubernetesNodeHostBinding"][];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    previewKubernetesNodeHostBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeHostBindingPreview"];
+            };
+        };
+        responses: {
+            /** @description Pending action. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["pending-action-public.schema"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getTelemetryUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Usage. */
+            200: {
+                headers: {
+                    "X-Retention-Metrics-Days"?: number;
+                    "X-Retention-Logs-Days"?: number;
+                    "X-Retention-Traces-Days"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelemetryUsage"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    queryTelemetryMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricsQuery"];
+            };
+        };
+        responses: {
+            /** @description Metrics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsResult"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    queryTelemetryLogs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogsQuery"];
+            };
+        };
+        responses: {
+            /** @description Logs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogsResult"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    queryTelemetryTraces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TracesQuery"];
+            };
+        };
+        responses: {
+            /** @description Traces. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TracesResult"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    queryTelemetryOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelemetryOverviewQuery"];
+            };
+        };
+        responses: {
+            /** @description Overview. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelemetryOverview"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getHostCollector: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collector. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorInstance"];
+                };
+            };
+            /** @description No Collector is installed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    previewHostCollectorAction: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: string;
+                action: "install" | "configure" | "upgrade" | "repair" | "uninstall";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorPreview"];
+            };
+        };
+        responses: {
+            /** @description Pending action. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["pending-action-public.schema"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getKubernetesCollector: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collector. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorInstance"];
+                };
+            };
+            /** @description No Collector is installed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    previewKubernetesCollectorAction: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: string;
+                action: "install" | "configure" | "upgrade" | "repair" | "uninstall";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorPreview"];
+            };
+        };
+        responses: {
+            /** @description Pending action. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["pending-action-public.schema"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+}

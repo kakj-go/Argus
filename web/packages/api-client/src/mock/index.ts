@@ -38,6 +38,7 @@ import {
   type MockDb,
 } from "./store";
 import { createTasksDomain } from "./tasks";
+import { createTelemetryDomain } from "./telemetry";
 import type {
   ConnectorRegistrationResult,
   ConnectorUninstallResult,
@@ -358,6 +359,7 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
     },
     connectors: createConnectorsDomain(ctx),
     kubernetes: createKubernetesDomain(ctx),
+    telemetry: createTelemetryDomain(ctx),
     tasks: createTasksDomain(ctx),
     approvals: approvalsDomain,
     approvalRequests: {

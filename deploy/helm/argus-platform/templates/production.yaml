@@ -1,6 +1,6 @@
 {{- if eq .Values.profile "production" }}
 {{- $workers := list "argus-worker-agent" "argus-worker-action" "argus-worker-compaction" "argus-worker-automation" "argus-worker-sandbox" -}}
-{{- range $name := concat (list "argus-web" "argus-server" "argus-direct-executor" "argus-connector-gateway" "argus-telemetry-ingest" "argus-telemetry-query") $workers }}
+{{- range $name := concat (list "argus-web" "argus-server" "argus-direct-executor" "argus-connector-gateway") $workers }}
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -13,7 +13,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: {{ $name }}
 {{- end }}
-{{- range $name := concat (list "argus-server" "argus-direct-executor" "argus-connector-gateway" "argus-telemetry-ingest" "argus-telemetry-query") $workers }}
+{{- range $name := concat (list "argus-server" "argus-direct-executor" "argus-connector-gateway") $workers }}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

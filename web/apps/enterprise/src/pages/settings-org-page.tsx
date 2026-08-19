@@ -11,6 +11,7 @@ import { OrgRolesTab } from "../components/settings/org-roles-tab";
 import { OrgScopesTab } from "../components/settings/org-scopes-tab";
 import { OrgUsersTab } from "../components/settings/org-users-tab";
 import { OrgRemoteAccessTab } from "../components/settings/org-remote-access-tab";
+import { OrgTelemetryTab } from "../components/settings/org-telemetry-tab";
 
 const TAB_KEYS = [
   "users",
@@ -21,6 +22,7 @@ const TAB_KEYS = [
   "policies",
   "access",
   "remote_access",
+  "telemetry",
 ] as const;
 
 /** 组织与权限：用户、部门、项目、角色、授权绑定、数据权限、审批策略、ServiceAccount/APIKey。 */
@@ -64,6 +66,9 @@ export function SettingsOrgPage() {
         </TabsContent>
         <TabsContent value="remote_access">
           <OrgRemoteAccessTab />
+        </TabsContent>
+        <TabsContent value="telemetry">
+          <OrgTelemetryTab />
         </TabsContent>
       </Tabs>
     </PageShell>

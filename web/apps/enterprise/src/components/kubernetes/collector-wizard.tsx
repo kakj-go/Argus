@@ -38,7 +38,8 @@ type BindingRow = {
   id: string;
   node: string;
   host: string;
-  status: "proposed" | "verified" | "rejected";
+  status: "proposed" | "verified" | "rejected" | "stale";
+  version: number;
 };
 
 type ClaimRow = {
@@ -77,22 +78,47 @@ export function CollectorWizard({
     queryKey: ["kubernetes", "collectionClaims", cluster.id],
     queryFn: () => api.kubernetes.listCollectionClaims(cluster.id),
   });
+  const distributionsQuery = useQuery({
+    queryKey: ["telemetry", "distributions"],
+    queryFn: () => api.telemetry.listDistributions(),
+  });
+  const profilesQuery = useQuery({
+    queryKey: ["telemetry", "profiles"],
+    queryFn: () => api.telemetry.listProfiles(),
+  });
 
   const verify = useMutation({
-    mutationFn: (input: { bindingId: string; hostId: string }) =>
+    mutationFn: (input: { bindingId: string; hostId: string; version: number }) =>
       api.kubernetes.verifyNodeBinding(input.bindingId, {
-        hostId: input.hostId,
+        host_id: input.hostId,
+        expected_version: input.version,
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["kubernetes"] });
-    },
+    onSuccess: setPendingAction,
   });
 
   const previewInstall = useMutation({
-    mutationFn: () =>
-      api.kubernetes.previewCollectorInstall(cluster.id, {
-        profile: "k8s-daemonset",
-      }),
+    mutationFn: () => {
+      const distribution = distributionsQuery.data?.find(
+        (item) =>
+          item.support_status === "supported" &&
+          item.artifacts.some((artifact) => artifact.platform === "linux_arm64"),
+      );
+      const profileIds = (profilesQuery.data ?? [])
+        .filter((item) =>
+          ["k8s-node-container", "k8s-cluster", "collector-self"].includes(
+            item.key,
+          ),
+        )
+        .map((item) => item.id);
+      if (!distribution || profileIds.length === 0) {
+        throw new Error("supported collector catalog is unavailable");
+      }
+      return api.kubernetes.previewCollectorInstall(cluster.id, {
+        distribution_version_id: distribution.id,
+        profile_ids: profileIds,
+        route_kind: "direct_argus",
+      });
+    },
     onSuccess: setPendingAction,
   });
 
@@ -103,19 +129,15 @@ export function CollectorWizard({
 
   const bindingRows: BindingRow[] = bindings.map((binding) => ({
     id: binding.id,
-    node: binding.nodeName,
-    host: binding.hostId ?? "—",
+    node: binding.node_name,
+    host: binding.host_id ?? "—",
     status: binding.status,
+    version: binding.version,
   }));
 
   const claimRows: ClaimRow[] = useMemo(() => {
     const rows: ClaimRow[] = [];
-    const nodeByBindingId = new Map(
-      bindings.map((binding) => [binding.id, binding.nodeName]),
-    );
-    const claimedBindingIds = new Set<string>();
     for (const claim of claimsQuery.data ?? []) {
-      if (claim.nodeBindingId) claimedBindingIds.add(claim.nodeBindingId);
       const state: ClaimStateKey =
         claim.status === "conflict"
           ? "closeHostProfile"
@@ -124,25 +146,23 @@ export function CollectorWizard({
             : "none";
       rows.push({
         id: claim.id,
-        node:
-          (claim.nodeBindingId && nodeByBindingId.get(claim.nodeBindingId)) ||
-          claim.scope,
+        node: claim.physical_resource_ref,
         signal: claim.signal,
-        profile: claim.profile,
-        owner: claim.collectorId,
+        profile: claim.profile_id ?? claim.claim_type,
+        owner: claim.collector_id,
         state,
         note:
           claim.status === "conflict"
-            ? `${t("kubernetes.collector.wizard.conflictWith")}: ${claim.conflictWithId ?? "—"}`
+            ? t("kubernetes.collector.wizard.conflictWith")
             : "",
       });
     }
     // proposed 绑定上尚无 Claim：安装后 DaemonSet 将接管。
     for (const binding of bindings) {
-      if (binding.status === "proposed" && !claimedBindingIds.has(binding.id)) {
+      if (binding.status === "proposed") {
         rows.push({
           id: `takeover-${binding.id}`,
-          node: binding.nodeName,
+          node: binding.node_name,
           signal: "metrics, logs",
           profile: "k8s-daemonset",
           owner: "—",
@@ -177,7 +197,11 @@ export function CollectorWizard({
             disabled={row.host === "—"}
             loading={verify.isPending && verify.variables?.bindingId === row.id}
             onClick={() =>
-              verify.mutate({ bindingId: row.id, hostId: row.host })
+              verify.mutate({
+                bindingId: row.id,
+                hostId: row.host,
+                version: row.version,
+              })
             }
             size="sm"
             variant="primary"

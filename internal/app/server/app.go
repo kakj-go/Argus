@@ -32,6 +32,7 @@ import (
 	objectstore "github.com/kakj-go/Argus/internal/storage/objectstore"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
+	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 	"github.com/kakj-go/Argus/internal/transport/httpapi"
 )
 
@@ -105,8 +106,12 @@ func (a *App) Run(ctx context.Context) error {
 		Issuer: connectorservice.CertManagerIssuer{Client: kubernetesClient, Namespace: a.config.SystemNamespace,
 			IssuerName: a.config.ConnectorIssuerName, IssuerGeneration: a.config.ConnectorIssuerGeneration}}
 	bastionDomain := connectorservice.BastionService{Store: postgresStore, Actions: actionDomain, Enrollment: connectorDomain}
+	telemetryActions := telemetryservice.ActionExtension{Next: bastionDomain, Credentials: secretDomain,
+		EnrollmentEndpoint: a.config.TelemetryEnrollment, IngestGRPCEndpoint: a.config.TelemetryIngestGRPC,
+		IngestHTTPEndpoint: a.config.TelemetryIngestHTTP, ServerCABundlePath: a.config.TelemetryCABundle,
+		KubernetesImage: a.config.OtelcolKubernetesImage}
 	resourceDomain := resource.Service{Store: postgresStore, Actions: actionDomain, Access: resource.AccessService{Store: postgresStore},
-		Direct: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs}, Commands: connectorDomain, DirectCommands: directDispatcher, Extension: bastionDomain,
+		Direct: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs}, Commands: connectorDomain, DirectCommands: directDispatcher, Extension: telemetryActions,
 		ClusterEnrollment: connectorDomain,
 		Kubernetes: kubernetesreader.Reader{Store: postgresStore, Secrets: secretDomain, Validator: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs},
 			Notifier: connectorDomain}}
@@ -144,6 +149,27 @@ func (a *App) Run(ctx context.Context) error {
 		Service: remoteaccessservice.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey},
 			Access: resource.AccessService{Store: postgresStore}, Keyring: secretKeyring, ObjectStore: objects, UserLimit: a.config.RemoteUserLimit,
 			HostLimit: a.config.RemoteHostLimit, EnterpriseLimit: a.config.RemoteEnterpriseLimit}}
+	telemetryTLS, err := telemetryservice.ClientTLSConfig(a.config.TelemetryClientCert, a.config.TelemetryClientKey, a.config.TelemetryCABundle, a.config.TelemetryServerName)
+	if err != nil {
+		return err
+	}
+	telemetryQuery, err := telemetryservice.NewGRPCQueryBackend(a.config.TelemetryQueryEndpoint, telemetryTLS)
+	if err != nil {
+		return err
+	}
+	defer telemetryQuery.Close()
+	telemetryDomain := telemetryservice.Service{Store: postgresStore, Access: resource.AccessService{Store: postgresStore}, Actions: actionDomain,
+		Query: telemetryQuery, OtelcolKubernetesImage: a.config.OtelcolKubernetesImage}
+	telemetryIdentity := telemetryservice.IdentityService{Store: postgresStore, Issuer: connectorservice.CertManagerIssuer{
+		Client: kubernetesClient, Namespace: a.config.SystemNamespace, IssuerName: a.config.TelemetryIssuerName, IssuerKind: "ClusterIssuer",
+		RequestPrefix: "argus-telemetry-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: a.config.TelemetryIssuerGeneration,
+		Usages: []string{"client auth", "server auth"},
+	}}
+	if err := (telemetryservice.Tools{Service: telemetryDomain}).Register(toolRegistry); err != nil {
+		return err
+	}
+	telemetryHandler := httpapi.TelemetryHandler{Identity: enterpriseIdentityHandler, Service: telemetryDomain, CollectorIdentity: telemetryIdentity,
+		IngestGRPCEndpoint: a.config.TelemetryIngestGRPC, IngestHTTPEndpoint: a.config.TelemetryIngestHTTP}
 	go (outbox.Relay{Store: postgresStore, Redis: redisClient, Logger: a.logger}).Run(ctx)
 	server := &http.Server{
 		Addr: a.config.Address,
@@ -158,6 +184,7 @@ func (a *App) Run(ctx context.Context) error {
 			Connector:      &connectorHandler,
 			Card:           &cardHandler,
 			RemoteAccess:   &remoteAccessHandler,
+			Telemetry:      &telemetryHandler,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

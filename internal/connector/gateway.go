@@ -29,6 +29,7 @@ import (
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
+	"github.com/kakj-go/Argus/internal/telemetrybinding"
 )
 
 const (
@@ -40,13 +41,18 @@ const (
 
 type Gateway struct {
 	connectorv1.UnimplementedConnectorControlServiceServer
-	Service           Service
-	Credentials       secret.Service
-	HeartbeatInterval time.Duration
-	DispatchInterval  time.Duration
-	Dispatch          *DispatchHub
-	RemoteAccess      *RemoteAccessHub
-	Drain             <-chan struct{}
+	Service                   Service
+	Credentials               secret.Service
+	HeartbeatInterval         time.Duration
+	DispatchInterval          time.Duration
+	Dispatch                  *DispatchHub
+	RemoteAccess              *RemoteAccessHub
+	Drain                     <-chan struct{}
+	CreateCollectorEnrollment func(context.Context, uuid.UUID) (CollectorEnrollmentMaterial, error)
+}
+
+type CollectorEnrollmentMaterial struct {
+	Token, EnrollmentEndpoint, IngestGRPCEndpoint, IngestHTTPEndpoint string
 }
 
 type activeCommand struct {
@@ -119,7 +125,7 @@ func (gateway Gateway) Connect(stream connectorv1.ConnectorControlService_Connec
 			return err
 		}
 		for _, command := range commands {
-			frame, err := typedCommand(command)
+			frame, err := gateway.typedCommand(stream.Context(), command)
 			if err != nil {
 				_, _ = gateway.Service.TransitionCommand(stream.Context(), identity, epoch, command.CommandID, "failed", nil, "CONNECTOR_COMMAND_SCHEMA_INVALID")
 				continue
@@ -266,7 +272,7 @@ func (gateway Gateway) handleFrame(ctx context.Context, identity TrustedIdentity
 		if err != nil || !resultTypeAllowed(command.CommandType, result.GetTypedResult()) {
 			return ErrCommandState
 		}
-		value, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(result.GetTypedResult())
+		value, err := marshalTypedResult(result.GetTypedResult())
 		if err != nil || len(value) > MaxMessageBytes {
 			return ErrCommandState
 		}
@@ -276,6 +282,9 @@ func (gateway Gateway) handleFrame(ctx context.Context, identity TrustedIdentity
 		}
 		next := normalizeResultStatus(result.GetStatus())
 		if command.CommandType == "connector_uninstall" && next == "succeeded" && !validConnectorUninstallResult(result.GetTypedResult()) {
+			return ErrCommandState
+		}
+		if command.CommandType == "collector_management" && next == "succeeded" && !validCollectorManagementResult(command, result.GetTypedResult()) {
 			return ErrCommandState
 		}
 		if _, err = gateway.Service.TransitionCommand(ctx, identity, epoch, result.GetCommandId(), next, value, errorCode); err != nil {
@@ -322,6 +331,17 @@ func (gateway Gateway) handleFrame(ctx context.Context, identity TrustedIdentity
 	default:
 		return ErrCommandState
 	}
+}
+
+func marshalTypedResult(value *anypb.Any) ([]byte, error) {
+	if value == nil {
+		return nil, ErrCommandState
+	}
+	message, err := value.UnmarshalNew()
+	if err != nil {
+		return nil, err
+	}
+	return protojson.MarshalOptions{UseProtoNames: true}.Marshal(message)
 }
 
 func (gateway Gateway) fulfillCredentialLease(ctx context.Context, identity TrustedIdentity, epoch int64, request *connectorv1.CredentialLeaseRequest) (*connectorv1.CredentialLeaseGrant, error) {
@@ -421,6 +441,10 @@ func connectorIDFromCertificate(certificate *x509.Certificate) (uuid.UUID, error
 }
 
 func typedCommand(command db.ConnectorCommand) (*connectorv1.ConnectorCommand, error) {
+	return (Gateway{}).typedCommand(context.Background(), command)
+}
+
+func (gateway Gateway) typedCommand(ctx context.Context, command db.ConnectorCommand) (*connectorv1.ConnectorCommand, error) {
 	var payload proto.Message
 	switch command.CommandType {
 	case "host_connection_probe":
@@ -465,6 +489,26 @@ func typedCommand(command db.ConnectorCommand) (*connectorv1.ConnectorCommand, e
 			return nil, ErrCommandState
 		}
 		payload = &request
+	case "collector_management":
+		var request connectorv1.CollectorManagementCommand
+		if protojson.Unmarshal(command.Payload, &request) != nil || request.GetCollectorId() == "" || request.GetResourceId() == "" || request.GetArtifact() == nil {
+			return nil, ErrCommandState
+		}
+		if request.GetOperation() == "install" && gateway.CreateCollectorEnrollment != nil {
+			collectorID, parseErr := uuid.Parse(request.GetCollectorId())
+			if parseErr != nil {
+				return nil, ErrCommandState
+			}
+			material, materialErr := gateway.CreateCollectorEnrollment(ctx, collectorID)
+			if materialErr != nil {
+				return nil, materialErr
+			}
+			request.EnrollmentToken = []byte(material.Token)
+			request.EnrollmentEndpoint = material.EnrollmentEndpoint
+			request.IngestGrpcEndpoint = material.IngestGRPCEndpoint
+			request.IngestHttpEndpoint = material.IngestHTTPEndpoint
+		}
+		payload = &request
 	default:
 		return nil, ErrCommandState
 	}
@@ -488,6 +532,7 @@ func resultTypeAllowed(commandType string, value *anypb.Any) bool {
 		"kubernetes_resource_query":   "type.googleapis.com/argus.connector.v1.KubernetesResourceQueryResult",
 		"kubernetes_pod_logs":         "type.googleapis.com/argus.connector.v1.KubernetesPodLogsResult",
 		"connector_uninstall":         "type.googleapis.com/argus.connector.v1.ConnectorUninstallResult",
+		"collector_management":        "type.googleapis.com/argus.connector.v1.CollectorManagementResult",
 	}
 	return value != nil && value.TypeUrl == allowed[commandType]
 }
@@ -497,8 +542,33 @@ func validConnectorUninstallResult(value *anypb.Any) bool {
 	return value != nil && value.UnmarshalTo(&result) == nil && result.GetIdentityRemoved() && result.GetServiceStopped()
 }
 
+func validCollectorManagementResult(command db.ConnectorCommand, value *anypb.Any) bool {
+	var request connectorv1.CollectorManagementCommand
+	var result connectorv1.CollectorManagementResult
+	if protojson.Unmarshal(command.Payload, &request) != nil || value == nil || value.UnmarshalTo(&result) != nil {
+		return false
+	}
+	if result.GetCollectorId() != request.GetCollectorId() || (result.GetStatus() != "converged" && result.GetStatus() != "uninstalled") {
+		return false
+	}
+	if request.GetResourceType() == "kubernetes_cluster" && request.GetOperation() != "uninstall" {
+		nodes := make([]telemetrybinding.NodeEvidence, 0, len(result.GetKubernetesNodes()))
+		for _, node := range result.GetKubernetesNodes() {
+			nodes = append(nodes, telemetrybinding.NodeEvidence{NodeUID: node.GetNodeUid(), NodeName: node.GetNodeName(),
+				ProviderID: node.GetProviderId(), MachineID: node.GetMachineId(), SystemUUID: node.GetSystemUuid(), InternalIPs: node.GetInternalIps()})
+		}
+		if telemetrybinding.Validate(nodes) != nil {
+			return false
+		}
+	} else if len(result.GetKubernetesNodes()) != 0 {
+		return false
+	}
+	return request.GetOperation() == "uninstall" || (result.GetEffectiveRevision() == request.GetDesiredRevision() &&
+		strings.EqualFold(result.GetAppliedConfigSha256(), request.GetConfigSha256()))
+}
+
 func reconciledCommandStatus(commandType, reported string) string {
-	if commandType == "connector_uninstall" && reported == "succeeded" {
+	if (commandType == "connector_uninstall" || commandType == "collector_management") && reported == "succeeded" {
 		return "result_unknown"
 	}
 	return reported

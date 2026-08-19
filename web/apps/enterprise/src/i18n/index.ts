@@ -9,6 +9,7 @@ import { kubernetesEn, kubernetesZh } from "./kubernetes";
 import { loginEn, loginZh } from "./login";
 import { remoteAccessEn, remoteAccessZh } from "./remote-access";
 import { shellEn, shellZh } from "./shell";
+import { telemetryEn, telemetryZh } from "./telemetry";
 
 /**
  * i18n 模块化注册模式：
@@ -28,6 +29,7 @@ const modulesZh = [
   aiSettingsZh,
   automationsZh,
   remoteAccessZh,
+  telemetryZh,
 ];
 const modulesEn = [
   commonEn,
@@ -39,6 +41,7 @@ const modulesEn = [
   aiSettingsEn,
   automationsEn,
   remoteAccessEn,
+  telemetryEn,
 ];
 
 const storedLocale = window.localStorage.getItem("argus.locale");

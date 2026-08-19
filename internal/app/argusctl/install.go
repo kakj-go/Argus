@@ -155,6 +155,23 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 		return err
 	}
 
+	telemetryChart, err := loadLocalChart(root, "argus-telemetry-pipeline")
+	if err != nil {
+		return err
+	}
+	if err := clients.setStage(ctx, cfg, "telemetry-pipeline", "running", "installing ClickHouse migration and Kafka topics"); err != nil {
+		return err
+	}
+	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-telemetry-pipeline", cfg.Spec.Namespaces.Observability, telemetryChart, telemetryValues(cfg)); err != nil {
+		return err
+	}
+	if err := waitForJob(ctx, clients, cfg.Spec.Namespaces.Observability, "argus-clickhouse-telemetry-migration", 10*time.Minute); err != nil {
+		return err
+	}
+	if err := clients.setStage(ctx, cfg, "telemetry-pipeline", "complete", "ClickHouse schema and Kafka topics ready"); err != nil {
+		return err
+	}
+
 	setupSecret := cfg.Spec.ReleaseID + "-generated-secrets"
 	if err := ensureSetupToken(ctx, clients, cfg.Spec.Namespaces.System, setupSecret); err != nil {
 		return err
@@ -192,17 +209,7 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 		return err
 	}
 
-	telemetryChart, err := loadLocalChart(root, "argus-telemetry-pipeline")
-	if err != nil {
-		return err
-	}
-	if err := clients.setStage(ctx, cfg, "telemetry-pipeline", "running", "installing ClickHouse migration and OTel writer"); err != nil {
-		return err
-	}
-	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-telemetry-pipeline", cfg.Spec.Namespaces.Observability, telemetryChart, telemetryValues(cfg)); err != nil {
-		return err
-	}
-	if err := waitForDeployment(ctx, clients, cfg.Spec.Namespaces.Observability, "otel-clickhouse-writer", 10*time.Minute); err != nil {
+	if err := waitForTelemetry(ctx, clients, cfg); err != nil {
 		return err
 	}
 	if err := clients.setStage(ctx, cfg, "complete", "complete", "all Evaluation stages installed"); err != nil {
@@ -237,7 +244,10 @@ func dataValues(cfg *InstallConfig, secrets map[string]string) map[string]any {
 		"secrets": map[string]any{
 			"postgresqlPassword": secrets["postgresql-password"], "redisPassword": secrets["redis-password"],
 			"minioRootUser": secrets["minio-root-user"], "minioRootPassword": secrets["minio-root-password"],
-			"clickhousePassword": secrets["clickhouse-password"],
+			"clickhousePassword":                   secrets["clickhouse-password"],
+			"telemetryClickhouseMigrationPassword": secrets["telemetry-clickhouse-migration-password"],
+			"telemetryClickhouseWriterPassword":    secrets["telemetry-clickhouse-writer-password"],
+			"telemetryClickhouseQueryPassword":     secrets["telemetry-clickhouse-query-password"],
 		},
 	}
 }
@@ -270,9 +280,23 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 				"current_version": 1,
 				"keys":            map[string]any{"1": secretKEK},
 			},
-			"connectorEnrollmentURL":  connectorEnrollmentURL,
-			"connectorGatewayAddress": connectorGatewayAddress,
-			"allowedOrigins":          allowedOrigins, "secureCookies": secureCookies,
+			"connectorEnrollmentURL":               connectorEnrollmentURL,
+			"connectorGatewayAddress":              connectorGatewayAddress,
+			"objectStoreUrl":                       "http://argus-minio:9000",
+			"objectStoreBucket":                    "argus-remote-recordings",
+			"objectStoreAccessKey":                 credentials["minio-root-user"],
+			"objectStoreSecretKey":                 credentials["minio-root-password"],
+			"telemetryClickhouseMigrationPassword": credentials["telemetry-clickhouse-migration-password"],
+			"telemetryClickhouseWriterPassword":    credentials["telemetry-clickhouse-writer-password"],
+			"telemetryClickhouseQueryPassword":     credentials["telemetry-clickhouse-query-password"],
+			"telemetryToolCatalogEnabled":          true,
+			"otelcolVersion":                       cfg.Spec.Telemetry.CollectorVersion,
+			"otelcolLinuxArm64Uri":                 cfg.Spec.Telemetry.LinuxARM64URI,
+			"otelcolLinuxArm64Sha256":              cfg.Spec.Telemetry.LinuxARM64SHA256,
+			"otelcolWindowsAmd64Uri":               cfg.Spec.Telemetry.WindowsAMD64URI,
+			"otelcolWindowsAmd64Sha256":            cfg.Spec.Telemetry.WindowsAMD64SHA256,
+			"otelcolSigningKeyId":                  cfg.Spec.Telemetry.SigningKeyID,
+			"allowedOrigins":                       allowedOrigins, "secureCookies": secureCookies,
 		},
 		"production": map[string]any{"hosts": map[string]any{"enterprise": cfg.Spec.Exposure.EnterpriseHost,
 			"platform": cfg.Spec.Exposure.PlatformHost, "setup": cfg.Spec.Exposure.SetupHost, "connector": cfg.Spec.Exposure.ConnectorHost}},
@@ -353,7 +377,7 @@ func sandboxValues(cfg *InstallConfig, apiKey string) map[string]any {
 func telemetryValues(cfg *InstallConfig) map[string]any {
 	return map[string]any{
 		"releaseId": cfg.Spec.ReleaseID, "namespace": cfg.Spec.Namespaces.Observability,
-		"images":     map[string]any{"clickhouse": "clickhouse/clickhouse-server:26.3.17.110-alpine", "otelCollector": "otel/opentelemetry-collector-contrib:0.158.0"},
+		"images":     map[string]any{"clickhouse": "clickhouse/clickhouse-server:26.3.17.110-alpine"},
 		"clickhouse": map[string]any{"endpoint": "tcp://argus-clickhouse-client:9000"},
 		"kafka":      map[string]any{"brokers": "argus-kafka-kafka-bootstrap:9092"},
 	}
@@ -409,7 +433,11 @@ mode = "dns+nft"
 
 func ensureCredentials(ctx context.Context, clients *kubeClients, cfg *InstallConfig) (map[string]string, error) {
 	values := map[string]string{}
-	for key, size := range map[string]int{"postgresql-password": 24, "redis-password": 24, "minio-root-password": 32, "clickhouse-password": 24} {
+	for key, size := range map[string]int{
+		"postgresql-password": 24, "redis-password": 24, "minio-root-password": 32, "clickhouse-password": 24,
+		"telemetry-clickhouse-migration-password": 24, "telemetry-clickhouse-writer-password": 24,
+		"telemetry-clickhouse-query-password": 24,
+	} {
 		value, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, cfg.Spec.ReleaseID+"-generated-credentials", key, size)
 		if err != nil {
 			return nil, err
@@ -521,13 +549,28 @@ func waitForData(ctx context.Context, clients *kubeClients, cfg *InstallConfig) 
 }
 
 func waitForPlatform(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
-	names := []string{"argus-web", "argus-server", "argus-worker", "argus-direct-executor", "argus-connector-gateway", "argus-telemetry-ingest", "argus-telemetry-query"}
+	names := []string{"argus-web", "argus-server", "argus-worker", "argus-direct-executor", "argus-connector-gateway"}
 	for _, name := range names {
 		if err := waitForDeployment(ctx, clients, cfg.Spec.Namespaces.System, name, 10*time.Minute); err != nil {
 			return err
 		}
 	}
 	return waitForJob(ctx, clients, cfg.Spec.Namespaces.System, "argus-postgresql-migration", 10*time.Minute)
+}
+
+func waitForTelemetry(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
+	if err := waitForJob(ctx, clients, cfg.Spec.Namespaces.Observability, "argus-clickhouse-telemetry-migration", 10*time.Minute); err != nil {
+		return err
+	}
+	if err := waitForJob(ctx, clients, cfg.Spec.Namespaces.System, "argus-telemetry-catalog-sync", 10*time.Minute); err != nil {
+		return err
+	}
+	for _, name := range []string{"argus-telemetry-ingest", "argus-telemetry-writer", "argus-telemetry-query"} {
+		if err := waitForDeployment(ctx, clients, cfg.Spec.Namespaces.Observability, name, 10*time.Minute); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func waitForDeployment(ctx context.Context, clients *kubeClients, namespace, name string, timeout time.Duration) error {

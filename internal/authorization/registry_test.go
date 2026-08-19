@@ -2,9 +2,9 @@ package authorization
 
 import "testing"
 
-func TestPermissionRegistryVersionAndBuiltinRolesIncludeM6(t *testing.T) {
-	if PermissionRegistryVersion != 5 {
-		t.Fatalf("permission registry version = %d, want 5", PermissionRegistryVersion)
+func TestPermissionRegistryVersionAndBuiltinRolesIncludeM7(t *testing.T) {
+	if PermissionRegistryVersion != 6 {
+		t.Fatalf("permission registry version = %d, want 6", PermissionRegistryVersion)
 	}
 
 	for _, permission := range []string{
@@ -16,6 +16,14 @@ func TestPermissionRegistryVersionAndBuiltinRolesIncludeM6(t *testing.T) {
 	} {
 		if _, ok := PermissionRegistry[permission]; !ok {
 			t.Errorf("M4 permission %q is missing from registry", permission)
+		}
+	}
+	for _, permission := range []string{
+		"telemetry.collector.read", "telemetry.collector.manage", "telemetry.query.metrics", "telemetry.query.logs",
+		"telemetry.query.traces", "telemetry.sensitive_fields.read", "telemetry.usage.read",
+	} {
+		if _, ok := PermissionRegistry[permission]; !ok {
+			t.Errorf("M7 permission %q is missing from registry", permission)
 		}
 	}
 

@@ -1,4 +1,12 @@
 releaseId: argus
+components:
+  credentials: true
+  postgresql: true
+  redis: true
+  minio: true
+  kafka: true
+  keeper: true
+  clickhouse: true
 namespaces:
   system: argus-system
   observability: argus-observability
@@ -24,3 +32,6 @@ secrets:
   minioRootUser: ""
   minioRootPassword: ""
   clickhousePassword: ""
+  telemetryClickhouseMigrationPassword: ""
+  telemetryClickhouseWriterPassword: ""
+  telemetryClickhouseQueryPassword: ""

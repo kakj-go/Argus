@@ -24,6 +24,8 @@ type Querier interface {
 	AdvanceConnectorEpoch(ctx context.Context, arg AdvanceConnectorEpochParams) (Connector, error)
 	AdvanceRemoteAccessRecording(ctx context.Context, arg AdvanceRemoteAccessRecordingParams) (RemoteAccessRecording, error)
 	AdvanceSecretVersion(ctx context.Context, arg AdvanceSecretVersionParams) (Secret, error)
+	ApplyCollectorOperationFailure(ctx context.Context, arg ApplyCollectorOperationFailureParams) (int64, error)
+	ApplyCollectorOperationSuccess(ctx context.Context, arg ApplyCollectorOperationSuccessParams) (int64, error)
 	BumpAuthorizationVersionRecord(ctx context.Context, arg BumpAuthorizationVersionRecordParams) error
 	BumpDepartmentUsersAuthorizationVersion(ctx context.Context, arg BumpDepartmentUsersAuthorizationVersionParams) ([]uuid.UUID, error)
 	BumpEnterpriseServiceAccountsAuthorizationVersion(ctx context.Context, enterpriseID uuid.UUID) ([]uuid.UUID, error)
@@ -38,10 +40,15 @@ type Querier interface {
 	ClaimExecution(ctx context.Context, arg ClaimExecutionParams) (Execution, error)
 	ClaimOutboxEvents(ctx context.Context, limit int32) ([]OutboxEvent, error)
 	ClaimRuntimeTask(ctx context.Context, arg ClaimRuntimeTaskParams) (RuntimeTask, error)
+	ClaimTelemetryCollectorOperation(ctx context.Context, arg ClaimTelemetryCollectorOperationParams) (TelemetryCollectorOperation, error)
+	ClaimTelemetryCollectorOperations(ctx context.Context, arg ClaimTelemetryCollectorOperationsParams) ([]TelemetryCollectorOperation, error)
+	ClaimTelemetryDLQReplay(ctx context.Context, id uuid.UUID) (TelemetryDlqRecord, error)
 	CloseConnectorSession(ctx context.Context, arg CloseConnectorSessionParams) (int64, error)
 	CompleteConnectionTest(ctx context.Context, arg CompleteConnectionTestParams) (ConnectionTest, error)
 	CompleteConnectorCertificateRotation(ctx context.Context, arg CompleteConnectorCertificateRotationParams) (Connector, error)
 	CompleteIdempotencyRecord(ctx context.Context, arg CompleteIdempotencyRecordParams) (int64, error)
+	CompleteTelemetryRouteTest(ctx context.Context, arg CompleteTelemetryRouteTestParams) (TelemetryRouteTest, error)
+	ConfirmKubernetesNodeHostBinding(ctx context.Context, arg ConfirmKubernetesNodeHostBindingParams) (KubernetesNodeHostBinding, error)
 	ConsumeActionBinding(ctx context.Context, arg ConsumeActionBindingParams) (ActionBinding, error)
 	ConsumeCardActionBinding(ctx context.Context, arg ConsumeCardActionBindingParams) (ActionBinding, error)
 	ConsumeCredentialLease(ctx context.Context, arg ConsumeCredentialLeaseParams) (int64, error)
@@ -50,6 +57,7 @@ type Querier interface {
 	ConsumePendingActionToken(ctx context.Context, arg ConsumePendingActionTokenParams) (int64, error)
 	ConsumeRemoteAccessTicket(ctx context.Context, arg ConsumeRemoteAccessTicketParams) (RemoteAccessTicket, error)
 	ConsumeRemoteAccessTicketForGateway(ctx context.Context, arg ConsumeRemoteAccessTicketForGatewayParams) (RemoteAccessTicket, error)
+	ConsumeTelemetryEnrollmentToken(ctx context.Context, id uuid.UUID) (TelemetryEnrollmentToken, error)
 	ConsumeTemporaryCredential(ctx context.Context, id uuid.UUID) (int64, error)
 	CountActiveSandboxSessions(ctx context.Context, enterpriseID uuid.UUID) (int32, error)
 	CountDepartmentUsers(ctx context.Context, arg CountDepartmentUsersParams) (int64, error)
@@ -80,6 +88,8 @@ type Querier interface {
 	CreateCardSlotBinding(ctx context.Context, arg CreateCardSlotBindingParams) (CardSlotBinding, error)
 	CreateCardValidationRun(ctx context.Context, arg CreateCardValidationRunParams) (CardValidationRun, error)
 	CreateCardVersion(ctx context.Context, arg CreateCardVersionParams) (CardVersion, error)
+	CreateCollectionClaim(ctx context.Context, arg CreateCollectionClaimParams) (CollectionClaim, error)
+	CreateCollectorConfigRevision(ctx context.Context, arg CreateCollectorConfigRevisionParams) (CollectorConfigRevision, error)
 	CreateConnectionTest(ctx context.Context, arg CreateConnectionTestParams) (ConnectionTest, error)
 	CreateConnector(ctx context.Context, arg CreateConnectorParams) (Connector, error)
 	CreateConnectorCertificate(ctx context.Context, arg CreateConnectorCertificateParams) (ConnectorCertificate, error)
@@ -101,6 +111,7 @@ type Querier interface {
 	CreateInteractiveCard(ctx context.Context, arg CreateInteractiveCardParams) (InteractiveCard, error)
 	CreateKubernetesCluster(ctx context.Context, arg CreateKubernetesClusterParams) (KubernetesCluster, error)
 	CreateManagedAccount(ctx context.Context, arg CreateManagedAccountParams) (ManagedAccount, error)
+	CreateMigrationCollectionClaim(ctx context.Context, arg CreateMigrationCollectionClaimParams) (CollectionClaim, error)
 	CreateModelCall(ctx context.Context, arg CreateModelCallParams) (ModelCall, error)
 	CreateModelCompatibilityResult(ctx context.Context, arg CreateModelCompatibilityResultParams) (ModelCompatibilityResult, error)
 	CreatePasswordCredential(ctx context.Context, arg CreatePasswordCredentialParams) (PasswordCredential, error)
@@ -135,6 +146,10 @@ type Querier interface {
 	CreateServiceAccount(ctx context.Context, arg CreateServiceAccountParams) (ServiceAccount, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateSystemCardVersionIfMissing(ctx context.Context, arg CreateSystemCardVersionIfMissingParams) (CardVersion, error)
+	CreateTelemetryCertificate(ctx context.Context, arg CreateTelemetryCertificateParams) (TelemetryCertificate, error)
+	CreateTelemetryCollectorOperation(ctx context.Context, arg CreateTelemetryCollectorOperationParams) (TelemetryCollectorOperation, error)
+	CreateTelemetryEnrollmentToken(ctx context.Context, arg CreateTelemetryEnrollmentTokenParams) (TelemetryEnrollmentToken, error)
+	CreateTelemetryRouteTest(ctx context.Context, arg CreateTelemetryRouteTestParams) (TelemetryRouteTest, error)
 	CreateTemporaryCredential(ctx context.Context, arg CreateTemporaryCredentialParams) (TemporaryCredential, error)
 	CreateToolCall(ctx context.Context, arg CreateToolCallParams) (ToolCall, error)
 	CreateToolResult(ctx context.Context, arg CreateToolResultParams) (ToolResult, error)
@@ -151,11 +166,15 @@ type Querier interface {
 	DisableRemoteAccessGrant(ctx context.Context, arg DisableRemoteAccessGrantParams) (RemoteAccessGrant, error)
 	DisableRemoteAccessPolicy(ctx context.Context, arg DisableRemoteAccessPolicyParams) (RemoteAccessPolicy, error)
 	DisableSecret(ctx context.Context, arg DisableSecretParams) (int64, error)
+	EnsureTelemetryRetentionPolicy(ctx context.Context, enterpriseID uuid.UUID) (TelemetryRetentionPolicy, error)
+	ExpireCollectionClaimMigrations(ctx context.Context) (int64, error)
 	ExpireConnectionTestsByCredential(ctx context.Context, arg ExpireConnectionTestsByCredentialParams) error
 	ExpireQueuedConnectionTests(ctx context.Context) (int64, error)
 	ExpireQueuedConnectorCommands(ctx context.Context) ([]ConnectorCommand, error)
+	ExpireTelemetryCollectorOperations(ctx context.Context) (int64, error)
 	FenceBastionScope(ctx context.Context, arg FenceBastionScopeParams) (BastionScope, error)
 	FinalizeBastionConnectorUninstall(ctx context.Context, arg FinalizeBastionConnectorUninstallParams) (int64, error)
+	FinalizeCollectorClaimMigrations(ctx context.Context, arg FinalizeCollectorClaimMigrationsParams) (int64, error)
 	FinalizeConnectorUninstall(ctx context.Context, arg FinalizeConnectorUninstallParams) (Connector, error)
 	FinalizeKubernetesConnectorUninstall(ctx context.Context, arg FinalizeKubernetesConnectorUninstallParams) (int64, error)
 	FinishAutomationRunByPendingAction(ctx context.Context, arg FinishAutomationRunByPendingActionParams) error
@@ -167,12 +186,14 @@ type Querier interface {
 	FinishRemoteAccessSession(ctx context.Context, arg FinishRemoteAccessSessionParams) (RemoteAccessSession, error)
 	FinishRunStep(ctx context.Context, arg FinishRunStepParams) (RunStep, error)
 	FinishRuntimeTask(ctx context.Context, arg FinishRuntimeTaskParams) (RuntimeTask, error)
+	FinishTelemetryCollectorOperation(ctx context.Context, arg FinishTelemetryCollectorOperationParams) (TelemetryCollectorOperation, error)
 	FinishToolCall(ctx context.Context, arg FinishToolCallParams) (ToolCall, error)
 	GetAIModel(ctx context.Context, arg GetAIModelParams) (AiModel, error)
 	GetAIModelCredential(ctx context.Context, arg GetAIModelCredentialParams) (AiModelCredential, error)
 	GetActiveAutomationRun(ctx context.Context, arg GetActiveAutomationRunParams) (AutomationRun, error)
 	GetActiveConnectorCertificate(ctx context.Context, arg GetActiveConnectorCertificateParams) (ConnectorCertificate, error)
 	GetActiveContextSnapshot(ctx context.Context, arg GetActiveContextSnapshotParams) (ContextSnapshot, error)
+	GetActivePrimaryCollectionClaim(ctx context.Context, arg GetActivePrimaryCollectionClaimParams) (CollectionClaim, error)
 	GetActiveRunForConversation(ctx context.Context, arg GetActiveRunForConversationParams) (Run, error)
 	GetActiveTemporaryCredential(ctx context.Context, arg GetActiveTemporaryCredentialParams) (TemporaryCredential, error)
 	GetApiKey(ctx context.Context, arg GetApiKeyParams) (ApiKey, error)
@@ -198,6 +219,9 @@ type Querier interface {
 	GetCardVersion(ctx context.Context, arg GetCardVersionParams) (CardVersion, error)
 	GetCardVersionByID(ctx context.Context, id uuid.UUID) (CardVersion, error)
 	GetCardVersionForEnterprise(ctx context.Context, arg GetCardVersionForEnterpriseParams) (CardVersion, error)
+	GetCollectorForResource(ctx context.Context, arg GetCollectorForResourceParams) (CollectorInstance, error)
+	GetCollectorInstance(ctx context.Context, arg GetCollectorInstanceParams) (CollectorInstance, error)
+	GetCollectorInstanceByID(ctx context.Context, id uuid.UUID) (CollectorInstance, error)
 	GetConnectionTest(ctx context.Context, arg GetConnectionTestParams) (ConnectionTest, error)
 	GetConnector(ctx context.Context, arg GetConnectorParams) (Connector, error)
 	GetConnectorByID(ctx context.Context, id uuid.UUID) (Connector, error)
@@ -230,6 +254,7 @@ type Querier interface {
 	GetInteractiveCard(ctx context.Context, arg GetInteractiveCardParams) (InteractiveCard, error)
 	GetInteractiveCardForUpdate(ctx context.Context, arg GetInteractiveCardForUpdateParams) (InteractiveCard, error)
 	GetKubernetesCluster(ctx context.Context, arg GetKubernetesClusterParams) (KubernetesCluster, error)
+	GetKubernetesNodeHostBinding(ctx context.Context, arg GetKubernetesNodeHostBindingParams) (KubernetesNodeHostBinding, error)
 	GetLatestAIModelRevision(ctx context.Context, arg GetLatestAIModelRevisionParams) (AiModelRevision, error)
 	GetLatestPassedCardValidation(ctx context.Context, arg GetLatestPassedCardValidationParams) (CardValidationRun, error)
 	GetManagedAccount(ctx context.Context, arg GetManagedAccountParams) (ManagedAccount, error)
@@ -272,11 +297,21 @@ type Querier interface {
 	GetServiceAccount(ctx context.Context, arg GetServiceAccountParams) (ServiceAccount, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetSystemCardBySlug(ctx context.Context, slug string) (InteractiveCard, error)
+	GetTelemetryCollectorIdentity(ctx context.Context, id uuid.UUID) (CollectorInstance, error)
+	GetTelemetryCollectorIdentityBySerial(ctx context.Context, serialNumber string) (GetTelemetryCollectorIdentityBySerialRow, error)
+	GetTelemetryCollectorOperation(ctx context.Context, arg GetTelemetryCollectorOperationParams) (TelemetryCollectorOperation, error)
+	GetTelemetryEnrollmentTokenForUpdate(ctx context.Context, tokenHash []byte) (TelemetryEnrollmentToken, error)
+	GetTelemetryRetentionPolicy(ctx context.Context, enterpriseID uuid.UUID) (TelemetryRetentionPolicy, error)
+	GetTelemetryRoute(ctx context.Context, arg GetTelemetryRouteParams) (TelemetryRoute, error)
+	GetTelemetryRouteByCollector(ctx context.Context, arg GetTelemetryRouteByCollectorParams) (TelemetryRoute, error)
+	GetTelemetryUsage(ctx context.Context, arg GetTelemetryUsageParams) (GetTelemetryUsageRow, error)
 	GetTemporaryCredentialByChallenge(ctx context.Context, challengeHash []byte) (TemporaryCredential, error)
 	GetToolResultByArtifact(ctx context.Context, arg GetToolResultByArtifactParams) (GetToolResultByArtifactRow, error)
 	GetValidConnectorCertificateBySerial(ctx context.Context, arg GetValidConnectorCertificateBySerialParams) (ConnectorCertificate, error)
+	GetValidTelemetryCertificateBySerial(ctx context.Context, arg GetValidTelemetryCertificateBySerialParams) (TelemetryCertificate, error)
 	HasExecutionOneTimeResult(ctx context.Context, arg HasExecutionOneTimeResultParams) (bool, error)
 	HeartbeatConnectorSession(ctx context.Context, arg HeartbeatConnectorSessionParams) (int64, error)
+	IncrementTelemetryUsage(ctx context.Context, arg IncrementTelemetryUsageParams) error
 	InitializeAuditChain(ctx context.Context, arg InitializeAuditChainParams) error
 	InitializeAuthorizationVersion(ctx context.Context, arg InitializeAuthorizationVersionParams) error
 	InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) (AuditEvent, error)
@@ -286,6 +321,7 @@ type Querier interface {
 	InvalidateRemoteAccessRequestsByGrant(ctx context.Context, arg InvalidateRemoteAccessRequestsByGrantParams) error
 	IsApprovalActorEligible(ctx context.Context, arg IsApprovalActorEligibleParams) (bool, error)
 	IsRemoteAccessApproverEligible(ctx context.Context, arg IsRemoteAccessApproverEligibleParams) (bool, error)
+	LimitTelemetryCertificateOverlap(ctx context.Context, arg LimitTelemetryCertificateOverlapParams) error
 	ListAIModels(ctx context.Context, arg ListAIModelsParams) ([]AiModel, error)
 	ListAllEnterpriseAuditEvents(ctx context.Context, enterpriseID uuid.NullUUID) ([]AuditEvent, error)
 	ListAllEnterprises(ctx context.Context) ([]Enterprise, error)
@@ -304,6 +340,10 @@ type Querier interface {
 	ListCardQueryBindingSpecs(ctx context.Context, cardInstanceID uuid.UUID) ([]CardQueryBindingSpec, error)
 	ListCardSlotBindings(ctx context.Context, cardVersionID uuid.UUID) ([]CardSlotBinding, error)
 	ListCardVersions(ctx context.Context, arg ListCardVersionsParams) ([]CardVersion, error)
+	ListCollectionClaims(ctx context.Context, arg ListCollectionClaimsParams) ([]CollectionClaim, error)
+	ListCollectionProfiles(ctx context.Context) ([]CollectionProfile, error)
+	ListCollectorDistributionVersions(ctx context.Context) ([]CollectorDistributionVersion, error)
+	ListCollectorInstances(ctx context.Context, arg ListCollectorInstancesParams) ([]CollectorInstance, error)
 	ListConnectors(ctx context.Context, enterpriseID uuid.UUID) ([]Connector, error)
 	ListConversationEvents(ctx context.Context, arg ListConversationEventsParams) ([]ConversationEvent, error)
 	ListConversations(ctx context.Context, arg ListConversationsParams) ([]Conversation, error)
@@ -323,6 +363,7 @@ type Querier interface {
 	ListHosts(ctx context.Context, enterpriseID uuid.UUID) ([]Host, error)
 	ListInteractiveCards(ctx context.Context, enterpriseID uuid.NullUUID) ([]InteractiveCard, error)
 	ListKubernetesClusters(ctx context.Context, enterpriseID uuid.UUID) ([]KubernetesCluster, error)
+	ListKubernetesNodeHostBindings(ctx context.Context, arg ListKubernetesNodeHostBindingsParams) ([]KubernetesNodeHostBinding, error)
 	ListManagedAccounts(ctx context.Context, enterpriseID uuid.UUID) ([]ManagedAccount, error)
 	ListMatchingApprovalPolicies(ctx context.Context, arg ListMatchingApprovalPoliciesParams) ([]ApprovalPolicy, error)
 	ListModelQuotas(ctx context.Context, enterpriseID uuid.UUID) ([]ModelQuota, error)
@@ -353,6 +394,7 @@ type Querier interface {
 	ListServiceAccountDataScopes(ctx context.Context, serviceAccountID uuid.UUID) ([]uuid.UUID, error)
 	ListServiceAccounts(ctx context.Context, enterpriseID uuid.UUID) ([]ServiceAccount, error)
 	ListSubjectsForDataScope(ctx context.Context, arg ListSubjectsForDataScopeParams) ([]ListSubjectsForDataScopeRow, error)
+	ListTelemetryRoutes(ctx context.Context, enterpriseID uuid.UUID) ([]TelemetryRoute, error)
 	ListUncertainConnectorCommands(ctx context.Context, arg ListUncertainConnectorCommandsParams) ([]ConnectorCommand, error)
 	ListUncertainExecutions(ctx context.Context, limit int32) ([]Execution, error)
 	LockAuditChain(ctx context.Context, chainKey string) (AuditChainHead, error)
@@ -363,11 +405,16 @@ type Querier interface {
 	MarkBastionScopeConnectorSuspectedOffline(ctx context.Context, arg MarkBastionScopeConnectorSuspectedOfflineParams) (int64, error)
 	MarkBastionScopeUninstalling(ctx context.Context, arg MarkBastionScopeUninstallingParams) (int64, error)
 	MarkCardQueryBindingInvoked(ctx context.Context, arg MarkCardQueryBindingInvokedParams) (CardQueryBinding, error)
+	MarkCollectorConfigApplying(ctx context.Context, arg MarkCollectorConfigApplyingParams) (int64, error)
+	MarkCollectorConfigEffective(ctx context.Context, arg MarkCollectorConfigEffectiveParams) (int64, error)
+	MarkCollectorConfigFailed(ctx context.Context, arg MarkCollectorConfigFailedParams) (int64, error)
+	MarkCollectorUninstalling(ctx context.Context, arg MarkCollectorUninstallingParams) (CollectorInstance, error)
 	MarkConnectorCertificatesOverlap(ctx context.Context, arg MarkConnectorCertificatesOverlapParams) error
 	MarkConnectorConnectionTestRunning(ctx context.Context, arg MarkConnectorConnectionTestRunningParams) (ConnectionTest, error)
 	MarkConnectorDisconnected(ctx context.Context, arg MarkConnectorDisconnectedParams) (int64, error)
 	MarkEnterpriseLogin(ctx context.Context, id uuid.UUID) error
 	MarkExecutionResultUnknown(ctx context.Context, arg MarkExecutionResultUnknownParams) (Execution, error)
+	MarkExecutionTelemetryResultUnknown(ctx context.Context, arg MarkExecutionTelemetryResultUnknownParams) (Execution, error)
 	MarkKubernetesConnectorUninstalling(ctx context.Context, arg MarkKubernetesConnectorUninstallingParams) (int64, error)
 	MarkOutboxPublished(ctx context.Context, id uuid.UUID) error
 	MarkPendingActionAwaitingApproval(ctx context.Context, arg MarkPendingActionAwaitingApprovalParams) (PendingAction, error)
@@ -382,10 +429,17 @@ type Querier interface {
 	MarkSecretAccessed(ctx context.Context, arg MarkSecretAccessedParams) error
 	MarkStaleBastionScopesOffline(ctx context.Context) (int64, error)
 	MarkStaleConnectorsOffline(ctx context.Context) (int64, error)
+	MarkTelemetryDLQReplayFailed(ctx context.Context, id uuid.UUID) error
+	MarkTelemetryDLQReplayed(ctx context.Context, id uuid.UUID) error
+	MarkTelemetryRouteActive(ctx context.Context, arg MarkTelemetryRouteActiveParams) (int64, error)
+	MarkTelemetryRouteDegraded(ctx context.Context, arg MarkTelemetryRouteDegradedParams) (int64, error)
 	NextContextSnapshotRevision(ctx context.Context, arg NextContextSnapshotRevisionParams) (int32, error)
 	NextConversationSequence(ctx context.Context, conversationID uuid.UUID) (int32, error)
 	NextRunStepSequence(ctx context.Context, arg NextRunStepSequenceParams) (int32, error)
+	RecordTelemetryDLQ(ctx context.Context, arg RecordTelemetryDLQParams) (TelemetryDlqRecord, error)
+	RecoverTelemetryCollectorOperations(ctx context.Context) (int64, error)
 	RejectPendingAction(ctx context.Context, arg RejectPendingActionParams) (PendingAction, error)
+	ReleaseCollectorClaims(ctx context.Context, arg ReleaseCollectorClaimsParams) error
 	RenewRuntimeTaskLease(ctx context.Context, arg RenewRuntimeTaskLeaseParams) (RuntimeTask, error)
 	ReplaceRoleBindingDataScopes(ctx context.Context, roleBindingID uuid.UUID) error
 	ReplaceServiceAccountDataScopes(ctx context.Context, serviceAccountID uuid.UUID) error
@@ -397,6 +451,7 @@ type Querier interface {
 	RetryOutboxEvent(ctx context.Context, arg RetryOutboxEventParams) error
 	RevokeActiveEnrollmentTokens(ctx context.Context, arg RevokeActiveEnrollmentTokensParams) error
 	RevokeApiKey(ctx context.Context, arg RevokeApiKeyParams) (ApiKey, error)
+	RevokeCollectorCertificates(ctx context.Context, arg RevokeCollectorCertificatesParams) error
 	RevokeConnectorCertificates(ctx context.Context, arg RevokeConnectorCertificatesParams) error
 	RevokeCredentialLease(ctx context.Context, arg RevokeCredentialLeaseParams) error
 	RevokeCredentialLeasesBySecret(ctx context.Context, arg RevokeCredentialLeasesBySecretParams) error
@@ -406,6 +461,7 @@ type Querier interface {
 	RevokeRemoteAccessLeasesByGrant(ctx context.Context, arg RevokeRemoteAccessLeasesByGrantParams) error
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) (int64, error)
 	RevokeSubjectSessions(ctx context.Context, arg RevokeSubjectSessionsParams) error
+	RollbackCollectorClaimMigrations(ctx context.Context, arg RollbackCollectorClaimMigrationsParams) (int64, error)
 	SelectSandboxProfile(ctx context.Context, dollar_1 string) (SandboxProfile, error)
 	SetAutomationStatus(ctx context.Context, arg SetAutomationStatusParams) (Automation, error)
 	SetCardVersionStatus(ctx context.Context, arg SetCardVersionStatusParams) (CardVersion, error)
@@ -419,6 +475,7 @@ type Querier interface {
 	StartRuntimeTask(ctx context.Context, arg StartRuntimeTaskParams) (RuntimeTask, error)
 	SumActiveAndSettledQuota(ctx context.Context, arg SumActiveAndSettledQuotaParams) (pgtype.Numeric, error)
 	SumQuotaReservationsBySubject(ctx context.Context, arg SumQuotaReservationsBySubjectParams) (SumQuotaReservationsBySubjectRow, error)
+	SupersedeCollectorConfigRevisions(ctx context.Context, collectorID uuid.UUID) error
 	SupersedeContextSnapshots(ctx context.Context, arg SupersedeContextSnapshotsParams) error
 	TerminateRemoteAccessSession(ctx context.Context, arg TerminateRemoteAccessSessionParams) (RemoteAccessSession, error)
 	TerminateRemoteAccessSessionsByEnterprise(ctx context.Context, arg TerminateRemoteAccessSessionsByEnterpriseParams) ([]RemoteAccessSession, error)
@@ -459,12 +516,17 @@ type Querier interface {
 	UpdateSandboxSessionStatus(ctx context.Context, arg UpdateSandboxSessionStatusParams) (SandboxSession, error)
 	UpdateSecretMetadata(ctx context.Context, arg UpdateSecretMetadataParams) (Secret, error)
 	UpdateServiceAccount(ctx context.Context, arg UpdateServiceAccountParams) (ServiceAccount, error)
+	UpsertCollectionProfile(ctx context.Context, arg UpsertCollectionProfileParams) (CollectionProfile, error)
+	UpsertCollectorDistributionVersion(ctx context.Context, arg UpsertCollectorDistributionVersionParams) (CollectorDistributionVersion, error)
+	UpsertCollectorForAction(ctx context.Context, arg UpsertCollectorForActionParams) (CollectorInstance, error)
 	UpsertConnectorSession(ctx context.Context, arg UpsertConnectorSessionParams) (ConnectorSession, error)
+	UpsertKubernetesNodeHostBindingProposal(ctx context.Context, arg UpsertKubernetesNodeHostBindingProposalParams) (KubernetesNodeHostBinding, error)
 	UpsertModelQuota(ctx context.Context, arg UpsertModelQuotaParams) (ModelQuota, error)
 	UpsertPermission(ctx context.Context, arg UpsertPermissionParams) error
 	UpsertRemoteAccessRoute(ctx context.Context, arg UpsertRemoteAccessRouteParams) (RemoteAccessRoute, error)
 	UpsertSandboxQuota(ctx context.Context, arg UpsertSandboxQuotaParams) (SandboxQuota, error)
 	UpsertSystemInteractiveCard(ctx context.Context, arg UpsertSystemInteractiveCardParams) (InteractiveCard, error)
+	UpsertTelemetryRoute(ctx context.Context, arg UpsertTelemetryRouteParams) (TelemetryRoute, error)
 }
 
 var _ Querier = (*Queries)(nil)

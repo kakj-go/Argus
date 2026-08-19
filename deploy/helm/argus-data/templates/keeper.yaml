@@ -1,3 +1,4 @@
+{{- if .Values.components.keeper }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -88,3 +89,4 @@ spec:
         resources:
           requests:
             storage: {{ .Values.persistence.keeper }}
+{{- end }}

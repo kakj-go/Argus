@@ -4,10 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import {
   useApi,
   type BastionScope,
+  type CollectorInstance,
   type Host,
   type PendingActionPublic,
 } from "@argus/api-client";
-import type { CollectorInstallState } from "@argus/api-client/provisional";
 import {
   Badge,
   Button,
@@ -27,9 +27,7 @@ import {
 } from "@argus/ui";
 import { PendingActionConfirm } from "./pending-action-confirm";
 import {
-  collectorStatusOf,
   collectorTone,
-  defaultTelemetryRouteOf,
   formatDateTime,
   scopeOf,
   telemetryRouteOf,
@@ -40,7 +38,7 @@ const CAPABILITY_KEYS = [
   "hostBasic",
   "systemLogs",
   "fileLogs",
-  "docker",
+  "collectorSelf",
   "prometheus",
   "otlp",
 ] as const;
@@ -51,37 +49,30 @@ function capabilitiesFromProfile(
 ): Record<CapabilityKey, boolean> {
   const parts = profile.split(",").map((part) => part.trim());
   return {
-    hostBasic: parts.includes("host-basic") || parts.includes("host-full"),
-    systemLogs: parts.includes("system-logs") || parts.includes("host-full"),
-    fileLogs: parts.includes("file-logs"),
-    docker: parts.includes("docker"),
-    prometheus: parts.includes("prometheus"),
-    otlp: parts.includes("otlp"),
+    hostBasic: parts.includes("host-basic"),
+    systemLogs: parts.includes("linux-journald"),
+    fileLogs: parts.includes("file-log"),
+    collectorSelf: parts.includes("collector-self"),
+    prometheus: parts.includes("prometheus-endpoint"),
+    otlp: parts.includes("otlp-receiver"),
   };
 }
 
 function profileFromCapabilities(caps: Record<CapabilityKey, boolean>): string {
   const parts: string[] = [];
   if (caps.hostBasic) parts.push("host-basic");
-  if (caps.systemLogs) parts.push("system-logs");
-  if (caps.fileLogs) parts.push("file-logs");
-  if (caps.docker) parts.push("docker");
-  if (caps.prometheus) parts.push("prometheus");
-  if (caps.otlp) parts.push("otlp");
+  if (caps.systemLogs) parts.push("linux-journald");
+  if (caps.fileLogs) parts.push("file-log");
+  if (caps.collectorSelf) parts.push("collector-self");
+  if (caps.prometheus) parts.push("prometheus-endpoint");
+  if (caps.otlp) parts.push("otlp-receiver");
   return parts.join(",") || "host-basic";
-}
-
-/** 前端模拟的路由测试（真实实现由源 Collector 所在主机执行）。 */
-function simulateRouteTest(): Promise<boolean> {
-  return new Promise((resolve) => {
-    window.setTimeout(() => resolve(true), 800);
-  });
 }
 
 const COLLECTOR_PROFILES = [
   "host-basic",
-  "host-basic,system-logs",
-  "host-full",
+  "host-basic,linux-journald",
+  "host-basic,linux-journald,collector-self",
 ];
 
 /** Connector 卡片：仅堡垒机（connector_local）主机显示。 */
@@ -269,11 +260,28 @@ export function CollectorInstallWizard({
   const [step, setStep] = useState(0);
   const [profile, setProfile] = useState(COLLECTOR_PROFILES[0]!);
   const [route, setRoute] = useState("direct_argus");
-  const [routeTested, setRouteTested] = useState(false);
-  const [routeTesting, setRouteTesting] = useState(false);
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const distributionsQuery = useQuery({
+    queryKey: ["telemetry", "distributions"],
+    queryFn: () => api.telemetry.listDistributions(),
+  });
+  const profilesQuery = useQuery({
+    queryKey: ["telemetry", "profiles"],
+    queryFn: () => api.telemetry.listProfiles(),
+  });
+  const collectorsQuery = useQuery({
+    queryKey: ["telemetry", "collectors"],
+    queryFn: () => api.telemetry.listCollectors(),
+  });
+  const platform =
+    host.platform === "windows" ? "windows_amd64" : "linux_arm64";
+  const distribution = distributionsQuery.data?.find(
+    (item) =>
+      item.support_status === "supported" &&
+      item.artifacts.some((artifact) => artifact.platform === platform),
+  );
 
   const scope = scopeOf(host, scopes);
   const gatewayScopes =
@@ -293,27 +301,31 @@ export function CollectorInstallWizard({
       setStep(0);
       setProfile(COLLECTOR_PROFILES[0]!);
       setRoute("direct_argus");
-      setRouteTested(false);
       setPendingAction(null);
     }
     onOpenChange(next);
   };
 
-  const runRouteTest = async () => {
-    setRouteTesting(true);
-    await simulateRouteTest();
-    setRouteTested(true);
-    setRouteTesting(false);
-  };
-
   const submit = async () => {
-    if (submitting) return;
+    if (submitting || !distribution) return;
+    const profileIds = profile
+      .split(",")
+      .map((key) => profilesQuery.data?.find((item) => item.key === key)?.id)
+      .filter((id): id is string => Boolean(id));
+    if (profileIds.length === 0) return;
+    const gatewayCollector =
+      route === "direct_argus"
+        ? undefined
+        : collectorsQuery.data?.find((item) => item.resource_id === route);
     setSubmitting(true);
     try {
       setPendingAction(
         await api.hosts.previewCollectorInstall(host.id, {
-          profile,
-          telemetryRoute: route,
+          distribution_version_id: distribution.id,
+          profile_ids: profileIds,
+          route_kind:
+            route === "direct_argus" ? "direct_argus" : "bastion_gateway",
+          gateway_collector_id: gatewayCollector?.id,
         }),
       );
     } finally {
@@ -346,7 +358,7 @@ export function CollectorInstallWizard({
         />
       ) : (
         <Wizard
-          canNext={step === 0 ? Boolean(profile) : routeTested}
+          canNext={step === 0 ? Boolean(profile && distribution) : true}
           current={step}
           onBack={() => setStep(0)}
           onNext={() => setStep(1)}
@@ -388,7 +400,6 @@ export function CollectorInstallWizard({
                 className={`argus-choice ${route === "direct_argus" ? "is-selected" : ""}`}
                 onClick={() => {
                   setRoute("direct_argus");
-                  setRouteTested(false);
                 }}
                 type="button"
               >
@@ -400,15 +411,13 @@ export function CollectorInstallWizard({
                 </span>
               </button>
               {gatewayScopes.map((gatewayScope) => {
-                const value =
-                  defaultTelemetryRouteOf(gatewayScope) ?? gatewayScope.name;
+                const value = gatewayScope.connector_host_id ?? gatewayScope.id;
                 return (
                   <button
                     className={`argus-choice ${route === value ? "is-selected" : ""}`}
                     key={gatewayScope.id}
                     onClick={() => {
                       setRoute(value);
-                      setRouteTested(false);
                     }}
                     type="button"
                   >
@@ -423,26 +432,6 @@ export function CollectorInstallWizard({
                   </button>
                 );
               })}
-              <div className="argus-form-actions">
-                <Button
-                  loading={routeTesting}
-                  onClick={() => void runRouteTest()}
-                  variant="secondary"
-                >
-                  {routeTesting
-                    ? t("hosts.components.installWizard.routeTesting")
-                    : t("hosts.components.installWizard.routeTest")}
-                </Button>
-                {routeTested ? (
-                  <StatusBadge tone="success">
-                    {t("hosts.components.installWizard.routeOk")}
-                  </StatusBadge>
-                ) : (
-                  <span className="argus-muted">
-                    {t("hosts.components.installWizard.needRouteTest")}
-                  </span>
-                )}
-              </div>
             </div>
           )}
         </Wizard>
@@ -473,6 +462,8 @@ function CollectorCard({
   const [routeAction, setRouteAction] = useState<PendingActionPublic | null>(
     null,
   );
+  const [lifecycleAction, setLifecycleAction] =
+    useState<PendingActionPublic | null>(null);
   const [routeChoice, setRouteChoice] = useState("direct_argus");
   const [routeTested, setRouteTested] = useState(false);
   const [routeTesting, setRouteTesting] = useState(false);
@@ -483,7 +474,32 @@ function CollectorCard({
     queryKey: ["host-collector", host.id],
     queryFn: () => api.hosts.getCollector(host.id),
   });
-  const collector: CollectorInstallState | null = collectorQuery.data ?? null;
+  const collector: CollectorInstance | null = collectorQuery.data ?? null;
+  const profilesQuery = useQuery({
+    queryKey: ["telemetry", "profiles"],
+    queryFn: () => api.telemetry.listProfiles(),
+  });
+  const distributionsQuery = useQuery({
+    queryKey: ["telemetry", "distributions"],
+    queryFn: () => api.telemetry.listDistributions(),
+  });
+  const claimsQuery = useQuery({
+    queryKey: ["telemetry", "claims", host.id],
+    queryFn: () => api.telemetry.listClaims(host.id),
+    enabled: Boolean(collector),
+  });
+  const routesQuery = useQuery({
+    queryKey: ["telemetry", "routes"],
+    queryFn: () => api.telemetry.listRoutes(),
+    enabled: Boolean(collector),
+  });
+  const collectorsQuery = useQuery({
+    queryKey: ["telemetry", "collectors"],
+    queryFn: () => api.telemetry.listCollectors(),
+  });
+  const currentRoute = routesQuery.data?.find(
+    (entry) => entry.collector_id === collector?.id,
+  );
 
   const scope = scopeOf(host, scopes);
   const gatewayScopes =
@@ -498,9 +514,26 @@ function CollectorCard({
         ? [scope]
         : [];
 
+  const activeProfileIds = useMemo(
+    () => [
+      ...new Set(
+        (claimsQuery.data ?? [])
+          .filter((claim) => claim.collector_id === collector?.id && claim.status === "active")
+          .map((claim) => claim.profile_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ],
+    [claimsQuery.data, collector?.id],
+  );
+  const activeProfileKeys = useMemo(
+    () => (profilesQuery.data ?? [])
+      .filter((profile) => activeProfileIds.includes(profile.id))
+      .map((profile) => profile.key),
+    [profilesQuery.data, activeProfileIds],
+  );
   const current = useMemo(
-    () => (collector ? capabilitiesFromProfile(collector.profile) : null),
-    [collector],
+    () => (collector ? capabilitiesFromProfile(activeProfileKeys.join(",")) : null),
+    [collector, activeProfileKeys],
   );
   const effective = draft ?? current;
   const dirty =
@@ -519,19 +552,21 @@ function CollectorCard({
       : [];
 
   const previewConfig = async () => {
-    if (!effective || previewing) return;
+    if (!effective || !collector || previewing) return;
+    const keys = profileFromCapabilities(effective).split(",");
+    const profileIds = (profilesQuery.data ?? [])
+      .filter((profile) => keys.includes(profile.key))
+      .map((profile) => profile.id);
+    if (profileIds.length === 0) return;
     setPreviewing(true);
     try {
       setConfigAction(
-        await api.approvals.preview({
-          tool: "telemetry.collector.configure",
-          title: t("hosts.components.installed.configureTitle", {
-            name: host.name,
-          }),
-          input_data: {
-            hostId: host.id,
-            profile: profileFromCapabilities(effective),
-          },
+        await api.hosts.previewCollectorAction(host.id, "configure", {
+          distribution_version_id: collector.distribution_version_id,
+          profile_ids: profileIds,
+          route_kind: currentRoute?.kind ?? "direct_argus",
+          gateway_collector_id: currentRoute?.gateway_collector_id,
+          expected_version: collector.version,
         }),
       );
     } finally {
@@ -540,21 +575,54 @@ function CollectorCard({
   };
 
   const previewRoute = async () => {
-    if (previewing) return;
+    if (previewing || !collector || activeProfileIds.length === 0) return;
+    const gatewayCollectorId = routeChoice === "direct_argus" ? undefined : routeChoice;
     setPreviewing(true);
     try {
       setRouteAction(
-        await api.approvals.preview({
-          tool: "telemetry.collector.route",
-          title: t("hosts.components.installed.routeTitle", {
-            name: host.name,
-          }),
-          input_data: {
-            hostId: host.id,
-            route: routeChoice,
-          },
+        await api.hosts.previewCollectorAction(host.id, "configure", {
+          distribution_version_id: collector.distribution_version_id,
+          profile_ids: activeProfileIds,
+          route_kind: gatewayCollectorId ? "bastion_gateway" : "direct_argus",
+          gateway_collector_id: gatewayCollectorId,
+          expected_version: collector.version,
         }),
       );
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const testCurrentRoute = async () => {
+    if (!collector || !currentRoute || routeTesting) return;
+    setRouteTesting(true);
+    setRouteTested(false);
+    try {
+      const result = await api.telemetry.testRoute({
+        collector_id: collector.id,
+        route_kind: currentRoute.kind,
+        gateway_collector_id: currentRoute.gateway_collector_id,
+      });
+      setRouteTested(result.status === "succeeded");
+    } finally {
+      setRouteTesting(false);
+    }
+  };
+
+  const previewLifecycle = async (action: "upgrade" | "repair" | "uninstall") => {
+    if (!collector || activeProfileIds.length === 0 || previewing) return;
+    const distribution = action === "upgrade"
+      ? distributionsQuery.data?.find((item) => item.support_status === "supported" && item.artifacts.some((artifact) => artifact.platform === collector.platform))
+      : undefined;
+    setPreviewing(true);
+    try {
+      setLifecycleAction(await api.hosts.previewCollectorAction(host.id, action, {
+        distribution_version_id: distribution?.id ?? collector.distribution_version_id,
+        profile_ids: activeProfileIds,
+        route_kind: currentRoute?.kind ?? "direct_argus",
+        gateway_collector_id: currentRoute?.gateway_collector_id,
+        expected_version: collector.version,
+      }));
     } finally {
       setPreviewing(false);
     }
@@ -604,13 +672,9 @@ function CollectorCard({
             {t("hosts.components.collectorTitle")}{" "}
             <StatusBadge
               pulse={collector.status === "converged"}
-              tone={collectorTone(
-                collector.status === "converged"
-                  ? "converged"
-                  : collectorStatusOf(host),
-              )}
+              tone={collectorTone(collector.status)}
             >
-              {t(`hosts.collectorStatus.${collectorStatusOf(host)}`)}
+              {t(`hosts.collectorStatus.${collector.status}`)}
             </StatusBadge>
           </>
         }
@@ -621,19 +685,23 @@ function CollectorCard({
           items={[
             {
               label: t("hosts.components.installed.profile"),
-              value: <span className="argus-mono">{collector.profile}</span>,
+              value: (
+                <span className="argus-mono">
+                  {collector.distribution_version_id}
+                </span>
+              ),
             },
             {
               label: t("hosts.components.version", {
-                version: collector.version,
+                version: collector.platform,
               }),
               value: collector.role,
             },
             {
               label: t("hosts.components.installed.revision"),
               value: t("hosts.components.installed.revisionValue", {
-                effective: collector.effectiveRevision,
-                desired: collector.desiredRevision,
+                effective: collector.effective_revision,
+                desired: collector.desired_revision,
               }),
             },
           ]}
@@ -719,11 +787,16 @@ function CollectorCard({
                 onClick={() => {
                   setRouteEditing(true);
                   setRouteTested(false);
+                  setRouteChoice(currentRoute?.gateway_collector_id ?? "direct_argus");
                 }}
                 variant="secondary"
               >
                 {t("hosts.components.installed.changeRoute")}
               </Button>
+              <Button loading={routeTesting} onClick={() => void testCurrentRoute()} variant="secondary">
+                {t("hosts.components.installed.routeTest")}
+              </Button>
+              {routeTested && <StatusBadge tone="success">{t("hosts.components.installed.routeOk")}</StatusBadge>}
             </div>
           )}
           {routeEditing && !routeAction && (
@@ -739,39 +812,16 @@ function CollectorCard({
                       value: "direct_argus",
                       label: t("hosts.components.installed.routeDirect"),
                     },
-                    ...gatewayScopes.map((gatewayScope) => ({
-                      value:
-                        defaultTelemetryRouteOf(gatewayScope) ??
-                        gatewayScope.name,
-                      label: t("hosts.components.installed.routeViaGateway", {
-                        route: gatewayScope.name,
-                      }),
-                    })),
+                    ...gatewayScopes.flatMap((gatewayScope) => {
+                      const gateway = collectorsQuery.data?.find((entry) => entry.resource_id === gatewayScope.connector_host_id && entry.role === "edge_gateway");
+                      return gateway ? [{ value: gateway.id, label: t("hosts.components.installed.routeViaGateway", { route: gatewayScope.name }) }] : [];
+                    }),
                   ]}
                   value={routeChoice}
                 />
               </Field>
               <div className="argus-form-actions">
                 <Button
-                  loading={routeTesting}
-                  onClick={() => {
-                    setRouteTesting(true);
-                    void simulateRouteTest().then(() => {
-                      setRouteTested(true);
-                      setRouteTesting(false);
-                    });
-                  }}
-                  variant="secondary"
-                >
-                  {t("hosts.components.installed.routeTest")}
-                </Button>
-                {routeTested && (
-                  <StatusBadge tone="success">
-                    {t("hosts.components.installed.routeOk")}
-                  </StatusBadge>
-                )}
-                <Button
-                  disabled={!routeTested}
                   loading={previewing}
                   onClick={() => void previewRoute()}
                   variant="primary"
@@ -794,6 +844,18 @@ function CollectorCard({
                 onChanged();
               }}
             />
+          )}
+        </section>
+        <section className="argus-detail-section">
+          <h3 className="argus-detail-section__title">{t("hosts.components.installed.lifecycle")}</h3>
+          {lifecycleAction ? (
+            <PendingActionConfirm action={lifecycleAction} onCancel={() => setLifecycleAction(null)} onDone={() => { setLifecycleAction(null); onChanged(); }} />
+          ) : (
+            <div className="argus-form-actions">
+              <Button loading={previewing} onClick={() => void previewLifecycle("upgrade")} variant="secondary">{t("hosts.components.installed.upgrade")}</Button>
+              <Button loading={previewing} onClick={() => void previewLifecycle("repair")} variant="secondary">{t("hosts.components.installed.repair")}</Button>
+              <Button loading={previewing} onClick={() => void previewLifecycle("uninstall")} variant="danger">{t("hosts.components.installed.uninstall")}</Button>
+            </div>
           )}
         </section>
       </CardContent>

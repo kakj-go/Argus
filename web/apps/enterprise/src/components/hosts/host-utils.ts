@@ -1,7 +1,12 @@
-import type { BastionScope, Environment, Host } from "@argus/api-client";
-import type { CollectorStatus } from "@argus/api-client/provisional";
+import type {
+  BastionScope,
+  CollectorInstance,
+  Environment,
+  Host,
+} from "@argus/api-client";
 
 type HostConnectionStatus = Host["connection_status"];
+type CollectorStatus = CollectorInstance["status"] | "not_installed";
 type ProvisionalHostTelemetry = {
   collectorStatus?: CollectorStatus;
   telemetryRoute?: string;
@@ -46,10 +51,10 @@ export function collectorTone(status: CollectorStatus): Tone {
       return "success";
     case "installing":
       return "info";
-    case "config_stale":
     case "backlog":
       return "warning";
-    case "interrupted":
+    case "degraded":
+    case "result_unknown":
       return "danger";
     default:
       return "neutral";

@@ -53,13 +53,14 @@ type ActionSubject struct {
 }
 
 type ActionCommitResult struct {
-	ResourceType       string
-	ResourceID         uuid.UUID
-	ResourceVersion    int64
-	Summary            string
-	ErrorCode          string
-	ConnectorCommandID uuid.NullUUID
-	Enrollment         *EnrollmentResult
+	ResourceType         string
+	ResourceID           uuid.UUID
+	ResourceVersion      int64
+	Summary              string
+	ErrorCode            string
+	ConnectorCommandID   uuid.NullUUID
+	TelemetryOperationID uuid.NullUUID
+	Enrollment           *EnrollmentResult
 }
 
 type EnrollmentResult struct {
@@ -87,7 +88,7 @@ func (service PendingActionService) ExecuteReady(ctx context.Context, q *db.Quer
 	if err != nil || plan.AuthorizationVersion != action.AuthorizationVersion {
 		return ActionCommitResult{}, ErrActionInvalidated
 	}
-	canonicalPlan, err := canonicalJSON(plan.ImmutablePlan)
+	canonicalPlan, err := CanonicalJSON(plan.ImmutablePlan)
 	if err != nil {
 		return ActionCommitResult{}, ErrActionInvalidated
 	}
@@ -141,7 +142,7 @@ func (service PendingActionService) PrepareForSubject(ctx context.Context, subje
 		if err != nil || len(planJSON) == 0 || string(planJSON) == "null" {
 			return db.PendingAction{}, ErrActionUnavailable
 		}
-		planJSON, err = canonicalJSON(planJSON)
+		planJSON, err = CanonicalJSON(planJSON)
 		if err != nil {
 			return db.PendingAction{}, ErrActionUnavailable
 		}
@@ -260,7 +261,7 @@ func (service PendingActionService) Confirm(ctx context.Context, actorID string,
 		if err != nil || plan.AuthorizationVersion != authorizationVersion {
 			return ActionConfirmation{}, ErrActionInvalidated
 		}
-		canonicalPlan, err := canonicalJSON(plan.ImmutablePlan)
+		canonicalPlan, err := CanonicalJSON(plan.ImmutablePlan)
 		if err != nil {
 			return ActionConfirmation{}, ErrActionInvalidated
 		}
@@ -314,7 +315,9 @@ func (service PendingActionService) Confirm(ctx context.Context, actorID string,
 	})
 }
 
-func canonicalJSON(raw []byte) ([]byte, error) {
+// CanonicalJSON preserves JSON number precision while normalizing object order
+// and insignificant whitespace for hashes stored alongside PostgreSQL jsonb.
+func CanonicalJSON(raw []byte) ([]byte, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var value any

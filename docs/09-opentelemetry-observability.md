@@ -4,7 +4,7 @@
 
 Argus 根据主机已有连接路径一键安装并管理 OpenTelemetry Collector：Bastion Scope 成员经所属堡垒机 Connector 执行，公网独立主机经受控 Direct Executor 执行，Kubernetes 经其既定 API 连接路径执行。Collector 主动向 Argus 推送 Metrics、Logs 和 Traces，目标环境不需要公网入站端口。
 
-堡垒机范围内只有堡垒机本机可以启用 Edge Gateway Collector，成员主机可以选择直接推送 Argus，或推送到所属堡垒机上的 Gateway Collector。堡垒机以外的独立主机可以直接推送，或加入由显式启用的独立 Edge Gateway Collector 组成的 Telemetry Group；不能选择任何 Bastion Scope 内的堡垒机或成员作为跨范围上游。
+堡垒机范围内只有堡垒机本机可以启用 Edge Gateway Collector，成员主机可以选择直接推送 Argus，或推送到所属堡垒机上的 Gateway Collector。堡垒机以外的独立主机第一批只支持直接推送；独立 Telemetry Group 保留为后续能力，且不能选择任何 Bastion Scope 内的堡垒机或成员作为跨范围上游。
 
 这个设计采用 OpenTelemetry Agent + Gateway 模式，不额外开发重复的遥测 Pusher。堡垒机上的 `argus-connector` 负责安装、配置和修复，`argus-otelcol` 负责 OTLP 接收、队列和推送；遥测不进入 Connector 控制或远程会话通道。
 
@@ -12,11 +12,13 @@ Argus 根据主机已有连接路径一键安装并管理 OpenTelemetry Collecto
 
 - 主机 Collector 安装、状态、配置、升级、修复和卸载。
 - Direct、Leaf、Edge Gateway 三种主机角色。
-- Bastion Scope 约束的成员 → 堡垒机 Gateway 路由，以及独立主机 Telemetry Group 组网。
+- `direct_argus` 与 Bastion Scope 约束的成员 → 堡垒机 `bastion_gateway` 路由；独立主机 Telemetry Group 延后。
 - Kubernetes DaemonSet + Gateway Deployment。
 - Connector Artifact Tunnel。
-- `argus-telemetry ingest` → Kafka → `otel-clickhouse-writer` → ClickHouse。
-- 主机详情中的 Collector 安装、采集能力和推送配置；Metrics/Logs/Traces 综合查询与告警大屏延后。
+- `argus-telemetry ingest` → Kafka → `argus-telemetry writer` → ClickHouse。
+- Host/Kubernetes 详情中的 Collector 安装、采集能力、推送配置和 Metrics/Logs/Traces 有界查询；告警大屏延后。
+
+截至 2026-08-19，M7 已完成 Linux arm64 Host 与 Kubernetes Evaluation 闭环：锁定 OCB Distribution、独立 Telemetry mTLS 身份、OTLP gRPC/HTTP、Kafka、Go Writer、ClickHouse、统一 Query、Web/Agent/Card 以及临时 Namespace 故障恢复 E2E 均已通过。最终成功运行号为 `20260819140437-21054`，证据位于 `artifacts/m7-e2e/20260819140437-21054`，三个 Namespace、运行相关 PVC 和 Lease 零残留。Bastion Gateway 的 Metrics/Logs/Traces 是同一次运行的硬门禁；Query 同时验证跨企业、DataScope、预算、脱敏、授权版本变化和 Web/Agent/Card 一致性。Windows amd64 Artifact 已生成但保持 `validation_pending` 且不可选择；WinRM Collector 管理、Windows Service 生命周期、Linux amd64、真实 Windows和 Production HA/容量/备份/供应链门禁归 M8。
 
 Kubernetes 节点无法拉取镜像时，第一版只检测 Runtime 并提供离线导入提示，不实现镜像分发。
 
@@ -60,7 +62,7 @@ flowchart LR
     K --> CH["ClickHouse"]
 ```
 
-主机 G 是这些成员所属 Bastion Scope 的根堡垒机。Connector 负责安装和控制，Edge Gateway Collector 负责接收内网 OTLP、批处理、持久队列和统一出站。它仍然采集本机数据，但不能覆盖 Leaf 的 `host.id`、`host.name`、`service.name` 和 Argus Resource ID。
+主机 G 是这些成员所属 Bastion Scope 的根堡垒机。Connector 负责安装和控制，Edge Gateway Collector 负责接收内网 OTLP、持久队列和统一出站。下游身份管线不得跨 Collector batch；只有同一可信主体内的数据才可聚合，避免不同 Leaf 身份被合并为一个 OTLP 请求。它仍然采集本机数据，但不能覆盖 Leaf 的 `host.id`、`host.name`、`service.name` 和 Argus Resource ID。
 
 ### 3.3 独立主机 Edge Gateway 模式
 
@@ -152,6 +154,8 @@ KubernetesNodeHostBinding
 6. 主机名只作为弱提示，不足以自动确认。
 
 高可信唯一匹配可以自动标记为 `verified`；多候选、只有 IP/名称或证据发生变化时进入人工确认。绑定变化会影响采集归属，必须展示 Preview、受影响 Profile 和可能重复/中断的信号。
+
+人工确认后的 `evidence_hash` 只绑定 Node UID、Node Name、Provider ID、受信 Machine ID 和 System UUID 等稳定强身份。InternalIP/ExternalIP 完整集合仍保存在证据中并参与 Host 候选匹配，但不进入确认哈希，避免节点网络短暂出现或消失 IPv4/IPv6 地址时错误撤销 Binding；任一强身份变化仍将 Binding 标记为 `stale`，并使关联 Claim/操作重新 Preview。
 
 ### 4.2 Collection Claim 与共存规则
 
@@ -636,11 +640,13 @@ service:
 企业：argus.enterprise.id
 ```
 
-Leaf 到 Edge Gateway 使用独立短期 Token 或 mTLS。Edge Gateway 根据认证结果和服务端资源关系覆盖可信 Enterprise、Resource 和 Collector ID，不能相信 Leaf 自报的企业、资源和 Collector 字段。覆盖发生在接收 Pipeline 最前端，客户端提交的 `argus.enterprise.id`、`argus.resource.id`、`argus.collector.id` 和 `argus.edge_gateway.id` 同名字段必须删除后重建，不能只在已有属性旁追加可信值。
+Leaf 到 Edge Gateway 使用独立 mTLS。Collector 本地生成私钥和 CSR，Enrollment 返回短期证书；Kubernetes Agent 与 Gateway 通过内存卷装载身份，Agent 到 Gateway 的 OTLP 链路要求双向 TLS。Edge Gateway 根据认证结果和服务端资源关系覆盖可信 Enterprise、Resource 和 Collector ID，不能相信 Leaf 自报的企业、资源和 Collector 字段。覆盖发生在接收 Pipeline 最前端，客户端提交的 `argus.enterprise.id`、`argus.resource.id`、`argus.collector.id` 和 `argus.edge_gateway.id` 同名字段必须删除后重建，不能只在已有属性旁追加可信值。
 
 堡垒机 Gateway 只签发给同一 Bastion Scope 成员的 Leaf Credential，认证时同时校验 `bastion_scope_id`、源 Host、源 Collector 和目标 Gateway。独立 Gateway 只接受同一 Telemetry Group 的独立主机凭证。即使网络端口可达，跨 Scope、独立主机 → 堡垒机 Gateway、堡垒机成员 → 独立 Gateway 的凭证都必须被拒绝。
 
 Edge Gateway 到 Argus 使用独立凭证。`argus-telemetry ingest` 根据该凭证确定企业，并从受信资源目录解析源 Resource 和 Collector，覆盖可信 `argus.enterprise.id`、`argus.resource.id` 和 `argus.collector.id`，同时校验源资源属于同一企业。Bastion Scope、Telemetry Group 或用户标签都不能替代资源真实企业归属和 DataScope 授权。
+
+Kubernetes Gateway 转发自身 Collector 数据时，只有内嵌 Collector ID 和证书序列与外层 mTLS 身份完全一致才按同 Collector 接受；其他下游身份必须匹配已落库的 Route、Gateway、资源和 Leaf 证书关系。Kubelet receiver 只读挂载宿主 kubelet 证书链并要求 `nodes/stats` 最小 RBAC，禁止设置 `insecure_skip_verify`。
 
 真实私钥不进入模型、普通 Tool Result 或 Card DOM。证书支持轮换、吊销和过期告警。
 
@@ -667,7 +673,7 @@ Ingest 自身需要水平扩展，不保存唯一业务状态。凭证和配额�
 argus-telemetry ingest
 → Kafka Producer
 → Kafka
-→ otel-clickhouse-writer（Kafka Receiver）
+→ argus-telemetry writer（Kafka Receiver）
 → ClickHouse Exporter
 → ClickHouse
 ```
@@ -689,7 +695,7 @@ Ingest 侧在认证和可信身份注入后使用幂等 Kafka Producer，并在�
 
 第一版使用共享 Signal Topic，通过可信 ResourceAttributes 和 Kafka Header 携带 `enterprise_id`、`resource_id` 和 `collector_id`。不要为每个企业或标签创建 Topic；超大企业后续再配置专用 Topic。
 
-`otel-clickhouse-writer` 优先使用标准 OpenTelemetry Collector 发行物。Kafka Receiver 必须启用 `message_marking.after: true`，并保持 `on_error: false` 与 `on_permanent_error: false`，使消息只在下游 Pipeline 成功后标记；具体版本的 Offset 提交语义需要作为发布门禁集成测试。Kafka 到 ClickHouse 保持至少一次语义，不能使用 Kafka Receiver 的默认提前标记行为假设“写入必达”。标准 Writer 与 Argus 三个逻辑数据集的映射以 16.6 Writer Gate 为准，不满足可靠性或 Schema 门禁时才启用最小自研 Writer。
+`argus-telemetry writer` 优先使用标准 OpenTelemetry Collector 发行物。Kafka Receiver 必须启用 `message_marking.after: true`，并保持 `on_error: false` 与 `on_permanent_error: false`，使消息只在下游 Pipeline 成功后标记；具体版本的 Offset 提交语义需要作为发布门禁集成测试。Kafka 到 ClickHouse 保持至少一次语义，不能使用 Kafka Receiver 的默认提前标记行为假设“写入必达”。标准 Writer 与 Argus 三个逻辑数据集的映射以 16.6 Writer Gate 为准，不满足可靠性或 Schema 门禁时才启用最小自研 Writer。
 
 无法解析或永久失败的记录不能无限阻塞分区。第一版应提供受控的隔离/DLQ 流程：记录原 Topic、Partition、Offset、失败原因和 Payload 哈希，人工或修复任务确认后再跳过或重放。是否由 Collector 组件直接路由 DLQ 取决于锁定版本的能力；如果标准组件不能满足“写成功后提交 + 永久错误隔离”，应将 Writer 替换为最小自研消费者，而不是降低可靠性语义。
 
@@ -893,7 +899,7 @@ Kubernetes 内置部署必须使用 Altinity ClickHouse Operator。职责边界�
 | --- | --- |
 | Altinity ClickHouse Operator | ClickHouseInstallation、Shard/Replica、Keeper、PVC、配置和滚动维护 |
 | Argus Schema Migration | 三个逻辑数据集的 Local/Distributed Table、索引、Projection、TTL 和 Schema Version |
-| `otel-clickhouse-writer` | 从 Kafka 消费标准 OTLP 数据并通过 ClickHouse Exporter 插入 |
+| `argus-telemetry writer` | 从 Kafka 消费标准 OTLP 数据并通过 ClickHouse Exporter 插入 |
 | `argus-telemetry query` | 企业隔离、语义查询、限流和结果裁剪 |
 
 ClickHouse Exporter 必须设置 `create_schema: false`。Operator 不能代替应用 Schema Migration，Migration 也不能直接管理 Pod、Replica 或 PVC。

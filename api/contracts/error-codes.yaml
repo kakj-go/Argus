@@ -120,3 +120,34 @@ codes:
   REMOTE_ACCESS_RECORDING_UNAVAILABLE: {http_status: 503, message_key: errors.remote_access.recording_unavailable, retryable: true}
   REMOTE_ACCESS_CONNECTION_LOST: {http_status: 409, message_key: errors.remote_access.connection_lost, retryable: true}
   WINRM_TLS_REQUIRED: {http_status: 422, message_key: errors.remote_access.winrm_tls_required, retryable: false}
+  COLLECTOR_DISTRIBUTION_UNSUPPORTED: {http_status: 422, message_key: errors.telemetry.distribution_unsupported, retryable: false}
+  COLLECTOR_ARTIFACT_INVALID: {http_status: 422, message_key: errors.telemetry.artifact_invalid, retryable: false}
+  COLLECTOR_PROFILE_INCOMPATIBLE: {http_status: 422, message_key: errors.telemetry.profile_incompatible, retryable: false}
+  COLLECTOR_ALREADY_INSTALLED: {http_status: 409, message_key: errors.telemetry.already_installed, retryable: false}
+  COLLECTOR_NOT_INSTALLED: {http_status: 404, message_key: errors.telemetry.not_installed, retryable: false}
+  COLLECTOR_CONFIG_INVALID: {http_status: 422, message_key: errors.telemetry.config_invalid, retryable: false}
+  COLLECTOR_HEALTH_CHECK_FAILED: {http_status: 503, message_key: errors.telemetry.health_check_failed, retryable: true}
+  COLLECTOR_COMMAND_INVALID: {http_status: 422, message_key: errors.telemetry.collector_command_invalid, retryable: false}
+  COLLECTOR_DISTRIBUTION_UNSUPPORTED: {http_status: 422, message_key: errors.telemetry.distribution_unsupported, retryable: false}
+  COLLECTOR_ARTIFACT_INVALID: {http_status: 422, message_key: errors.telemetry.artifact_invalid, retryable: false}
+  COLLECTOR_NODE_EVIDENCE_INVALID: {http_status: 422, message_key: errors.telemetry.node_evidence_invalid, retryable: false}
+  COLLECTOR_KUBERNETES_FORBIDDEN: {http_status: 403, message_key: errors.telemetry.kubernetes_forbidden, retryable: false}
+  COLLECTOR_KUBERNETES_RESOURCE_INVALID: {http_status: 422, message_key: errors.telemetry.kubernetes_resource_invalid, retryable: false}
+  COLLECTOR_KUBERNETES_RESOURCE_MISSING: {http_status: 404, message_key: errors.telemetry.kubernetes_resource_missing, retryable: false}
+  COLLECTOR_KUBERNETES_CONFLICT: {http_status: 409, message_key: errors.telemetry.kubernetes_conflict, retryable: true}
+  COLLECTOR_MANAGEMENT_FAILED: {http_status: 503, message_key: errors.telemetry.collector_management_failed, retryable: true}
+  COLLECTOR_ROUTE_INVALID: {http_status: 422, message_key: errors.telemetry.route_invalid, retryable: false}
+  COLLECTION_CLAIM_CONFLICT: {http_status: 409, message_key: errors.telemetry.claim_conflict, retryable: false}
+  NODE_HOST_BINDING_REQUIRED: {http_status: 409, message_key: errors.telemetry.node_host_binding_required, retryable: false}
+  TELEMETRY_CREDENTIAL_INVALID: {http_status: 401, message_key: errors.telemetry.credential_invalid, retryable: false}
+  TELEMETRY_ENROLLMENT_INVALID: {http_status: 401, message_key: errors.telemetry.enrollment_invalid, retryable: false}
+  TELEMETRY_CERTIFICATE_FENCED: {http_status: 401, message_key: errors.telemetry.certificate_fenced, retryable: false}
+  TELEMETRY_IDENTITY_MISMATCH: {http_status: 403, message_key: errors.telemetry.identity_mismatch, retryable: false}
+  TELEMETRY_INGEST_LIMIT_EXCEEDED: {http_status: 429, message_key: errors.telemetry.ingest_limit_exceeded, retryable: true}
+  TELEMETRY_SCHEMA_UNSUPPORTED: {http_status: 422, message_key: errors.telemetry.schema_unsupported, retryable: false}
+  TELEMETRY_BACKPRESSURE: {http_status: 503, message_key: errors.telemetry.backpressure, retryable: true}
+  TELEMETRY_QUERY_BUDGET_EXCEEDED: {http_status: 422, message_key: errors.telemetry.query_budget_exceeded, retryable: false}
+  TELEMETRY_SIGNAL_FORBIDDEN: {http_status: 403, message_key: errors.telemetry.signal_forbidden, retryable: false}
+  TELEMETRY_FIELD_FORBIDDEN: {http_status: 403, message_key: errors.telemetry.field_forbidden, retryable: false}
+  TELEMETRY_DEPENDENCY_UNAVAILABLE: {http_status: 503, message_key: errors.telemetry.dependency_unavailable, retryable: true}
+  TELEMETRY_DLQ_REPLAY_CONFLICT: {http_status: 409, message_key: errors.telemetry.dlq_replay_conflict, retryable: false}

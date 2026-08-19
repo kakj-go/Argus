@@ -3,10 +3,10 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useApi,
+  type CollectorInstance,
   type KubernetesCluster,
   type PendingActionPublic,
 } from "@argus/api-client";
-import type { CollectorInstallState } from "@argus/api-client/provisional";
 import {
   Button,
   Card,
@@ -63,7 +63,7 @@ export function CollectorStatusPanel({
   collector,
 }: {
   cluster: KubernetesCluster;
-  collector: CollectorInstallState;
+  collector: CollectorInstance;
 }) {
   const { t } = useTranslation();
   const api = useApi();
@@ -77,23 +77,33 @@ export function CollectorStatusPanel({
     queryKey: ["kubernetes", "collectionClaims", cluster.id],
     queryFn: () => api.kubernetes.listCollectionClaims(cluster.id),
   });
+  const profilesQuery = useQuery({
+    queryKey: ["telemetry", "profiles"],
+    queryFn: () => api.telemetry.listProfiles(),
+  });
 
   const [profiles, setProfiles] = useState(() =>
-    initialProfiles(collector.profile),
+    initialProfiles("k8s-daemonset"),
   );
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
+  const [routeTested, setRouteTested] = useState(false);
 
   const baseline = useMemo(
-    () => initialProfiles(collector.profile),
-    [collector.profile],
+    () => initialProfiles("k8s-daemonset"),
+    [],
   );
 
   const diffLines = useMemo(() => {
     const lines: Array<{
       type: "add" | "remove" | "context";
       content: string;
-    }> = [{ type: "context", content: `profile: ${collector.profile}` }];
+    }> = [
+      {
+        type: "context",
+        content: `distribution: ${collector.distribution_version_id}`,
+      },
+    ];
     for (const key of PROFILE_KEYS) {
       if (profiles[key] === baseline[key]) continue;
       lines.push({
@@ -104,16 +114,58 @@ export function CollectorStatusPanel({
       });
     }
     return lines;
-  }, [profiles, baseline, collector.profile, t]);
+  }, [profiles, baseline, collector.distribution_version_id, t]);
 
   const changed = diffLines.length > 1;
 
   const previewChange = useMutation({
-    mutationFn: () =>
-      api.kubernetes.previewCollectorInstall(cluster.id, {
-        profile: toProfileString(profiles),
-      }),
+    mutationFn: () => {
+      const keys = toProfileString(profiles).split(",");
+      const catalogKeys = new Set<string>();
+      if (keys.includes("k8s-daemonset") || keys.includes("node-metrics")) {
+        catalogKeys.add("k8s-node-container");
+      }
+      if (keys.includes("cluster-traces")) {
+        catalogKeys.add("k8s-otlp-gateway");
+      }
+      const profileIds = (profilesQuery.data ?? [])
+        .filter((profile) => catalogKeys.has(profile.key))
+        .map((profile) => profile.id);
+      return api.kubernetes.previewCollectorAction(cluster.id, "configure", {
+        distribution_version_id: collector.distribution_version_id,
+        profile_ids: profileIds,
+        route_kind: collector.route?.kind ?? "direct_argus",
+        gateway_collector_id: collector.route?.gateway_collector_id,
+        expected_version: collector.version,
+      });
+    },
     onSuccess: setPendingAction,
+  });
+
+  const previewLifecycle = useMutation({
+    mutationFn: (action: "upgrade" | "repair" | "uninstall") => {
+      const profileIds = [...new Set((claimsQuery.data ?? [])
+        .filter((claim) => claim.collector_id === collector.id && claim.status === "active")
+        .map((claim) => claim.profile_id)
+        .filter((id): id is string => Boolean(id)))];
+      return api.kubernetes.previewCollectorAction(cluster.id, action, {
+        distribution_version_id: collector.distribution_version_id,
+        profile_ids: profileIds,
+        route_kind: collector.route?.kind ?? "direct_argus",
+        gateway_collector_id: collector.route?.gateway_collector_id,
+        expected_version: collector.version,
+      });
+    },
+    onSuccess: setPendingAction,
+  });
+
+  const testRoute = useMutation({
+    mutationFn: () => api.telemetry.testRoute({
+      collector_id: collector.id,
+      route_kind: collector.route?.kind ?? "direct_argus",
+      gateway_collector_id: collector.route?.gateway_collector_id,
+    }),
+    onSuccess: (result) => setRouteTested(result.status === "succeeded"),
   });
 
   const coverage = bindingCoverage(cluster, bindingsQuery.data);
@@ -150,7 +202,7 @@ export function CollectorStatusPanel({
         />
         <StatCard
           label={t("kubernetes.collector.status.version")}
-          value={collector.version}
+          value={collector.platform}
         />
       </div>
 
@@ -158,10 +210,32 @@ export function CollectorStatusPanel({
         <CardHeader title={t("kubernetes.collector.status.readyReplicas")} />
         <CardContent>
           <Progress
-            label={`${collector.progress}%`}
-            tone={collector.progress >= 100 ? "success" : "accent"}
-            value={collector.progress}
+            label={collector.status === "converged" ? "100%" : "60%"}
+            tone={collector.status === "converged" ? "success" : "accent"}
+            value={collector.status === "converged" ? 100 : 60}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("kubernetes.collector.status.lifecycleTitle")} />
+        <CardContent>
+          {pendingAction ? (
+            <PendingActionCard action={pendingAction} onSettled={() => {
+              setPendingAction(null);
+              void queryClient.invalidateQueries({ queryKey: ["kubernetes"] });
+            }} />
+          ) : (
+            <div className="argus-form-actions">
+              <Button loading={testRoute.isPending} onClick={() => testRoute.mutate()} variant="secondary">
+                {t("kubernetes.collector.status.testRoute")}
+              </Button>
+              {routeTested && <StatusBadge tone="success">{t("kubernetes.collector.status.routeOk")}</StatusBadge>}
+              <Button loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("upgrade")} variant="secondary">{t("kubernetes.collector.status.upgrade")}</Button>
+              <Button loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("repair")} variant="secondary">{t("kubernetes.collector.status.repair")}</Button>
+              <Button loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("uninstall")} variant="danger">{t("kubernetes.collector.status.uninstall")}</Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -173,11 +247,11 @@ export function CollectorStatusPanel({
             items={[
               {
                 label: t("kubernetes.collector.status.revision"),
-                value: `${collector.effectiveRevision} → ${collector.desiredRevision}`,
+                value: `${collector.effective_revision} → ${collector.desired_revision}`,
               },
               {
                 label: t("kubernetes.collector.wizard.profile"),
-                value: collector.profile,
+                value: collector.distribution_version_id,
               },
               {
                 label: t("kubernetes.collector.status.imageDigest"),
@@ -209,9 +283,8 @@ export function CollectorStatusPanel({
                     {t("kubernetes.claimState.closeHostProfile")}
                   </StatusBadge>
                   <span>
-                    {claim.profile} · {claim.signal} ·{" "}
-                    {t("kubernetes.collector.wizard.conflictWith")}:{" "}
-                    {claim.conflictWithId ?? "—"}
+                    {claim.profile_id ?? claim.claim_type} · {claim.signal} ·{" "}
+                    {claim.physical_resource_ref}
                   </span>
                 </li>
               ))}

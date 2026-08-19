@@ -38,6 +38,18 @@ data:
   ARGUS_OBJECT_STORE_URL: {{ required "runtime.objectStoreUrl is required" .Values.runtime.objectStoreUrl | quote }}
   ARGUS_OBJECT_STORE_BUCKET: {{ required "runtime.objectStoreBucket is required" .Values.runtime.objectStoreBucket | quote }}
   ARGUS_DIRECT_EXECUTOR_RECIPIENT_ID: argus-direct-executor
+  ARGUS_TELEMETRY_QUERY_ENDPOINT: {{ printf "argus-telemetry-query.%s.svc:9447" .Values.namespaces.observability | quote }}
+  ARGUS_TELEMETRY_SERVER_NAME: {{ printf "argus-telemetry-query.%s.svc" .Values.namespaces.observability | quote }}
+  ARGUS_TELEMETRY_ISSUER_NAME: {{ .Values.runtime.telemetryIssuerName | quote }}
+  ARGUS_TELEMETRY_ISSUER_GENERATION: {{ .Values.runtime.telemetryIssuerGeneration | quote }}
+  ARGUS_TELEMETRY_INGEST_GRPC_ENDPOINT: {{ .Values.runtime.telemetryIngestGrpcEndpoint | quote }}
+  ARGUS_TELEMETRY_INGEST_HTTP_ENDPOINT: {{ .Values.runtime.telemetryIngestHttpEndpoint | quote }}
+  ARGUS_TELEMETRY_ENROLLMENT_ENDPOINT: {{ .Values.runtime.telemetryEnrollmentEndpoint | quote }}
+  ARGUS_TELEMETRY_TOOL_CATALOG_ENABLED: {{ .Values.runtime.telemetryToolCatalogEnabled | quote }}
+  ARGUS_TELEMETRY_CERTIFICATE_REQUEST_NAMESPACE: {{ .Values.namespaces.observability | quote }}
+  ARGUS_OTELCOL_SIGNING_PUBLIC_KEYS: {{ dict .Values.runtime.otelcolSigningKeyId .Values.runtime.otelcolSigningPublicKey | toJson | quote }}
+  ARGUS_OTELCOL_KUBERNETES_IMAGE: {{ required "runtime.otelcolKubernetesImage is required" .Values.runtime.otelcolKubernetesImage | quote }}
+  ARGUS_OTELCOL_ARTIFACT_CA_PATH: {{ if .Values.runtime.otelcolArtifactCABundleSecretName }}"/var/run/secrets/argus/otelcol-artifact-ca/ca.crt"{{ else }}""{{ end }}
 ---
 apiVersion: v1
 kind: Secret

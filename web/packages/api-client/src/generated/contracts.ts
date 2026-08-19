@@ -27,6 +27,7 @@ export type { components as AutomationapiComponents, paths as AutomationapiPaths
 export type { components as SandboxapiComponents, paths as SandboxapiPaths } from "./sandboxapi.js";
 export type { components as CardapiComponents, paths as CardapiPaths } from "./cardapi.js";
 export type { components as RemoteaccessapiComponents, paths as RemoteaccessapiPaths } from "./remoteaccessapi.js";
+export type { components as TelemetryapiComponents, paths as TelemetryapiPaths } from "./telemetryapi.js";
 
 export type ApiError = import("./common.js").components["schemas"]["ApiError"];
 export type CursorPage = import("./common.js").components["schemas"]["CursorPage"];
@@ -193,3 +194,24 @@ export type RemoteAccessSessionCreate = import("./remoteaccessapi.js").component
 export type SessionTicketResult = import("./remoteaccessapi.js").components["schemas"]["SessionTicketResult"];
 export type RemoteAccessRecording = import("./remoteaccessapi.js").components["schemas"]["RemoteAccessRecording"];
 export type RecordingEventPage = import("./remoteaccessapi.js").components["schemas"]["RecordingEventPage"];
+export type CollectorDistributionVersion = import("./telemetryapi.js").components["schemas"]["CollectorDistributionVersion"];
+export type CollectionProfile = import("./telemetryapi.js").components["schemas"]["CollectionProfile"];
+export type CollectorInstance = import("./telemetryapi.js").components["schemas"]["CollectorInstance"];
+export type CollectorPage = import("./telemetryapi.js").components["schemas"]["CollectorPage"];
+export type CollectorPreview = import("./telemetryapi.js").components["schemas"]["CollectorPreview"];
+export type TelemetryRoute = import("./telemetryapi.js").components["schemas"]["TelemetryRoute"];
+export type CollectionClaim = import("./telemetryapi.js").components["schemas"]["CollectionClaim"];
+export type KubernetesNodeHostBinding = import("./telemetryapi.js").components["schemas"]["KubernetesNodeHostBinding"];
+export type NodeHostBindingPreview = import("./telemetryapi.js").components["schemas"]["NodeHostBindingPreview"];
+export type TelemetryRetentionPolicy = import("./telemetryapi.js").components["schemas"]["TelemetryRetentionPolicy"];
+export type TelemetryUsage = import("./telemetryapi.js").components["schemas"]["TelemetryUsage"];
+export type MetricsQuery = import("./telemetryapi.js").components["schemas"]["MetricsQuery"];
+export type LogsQuery = import("./telemetryapi.js").components["schemas"]["LogsQuery"];
+export type TracesQuery = import("./telemetryapi.js").components["schemas"]["TracesQuery"];
+export type TelemetryOverviewQuery = import("./telemetryapi.js").components["schemas"]["TelemetryOverviewQuery"];
+export type MetricsResult = import("./telemetryapi.js").components["schemas"]["MetricsResult"];
+export type LogsResult = import("./telemetryapi.js").components["schemas"]["LogsResult"];
+export type TracesResult = import("./telemetryapi.js").components["schemas"]["TracesResult"];
+export type TelemetryOverview = import("./telemetryapi.js").components["schemas"]["TelemetryOverview"];
+export type RouteTestCreate = import("./telemetryapi.js").components["schemas"]["RouteTestCreate"];
+export type RouteTestResult = import("./telemetryapi.js").components["schemas"]["RouteTestResult"];

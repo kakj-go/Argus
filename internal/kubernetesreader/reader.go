@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -48,13 +48,10 @@ func (reader Reader) List(ctx context.Context, cluster db.KubernetesCluster, que
 	}
 	payload := &connectorv1.KubernetesResourceQuery{ClusterId: cluster.ID.String(), ResourceType: query.ResourceType, Namespace: query.Namespace,
 		Name: query.Query, Limit: uint32(query.Limit), MaxResultBytes: 1 << 20}
-	result, err := reader.connectorCommand(ctx, cluster, "kubernetes_resource_query", payload)
+	var typed connectorv1.KubernetesResourceQueryResult
+	err := reader.connectorCommand(ctx, cluster, "kubernetes_resource_query", payload, &typed)
 	if err != nil {
 		return nil, err
-	}
-	var typed connectorv1.KubernetesResourceQueryResult
-	if result.UnmarshalTo(&typed) != nil {
-		return nil, resource.ErrKubernetesUnavailable
 	}
 	items := make([]resource.KubernetesObject, 0, len(typed.ResourcesJson))
 	for _, encoded := range typed.ResourcesJson {
@@ -73,13 +70,10 @@ func (reader Reader) PodLogs(ctx context.Context, cluster db.KubernetesCluster, 
 	}
 	payload := &connectorv1.KubernetesPodLogsQuery{ClusterId: cluster.ID.String(), Namespace: query.Namespace, Pod: query.Pod,
 		Container: query.Container, TailLines: uint32(query.TailLines), MaxResultBytes: 1 << 20}
-	result, err := reader.connectorCommand(ctx, cluster, "kubernetes_pod_logs", payload)
+	var typed connectorv1.KubernetesPodLogsResult
+	err := reader.connectorCommand(ctx, cluster, "kubernetes_pod_logs", payload, &typed)
 	if err != nil {
 		return nil, false, err
-	}
-	var typed connectorv1.KubernetesPodLogsResult
-	if result.UnmarshalTo(&typed) != nil {
-		return nil, false, resource.ErrKubernetesUnavailable
 	}
 	return typed.Content, typed.Truncated, nil
 }
@@ -229,10 +223,10 @@ func rejectRedirect(_ *http.Request, _ []*http.Request) error {
 	return resource.ErrDirectTargetDenied
 }
 
-func (reader Reader) connectorCommand(ctx context.Context, cluster db.KubernetesCluster, commandType string, payload any) (*anypb.Any, error) {
+func (reader Reader) connectorCommand(ctx context.Context, cluster db.KubernetesCluster, commandType string, payload any, result proto.Message) error {
 	connectorRecord, err := reader.connectorForCluster(ctx, cluster)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var leaseID uuid.NullUUID
 	if cluster.CredentialID.Valid {
@@ -240,14 +234,14 @@ func (reader Reader) connectorCommand(ctx context.Context, cluster db.Kubernetes
 			CredentialID: cluster.CredentialID.UUID, OperationRef: "kubernetes.query/" + uuid.NewString(), TargetResourceType: "kubernetes_cluster", TargetResourceID: cluster.ID,
 			RecipientType: "connector", RecipientID: connectorRecord.ID.String(), Protocol: "kubernetes", TTL: time.Minute})
 		if err != nil {
-			return nil, resource.ErrKubernetesUnavailable
+			return resource.ErrKubernetesUnavailable
 		}
 		clear(issued.Value)
 		leaseID = uuid.NullUUID{UUID: issued.Lease.ID, Valid: true}
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil || len(encoded) > 1<<20 {
-		return nil, resource.ErrKubernetesUnavailable
+		return resource.ErrKubernetesUnavailable
 	}
 	hash := sha256.Sum256(encoded)
 	commandID := "cmd_" + strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -256,7 +250,7 @@ func (reader Reader) connectorCommand(ctx context.Context, cluster db.Kubernetes
 		OperationRef: cluster.ID.String(), CredentialLeaseID: leaseID, CommandType: commandType, PayloadSchemaVersion: "argus.connector_command/v1",
 		Payload: encoded, PayloadHash: hash[:], IdempotencyKey: uuid.NewString(), ExpiresAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(reader.timeout()), Valid: true}})
 	if err != nil {
-		return nil, resource.ErrKubernetesUnavailable
+		return resource.ErrKubernetesUnavailable
 	}
 	if reader.Notifier != nil {
 		reader.Notifier.NotifyConnectorCommand(ctx, command.ConnectorID, command.ConnectionEpoch)
@@ -268,26 +262,32 @@ func (reader Reader) connectorCommand(ctx context.Context, cluster db.Kubernetes
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return ctx.Err()
 		case <-timeout.C:
-			return nil, resource.ErrKubernetesUnavailable
+			return resource.ErrKubernetesUnavailable
 		case <-ticker.C:
 			command, err = reader.Store.Queries.GetConnectorCommand(ctx, db.GetConnectorCommandParams{CommandID: command.CommandID, ConnectorID: command.ConnectorID, ConnectionEpoch: command.ConnectionEpoch})
 			if err != nil {
-				return nil, resource.ErrKubernetesUnavailable
+				return resource.ErrKubernetesUnavailable
 			}
 			if command.Status == "failed" || command.Status == "timed_out" || command.Status == "result_unknown" {
-				return nil, resource.ErrKubernetesUnavailable
+				return resource.ErrKubernetesUnavailable
 			}
 			if command.Status == "succeeded" {
-				var value anypb.Any
-				if protojson.Unmarshal(command.Result, &value) != nil {
-					return nil, resource.ErrKubernetesUnavailable
+				if err := unmarshalConnectorResult(command.Result, result); err != nil {
+					return err
 				}
-				return &value, nil
+				return nil
 			}
 		}
 	}
+}
+
+func unmarshalConnectorResult(encoded json.RawMessage, result proto.Message) error {
+	if len(encoded) == 0 || result == nil || protojson.Unmarshal(encoded, result) != nil {
+		return resource.ErrKubernetesUnavailable
+	}
+	return nil
 }
 
 func (reader Reader) connectorForCluster(ctx context.Context, cluster db.KubernetesCluster) (db.Connector, error) {

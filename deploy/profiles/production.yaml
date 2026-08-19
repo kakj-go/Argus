@@ -27,6 +27,13 @@ spec:
   openSandbox:
     runtimeClassName: ""
     allowSharedRuntime: false
+  telemetry:
+    collectorVersion: 0.1.0-m7
+    linuxArm64Uri: https://artifacts.example.com/argus-otelcol/0.1.0-m7/linux-arm64.tar.gz
+    linuxArm64Sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    windowsAmd64Uri: https://artifacts.example.com/argus-otelcol/0.1.0-m7/windows-amd64.zip
+    windowsAmd64Sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    signingKeyId: replace-before-production
   persistence:
     postgresql: 200Gi
     redis: 20Gi

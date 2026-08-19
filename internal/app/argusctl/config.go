@@ -40,11 +40,21 @@ type InstallSpec struct {
 		RuntimeClassName   string `json:"runtimeClassName"`
 		AllowSharedRuntime bool   `json:"allowSharedRuntime"`
 	} `json:"openSandbox"`
-	Persistence Persistence `json:"persistence"`
+	Telemetry   TelemetryArtifacts `json:"telemetry"`
+	Persistence Persistence        `json:"persistence"`
 	Cleanup     struct {
 		RetainData      bool `json:"retainData"`
 		DeleteOwnedCRDs bool `json:"deleteOwnedCrds"`
 	} `json:"cleanup"`
+}
+
+type TelemetryArtifacts struct {
+	CollectorVersion   string `json:"collectorVersion"`
+	LinuxARM64URI      string `json:"linuxArm64Uri"`
+	LinuxARM64SHA256   string `json:"linuxArm64Sha256"`
+	WindowsAMD64URI    string `json:"windowsAmd64Uri"`
+	WindowsAMD64SHA256 string `json:"windowsAmd64Sha256"`
+	SigningKeyID       string `json:"signingKeyId"`
 }
 
 type Namespaces struct {
@@ -122,6 +132,18 @@ func (c *InstallConfig) Validate() error {
 	}
 	if c.Spec.Images.Registry == "" || c.Spec.Images.Tag == "" {
 		return fmt.Errorf("spec.images.registry and spec.images.tag are required")
+	}
+	if c.Spec.Telemetry.CollectorVersion == "" || c.Spec.Telemetry.LinuxARM64URI == "" ||
+		c.Spec.Telemetry.WindowsAMD64URI == "" || c.Spec.Telemetry.SigningKeyID == "" {
+		return fmt.Errorf("spec.telemetry Collector version, artifact URIs, and signing key ID are required")
+	}
+	for name, value := range map[string]string{
+		"spec.telemetry.linuxArm64Sha256":   c.Spec.Telemetry.LinuxARM64SHA256,
+		"spec.telemetry.windowsAmd64Sha256": c.Spec.Telemetry.WindowsAMD64SHA256,
+	} {
+		if matched, _ := regexp.MatchString(`^[0-9a-fA-F]{64}$`, value); !matched {
+			return fmt.Errorf("%s must be a SHA-256 hex digest", name)
+		}
 	}
 	if !contains([]string{"local-registry", "oci-registry"}, c.Spec.Images.Mode) {
 		return fmt.Errorf("unsupported image mode %q", c.Spec.Images.Mode)

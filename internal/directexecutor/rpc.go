@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -46,6 +47,11 @@ func (dispatcher *Dispatcher) Close() error { return dispatcher.connection.Close
 
 func (dispatcher *Dispatcher) DispatchConnectionTest(ctx context.Context, test db.ConnectionTest) error {
 	_, err := dispatcher.client.DispatchConnectionTest(ctx, &directv1.DispatchConnectionTestRequest{ConnectionTestId: test.ID.String()})
+	return err
+}
+
+func (dispatcher *Dispatcher) DispatchCollectorManagement(ctx context.Context, operation db.TelemetryCollectorOperation) error {
+	_, err := dispatcher.client.DispatchCollectorManagement(ctx, &directv1.DispatchCollectorManagementRequest{OperationId: operation.ID.String()})
 	return err
 }
 
@@ -85,6 +91,35 @@ func (server RPCServer) DispatchConnectionTest(_ context.Context, request *direc
 		server.Executor.execute(server.Context, test)
 	}()
 	return &directv1.DispatchConnectionTestResponse{Status: directv1.DispatchStatus_DISPATCH_STATUS_ACCEPTED}, nil
+}
+
+func (server RPCServer) DispatchCollectorManagement(_ context.Context, request *directv1.DispatchCollectorManagementRequest) (*directv1.DispatchCollectorManagementResponse, error) {
+	if server.Executor == nil || server.Executor.Store == nil {
+		return nil, status.Error(codes.Unavailable, "Direct Executor is unavailable")
+	}
+	id, err := uuid.Parse(request.GetOperationId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid Collector operation ID")
+	}
+	if !server.Executor.reserveOne() {
+		return nil, status.Error(codes.ResourceExhausted, "Direct Executor is at capacity")
+	}
+	operation, err := server.Executor.Store.Queries.ClaimTelemetryCollectorOperation(server.Context, db.ClaimTelemetryCollectorOperationParams{
+		ID: id, LeaseOwner: pgtype.Text{String: server.Executor.InstanceID, Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		server.Executor.release(1)
+		return &directv1.DispatchCollectorManagementResponse{Status: directv1.DispatchStatus_DISPATCH_STATUS_ALREADY_HANDLED}, nil
+	}
+	if err != nil {
+		server.Executor.release(1)
+		return nil, status.Error(codes.Unavailable, "claim Collector operation")
+	}
+	go func() {
+		defer server.Executor.release(1)
+		server.Executor.executeCollectorOperation(server.Context, operation)
+	}()
+	return &directv1.DispatchCollectorManagementResponse{Status: directv1.DispatchStatus_DISPATCH_STATUS_ACCEPTED}, nil
 }
 
 func LoadServerTLS(certificatePath, privateKeyPath, caPath string, authorizedClientNames []string) (*tls.Config, error) {

@@ -29,3 +29,6 @@ spec:
                 name: argus-runtime-secrets
             - configMapRef:
                 name: argus-runtime-config
+          env:
+            - name: ARGUS_TELEMETRY_TOOL_CATALOG_ENABLED
+              value: {{ .Values.runtime.telemetryToolCatalogEnabled | quote }}

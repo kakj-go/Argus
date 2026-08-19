@@ -20,18 +20,20 @@ describe("configured adapter", () => {
     ).rejects.toBeInstanceOf(ClientConfigurationError);
   });
 
-  it("returns a stable unavailable error for unfrozen real operations", async () => {
+  it("returns a stable unavailable error for portal-incompatible operations", async () => {
     const client = await createConfiguredApiClient({
-      portal: "enterprise",
+      portal: "setup",
       mode: "real",
       base_url: "https://api.example.test",
     });
-    await expect(client.hosts.getCollector("host-1")).rejects.toBeInstanceOf(
+    await expect(
+      client.auth.login({ username: "setup", password: "not-sent" }),
+    ).rejects.toBeInstanceOf(
       ClientOperationUnavailableError,
     );
-    await expect(client.hosts.getCollector("host-1")).rejects.toMatchObject({
-      code: "CLIENT_OPERATION_UNAVAILABLE",
-    });
+    await expect(
+      client.auth.login({ username: "setup", password: "not-sent" }),
+    ).rejects.toMatchObject({ code: "CLIENT_OPERATION_UNAVAILABLE" });
   });
 
   it("submits a conversation message before resuming its SSE stream", async () => {

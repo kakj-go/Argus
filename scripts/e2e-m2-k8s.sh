@@ -12,6 +12,7 @@ OBSERVABILITY_NS="argus-${PHASE}-observability-${RUN_ID}"
 LEASE_NAME="argus-${PHASE}-e2e-lock"
 BACKEND_IMAGE="argus/argus-backend:${PHASE}-${RUN_ID}"
 WEB_IMAGE="argus/argus-web:${PHASE}-${RUN_ID}"
+OTELCOL_IMAGE="argus/argus-otelcol:${PHASE}-${RUN_ID}"
 API_PORT=${ARGUS_E2E_API_PORT:-4180}
 ENTERPRISE_PORT=${ARGUS_E2E_ENTERPRISE_PORT:-4173}
 PLATFORM_PORT=${ARGUS_E2E_PLATFORM_PORT:-4174}
@@ -35,6 +36,7 @@ LEASE_ACQUIRED=false
 NAMESPACES_CREATED=false
 RESPONSE_FILE=""
 LAST_REQUEST_NAME="none"
+M7_HELM_ARGS=()
 
 mkdir -p "$ARTIFACT_DIR"
 
@@ -71,7 +73,7 @@ diagnostics() {
   } 2>&1 | redact >"${ARTIFACT_DIR}/cluster.txt"
   k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus --all-containers=true --prefix=true --tail=1000 2>&1 \
     | redact >"${ARTIFACT_DIR}/argus.log" || true
-  if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" ]]; then
+  if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" ]]; then
     k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus-m3-e2e --all-containers=true --prefix=true --tail=1000 2>&1 \
       | redact >"${ARTIFACT_DIR}/m3-workloads.log" || true
   fi
@@ -82,6 +84,7 @@ diagnostics() {
     diagnostics_m5
   fi
   if declare -F diagnostics_m6 >/dev/null; then diagnostics_m6; fi
+  if declare -F diagnostics_m7 >/dev/null; then diagnostics_m7; fi
   k -n "$SYSTEM_NS" logs statefulset/argus-postgresql --tail=300 2>&1 \
     | redact >"${ARTIFACT_DIR}/postgresql.log" || true
   k -n "$SYSTEM_NS" logs statefulset/argus-redis --tail=300 2>&1 \
@@ -103,6 +106,7 @@ cleanup() {
     cleanup_m5
   fi
   if declare -F cleanup_m6 >/dev/null; then cleanup_m6; fi
+  if declare -F cleanup_m7 >/dev/null; then cleanup_m7; fi
   if declare -F cleanup_cert_manager_dependency >/dev/null; then
     cleanup_cert_manager_dependency
   fi
@@ -141,10 +145,10 @@ cleanup() {
   if [[ "$KUBE_CONTEXT" == "docker-desktop" ]]; then
     node=$(k get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
     if [[ -n "$node" ]]; then
-      docker exec "$node" ctr -n k8s.io images remove "docker.io/${BACKEND_IMAGE}" "docker.io/${WEB_IMAGE}" >/dev/null 2>&1 || true
+      docker exec "$node" ctr -n k8s.io images remove "docker.io/${BACKEND_IMAGE}" "docker.io/${WEB_IMAGE}" "docker.io/${OTELCOL_IMAGE}" >/dev/null 2>&1 || true
     fi
   fi
-  docker image rm "$BACKEND_IMAGE" "$WEB_IMAGE" >/dev/null 2>&1 || true
+  docker image rm "$BACKEND_IMAGE" "$WEB_IMAGE" "$OTELCOL_IMAGE" >/dev/null 2>&1 || true
   rm -rf "$WORK_DIR"
   if [[ $status -ne 0 ]]; then
     printf '[%s-e2e] failed after request %s; redacted diagnostics: %s\n' "$PHASE" "$LAST_REQUEST_NAME" "$ARTIFACT_DIR" >&2
@@ -196,7 +200,7 @@ create_namespaces() {
 build_images() {
   log "building backend image ${BACKEND_IMAGE}"
   backend_args=(--build-arg GO_BUILD_TAGS=)
-  if [[ "$PHASE" == "m4" || "$PHASE" == "m5" ]]; then
+  if [[ "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m7" ]]; then
     backend_args=(--build-arg GO_BUILD_TAGS=m4e2e)
   fi
   retry 3 docker build --quiet -f deploy/docker/backend.Dockerfile -t "$BACKEND_IMAGE" "${backend_args[@]}" . >/dev/null
@@ -207,12 +211,20 @@ build_images() {
     --build-arg "VITE_CARD_ORIGIN=http://127.0.0.1:${CARD_PORT}" \
     --build-arg "VITE_PLATFORM_URL=http://127.0.0.1:${PLATFORM_PORT}/login" \
     --build-arg "VITE_DIRECT_EGRESS_ADDRESSES=${ARGUS_E2E_DIRECT_EGRESS_DISPLAY:-127.0.0.1}" . >/dev/null
+  if [[ "$PHASE" == "m7" ]]; then
+    log "building locked Linux arm64 Collector distribution and image ${OTELCOL_IMAGE}"
+    make otelcol-linux-arm64 >/dev/null
+    retry 3 docker build --quiet --platform linux/arm64 -f deploy/docker/otelcol.Dockerfile -t "$OTELCOL_IMAGE" \
+      --build-arg TARGETOS=linux --build-arg TARGETARCH=arm64 . >/dev/null
+  fi
+  images=("$BACKEND_IMAGE" "$WEB_IMAGE")
+  if [[ "$PHASE" == "m7" ]]; then images+=("$OTELCOL_IMAGE"); fi
   case "$KUBE_CONTEXT" in
-    kind-*) kind load docker-image --name "${KUBE_CONTEXT#kind-}" "$BACKEND_IMAGE" "$WEB_IMAGE" ;;
-    minikube) minikube image load "$BACKEND_IMAGE" "$WEB_IMAGE" ;;
+    kind-*) kind load docker-image --name "${KUBE_CONTEXT#kind-}" "${images[@]}" ;;
+    minikube) minikube image load "${images[@]}" ;;
     docker-desktop)
       node=$(k get nodes -o jsonpath='{.items[0].metadata.name}')
-      docker save "$BACKEND_IMAGE" "$WEB_IMAGE" | docker exec -i "$node" ctr -n k8s.io images import - >/dev/null
+      docker save "${images[@]}" | docker exec -i "$node" ctr -n k8s.io images import - >/dev/null
       ;;
   esac
 }
@@ -365,7 +377,9 @@ EOF
 }
 
 install_argus() {
-  local kubernetes_api_ip kubernetes_api_endpoint kubernetes_api_cidr kubernetes_api_endpoint_cidr
+	local kubernetes_api_ip kubernetes_api_endpoint kubernetes_api_cidr kubernetes_api_endpoint_cidr telemetry_catalog_enabled
+	telemetry_catalog_enabled=false
+	if [[ "$PHASE" == "m7" ]]; then telemetry_catalog_enabled=true; fi
   kubernetes_api_ip=$(k -n default get service kubernetes -o jsonpath='{.spec.clusterIP}')
   kubernetes_api_endpoint=$(k -n default get endpoints kubernetes -o jsonpath='{.subsets[0].addresses[0].ip}')
   if [[ "$kubernetes_api_ip" == *:* ]]; then kubernetes_api_cidr="${kubernetes_api_ip}/128"; else kubernetes_api_cidr="${kubernetes_api_ip}/32"; fi
@@ -394,7 +408,9 @@ install_argus() {
     --set-string runtime.objectStoreUrl="http://argus-minio.${SYSTEM_NS}.svc:9000" \
     --set-string runtime.objectStoreAccessKey="$OBJECT_STORE_ACCESS" \
     --set-string runtime.objectStoreSecretKey="$OBJECT_STORE_SECRET" \
-    --set-string runtime.secureCookies=false >/dev/null
+    --set-string runtime.secureCookies=false \
+	--set-string runtime.telemetryToolCatalogEnabled="$telemetry_catalog_enabled" \
+    "${M7_HELM_ARGS[@]}" >/dev/null
   k -n "$SYSTEM_NS" get job argus-postgresql-migration -o jsonpath='{.status.succeeded}' | grep -q '^1$'
 }
 
@@ -455,6 +471,10 @@ request() {
   status=$(curl "${args[@]}" "$@" "${API_URL}${path}")
   if [[ "$status" != "$expected" ]]; then
     jq -c '{code: .code, message_key: .message_key}' "$RESPONSE_FILE" >&2 2>/dev/null || true
+    if [[ -n "${ARTIFACT_DIR:-}" && -f "$RESPONSE_FILE" ]]; then
+      jq 'del(.temporary_password, .password_change_challenge.temporary_password, .authenticated_session.csrf_token, .csrf_token)' "$RESPONSE_FILE" \
+        >"${ARTIFACT_DIR}/${name}-response.json" 2>/dev/null || cp "$RESPONSE_FILE" "${ARTIFACT_DIR}/${name}-response.json"
+    fi
     fail "${name}: expected HTTP ${expected}, got ${status}"
   fi
 }
@@ -625,6 +645,7 @@ run_api_flow() {
     run_m5_api_flow
   fi
   if declare -F run_m6_api_flow >/dev/null; then run_m6_api_flow; fi
+  if declare -F run_m7_api_flow >/dev/null; then run_m7_api_flow; fi
 
   log "stopping Redis to verify PostgreSQL authority"
   k -n "$SYSTEM_NS" scale statefulset/argus-redis --replicas=0 >/dev/null
@@ -697,6 +718,7 @@ main() {
     prepare_m5_dependencies
   fi
   if declare -F prepare_m6_dependencies >/dev/null; then prepare_m6_dependencies; fi
+  if declare -F prepare_m7_dependencies >/dev/null; then prepare_m7_dependencies; fi
   install_argus
   start_port_forwards
   run_api_flow
@@ -704,18 +726,19 @@ main() {
   log "${phase_label} Kubernetes E2E passed; diagnostics: ${ARTIFACT_DIR}"
 }
 
-if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" ]]; then
+if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" ]]; then
   source "${ROOT_DIR}/scripts/e2e-cert-manager.sh"
 fi
-if [[ "$PHASE" == "m3" || "$PHASE" == "m5" || "$PHASE" == "m6" ]]; then
+if [[ "$PHASE" == "m3" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" ]]; then
   source "${ROOT_DIR}/scripts/e2e-m3-flow.sh"
 fi
-if [[ "$PHASE" == "m4" || "$PHASE" == "m5" ]]; then
+if [[ "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m7" ]]; then
   source "${ROOT_DIR}/scripts/e2e-m4-flow.sh"
 fi
-if [[ "$PHASE" == "m5" ]]; then
+if [[ "$PHASE" == "m5" || "$PHASE" == "m7" ]]; then
   source "${ROOT_DIR}/scripts/e2e-m5-flow.sh"
 fi
 if [[ "$PHASE" == "m6" ]]; then source "${ROOT_DIR}/scripts/e2e-m6-flow.sh"; fi
+if [[ "$PHASE" == "m7" ]]; then source "${ROOT_DIR}/scripts/e2e-m7-flow.sh"; fi
 
 main "$@"

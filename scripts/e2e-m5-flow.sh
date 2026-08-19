@@ -51,7 +51,11 @@ run_m5_api_flow() {
   [[ "$M5_CATALOG_BEFORE" == "$M5_CATALOG_AFTER" ]] || fail "M5 System Card catalog sync changed an already synchronized catalog"
 
   request m5-system-cards 200 GET /enterprise/interactive-cards "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
-  jq -e '([.items[] | select(.source == "system")] | length) == 5 and any(.items[]; .slug == "telemetry-overview" and .availability == "dependency_pending" and .enabled == false)' "$RESPONSE_FILE" >/dev/null
+  if [[ "$PHASE" == "m7" ]]; then
+    jq -e '([.items[] | select(.source == "system")] | length) == 5 and any(.items[]; .slug == "telemetry-overview" and .availability == "available" and .enabled == true)' "$RESPONSE_FILE" >/dev/null
+  else
+    jq -e '([.items[] | select(.source == "system")] | length) == 5 and any(.items[]; .slug == "telemetry-overview" and .availability == "dependency_pending" and .enabled == false)' "$RESPONSE_FILE" >/dev/null
+  fi
   M5_SYSTEM_CARD_ID=$(jq -er '.items[] | select(.source == "system" and .slug == "host-list") | .id' "$RESPONSE_FILE")
   M5_SYSTEM_CARD_VERSION=$(jq -er '.items[] | select(.id == $id) | .version' --arg id "$M5_SYSTEM_CARD_ID" "$RESPONSE_FILE")
   request m5-system-readonly 403 POST "/enterprise/interactive-cards/${M5_SYSTEM_CARD_ID}/disable" "$ENTERPRISE_JAR" \
@@ -183,7 +187,17 @@ run_m5_api_flow() {
   kill "$API_PF_PID" >/dev/null 2>&1 || true
   wait "$API_PF_PID" >/dev/null 2>&1 || true
   start_api_port_forward
-  for _ in $(seq 1 60); do curl --noproxy '*' --silent --fail --max-time 3 "http://127.0.0.1:${API_PORT}/readyz" >/dev/null 2>&1 && break; sleep 1; done
+  ready_checks=0
+  for _ in $(seq 1 90); do
+    if curl --noproxy '*' --silent --fail --max-time 3 "http://127.0.0.1:${API_PORT}/readyz" >/dev/null 2>&1; then
+      ready_checks=$((ready_checks + 1))
+      [[ "$ready_checks" -ge 2 ]] && break
+    else
+      ready_checks=0
+    fi
+    sleep 1
+  done
+  [[ "$ready_checks" -ge 2 ]] || fail "API port-forward did not recover for Card persistence check"
   request m5-recovered-card 200 GET "/enterprise/interactive-cards/${M5_CARD_ID}" "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
   jq -e '.active_revision == 1 and .latest_revision == 2' "$RESPONSE_FILE" >/dev/null
   request m5-recovered-presentation 201 POST "/enterprise/card-instances/${M5_SYSTEM_INSTANCE}/presentations" "$ENTERPRISE_JAR" \

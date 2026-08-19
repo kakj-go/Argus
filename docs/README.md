@@ -67,7 +67,7 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 | argus-server | Argus 控制面 API，承载身份、权限、资源、Tool、Card、Pending Action 和监控控制能力 |
 | argus-worker | Argus 异步执行面，承载 Agent Harness、模型调用、Tool Run、安装任务和 OpenSandbox 调用 |
 | argus-connector-gateway | 承载 Connector 长连接、命令流、Artifact Tunnel 和经短期票据授权的人工远程会话流，不接收 OTLP 遥测 |
-| argus-telemetry | 遥测服务程序，以 ingest 或 query 模式分别承担写入入口和查询入口 |
+| argus-telemetry | 遥测服务程序，以 `ingest`、`writer` 或 `query` 模式分别承担摄入入口、可靠写入和查询入口 |
 
 ## 已确定的设计原则
 

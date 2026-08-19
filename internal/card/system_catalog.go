@@ -16,7 +16,10 @@ import (
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
-const SystemCatalogRevision = 4
+const (
+	SystemCatalogRevision          = 5
+	TelemetrySystemCatalogRevision = 6
+)
 
 type SystemCatalogCard struct {
 	Slug              string
@@ -38,7 +41,7 @@ func SystemCatalog() []SystemCatalogCard {
 		{Slug: "kubernetes-cluster-list", Name: "Kubernetes clusters", Description: "System renderer for authorized Kubernetes clusters.", PresentationKind: "table", ToolID: "kubernetes.cluster.list", Path: "$.items", ValueType: "array", SemanticType: "resource_collection", QueryRefresh: true},
 		{Slug: "connector-status-list", Name: "Connector status", Description: "System renderer for Connector status.", PresentationKind: "table", ToolID: "connector.list", Path: "$.items", ValueType: "array", SemanticType: "resource_collection", QueryRefresh: true},
 		{Slug: "pending-action", Name: "Pending action", Description: "System renderer for preview, confirmation, and cancellation.", PresentationKind: "pending_action", ToolID: "pending_action.get", Path: "$", ValueType: "object", SemanticType: "pending_action", Actions: []string{"confirm", "cancel"}},
-		{Slug: "telemetry-overview", Name: "Telemetry overview", Description: "Validated system renderer activated when M7 registers a compatible Telemetry schema.", PresentationKind: "metric", ToolID: "telemetry.overview", Path: "$", ValueType: "object", SemanticType: "telemetry_overview", DependencyPending: true},
+		{Slug: "telemetry-overview", Name: "Telemetry overview", Description: "Authorized Metrics, Logs, Traces, and Collector health overview.", PresentationKind: "metric", ToolID: "telemetry.overview", Path: "$", ValueType: "object", SemanticType: "telemetry_overview"},
 	}
 }
 
@@ -64,8 +67,9 @@ func (service Service) syncSystemCard(ctx context.Context, q *db.Queries, defini
 		availability = "dependency_pending"
 		enabled = false
 	}
+	revision := systemCatalogRevision(definition, dependencyAvailable, metadata.OutputSchemaHash)
 	card, err := q.UpsertSystemInteractiveCard(ctx, db.UpsertSystemInteractiveCardParams{ID: cardID, Slug: definition.Slug, Name: definition.Name,
-		Description: definition.Description, Enabled: enabled, Availability: availability, LatestRevision: SystemCatalogRevision})
+		Description: definition.Description, Enabled: enabled, Availability: availability, LatestRevision: revision})
 	if errors.Is(err, pgx.ErrNoRows) {
 		card, err = q.GetSystemCardBySlug(ctx, definition.Slug)
 	}
@@ -74,19 +78,19 @@ func (service Service) syncSystemCard(ctx context.Context, q *db.Queries, defini
 	}
 	html := systemCardHTML(definition)
 	contentHash := sha256.Sum256(html)
-	manifest, err := systemManifest(cardID, definition, contentHash)
+	manifest, err := systemManifest(cardID, definition, revision, contentHash)
 	if err != nil {
 		return err
 	}
 	manifestHash := sha256.Sum256(manifest)
-	versionID := uuid.NewSHA1(cardID, []byte(fmt.Sprintf("revision/%d", SystemCatalogRevision)))
+	versionID := uuid.NewSHA1(cardID, []byte(fmt.Sprintf("revision/%d", revision)))
 	version, err := q.CreateSystemCardVersionIfMissing(ctx, db.CreateSystemCardVersionIfMissingParams{ID: versionID, CardID: card.ID,
-		Revision: SystemCatalogRevision, Manifest: manifest, EntrypointHtml: html, ContentHash: contentHash[:], ManifestHash: manifestHash[:]})
+		Revision: revision, Manifest: manifest, EntrypointHtml: html, ContentHash: contentHash[:], ManifestHash: manifestHash[:]})
 	if err != nil {
 		return err
 	}
 	if !slices.Equal(version.ContentHash, contentHash[:]) || !slices.Equal(version.ManifestHash, manifestHash[:]) {
-		return fmt.Errorf("system Card %s revision %d changed without a catalog revision bump", definition.Slug, SystemCatalogRevision)
+		return fmt.Errorf("system Card %s revision %d changed without a catalog revision bump", definition.Slug, revision)
 	}
 	existing, err := q.ListCardSlotBindings(ctx, version.ID)
 	if err != nil {
@@ -136,9 +140,16 @@ func (service Service) syncSystemCard(ctx context.Context, q *db.Queries, defini
 	return err
 }
 
-func systemManifest(cardID uuid.UUID, definition SystemCatalogCard, contentHash [sha256.Size]byte) (json.RawMessage, error) {
+func systemCatalogRevision(definition SystemCatalogCard, dependencyAvailable bool, schemaHash string) int32 {
+	if definition.Slug == "telemetry-overview" && dependencyAvailable && schemaHash != "" {
+		return TelemetrySystemCatalogRevision
+	}
+	return SystemCatalogRevision
+}
+
+func systemManifest(cardID uuid.UUID, definition SystemCatalogCard, revision int32, contentHash [sha256.Size]byte) (json.RawMessage, error) {
 	return json.Marshal(map[string]any{
-		"schema_version": "argus.card_manifest/v1", "card_id": cardID.String(), "revision": SystemCatalogRevision, "source": "system",
+		"schema_version": "argus.card_manifest/v1", "card_id": cardID.String(), "revision": revision, "source": "system",
 		"entrypoint_hash": fmt.Sprintf("%x", contentHash[:]), "bridge_version": "argus.card_bridge/v1", "max_message_bytes": 1024 * 1024,
 		"slots":             systemSlots(definition),
 		"allowed_resources": []string{"inline_style", "inline_script"}, "supported_locales": []string{"zh-CN", "en-US"}, "default_locale": "zh-CN",

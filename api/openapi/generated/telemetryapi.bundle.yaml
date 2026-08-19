@@ -1,0 +1,1789 @@
+openapi: 3.1.0
+info:
+  title: Argus Telemetry API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /telemetry/collectors/enroll:
+    post:
+      operationId: enrollTelemetryCollector
+      summary: Exchange a one-time Collector Enrollment Token and CSR for a Telemetry client certificate.
+      security: []
+      parameters:
+        - name: X-Argus-Telemetry-Enrollment-Token
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 32
+            maxLength: 256
+            writeOnly: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectorEnrollmentRequest'
+      responses:
+        '201':
+          description: One-time Collector certificate result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectorCertificateResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/distributions:
+    get:
+      operationId: listCollectorDistributions
+      summary: List supported Collector distributions.
+      responses:
+        '200':
+          description: Distribution catalog.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectorDistributionVersion'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/profiles:
+    get:
+      operationId: listCollectionProfiles
+      summary: List versioned Collection Profiles.
+      responses:
+        '200':
+          description: Profile catalog.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectionProfile'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/collectors:
+    get:
+      operationId: listCollectorInstances
+      summary: List authorized Collector instances.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+            enum:
+              - host
+              - kubernetes_cluster
+        - name: resource_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Collector page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectorPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/collectors/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getCollectorInstance
+      summary: Get an authorized Collector instance.
+      responses:
+        '200':
+          description: Collector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectorInstance'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/routes:
+    get:
+      operationId: listTelemetryRoutes
+      summary: List authorized Telemetry routes.
+      responses:
+        '200':
+          description: Routes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TelemetryRoute'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/routes/tests:
+    post:
+      operationId: createTelemetryRouteTest
+      summary: Start an authorized route test.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteTestCreate'
+      responses:
+        '202':
+          description: Route test.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteTestResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/collection-claims:
+    get:
+      operationId: listCollectionClaims
+      summary: List authorized Collection Claims.
+      parameters:
+        - name: resource_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Claims.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectionClaim'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/node-host-bindings:
+    get:
+      operationId: listKubernetesNodeHostBindings
+      summary: List Node to Host bindings.
+      parameters:
+        - name: kubernetes_cluster_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bindings.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KubernetesNodeHostBinding'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/node-host-bindings/{id}/actions/preview-confirm:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: previewKubernetesNodeHostBinding
+      summary: Preview confirmation of a Node to Host binding.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeHostBindingPreview'
+      responses:
+        '201':
+          description: Pending action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/usage:
+    get:
+      operationId: getTelemetryUsage
+      summary: Get authorized Telemetry usage.
+      responses:
+        '200':
+          description: Usage.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryUsage'
+          headers:
+            X-Retention-Metrics-Days:
+              schema:
+                type: integer
+            X-Retention-Logs-Days:
+              schema:
+                type: integer
+            X-Retention-Traces-Days:
+              schema:
+                type: integer
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/query/metrics:
+    post:
+      operationId: queryTelemetryMetrics
+      summary: Query authorized Metrics.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricsQuery'
+      responses:
+        '200':
+          description: Metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/query/logs:
+    post:
+      operationId: queryTelemetryLogs
+      summary: Query authorized Logs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogsQuery'
+      responses:
+        '200':
+          description: Logs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogsResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/query/traces:
+    post:
+      operationId: queryTelemetryTraces
+      summary: Query authorized Traces.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TracesQuery'
+      responses:
+        '200':
+          description: Traces.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TracesResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/telemetry/query/overview:
+    post:
+      operationId: queryTelemetryOverview
+      summary: Query the Card-safe Telemetry overview.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryOverviewQuery'
+      responses:
+        '200':
+          description: Overview.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryOverview'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/hosts/{id}/collector:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getHostCollector
+      summary: Get the Collector installed on a Host.
+      responses:
+        '200':
+          description: Collector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectorInstance'
+        '204':
+          description: No Collector is installed.
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/hosts/{id}/collector/actions/preview-{action}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - install
+            - configure
+            - upgrade
+            - repair
+            - uninstall
+    post:
+      operationId: previewHostCollectorAction
+      summary: Preview a deterministic Host Collector action.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectorPreview'
+      responses:
+        '201':
+          description: Pending action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/kubernetes-clusters/{id}/collector:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getKubernetesCollector
+      summary: Get the Collector installed on a Kubernetes cluster.
+      responses:
+        '200':
+          description: Collector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectorInstance'
+        '204':
+          description: No Collector is installed.
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/kubernetes-clusters/{id}/collector/actions/preview-{action}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - install
+            - configure
+            - upgrade
+            - repair
+            - uninstall
+    post:
+      operationId: previewKubernetesCollectorAction
+      summary: Preview a deterministic Kubernetes Collector action.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectorPreview'
+      responses:
+        '201':
+          description: Pending action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    CollectorDistributionVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - version
+        - collector_version
+        - config_schema_version
+        - support_status
+        - components
+        - artifacts
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        version:
+          type: string
+          minLength: 1
+          maxLength: 64
+        collector_version:
+          type: string
+          minLength: 1
+          maxLength: 64
+        config_schema_version:
+          type: string
+          minLength: 1
+          maxLength: 64
+        support_status:
+          $ref: '#/components/schemas/CollectorSupportStatus'
+        components:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectorArtifact'
+        created_at:
+          type: string
+          format: date-time
+    CollectionProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - key
+        - version
+        - name
+        - description
+        - signals
+        - required_components
+        - supported_platforms
+        - claim_types
+        - config_schema_version
+        - support_status
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        version:
+          type: string
+          minLength: 1
+          maxLength: 64
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        signals:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/TelemetrySignal'
+        required_components:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        supported_platforms:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/CollectorPlatform'
+        claim_types:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        config_schema_version:
+          type: string
+          minLength: 1
+          maxLength: 64
+        support_status:
+          $ref: '#/components/schemas/CollectorSupportStatus'
+    CollectorInstance:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - resource_type
+        - resource_id
+        - distribution_version_id
+        - platform
+        - role
+        - status
+        - desired_revision
+        - effective_revision
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        resource_type:
+          type: string
+          enum:
+            - host
+            - kubernetes_cluster
+        resource_id:
+          type: string
+          format: uuid
+        distribution_version_id:
+          type: string
+          format: uuid
+        platform:
+          $ref: '#/components/schemas/CollectorPlatform'
+        role:
+          $ref: '#/components/schemas/CollectorRole'
+        status:
+          $ref: '#/components/schemas/CollectorStatus'
+        desired_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        effective_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        route:
+          $ref: '#/components/schemas/TelemetryRoute'
+        last_seen_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CollectorEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - collector_id
+        - csr_pem
+      properties:
+        collector_id:
+          type: string
+          format: uuid
+        csr_pem:
+          type: string
+          minLength: 128
+          maxLength: 16384
+          writeOnly: true
+    CollectorCertificateResult:
+      type: object
+      additionalProperties: false
+      required:
+        - collector_id
+        - certificate_pem
+        - ca_bundle_pem
+        - ingest_grpc_endpoint
+        - ingest_http_endpoint
+        - certificate_expires_at
+      properties:
+        collector_id:
+          type: string
+          format: uuid
+        certificate_pem:
+          type: string
+          minLength: 128
+          maxLength: 32768
+          writeOnly: true
+        ca_bundle_pem:
+          type: string
+          minLength: 128
+          maxLength: 32768
+        ingest_grpc_endpoint:
+          type: string
+          format: uri
+          readOnly: true
+        ingest_http_endpoint:
+          type: string
+          format: uri
+          readOnly: true
+        certificate_expires_at:
+          type: string
+          format: date-time
+    CollectorConfigRevision:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - collector_id
+        - revision
+        - profile_ids
+        - config_hash
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        collector_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        profile_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        config_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        status:
+          $ref: '#/components/schemas/ConfigRevisionStatus'
+        failure_code:
+          type: string
+          maxLength: 128
+        created_at:
+          type: string
+          format: date-time
+        applied_at:
+          type: string
+          format: date-time
+    TelemetryRoute:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - collector_id
+        - kind
+        - status
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        collector_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/TelemetryRouteKind'
+        gateway_collector_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - pending
+            - testing
+            - active
+            - degraded
+            - invalidated
+        last_tested_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CollectionClaim:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - physical_resource_ref
+        - collector_id
+        - claim_type
+        - signal
+        - selector_hash
+        - ownership
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        physical_resource_ref:
+          type: string
+          minLength: 1
+          maxLength: 256
+        collector_id:
+          type: string
+          format: uuid
+        profile_id:
+          type: string
+          format: uuid
+        claim_type:
+          type: string
+          minLength: 1
+          maxLength: 128
+        signal:
+          $ref: '#/components/schemas/TelemetrySignal'
+        selector_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        ownership:
+          type: string
+          enum:
+            - primary
+            - supplemental
+            - migration
+        status:
+          type: string
+          enum:
+            - active
+            - released
+            - conflict
+            - expired
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    KubernetesNodeHostBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - kubernetes_cluster_id
+        - node_uid
+        - node_name
+        - matched_by
+        - evidence_hash
+        - confidence
+        - status
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        kubernetes_cluster_id:
+          type: string
+          format: uuid
+        node_uid:
+          type: string
+          minLength: 1
+          maxLength: 256
+        node_name:
+          type: string
+          minLength: 1
+          maxLength: 253
+        host_id:
+          type: string
+          format: uuid
+        matched_by:
+          type: string
+          enum:
+            - system_uuid
+            - provider_id
+            - machine_id
+            - collector_host_id
+            - ip
+            - manual
+        evidence_hash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum:
+            - proposed
+            - verified
+            - rejected
+            - stale
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    NodeHostBindingPreview:
+      type: object
+      additionalProperties: false
+      required:
+        - host_id
+        - expected_version
+      properties:
+        host_id:
+          type: string
+          format: uuid
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    CollectorPreview:
+      type: object
+      additionalProperties: false
+      required:
+        - distribution_version_id
+        - profile_ids
+        - route_kind
+      properties:
+        distribution_version_id:
+          type: string
+          format: uuid
+        profile_ids:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        route_kind:
+          $ref: '#/components/schemas/TelemetryRouteKind'
+        gateway_collector_id:
+          type: string
+          format: uuid
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 0
+    TelemetryRetentionPolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - metrics_days
+        - logs_days
+        - traces_days
+        - version
+      properties:
+        metrics_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        logs_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        traces_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    TelemetryUsage:
+      type: object
+      additionalProperties: false
+      required:
+        - period_start
+        - period_end
+        - ingested_bytes
+        - metric_points
+        - log_records
+        - spans
+        - estimated_storage_bytes
+      properties:
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        ingested_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        metric_points:
+          type: integer
+          format: int64
+          minimum: 0
+        log_records:
+          type: integer
+          format: int64
+          minimum: 0
+        spans:
+          type: integer
+          format: int64
+          minimum: 0
+        estimated_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+    MetricsQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_ids
+        - from
+        - to
+        - metric_name
+        - aggregation
+      properties:
+        resource_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          default: 50000
+        cursor:
+          type: string
+          maxLength: 4096
+        metric_name:
+          type: string
+          minLength: 1
+          maxLength: 256
+        aggregation:
+          type: string
+          enum:
+            - avg
+            - min
+            - max
+            - sum
+            - count
+            - rate
+            - p50
+            - p95
+            - p99
+        step_seconds:
+          type: integer
+          minimum: 10
+          maximum: 86400
+          default: 60
+    LogsQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_ids
+        - from
+        - to
+      properties:
+        resource_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          default: 50000
+        cursor:
+          type: string
+          maxLength: 4096
+        service_name:
+          type: string
+          maxLength: 256
+        severity:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            maxLength: 32
+        text:
+          type: string
+          maxLength: 512
+    TracesQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_ids
+        - from
+        - to
+      properties:
+        resource_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          default: 50000
+        cursor:
+          type: string
+          maxLength: 4096
+        service_name:
+          type: string
+          maxLength: 256
+        operation:
+          type: string
+          maxLength: 256
+        status:
+          type: string
+          enum:
+            - unset
+            - ok
+            - error
+        min_duration_ms:
+          type: integer
+          minimum: 0
+    TelemetryOverviewQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_ids
+        - lookback_seconds
+      properties:
+        resource_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        lookback_seconds:
+          type: integer
+          minimum: 300
+          maximum: 604800
+          default: 3600
+    MetricsResult:
+      type: object
+      additionalProperties: false
+      required:
+        - series
+        - meta
+      properties:
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricSeries'
+        meta:
+          $ref: '#/components/schemas/TelemetryQueryMeta'
+    LogsResult:
+      type: object
+      additionalProperties: false
+      required:
+        - records
+        - meta
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogRecord'
+        meta:
+          $ref: '#/components/schemas/TelemetryQueryMeta'
+    TracesResult:
+      type: object
+      additionalProperties: false
+      required:
+        - traces
+        - meta
+      properties:
+        traces:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraceSummary'
+        meta:
+          $ref: '#/components/schemas/TelemetryQueryMeta'
+    TelemetryOverview:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_count
+        - healthy_collectors
+        - degraded_collectors
+        - metric_points
+        - log_records
+        - spans
+        - window_seconds
+        - partial
+      properties:
+        resource_count:
+          type: integer
+          minimum: 0
+        healthy_collectors:
+          type: integer
+          minimum: 0
+        degraded_collectors:
+          type: integer
+          minimum: 0
+        metric_points:
+          type: integer
+          format: int64
+          minimum: 0
+        log_records:
+          type: integer
+          format: int64
+          minimum: 0
+        spans:
+          type: integer
+          format: int64
+          minimum: 0
+        window_seconds:
+          type: integer
+          minimum: 300
+        partial:
+          type: boolean
+    CollectorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectorInstance'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RouteTestCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - collector_id
+        - route_kind
+      properties:
+        collector_id:
+          type: string
+          format: uuid
+        route_kind:
+          $ref: '#/components/schemas/TelemetryRouteKind'
+        gateway_collector_id:
+          type: string
+          format: uuid
+    RouteTestResult:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - started_at
+        - expires_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - succeeded
+            - failed
+            - expired
+        error_code:
+          type: string
+          maxLength: 128
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    CollectorSupportStatus:
+      type: string
+      enum:
+        - supported
+        - validation_pending
+        - retired
+    CollectorPlatform:
+      type: string
+      enum:
+        - linux_arm64
+        - windows_amd64
+    CollectorArtifact:
+      type: object
+      additionalProperties: false
+      required:
+        - platform
+        - uri
+        - sha256
+        - signature
+        - signing_key_id
+        - byte_size
+      properties:
+        platform:
+          $ref: '#/components/schemas/CollectorPlatform'
+        uri:
+          type: string
+          format: uri
+          readOnly: true
+        sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        signature:
+          type: string
+          minLength: 32
+          maxLength: 2048
+          readOnly: true
+        signing_key_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          readOnly: true
+        byte_size:
+          type: integer
+          format: int64
+          minimum: 1
+    TelemetrySignal:
+      type: string
+      enum:
+        - metrics
+        - logs
+        - traces
+    CollectorRole:
+      type: string
+      enum:
+        - direct
+        - leaf
+        - edge_gateway
+        - daemonset
+        - kubernetes_gateway
+    CollectorStatus:
+      type: string
+      enum:
+        - pending_install
+        - installing
+        - converged
+        - degraded
+        - backlog
+        - result_unknown
+        - uninstalling
+        - uninstalled
+    TelemetryRouteKind:
+      type: string
+      enum:
+        - direct_argus
+        - bastion_gateway
+    PartialMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - partial
+        - reasons
+      properties:
+        partial:
+          type: boolean
+        reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - authorization_filtered
+              - budget_truncated
+              - source_timeout
+              - source_unavailable
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+        - partial
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+        partial:
+          $ref: '#/components/schemas/PartialMetadata'
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    PublicJsonValue:
+      x-argus-typescript-type: unknown
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/PublicJsonValue'
+        - $ref: '#/components/schemas/PublicJsonObject'
+    PublicJsonObject:
+      x-argus-typescript-type: unknown
+      type: object
+      propertyNames:
+        allOf:
+          - pattern: ^[a-z][a-z0-9_]*$
+          - not:
+              pattern: (^|_)(argus__token|token|secret|credential|private_params?|commit_tool|remote_access_ticket)($|_)
+      additionalProperties:
+        $ref: '#/components/schemas/PublicJsonValue'
+    pending-action-public.schema:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      $id: https://argus.io/schemas/v1/action/pending-action-public.schema.json
+      title: PendingActionPublic
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - action_ref
+        - title
+        - summary
+        - risk
+        - preview
+        - diff
+        - status
+        - available_actions
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        schema_version:
+          const: argus.pending_action/v1
+        action_ref:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        risk:
+          enum:
+            - read
+            - write
+            - dangerous
+            - critical
+        preview:
+          $ref: '#/components/schemas/PublicJsonObject'
+        diff:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - kind
+              - text
+            properties:
+              kind:
+                enum:
+                  - add
+                  - remove
+                  - change
+                  - note
+              text:
+                type: string
+                maxLength: 2048
+        status:
+          enum:
+            - prepared
+            - awaiting_confirmation
+            - awaiting_approval
+            - ready
+            - executing
+            - succeeded
+            - failed
+            - result_unknown
+            - cancelled
+            - expired
+            - rejected
+            - invalidated
+        available_actions:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - confirm
+              - cancel
+              - approve
+              - reject
+        approval:
+          type: object
+          additionalProperties: false
+          required:
+            - required
+            - minimum_approvers
+            - approved_count
+            - separation_of_duty
+          properties:
+            required:
+              type: boolean
+            policy_ref:
+              type: string
+            minimum_approvers:
+              type: integer
+              minimum: 0
+            approved_count:
+              type: integer
+              minimum: 0
+            separation_of_duty:
+              type: boolean
+        execution_ref:
+          type: string
+          minLength: 1
+        result_summary:
+          type: string
+          maxLength: 4096
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MetricPoint:
+      type: object
+      additionalProperties: false
+      required:
+        - timestamp
+        - value
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        value:
+          type: number
+    MetricSeries:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_id
+        - metric_name
+        - points
+      properties:
+        resource_id:
+          type: string
+          format: uuid
+        metric_name:
+          type: string
+        unit:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricPoint'
+    TelemetryQueryMeta:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - partial
+        - partial_reasons
+        - applied_resource_count
+        - scanned_bytes
+        - elapsed_ms
+      properties:
+        schema_version:
+          type: string
+          const: argus.telemetry_result/v1
+        partial:
+          type: boolean
+        partial_reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - unauthorized_resources
+              - row_limit
+              - scan_budget
+              - timeout
+              - data_lag
+        applied_resource_count:
+          type: integer
+          minimum: 0
+        scanned_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        elapsed_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        next_cursor:
+          type: string
+          maxLength: 4096
+    LogRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - timestamp
+        - resource_id
+        - severity
+        - body
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        resource_id:
+          type: string
+          format: uuid
+        service_name:
+          type: string
+        severity:
+          type: string
+        body:
+          type: string
+          maxLength: 262144
+        trace_id:
+          type: string
+          minLength: 32
+          maxLength: 32
+          pattern: ^[a-f0-9]{32}$
+    TraceSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - trace_id
+        - resource_id
+        - service_name
+        - root_span_name
+        - started_at
+        - duration_ms
+        - span_count
+        - status
+      properties:
+        trace_id:
+          type: string
+          minLength: 32
+          maxLength: 32
+          pattern: ^[a-f0-9]{32}$
+        resource_id:
+          type: string
+          format: uuid
+        service_name:
+          type: string
+        root_span_name:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: number
+          minimum: 0
+        span_count:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum:
+            - unset
+            - ok
+            - error
+    ConfigRevisionStatus:
+      type: string
+      enum:
+        - prepared
+        - applying
+        - effective
+        - failed
+        - rolled_back
+        - superseded
+  responses:
+    Error:
+      description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256

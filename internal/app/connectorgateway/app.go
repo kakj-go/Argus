@@ -24,6 +24,7 @@ import (
 	"github.com/kakj-go/Argus/internal/storage/objectstore"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
+	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 )
 
 func Run(ctx context.Context, logger *slog.Logger) error {
@@ -95,9 +96,15 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	remoteSessions := remoteaccess.NewSessionTracker()
 	rejectNewRemote, forceRemoteDrain := make(chan struct{}), make(chan struct{})
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.MaxRecvMsgSize(connector.MaxMessageBytes), grpc.MaxSendMsgSize(connector.MaxMessageBytes))
+	collectorIdentity := telemetryservice.IdentityService{Store: store}
 	connectorv1.RegisterConnectorControlServiceServer(grpcServer, connector.Gateway{Service: domain,
 		Credentials: secretservice.Service{Store: store, Keyring: keyring}, HeartbeatInterval: cfg.HeartbeatInterval, Dispatch: dispatchHub,
-		RemoteAccess: remoteHub, Drain: forceRemoteDrain})
+		RemoteAccess: remoteHub, Drain: forceRemoteDrain,
+		CreateCollectorEnrollment: func(ctx context.Context, collectorID uuid.UUID) (connector.CollectorEnrollmentMaterial, error) {
+			token, tokenErr := collectorIdentity.CreateEnrollmentToken(ctx, nil, collectorID)
+			return connector.CollectorEnrollmentMaterial{Token: token, EnrollmentEndpoint: cfg.TelemetryEnrollmentEndpoint,
+				IngestGRPCEndpoint: cfg.TelemetryIngestGRPCEndpoint, IngestHTTPEndpoint: cfg.TelemetryIngestHTTPEndpoint}, tokenErr
+		}})
 	remoteService := remoteaccess.GatewayService{Store: store, Credentials: secretservice.Service{Store: store, Keyring: keyring}, InstanceID: cfg.InstanceID,
 		DirectRecipientID: cfg.DirectExecutorRecipientID}
 	peerGRPCServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(remotePeerTLS)), grpc.MaxRecvMsgSize(remoteaccess.MaxFrameBytes), grpc.MaxSendMsgSize(remoteaccess.MaxFrameBytes))

@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	mode := flag.String("mode", "", "runtime mode: ingest or query")
+	mode := flag.String("mode", "", "runtime mode: ingest, writer, or query")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

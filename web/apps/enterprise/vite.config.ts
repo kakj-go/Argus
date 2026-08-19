@@ -12,6 +12,8 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
+          if (id.includes("/echarts/")) return "vendor-echarts";
+          if (id.includes("/zrender/")) return "vendor-zrender";
           if (id.includes("react")) return "vendor-react";
           if (id.includes("@tanstack")) return "vendor-tanstack";
           if (id.includes("@radix-ui")) return "vendor-radix";

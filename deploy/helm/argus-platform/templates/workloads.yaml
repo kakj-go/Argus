@@ -8,8 +8,6 @@
   (dict "name" "argus-worker-sandbox" "command" "argus-worker" "args" (list "--pool=sandbox") "pool" "sandbox" "port" 8081 "healthPort" 8081)
   (dict "name" "argus-direct-executor" "command" "argus-worker" "args" (list "--pool=direct-executor") "port" 8081 "healthPort" 8081)
   (dict "name" "argus-connector-gateway" "command" "argus-connector-gateway" "args" (list) "port" 8081 "healthPort" 8081)
-  (dict "name" "argus-telemetry-ingest" "command" "argus-telemetry" "args" (list "--mode=ingest") "port" 8081 "healthPort" 8081)
-  (dict "name" "argus-telemetry-query" "command" "argus-telemetry" "args" (list "--mode=query") "port" 8081 "healthPort" 8081)
 -}}
 {{- range $item := $workloads }}
 ---
@@ -76,17 +74,24 @@ spec:
               mountPath: /var/run/secrets/argus/secret-kek
               readOnly: true
           {{- if or (eq $item.name "argus-server") (hasKey $item "pool") }}
+            - name: telemetry-ca
+              mountPath: /var/run/secrets/argus/telemetry-ca
+              readOnly: true
           {{- if eq $item.name "argus-server" }}
             - name: setup-token
               mountPath: /var/run/secrets/argus/setup
               readOnly: true
           {{- end }}
+            - name: telemetry-client
+              mountPath: /var/run/secrets/argus/telemetry-client
+              readOnly: true
             - name: direct-executor-client
               mountPath: /var/run/secrets/argus/direct-executor-client
               readOnly: true
             - name: direct-executor-ca
               mountPath: /var/run/secrets/argus/direct-executor-ca
               readOnly: true
+          {{- end }}
           {{- end }}
           {{- if eq $item.name "argus-direct-executor" }}
             - name: direct-executor-tls
@@ -95,6 +100,11 @@ spec:
             - name: direct-executor-ca
               mountPath: /var/run/secrets/argus/direct-executor-ca
               readOnly: true
+          {{- if $root.Values.runtime.otelcolArtifactCABundleSecretName }}
+            - name: otelcol-artifact-ca
+              mountPath: /var/run/secrets/argus/otelcol-artifact-ca
+              readOnly: true
+          {{- end }}
           {{- end }}
           {{- if eq $item.name "argus-connector-gateway" }}
             - name: connector-gateway-tls
@@ -109,7 +119,6 @@ spec:
             - name: direct-executor-ca
               mountPath: /var/run/secrets/argus/direct-executor-ca
               readOnly: true
-          {{- end }}
           {{- end }}
           {{- if ne $item.name "argus-server" }}
           env:
@@ -151,6 +160,11 @@ spec:
           secret:
             secretName: argus-secret-kek
       {{- if or (eq $item.name "argus-server") (hasKey $item "pool") }}
+        - name: telemetry-ca
+          secret:
+            secretName: argus-server-telemetry-client-tls
+            items:
+              - {key: ca.crt, path: ca.crt}
       {{- if eq $item.name "argus-server" }}
         - name: setup-token
           secret:
@@ -159,6 +173,9 @@ spec:
               - {key: setup-token, path: token}
               - {key: setup-token-expires-at, path: expires-at}
       {{- end }}
+        - name: telemetry-client
+          secret:
+            secretName: argus-server-telemetry-client-tls
         - name: direct-executor-client
           secret:
             secretName: argus-server-direct-executor-client-tls
@@ -167,6 +184,7 @@ spec:
             secretName: argus-direct-executor-root-ca
             items:
               - {key: ca.crt, path: ca.crt}
+      {{- end }}
       {{- end }}
       {{- if eq $item.name "argus-direct-executor" }}
         - name: direct-executor-tls
@@ -177,6 +195,13 @@ spec:
             secretName: argus-direct-executor-root-ca
             items:
               - {key: ca.crt, path: ca.crt}
+      {{- if $root.Values.runtime.otelcolArtifactCABundleSecretName }}
+        - name: otelcol-artifact-ca
+          secret:
+            secretName: {{ $root.Values.runtime.otelcolArtifactCABundleSecretName }}
+            items:
+              - {key: ca.crt, path: ca.crt}
+      {{- end }}
       {{- end }}
       {{- if eq $item.name "argus-connector-gateway" }}
         - name: connector-gateway-tls
@@ -195,7 +220,6 @@ spec:
             secretName: argus-direct-executor-root-ca
             items:
               - {key: ca.crt, path: ca.crt}
-      {{- end }}
       {{- end }}
 {{- end }}
 ---
@@ -251,23 +275,3 @@ spec:
   selector: {app.kubernetes.io/name: argus-connector-gateway}
   ports:
     - {name: remote-rpc, port: 9446, targetPort: remote-rpc}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: argus-telemetry-ingest
-  namespace: {{ .Values.namespaces.system }}
-spec:
-  selector: {app.kubernetes.io/name: argus-telemetry-ingest}
-  ports:
-    - {name: health, port: 8081, targetPort: health}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: argus-telemetry-query
-  namespace: {{ .Values.namespaces.system }}
-spec:
-  selector: {app.kubernetes.io/name: argus-telemetry-query}
-  ports:
-    - {name: health, port: 8081, targetPort: health}

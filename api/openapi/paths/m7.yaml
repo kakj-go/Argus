@@ -1,0 +1,136 @@
+collector_enrollment:
+  post:
+    operationId: enrollTelemetryCollector
+    summary: Exchange a one-time Collector Enrollment Token and CSR for a Telemetry client certificate.
+    security: []
+    parameters:
+      - name: X-Argus-Telemetry-Enrollment-Token
+        in: header
+        required: true
+        schema: {type: string, minLength: 32, maxLength: 256, writeOnly: true}
+    requestBody:
+      required: true
+      content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/CollectorEnrollmentRequest'}}}
+    responses:
+      '201': {description: One-time Collector certificate result., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/CollectorCertificateResult'}}}}
+      default: {$ref: '#/components/responses/Error'}
+
+distribution_collection:
+  get:
+    operationId: listCollectorDistributions
+    summary: List supported Collector distributions.
+    responses: {'200': {description: Distribution catalog., content: {application/json: {schema: {type: array, items: {$ref: '../components/m7.yaml#/components/schemas/CollectorDistributionVersion'}}}}}, default: {$ref: '#/components/responses/Error'}}
+profile_collection:
+  get:
+    operationId: listCollectionProfiles
+    summary: List versioned Collection Profiles.
+    responses: {'200': {description: Profile catalog., content: {application/json: {schema: {type: array, items: {$ref: '../components/m7.yaml#/components/schemas/CollectionProfile'}}}}}, default: {$ref: '#/components/responses/Error'}}
+collector_collection:
+  get:
+    operationId: listCollectorInstances
+    summary: List authorized Collector instances.
+    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}, {name: resource_type, in: query, schema: {type: string, enum: [host, kubernetes_cluster]}}, {name: resource_id, in: query, schema: {type: string, format: uuid}}]
+    responses: {'200': {description: Collector page., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/CollectorPage'}}}}, default: {$ref: '#/components/responses/Error'}}
+collector_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getCollectorInstance
+    summary: Get an authorized Collector instance.
+    responses: {'200': {description: Collector., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/CollectorInstance'}}}}, default: {$ref: '#/components/responses/Error'}}
+route_collection:
+  get:
+    operationId: listTelemetryRoutes
+    summary: List authorized Telemetry routes.
+    responses: {'200': {description: Routes., content: {application/json: {schema: {type: array, items: {$ref: '../components/m7.yaml#/components/schemas/TelemetryRoute'}}}}}, default: {$ref: '#/components/responses/Error'}}
+route_tests:
+  post:
+    operationId: createTelemetryRouteTest
+    summary: Start an authorized route test.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/RouteTestCreate'}}}}
+    responses: {'202': {description: Route test., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/RouteTestResult'}}}}, default: {$ref: '#/components/responses/Error'}}
+claim_collection:
+  get:
+    operationId: listCollectionClaims
+    summary: List authorized Collection Claims.
+    parameters: [{name: resource_id, in: query, schema: {type: string, format: uuid}}]
+    responses: {'200': {description: Claims., content: {application/json: {schema: {type: array, items: {$ref: '../components/m7.yaml#/components/schemas/CollectionClaim'}}}}}, default: {$ref: '#/components/responses/Error'}}
+binding_collection:
+  get:
+    operationId: listKubernetesNodeHostBindings
+    summary: List Node to Host bindings.
+    parameters: [{name: kubernetes_cluster_id, in: query, required: true, schema: {type: string, format: uuid}}]
+    responses: {'200': {description: Bindings., content: {application/json: {schema: {type: array, items: {$ref: '../components/m7.yaml#/components/schemas/KubernetesNodeHostBinding'}}}}}, default: {$ref: '#/components/responses/Error'}}
+binding_preview:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: previewKubernetesNodeHostBinding
+    summary: Preview confirmation of a Node to Host binding.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/NodeHostBindingPreview'}}}}
+    responses: {'201': {description: Pending action., content: {application/json: {schema: {$ref: '../../schemas/action/pending-action-public.schema.json'}}}}, default: {$ref: '#/components/responses/Error'}}
+usage_item:
+  get:
+    operationId: getTelemetryUsage
+    summary: Get authorized Telemetry usage.
+    responses: {'200': {description: Usage., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TelemetryUsage'}}}, headers: {X-Retention-Metrics-Days: {schema: {type: integer}}, X-Retention-Logs-Days: {schema: {type: integer}}, X-Retention-Traces-Days: {schema: {type: integer}}}}, default: {$ref: '#/components/responses/Error'}}
+metrics_query:
+  post:
+    operationId: queryTelemetryMetrics
+    summary: Query authorized Metrics.
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/MetricsQuery'}}}}
+    responses: {'200': {description: Metrics., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/MetricsResult'}}}}, default: {$ref: '#/components/responses/Error'}}
+logs_query:
+  post:
+    operationId: queryTelemetryLogs
+    summary: Query authorized Logs.
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/LogsQuery'}}}}
+    responses: {'200': {description: Logs., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/LogsResult'}}}}, default: {$ref: '#/components/responses/Error'}}
+traces_query:
+  post:
+    operationId: queryTelemetryTraces
+    summary: Query authorized Traces.
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TracesQuery'}}}}
+    responses: {'200': {description: Traces., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TracesResult'}}}}, default: {$ref: '#/components/responses/Error'}}
+overview_query:
+  post:
+    operationId: queryTelemetryOverview
+    summary: Query the Card-safe Telemetry overview.
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TelemetryOverviewQuery'}}}}
+    responses: {'200': {description: Overview., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TelemetryOverview'}}}}, default: {$ref: '#/components/responses/Error'}}
+host_collector_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getHostCollector
+    summary: Get the Collector installed on a Host.
+    responses: {'200': {description: Collector., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/CollectorInstance'}}}}, '204': {description: No Collector is installed.}, default: {$ref: '#/components/responses/Error'}}
+host_collector_preview:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}, {name: action, in: path, required: true, schema: {type: string, enum: [install, configure, upgrade, repair, uninstall]}}]
+  post:
+    operationId: previewHostCollectorAction
+    summary: Preview a deterministic Host Collector action.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/CollectorPreview'}}}}
+    responses: {'201': {description: Pending action., content: {application/json: {schema: {$ref: '../../schemas/action/pending-action-public.schema.json'}}}}, default: {$ref: '#/components/responses/Error'}}
+kubernetes_collector_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getKubernetesCollector
+    summary: Get the Collector installed on a Kubernetes cluster.
+    responses: {'200': {description: Collector., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/CollectorInstance'}}}}, '204': {description: No Collector is installed.}, default: {$ref: '#/components/responses/Error'}}
+kubernetes_collector_preview:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}, {name: action, in: path, required: true, schema: {type: string, enum: [install, configure, upgrade, repair, uninstall]}}]
+  post:
+    operationId: previewKubernetesCollectorAction
+    summary: Preview a deterministic Kubernetes Collector action.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/CollectorPreview'}}}}
+    responses: {'201': {description: Pending action., content: {application/json: {schema: {$ref: '../../schemas/action/pending-action-public.schema.json'}}}}, default: {$ref: '#/components/responses/Error'}}
+components:
+  parameters:
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {$ref: '../components/common.yaml#/components/schemas/IdempotencyKey'}}
+    CsrfToken: {name: X-CSRF-Token, in: header, required: true, schema: {type: string, minLength: 32, maxLength: 256}}
+    Cursor: {name: cursor, in: query, required: false, schema: {type: string, minLength: 1, maxLength: 4096}}
+    Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+  responses:
+    Error: {description: Stable Argus API error., content: {application/json: {schema: {$ref: '../components/common.yaml#/components/schemas/ApiError'}}}}

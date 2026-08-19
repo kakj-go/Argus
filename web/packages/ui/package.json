@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./telemetry": "./src/telemetry.tsx",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
@@ -25,6 +26,7 @@
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "echarts": "^6.1.0",
     "lucide-react": "^0.536.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

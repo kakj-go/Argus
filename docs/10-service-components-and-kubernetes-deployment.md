@@ -1,6 +1,6 @@
 # 服务组件与 Kubernetes 一键部署
 
-> 本文描述第一版目标部署架构。仓库已经具备可安装、可验证和可清理的 Evaluation 基座；M2-M6 的身份、资源/Connector、Agent、Card 和 Remote Access 均已接入 real API，Telemetry 由 M7 推进。实际完成度见[当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)，PostgreSQL 环境决策见[PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)。
+> 本文描述第一版目标部署架构。仓库已经具备可安装、可验证和可清理的 Evaluation 基座；M2-M7 的身份、资源/Connector、Agent、Card、Remote Access 和 Telemetry 均已接入 real API。实际完成度见[当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)，PostgreSQL 环境决策见[PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)。
 
 ## 1. 目标
 
@@ -39,7 +39,7 @@ cmd/
 | `argus-connector-gateway` | Deployment                                         | 在线 Connector 数、远程会话数、连接数、带宽   |
 | `argus-telemetry-ingest`  | Deployment                                         | OTLP 请求速率、Kafka Producer 延迟、CPU       |
 | `argus-telemetry-query`   | Deployment                                         | 查询并发、延迟、ClickHouse 压力               |
-| `otel-clickhouse-writer`  | Deployment                                         | Kafka Lag、ClickHouse 插入延迟                |
+| `argus-telemetry writer`  | Deployment                                         | Kafka Lag、ClickHouse 插入延迟                |
 
 `argus-telemetry-ingest` 与 `argus-telemetry-query` 使用相同镜像、不同启动参数。它们必须拥有不同的 Service、ServiceAccount、NetworkPolicy、PodDisruptionBudget、HPA 和数据库凭证。
 
@@ -53,7 +53,7 @@ cmd/
 | `argus-connector-gateway` | Connector/远程会话连接分布和跨 Gateway 内部转发 | PostgreSQL 命令队列、Redis Registry/Pub/Sub、connection_epoch、短期票据、录像外置、Drain |
 | `argus-telemetry-ingest`  | 负载均衡分发 OTLP                               | Kafka ACK、分布式配额、凭证快速失效                                                |
 | `argus-telemetry-query`   | 任意副本查询                                    | 无状态 Cursor、Enterprise/授权 Resource 条件强制注入、字段脱敏和查询预算           |
-| `otel-clickhouse-writer`  | Kafka Consumer Group                            | Partition 数、Rebalance 和 Offset 门禁                                             |
+| `argus-telemetry writer`  | Kafka Consumer Group                            | Partition 数、Rebalance 和 Offset 门禁                                             |
 
 具体状态所有权和扩缩容失败场景见[运行时状态、Redis 与横向扩展](./11-runtime-state-and-horizontal-scaling.md)。Migration、Bootstrap、系统 Card Catalog Sync 和 DLQ 重放不是普通横向扩展工作负载，必须使用 Job/Lease 或幂等数据库约束保证单一结果。`argus-card-catalog-sync` 只同步随镜像发布的不可变系统 Card Revision，普通 Server 启动不修改目录。
 
@@ -93,7 +93,7 @@ flowchart TB
     subgraph Ingestion["遥测推送链路"]
         OTel["argus-otelcol"] --> TI["argus-telemetry ingest"]
         TI --> Kafka["Kafka"]
-        Kafka --> Writer["otel-clickhouse-writer"]
+        Kafka --> Writer["argus-telemetry writer"]
         Writer --> CH["ClickHouseInstallation"]
     end
 
@@ -115,8 +115,9 @@ flowchart TB
 - Gateway peer 通过 Kubernetes API 获取 Ready owner Pod IP，ServiceAccount 只允许读取同 Namespace Pod；NetworkPolicy 必须允许 Kubernetes API Endpoint、DNS、Gateway peer `9446`、PostgreSQL、Redis、Direct Executor 和 ObjectStore。
 - 录像按 asciicast v2 NDJSON 加密分片写 Artifact Store，不能依赖 Gateway Pod 本地磁盘；ObjectStore 连续不可用超过 30 秒时会话 fail closed。
 - Collector 仅连接 `argus-telemetry-ingest`，不接收远程控制命令。
+- Kubernetes Agent 与 Gateway 使用独立 Collector mTLS 身份；Gateway 下游 receiver 校验证书，Gateway 向 Ingest 转发自身数据时还必须匹配 Collector ID 与证书序列。Kubelet 采集只读挂载宿主证书链，并以最小 `nodes/stats` RBAC访问 Stats API。
 - `argus-telemetry-query` 只持有 ClickHouse 只读账号。
-- `otel-clickhouse-writer` 只持有 Kafka Consumer 和 ClickHouse Insert 权限。
+- `argus-telemetry writer` 只持有 Kafka Consumer 和 ClickHouse Insert 权限。
 - 控制面不能绕过 Query Service 向企业用户暴露 ClickHouse。
 - 各链路使用独立域名、端口、证书、限流、HPA 和告警。
 
@@ -127,7 +128,7 @@ flowchart TB
 ```text
 argus-system         Argus 服务、Web、Migration、PostgreSQL、Redis、Artifact Store
 argus-sandbox        OpenSandbox 控制/API 与 Kubernetes Runtime
-argus-observability  Kafka、ClickHouse、otel-clickhouse-writer、遥测内部组件
+argus-observability  Kafka、ClickHouse、argus-telemetry writer、遥测内部组件
 ```
 
 Operator 可以安装在 `argus-observability`，也可以复用平台已有的集群级 Operator。命名空间拆分用于 RBAC、NetworkPolicy、Quota 和故障域隔离，不表示需要拆分仓库或增加业务服务。
@@ -140,7 +141,7 @@ argus-data-operators      Altinity ClickHouse Operator、Strimzi Kafka Operator
 argus-data                Kafka、ClickHouseInstallation、Keeper、PostgreSQL、Redis、Artifact Store
 argus-sandbox             OpenSandbox
 argus-platform            Web 与四个 Argus 程序
-argus-telemetry-pipeline  otel-clickhouse-writer、Topic、Schema Migration
+argus-telemetry-pipeline  argus-telemetry writer、Topic、Schema Migration
 ```
 
 拆成多个 Release 后，某一阶段失败可以修复后继续，升级也不必同时滚动所有有状态服务。
@@ -320,10 +321,12 @@ Production Profile 必须在同一 Kubernetes 集群内选择强化隔离，例�
 - `argus-server` 依赖 PostgreSQL Migration 完成。
 - `argus-worker` 依赖 PostgreSQL 和任务协调组件；OpenSandbox 故障只应暂停 Sandbox 类任务，不能让其他 Agent/Tool Run 整体失去就绪状态。
 - `argus-telemetry-ingest` 依赖 Kafka 可写，不依赖 ClickHouse 可写。
-- `otel-clickhouse-writer` 依赖 Kafka 可读和 ClickHouse Schema 就绪。
+- `argus-telemetry writer` 依赖 Kafka 可读和 ClickHouse Schema 就绪。
 - `argus-telemetry-query` 依赖 ClickHouse Schema 版本兼容。
 
-PostgreSQL Migration 和 ClickHouse Migration 是独立 Job 和独立版本。Telemetry Ingest 只依赖 Kafka 可写，可以在 ClickHouse Migration/Writer 尚未就绪时先接收并由 Kafka 缓冲数据；但安装验证只有在 Writer 和 Query 全链路成功后才通过。
+PostgreSQL Migration 和 ClickHouse Migration 是独立 Job 和独立版本。Telemetry Ingest 依赖 Collector 身份控制数据、Redis 配额和 Kafka 可写，但不依赖 ClickHouse，因此可以在 ClickHouse Migration/Writer 尚未就绪时先接收并由 Kafka 缓冲数据；安装验证只有在 Writer 和 Query 全链路成功后才通过。Evaluation 的身份控制数据通过窄 PostgreSQL Adapter 读取，Production 凭证与网络边界由 M8 ADR 固化。
+
+M7 Evaluation 已验证 Ingest/Writer/Query Pod 删除、Redis 清空、Kafka backlog、DLQ replay 和 Collector 持久队列恢复。Kafka Producer 固定启用 `IdempotentWrite`，Artifact 下载要求严格 TLS，Collector 变更使用 canonical Operation Plan Hash；Production 的多副本容量、跨节点故障、备份恢复、供应链签名和 Telemetry PKI 长周期轮换继续由 M8 阻断。
 
 ## 8. ClickHouse 与 Altinity Operator
 
@@ -344,7 +347,7 @@ Argus 不把建表职责交给 Operator 或 ClickHouse Exporter。独立 `argus-
 
 三个逻辑数据集由所有企业共享，禁止按企业或资源标签创建表或 Partition。即使第一版只有一个 Shard，也必须保留 Local/Distributed 两层，使新增 Shard 时不改变 Query API 和表名。严格三张物理表是否可行取决于统一 Metrics 稀疏列 Benchmark 和 Writer Gate；物理层允许按 Metric Type 拆表，但产品层始终只暴露 Metrics、Logs、Traces 三类查询协议。
 
-`otel-clickhouse-writer` 必须设置 `create_schema: false`。升级顺序通常为“兼容 Schema → Writer → Query → 清理旧 Schema”，不能先删除旧列再升级读取方。
+`argus-telemetry writer` 必须设置 `create_schema: false`。升级顺序通常为“兼容 Schema → Writer → Query → 清理旧 Schema”，不能先删除旧列再升级读取方。
 
 第一版不提供绕过 Altinity Operator 的外部 ClickHouse 模式。所有 ClickHouse Schema Migration 必须面向安装器创建的 ClickHouseInstallation，并使用 `ON CLUSTER`、Replicated Local Table 和 Distributed Table 兼容未来扩分片。
 

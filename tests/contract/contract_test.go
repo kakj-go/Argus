@@ -1329,7 +1329,8 @@ func validateSnapshotRange(value any) error {
 func checkLegacyWebBaseline(t *testing.T, root string) {
 	t.Helper()
 	_ = filepath.WalkDir(filepath.Join(root, "web"), func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry.IsDir() || strings.Contains(path, "node_modules") || strings.Contains(path, "/dist/") {
+		if walkErr != nil || entry.IsDir() || strings.Contains(path, "node_modules") || strings.Contains(path, "/dist/") ||
+			strings.Contains(path, "/test-results/") || strings.Contains(path, "/playwright-report/") {
 			return walkErr
 		}
 		data, readErr := os.ReadFile(path)

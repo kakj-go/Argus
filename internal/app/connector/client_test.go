@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kakj-go/Argus/internal/collectormanager"
 	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
+	"github.com/kakj-go/Argus/internal/telemetrybinding"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -166,6 +168,33 @@ func TestCommandExecutorRejectsInvalidTypesAndAcceptsUninstall(t *testing.T) {
 	}, nil)
 	if expired.code != "CONNECTOR_COMMAND_INVALID" {
 		t.Fatalf("expired command code=%q", expired.code)
+	}
+}
+
+func TestCollectorManagementUsesConvergenceTimeout(t *testing.T) {
+	if got := timeoutForCommand("host_connection_probe"); got != 45*time.Second {
+		t.Fatalf("host command timeout=%s, want 45s", got)
+	}
+	if got := timeoutForCommand("collector_management"); got != 3*time.Minute {
+		t.Fatalf("Collector command timeout=%s, want 3m", got)
+	}
+}
+
+func TestCollectorManagementFailureCodesAreStableAndSanitized(t *testing.T) {
+	for name, test := range map[string]struct {
+		err  error
+		code string
+	}{
+		"invalid":  {collectormanager.ErrInvalidCommand, "COLLECTOR_COMMAND_INVALID"},
+		"artifact": {collectormanager.ErrArtifactInvalid, "COLLECTOR_ARTIFACT_INVALID"},
+		"evidence": {telemetrybinding.ErrInvalidNodeEvidence, "COLLECTOR_NODE_EVIDENCE_INVALID"},
+		"timeout":  {context.DeadlineExceeded, "COLLECTOR_HEALTH_CHECK_FAILED"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := collectorManagementFailureCode(test.err); got != test.code {
+				t.Fatalf("failure code=%q, want %q", got, test.code)
+			}
+		})
 	}
 }
 

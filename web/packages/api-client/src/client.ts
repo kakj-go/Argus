@@ -57,13 +57,7 @@ import type {
   UsageRange,
   User,
 } from "./types";
-import type {
-  CollectionClaim,
-  CollectorInstallState,
-  K8sNodeBinding,
-  K8sWorkload,
-  K8sWorkloadFilter,
-} from "./provisional";
+import type { K8sWorkload, K8sWorkloadFilter } from "./provisional";
 import type { TaskEvent, TaskFilter, TaskViewModel } from "./provisional";
 import type {
   Automation,
@@ -118,6 +112,25 @@ import type {
   CardConfigurationVersionCreate,
   CardStateCommand,
   CardPresentation,
+  CollectionClaim,
+  CollectionProfile,
+  CollectorDistributionVersion,
+  CollectorInstance,
+  CollectorPreview,
+  KubernetesNodeHostBinding,
+  NodeHostBindingPreview,
+  TelemetryRoute,
+  TelemetryUsage,
+  MetricsQuery,
+  MetricsResult,
+  LogsQuery,
+  LogsResult,
+  TracesQuery,
+  TracesResult,
+  TelemetryOverviewQuery,
+  TelemetryOverview,
+  RouteTestCreate,
+  RouteTestResult,
   CardPresentationCreate,
   CardBindingInvokeResult,
   ToolSchemaCatalog,
@@ -137,6 +150,13 @@ import type {
   RemoteAccessRecording,
   RecordingEventPage,
 } from "./generated/contracts";
+
+export type CollectorAction =
+  | "install"
+  | "configure"
+  | "upgrade"
+  | "repair"
+  | "uninstall";
 
 export interface CursorListQuery {
   cursor?: string;
@@ -241,10 +261,15 @@ export interface ArgusApiClient {
       expectedVersion: number,
     ): Promise<PendingActionPublic>;
     /** Collector install wizard on a host: status -> preview -> confirm. */
-    getCollector(hostId: string): Promise<CollectorInstallState | null>;
+    getCollector(hostId: string): Promise<CollectorInstance | null>;
+    previewCollectorAction(
+      hostId: string,
+      action: CollectorAction,
+      input: CollectorPreview,
+    ): Promise<PendingActionPublic>;
     previewCollectorInstall(
       hostId: string,
-      input: { profile: string; telemetryRoute: string },
+      input: CollectorPreview,
     ): Promise<PendingActionPublic>;
   };
 
@@ -332,18 +357,37 @@ export interface ArgusApiClient {
       clusterId: string,
       filter?: K8sWorkloadFilter,
     ): Promise<K8sWorkload[]>;
-    listNodeBindings(clusterId: string): Promise<K8sNodeBinding[]>;
+    listNodeBindings(clusterId: string): Promise<KubernetesNodeHostBinding[]>;
     verifyNodeBinding(
       bindingId: string,
-      input: { hostId: string },
-    ): Promise<K8sNodeBinding>;
+      input: NodeHostBindingPreview,
+    ): Promise<PendingActionPublic>;
     listCollectionClaims(clusterId?: string): Promise<CollectionClaim[]>;
     /** DaemonSet collector install wizard on a cluster. */
-    getCollector(clusterId: string): Promise<CollectorInstallState | null>;
+    getCollector(clusterId: string): Promise<CollectorInstance | null>;
+    previewCollectorAction(
+      clusterId: string,
+      action: CollectorAction,
+      input: CollectorPreview,
+    ): Promise<PendingActionPublic>;
     previewCollectorInstall(
       clusterId: string,
-      input: { profile: string },
+      input: CollectorPreview,
     ): Promise<PendingActionPublic>;
+  };
+
+  telemetry: {
+    listDistributions(): Promise<CollectorDistributionVersion[]>;
+    listProfiles(): Promise<CollectionProfile[]>;
+    listCollectors(): Promise<CollectorInstance[]>;
+    listRoutes(): Promise<TelemetryRoute[]>;
+    listClaims(resourceId?: string): Promise<CollectionClaim[]>;
+    testRoute(input: RouteTestCreate): Promise<RouteTestResult>;
+    usage(): Promise<TelemetryUsage>;
+    queryMetrics(input: MetricsQuery): Promise<MetricsResult>;
+    queryLogs(input: LogsQuery): Promise<LogsResult>;
+    queryTraces(input: TracesQuery): Promise<TracesResult>;
+    overview(input: TelemetryOverviewQuery): Promise<TelemetryOverview>;
   };
 
   /** Execution tasks with steps, logs and progress subscriptions. */

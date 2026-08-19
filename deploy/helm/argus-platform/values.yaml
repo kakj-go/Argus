@@ -45,6 +45,31 @@ runtime:
   objectStoreBucket: argus-remote-recordings
   objectStoreAccessKey: ""
   objectStoreSecretKey: ""
+  telemetryKafkaUsername: argus-telemetry
+  telemetryKafkaPassword: ""
+  telemetryClickhouseMigrationPassword: ""
+  telemetryClickhouseWriterPassword: ""
+  telemetryClickhouseQueryPassword: ""
+  telemetryIssuerName: argus-telemetry-ca
+  telemetryIssuerGeneration: 1
+  telemetryIngestGrpcEndpoint: grpcs://localhost:4317
+  telemetryIngestHttpEndpoint: https://localhost:4318
+  telemetryEnrollmentEndpoint: https://localhost:4318/v1/identity/enroll
+  telemetryToolCatalogEnabled: true
+  otelcolVersion: 0.1.0-m7
+  otelcolLinuxArm64Uri: ""
+  otelcolLinuxArm64Sha256: ""
+  otelcolLinuxArm64Signature: ""
+  otelcolLinuxArm64ByteSize: 0
+  otelcolWindowsAmd64Uri: ""
+  otelcolWindowsAmd64Sha256: ""
+  otelcolWindowsAmd64Signature: ""
+  otelcolWindowsAmd64ByteSize: 0
+  otelcolSigningKeyId: ""
+  otelcolSigningPublicKey: ""
+  otelcolKubernetesImage: ""
+  otelcolArtifactCABundleSecretName: ""
+  certManagerNamespace: cert-manager
 replicas: 1
 workerPools:
   agent:

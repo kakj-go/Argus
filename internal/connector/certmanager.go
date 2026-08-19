@@ -23,7 +23,11 @@ type CertManagerIssuer struct {
 	Client           dynamic.Interface
 	Namespace        string
 	IssuerName       string
+	IssuerKind       string
+	RequestPrefix    string
+	SubjectLabel     string
 	IssuerGeneration int32
+	Usages           []string
 	PollInterval     time.Duration
 	Timeout          time.Duration
 }
@@ -32,25 +36,48 @@ func (issuer CertManagerIssuer) Issue(ctx context.Context, connectorID uuid.UUID
 	if issuer.Client == nil || issuer.Namespace == "" || issuer.IssuerName == "" {
 		return Certificate{}, errors.New("cert-manager issuer is not configured")
 	}
+	issuerKind := issuer.IssuerKind
+	if issuerKind == "" {
+		issuerKind = "Issuer"
+	}
+	prefix := issuer.RequestPrefix
+	if prefix == "" {
+		prefix = "argus-connector-"
+	}
+	label := issuer.SubjectLabel
+	if label == "" {
+		label = "argus.io/connector-id"
+	}
 	requestPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
+	usages := issuer.Usages
+	if len(usages) == 0 {
+		usages = []string{"client auth"}
+	}
+	encodedUsages := make([]any, len(usages))
+	for index, usage := range usages {
+		if usage != "client auth" && usage != "server auth" {
+			return Certificate{}, fmt.Errorf("unsupported certificate usage %q", usage)
+		}
+		encodedUsages[index] = usage
+	}
 	request := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "cert-manager.io/v1",
 		"kind":       "CertificateRequest",
 		"metadata": map[string]any{
-			"generateName": "argus-connector-",
+			"generateName": prefix,
 			"namespace":    issuer.Namespace,
 			"labels": map[string]any{
-				"argus.io/connector-id": fmt.Sprint(connectorID),
+				label: fmt.Sprint(connectorID),
 			},
 		},
 		"spec": map[string]any{
 			"request":  base64.StdEncoding.EncodeToString(requestPEM),
 			"duration": ttl.String(),
 			"isCA":     false,
-			"usages":   []any{"client auth"},
+			"usages":   encodedUsages,
 			"issuerRef": map[string]any{
 				"name":  issuer.IssuerName,
-				"kind":  "Issuer",
+				"kind":  issuerKind,
 				"group": "cert-manager.io",
 			},
 		},

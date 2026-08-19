@@ -1,0 +1,327 @@
+{{- $system := .Values.namespaces.system -}}
+{{- $observability := .Values.namespaces.observability -}}
+{{- $issuer := .Values.runtime.telemetryIssuerName -}}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.releaseId }}-telemetry-selfsigned
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.releaseId }}-telemetry-root-ca
+  namespace: {{ .Values.runtime.certManagerNamespace }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
+spec:
+  isCA: true
+  commonName: {{ .Values.releaseId }}-telemetry-root-ca
+  secretName: {{ .Values.releaseId }}-telemetry-root-ca
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey: {algorithm: ECDSA, size: 256}
+  issuerRef: {name: {{ .Values.releaseId }}-telemetry-selfsigned, kind: ClusterIssuer}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ $issuer }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
+spec:
+  ca:
+    secretName: {{ .Values.releaseId }}-telemetry-root-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-telemetry-server
+  namespace: {{ $observability }}
+spec:
+  secretName: argus-telemetry-server-tls
+  duration: 24h
+  renewBefore: 8h
+  dnsNames:
+    - argus-telemetry-ingest
+    - argus-telemetry-ingest.{{ $observability }}.svc
+    - argus-telemetry-query
+    - argus-telemetry-query.{{ $observability }}.svc
+  privateKey: {algorithm: ECDSA, size: 256}
+  usages: [server auth, client auth]
+  issuerRef: {name: {{ $issuer }}, kind: ClusterIssuer}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-server-telemetry-client
+  namespace: {{ $system }}
+spec:
+  secretName: argus-server-telemetry-client-tls
+  duration: 24h
+  renewBefore: 8h
+  dnsNames: [argus-server]
+  privateKey: {algorithm: ECDSA, size: 256}
+  usages: [client auth]
+  issuerRef: {name: {{ $issuer }}, kind: ClusterIssuer}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: argus-telemetry
+  namespace: {{ $observability }}
+  labels:
+    strimzi.io/cluster: argus-kafka
+spec:
+  authentication: {type: scram-sha-512}
+  authorization:
+    type: simple
+    acls:
+      - operations: [Read, Write, Describe]
+        resource: {type: topic, name: otlp-, patternType: prefix}
+      - operations: [Read]
+        resource: {type: group, name: argus-telemetry-writer-v1, patternType: literal}
+      - operations: [Read]
+        resource: {type: group, name: argus-telemetry-dlq-replay, patternType: literal}
+      - operations: [IdempotentWrite]
+        resource: {type: cluster, name: kafka-cluster, patternType: literal}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: argus-telemetry-certificate-issuer, namespace: {{ $observability }}}
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificaterequests"]
+    verbs: ["create", "get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: argus-telemetry-certificate-issuer, namespace: {{ $observability }}}
+subjects:
+  - {kind: ServiceAccount, name: argus-telemetry-ingest, namespace: {{ $observability }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: argus-telemetry-certificate-issuer}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argus-telemetry-runtime
+  namespace: {{ $observability }}
+type: Opaque
+stringData:
+  database-url: {{ printf "postgres://argus:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.postgresqlPassword is required" .Values.runtime.postgresqlPassword) $system | quote }}
+---
+{{- range $mode := list "ingest" "writer" "query" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argus-telemetry-{{ $mode }}
+  namespace: {{ $observability }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argus-telemetry-{{ $mode }}
+  namespace: {{ $observability }}
+  labels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}, app.kubernetes.io/part-of: argus}
+spec:
+  replicas: {{ if eq $.Values.profile "production" }}{{ $.Values.production.minReplicas }}{{ else }}1{{ end }}
+  selector: {matchLabels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}, app.kubernetes.io/part-of: argus}}
+    spec:
+      serviceAccountName: argus-telemetry-{{ $mode }}
+      terminationGracePeriodSeconds: 30
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: telemetry
+          image: {{ $.Values.images.backend }}
+          imagePullPolicy: {{ $.Values.images.pullPolicy }}
+          command: [/usr/local/bin/argus-telemetry]
+          args: [--mode={{ $mode }}]
+          env:
+            - {name: ARGUS_HEALTH_ADDRESS, value: ":8081"}
+            {{- if or (eq $mode "ingest") (eq $mode "writer") }}
+            - name: ARGUS_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: argus-telemetry-runtime, key: database-url}}
+            - {name: ARGUS_KAFKA_BROKERS, value: {{ printf "argus-kafka-kafka-bootstrap.%s.svc:9093" $observability | quote }}}
+            - {name: ARGUS_KAFKA_USERNAME, value: argus-telemetry}
+            - name: ARGUS_KAFKA_PASSWORD
+              valueFrom: {secretKeyRef: {name: argus-telemetry, key: password}}
+            {{- end }}
+            {{- if or (eq $mode "ingest") (eq $mode "query") }}
+            - {name: ARGUS_REDIS_URL, value: {{ printf "redis://:%s@argus-redis.%s.svc:6379/0" (required "runtime.redisPassword is required" $.Values.runtime.redisPassword) $system | quote }}}
+            {{- end }}
+            {{- if eq $mode "ingest" }}
+            - {name: ARGUS_TELEMETRY_CERTIFICATE_REQUEST_NAMESPACE, value: {{ $observability | quote }}}
+            - {name: ARGUS_TELEMETRY_ISSUER_NAME, value: {{ $.Values.runtime.telemetryIssuerName | quote }}}
+            - {name: ARGUS_TELEMETRY_ISSUER_GENERATION, value: {{ $.Values.runtime.telemetryIssuerGeneration | quote }}}
+            - {name: ARGUS_TELEMETRY_INGEST_GRPC_ENDPOINT, value: {{ $.Values.runtime.telemetryIngestGrpcEndpoint | quote }}}
+            - {name: ARGUS_TELEMETRY_INGEST_HTTP_ENDPOINT, value: {{ $.Values.runtime.telemetryIngestHttpEndpoint | quote }}}
+            {{- end }}
+            {{- if or (eq $mode "writer") (eq $mode "query") }}
+            - {name: ARGUS_CLICKHOUSE_ADDRESS, value: {{ printf "argus-clickhouse-client.%s.svc:9000" $observability | quote }}}
+            - {name: ARGUS_CLICKHOUSE_DATABASE, value: argus_telemetry}
+            - {name: ARGUS_CLICKHOUSE_USERNAME, value: {{ ternary "argus_telemetry_writer" "argus_telemetry_query" (eq $mode "writer") | quote }}}
+            - name: ARGUS_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: argus-telemetry-clickhouse
+                  key: {{ ternary "writer-password" "query-password" (eq $mode "writer") }}
+            {{- end }}
+            {{- if or (eq $mode "ingest") (eq $mode "query") }}
+            - {name: ARGUS_TELEMETRY_TLS_CERT_PATH, value: /var/run/secrets/argus/telemetry-server/tls.crt}
+            - {name: ARGUS_TELEMETRY_TLS_KEY_PATH, value: /var/run/secrets/argus/telemetry-server/tls.key}
+            - {name: ARGUS_TELEMETRY_CLIENT_CA_PATH, value: /var/run/secrets/argus/telemetry-server/ca.crt}
+            {{- end }}
+          ports:
+            - {name: health, containerPort: 8081}
+            {{- if eq $mode "ingest" }}
+            - {name: otlp-grpc, containerPort: 4317}
+            - {name: otlp-http, containerPort: 4318}
+            {{- else if eq $mode "query" }}
+            - {name: query-rpc, containerPort: 9447}
+            {{- end }}
+          readinessProbe: {httpGet: {path: /readyz, port: health}, initialDelaySeconds: 3, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: health}, initialDelaySeconds: 5, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+          {{- if or (eq $mode "ingest") (eq $mode "query") }}
+          volumeMounts:
+            - {name: telemetry-server, mountPath: /var/run/secrets/argus/telemetry-server, readOnly: true}
+          {{- end }}
+      {{- if or (eq $mode "ingest") (eq $mode "query") }}
+      volumes:
+        - {name: telemetry-server, secret: {secretName: argus-telemetry-server-tls}}
+      {{- end }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata: {name: argus-telemetry-ingest, namespace: {{ $observability }}}
+spec:
+  selector: {app.kubernetes.io/name: argus-telemetry-ingest}
+  ports:
+    - {name: health, port: 8081, targetPort: health}
+    - {name: otlp-grpc, port: 4317, targetPort: otlp-grpc}
+    - {name: otlp-http, port: 4318, targetPort: otlp-http}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: argus-telemetry-query, namespace: {{ $observability }}}
+spec:
+  selector: {app.kubernetes.io/name: argus-telemetry-query}
+  ports:
+    - {name: health, port: 8081, targetPort: health}
+    - {name: query-rpc, port: 9447, targetPort: query-rpc}
+---
+{{- range $mode := list "ingest" "writer" "query" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: argus-telemetry-{{ $mode }}, namespace: {{ $observability }}}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}}}
+  policyTypes: [Ingress, Egress]
+  {{- if eq $mode "writer" }}
+  ingress: []
+  {{- else }}
+  ingress:
+    {{- if eq $mode "ingest" }}
+    - ports: [{protocol: TCP, port: 4317}, {protocol: TCP, port: 4318}]
+    {{- else }}
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $system }}}}
+          podSelector:
+            matchExpressions:
+              - {key: app.kubernetes.io/name, operator: In, values: [argus-server, argus-worker-agent, argus-worker-automation]}
+      ports: [{protocol: TCP, port: 9447}]
+    {{- end }}
+  {{- end }}
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    {{- if or (eq $mode "ingest") (eq $mode "writer") }}
+    - to:
+        - podSelector: {matchLabels: {strimzi.io/cluster: argus-kafka}}
+      ports: [{protocol: TCP, port: 9093}]
+    {{- end }}
+    {{- if eq $mode "ingest" }}
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $system }}}}
+      ports: [{protocol: TCP, port: 5432}, {protocol: TCP, port: 6379}]
+    {{- range $.Values.runtime.kubernetesApiCidrs }}
+    - to:
+        - ipBlock: {cidr: {{ . | quote }}}
+      ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 6443}]
+    {{- end }}
+    {{- else if eq $mode "writer" }}
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $system }}}}
+      ports: [{protocol: TCP, port: 5432}]
+    - to:
+        - podSelector: {matchLabels: {clickhouse.altinity.com/chi: argus-clickhouse}}
+      ports: [{protocol: TCP, port: 9000}]
+    {{- else }}
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $system }}}}
+      ports: [{protocol: TCP, port: 6379}]
+    - to:
+        - podSelector: {matchLabels: {clickhouse.altinity.com/chi: argus-clickhouse}}
+      ports: [{protocol: TCP, port: 9000}]
+    {{- end }}
+---
+{{- if eq $.Values.profile "production" }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: argus-telemetry-{{ $mode }}, namespace: {{ $observability }}}
+spec:
+  minAvailable: 2
+  selector: {matchLabels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: argus-telemetry-{{ $mode }}, namespace: {{ $observability }}}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: argus-telemetry-{{ $mode }}}
+  minReplicas: {{ $.Values.production.minReplicas }}
+  maxReplicas: {{ $.Values.production.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+{{- end }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: argus-telemetry-catalog-sync
+  namespace: {{ $system }}
+  labels: {app.kubernetes.io/name: argus-telemetry-catalog-sync, app.kubernetes.io/part-of: argus}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "6"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: argus-telemetry-catalog-sync, app.kubernetes.io/part-of: argus}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: sync
+          image: {{ .Values.images.backend }}
+          command: [/usr/local/bin/argus-telemetry-catalog-sync]
+          envFrom: [{secretRef: {name: argus-runtime-secrets}}]
+          env:
+            - {name: ARGUS_OTELCOL_VERSION, value: {{ .Values.runtime.otelcolVersion | quote }}}
+            - {name: ARGUS_OTELCOL_LINUX_ARM64_URI, value: {{ required "runtime.otelcolLinuxArm64Uri is required" .Values.runtime.otelcolLinuxArm64Uri | quote }}}
+            - {name: ARGUS_OTELCOL_LINUX_ARM64_SHA256, value: {{ required "runtime.otelcolLinuxArm64Sha256 is required" .Values.runtime.otelcolLinuxArm64Sha256 | quote }}}
+            - {name: ARGUS_OTELCOL_LINUX_ARM64_SIGNATURE, value: {{ required "runtime.otelcolLinuxArm64Signature is required" .Values.runtime.otelcolLinuxArm64Signature | quote }}}
+            - {name: ARGUS_OTELCOL_LINUX_ARM64_BYTE_SIZE, value: {{ required "runtime.otelcolLinuxArm64ByteSize is required" .Values.runtime.otelcolLinuxArm64ByteSize | quote }}}
+            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_URI, value: {{ required "runtime.otelcolWindowsAmd64Uri is required" .Values.runtime.otelcolWindowsAmd64Uri | quote }}}
+            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_SHA256, value: {{ required "runtime.otelcolWindowsAmd64Sha256 is required" .Values.runtime.otelcolWindowsAmd64Sha256 | quote }}}
+            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_SIGNATURE, value: {{ required "runtime.otelcolWindowsAmd64Signature is required" .Values.runtime.otelcolWindowsAmd64Signature | quote }}}
+            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_BYTE_SIZE, value: {{ required "runtime.otelcolWindowsAmd64ByteSize is required" .Values.runtime.otelcolWindowsAmd64ByteSize | quote }}}
+            - {name: ARGUS_OTELCOL_SIGNING_KEY_ID, value: {{ required "runtime.otelcolSigningKeyId is required" .Values.runtime.otelcolSigningKeyId | quote }}}
+            - {name: ARGUS_OTELCOL_SIGNING_PUBLIC_KEY, value: {{ required "runtime.otelcolSigningPublicKey is required" .Values.runtime.otelcolSigningPublicKey | quote }}}

@@ -195,7 +195,7 @@ M4 将普通 Worker 拆为五个独立 Pool：`agent` 运行模型与可见 Tool
 - 查询预算和并发按企业通过 Redis 协调，数据库保存权威策略。
 - HPA 使用查询并发、P95 延迟、排队长度和 ClickHouse 拒绝率。
 
-### 7.7 `otel-clickhouse-writer`
+### 7.7 `argus-telemetry writer`
 
 可以按 Kafka Consumer Group 横向扩展，但扩展上限受 Topic Partition 数限制。
 

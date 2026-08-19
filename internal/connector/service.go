@@ -17,13 +17,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/kakj-go/Argus/internal/audit"
+	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
+	"github.com/kakj-go/Argus/internal/telemetrybinding"
 )
 
 var (
@@ -438,15 +441,127 @@ func (service Service) TransitionCommand(ctx context.Context, identity TrustedId
 		var transitionErr error
 		transitioned, transitionErr = q.TransitionConnectorCommand(ctx, db.TransitionConnectorCommandParams{CommandID: commandID, ConnectorID: identity.ConnectorID,
 			ConnectionEpoch: epoch, Status: next, Result: result, ResultHash: hash, ErrorCode: pgtype.Text{String: errorCode, Valid: errorCode != ""}})
-		if transitionErr != nil || current.CommandType != "connector_uninstall" || next != "succeeded" {
+		if transitionErr != nil {
 			return transitionErr
 		}
-		return finalizeConnectorUninstall(ctx, q, identity, epoch)
+		if current.CommandType == "collector_management" && (next == "succeeded" || next == "failed") {
+			return finalizeCollectorManagement(ctx, q, current, next, result, errorCode)
+		}
+		if current.CommandType == "connector_uninstall" && next == "succeeded" {
+			return finalizeConnectorUninstall(ctx, q, identity, epoch)
+		}
+		return nil
 	})
 	if err == nil && current.CommandType == "connector_uninstall" && next == "succeeded" && service.Redis != nil {
 		_ = service.Redis.DeleteConnectorRegistry(ctx, identity.ConnectorID.String())
 	}
 	return transitioned, err
+}
+
+type collectorManagementRequest struct {
+	CollectorID     string `json:"collector_id"`
+	Operation       string `json:"operation"`
+	ResourceID      string `json:"resource_id"`
+	ResourceType    string `json:"resource_type"`
+	DesiredRevision uint64 `json:"desired_revision"`
+	ConfigSHA256    string `json:"config_sha256"`
+}
+
+type collectorManagementResult struct {
+	CollectorID         string `json:"collector_id"`
+	EffectiveRevision   uint64 `json:"effective_revision"`
+	AppliedConfigSHA256 string `json:"applied_config_sha256"`
+	Status              string `json:"status"`
+	KubernetesNodes     []telemetrybinding.NodeEvidence
+}
+
+func finalizeCollectorManagement(ctx context.Context, q *db.Queries, command db.ConnectorCommand, status string, raw json.RawMessage, errorCode string) error {
+	request, result, err := validateCollectorManagementOutcome(command.Payload, status, raw)
+	if err != nil {
+		return ErrCommandState
+	}
+	collectorID, _ := uuid.Parse(request.CollectorID)
+	if status == "succeeded" {
+		if result.Status != "converged" && result.Status != "uninstalled" {
+			return ErrCommandState
+		}
+		if request.Operation != "uninstall" && (result.EffectiveRevision != request.DesiredRevision ||
+			!strings.EqualFold(result.AppliedConfigSHA256, request.ConfigSHA256)) {
+			return ErrCommandState
+		}
+		if _, err = q.ApplyCollectorOperationSuccess(ctx, db.ApplyCollectorOperationSuccessParams{ID: collectorID, EnterpriseID: command.EnterpriseID, Column3: request.Operation}); err != nil {
+			return err
+		}
+		if request.Operation != "uninstall" {
+			if request.ResourceType == "kubernetes_cluster" {
+				clusterID, parseErr := uuid.Parse(request.ResourceID)
+				if parseErr != nil || telemetrybinding.Upsert(ctx, q, command.EnterpriseID, clusterID, result.KubernetesNodes) != nil {
+					return ErrCommandState
+				}
+			}
+			if _, err = q.MarkCollectorConfigEffective(ctx, db.MarkCollectorConfigEffectiveParams{CollectorID: collectorID, Revision: int64(request.DesiredRevision)}); err != nil {
+				return err
+			}
+			if _, err = q.MarkTelemetryRouteActive(ctx, db.MarkTelemetryRouteActiveParams{CollectorID: collectorID, EnterpriseID: command.EnterpriseID}); err != nil {
+				return err
+			}
+			_, err = q.FinalizeCollectorClaimMigrations(ctx, db.FinalizeCollectorClaimMigrationsParams{EnterpriseID: command.EnterpriseID, CollectorID: collectorID})
+		}
+		return err
+	}
+	if errorCode == "" {
+		errorCode = "COLLECTOR_MANAGEMENT_FAILED"
+	}
+	if _, err = q.ApplyCollectorOperationFailure(ctx, db.ApplyCollectorOperationFailureParams{ID: collectorID, EnterpriseID: command.EnterpriseID, Status: "degraded"}); err != nil {
+		return err
+	}
+	if request.Operation != "uninstall" {
+		_, _ = q.MarkCollectorConfigFailed(ctx, db.MarkCollectorConfigFailedParams{CollectorID: collectorID, Revision: int64(request.DesiredRevision), FailureCode: pgtype.Text{String: errorCode, Valid: true}})
+	}
+	_, _ = q.RollbackCollectorClaimMigrations(ctx, db.RollbackCollectorClaimMigrationsParams{EnterpriseID: command.EnterpriseID, CollectorID: collectorID})
+	_, err = q.MarkTelemetryRouteDegraded(ctx, db.MarkTelemetryRouteDegradedParams{CollectorID: collectorID, EnterpriseID: command.EnterpriseID})
+	return err
+}
+
+func validateCollectorManagementOutcome(payload json.RawMessage, status string, raw json.RawMessage) (collectorManagementRequest, collectorManagementResult, error) {
+	var requestMessage connectorv1.CollectorManagementCommand
+	if protojson.Unmarshal(payload, &requestMessage) != nil {
+		return collectorManagementRequest{}, collectorManagementResult{}, ErrCommandState
+	}
+	request := collectorManagementRequest{CollectorID: requestMessage.GetCollectorId(), Operation: requestMessage.GetOperation(),
+		ResourceID: requestMessage.GetResourceId(), ResourceType: requestMessage.GetResourceType(),
+		DesiredRevision: requestMessage.GetDesiredRevision(), ConfigSHA256: requestMessage.GetConfigSha256()}
+	var result collectorManagementResult
+	if request.CollectorID == "" {
+		return request, result, ErrCommandState
+	}
+	if _, err := uuid.Parse(request.CollectorID); err != nil {
+		return request, result, ErrCommandState
+	}
+	if status != "succeeded" {
+		return request, result, nil
+	}
+	var resultMessage connectorv1.CollectorManagementResult
+	if protojson.Unmarshal(raw, &resultMessage) != nil {
+		return request, result, ErrCommandState
+	}
+	result = collectorManagementResult{CollectorID: resultMessage.GetCollectorId(), EffectiveRevision: resultMessage.GetEffectiveRevision(),
+		AppliedConfigSHA256: resultMessage.GetAppliedConfigSha256(), Status: resultMessage.GetStatus()}
+	for _, node := range resultMessage.GetKubernetesNodes() {
+		result.KubernetesNodes = append(result.KubernetesNodes, telemetrybinding.NodeEvidence{NodeUID: node.GetNodeUid(), NodeName: node.GetNodeName(),
+			ProviderID: node.GetProviderId(), MachineID: node.GetMachineId(), SystemUUID: node.GetSystemUuid(), InternalIPs: append([]string(nil), node.GetInternalIps()...)})
+	}
+	if result.CollectorID != request.CollectorID {
+		return request, result, ErrCommandState
+	}
+	if request.ResourceType == "kubernetes_cluster" && request.Operation != "uninstall" {
+		if _, err := uuid.Parse(request.ResourceID); err != nil || telemetrybinding.Validate(result.KubernetesNodes) != nil {
+			return request, result, ErrCommandState
+		}
+	} else if len(result.KubernetesNodes) != 0 {
+		return request, result, ErrCommandState
+	}
+	return request, result, nil
 }
 
 func finalizeConnectorUninstall(ctx context.Context, q *db.Queries, identity TrustedIdentity, epoch int64) error {

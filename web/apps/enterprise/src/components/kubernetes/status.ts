@@ -1,11 +1,9 @@
 import type {
+  CollectorInstance,
   KubernetesCluster,
+  KubernetesNodeHostBinding,
 } from "@argus/api-client";
-import type {
-  CollectorInstallState,
-  K8sNodeBinding,
-  K8sWorkload,
-} from "@argus/api-client/provisional";
+import type { K8sWorkload } from "@argus/api-client/provisional";
 
 type ClusterConnectionStatus = KubernetesCluster["connection_status"];
 
@@ -18,7 +16,7 @@ export function connectionStatusTone(status: ClusterConnectionStatus): Tone {
 }
 
 export function collectorStatusTone(
-  status: CollectorInstallState["status"] | "not_installed",
+  status: CollectorInstance["status"] | "not_installed",
 ): Tone {
   switch (status) {
     case "converged":
@@ -27,7 +25,8 @@ export function collectorStatusTone(
       return "info";
     case "backlog":
       return "warning";
-    case "interrupted":
+    case "degraded":
+    case "result_unknown":
       return "danger";
     default:
       return "neutral";
@@ -40,7 +39,9 @@ export function workloadStatusTone(status: K8sWorkload["status"]): Tone {
   return "danger";
 }
 
-export function bindingStatusTone(status: K8sNodeBinding["status"]): Tone {
+export function bindingStatusTone(
+  status: KubernetesNodeHostBinding["status"],
+): Tone {
   if (status === "verified") return "success";
   if (status === "proposed") return "info";
   return "danger";
@@ -49,7 +50,7 @@ export function bindingStatusTone(status: K8sNodeBinding["status"]): Tone {
 /** verified 绑定数 / 集群节点数。 */
 export function bindingCoverage(
   cluster: KubernetesCluster,
-  bindings: K8sNodeBinding[] | undefined,
+  bindings: KubernetesNodeHostBinding[] | undefined,
 ): { verified: number; total: number; percent: number } {
   const verified = (bindings ?? []).filter(
     (entry) => entry.status === "verified",

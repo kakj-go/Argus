@@ -1,0 +1,51 @@
+openapi: 3.1.0
+info: {title: Argus Telemetry API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  /telemetry/collectors/enroll: {$ref: ../argus.yaml#/paths/~1telemetry~1collectors~1enroll}
+  /enterprise/telemetry/distributions: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1distributions}
+  /enterprise/telemetry/profiles: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1profiles}
+  /enterprise/telemetry/collectors: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1collectors}
+  "/enterprise/telemetry/collectors/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1telemetry~1collectors~1{id}"}
+  /enterprise/telemetry/routes: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1routes}
+  /enterprise/telemetry/routes/tests: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1routes~1tests}
+  /enterprise/telemetry/collection-claims: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1collection-claims}
+  /enterprise/telemetry/node-host-bindings: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1node-host-bindings}
+  "/enterprise/telemetry/node-host-bindings/{id}/actions/preview-confirm": {$ref: "../argus.yaml#/paths/~1enterprise~1telemetry~1node-host-bindings~1{id}~1actions~1preview-confirm"}
+  /enterprise/telemetry/usage: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1usage}
+  /enterprise/telemetry/query/metrics: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1query~1metrics}
+  /enterprise/telemetry/query/logs: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1query~1logs}
+  /enterprise/telemetry/query/traces: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1query~1traces}
+  /enterprise/telemetry/query/overview: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1query~1overview}
+  "/enterprise/hosts/{id}/collector": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1collector"}
+  "/enterprise/hosts/{id}/collector/actions/preview-{action}": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1collector~1actions~1preview-{action}"}
+  "/enterprise/kubernetes-clusters/{id}/collector": {$ref: "../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1{id}~1collector"}
+  "/enterprise/kubernetes-clusters/{id}/collector/actions/preview-{action}": {$ref: "../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1{id}~1collector~1actions~1preview-{action}"}
+components:
+  securitySchemes: {sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}}
+  schemas:
+    CollectorDistributionVersion: {$ref: ../components/m7.yaml#/components/schemas/CollectorDistributionVersion}
+    CollectionProfile: {$ref: ../components/m7.yaml#/components/schemas/CollectionProfile}
+    CollectorInstance: {$ref: ../components/m7.yaml#/components/schemas/CollectorInstance}
+    CollectorEnrollmentRequest: {$ref: ../components/m7.yaml#/components/schemas/CollectorEnrollmentRequest}
+    CollectorCertificateResult: {$ref: ../components/m7.yaml#/components/schemas/CollectorCertificateResult}
+    CollectorConfigRevision: {$ref: ../components/m7.yaml#/components/schemas/CollectorConfigRevision}
+    TelemetryRoute: {$ref: ../components/m7.yaml#/components/schemas/TelemetryRoute}
+    CollectionClaim: {$ref: ../components/m7.yaml#/components/schemas/CollectionClaim}
+    KubernetesNodeHostBinding: {$ref: ../components/m7.yaml#/components/schemas/KubernetesNodeHostBinding}
+    NodeHostBindingPreview: {$ref: ../components/m7.yaml#/components/schemas/NodeHostBindingPreview}
+    CollectorPreview: {$ref: ../components/m7.yaml#/components/schemas/CollectorPreview}
+    TelemetryRetentionPolicy: {$ref: ../components/m7.yaml#/components/schemas/TelemetryRetentionPolicy}
+    TelemetryUsage: {$ref: ../components/m7.yaml#/components/schemas/TelemetryUsage}
+    MetricsQuery: {$ref: ../components/m7.yaml#/components/schemas/MetricsQuery}
+    LogsQuery: {$ref: ../components/m7.yaml#/components/schemas/LogsQuery}
+    TracesQuery: {$ref: ../components/m7.yaml#/components/schemas/TracesQuery}
+    TelemetryOverviewQuery: {$ref: ../components/m7.yaml#/components/schemas/TelemetryOverviewQuery}
+    MetricsResult: {$ref: ../components/m7.yaml#/components/schemas/MetricsResult}
+    LogsResult: {$ref: ../components/m7.yaml#/components/schemas/LogsResult}
+    TracesResult: {$ref: ../components/m7.yaml#/components/schemas/TracesResult}
+    TelemetryOverview: {$ref: ../components/m7.yaml#/components/schemas/TelemetryOverview}
+    CollectorPage: {$ref: ../components/m7.yaml#/components/schemas/CollectorPage}
+    RouteTestCreate: {$ref: ../components/m7.yaml#/components/schemas/RouteTestCreate}
+    RouteTestResult: {$ref: ../components/m7.yaml#/components/schemas/RouteTestResult}

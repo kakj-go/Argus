@@ -34,6 +34,20 @@ import type {
   Secret as SecretContract,
   SetupInitializeResult,
   SetupStatus as SetupStatusContract,
+  CollectionClaim,
+  CollectionProfile,
+  CollectorDistributionVersion,
+  CollectorInstance,
+  CollectorPage,
+  KubernetesNodeHostBinding,
+  TelemetryRoute,
+  TelemetryUsage,
+  MetricsResult,
+  LogsResult,
+  TracesResult,
+  TelemetryOverview,
+  RouteTestCreate,
+  RouteTestResult,
 } from "../generated/contracts";
 import type {
   AuditEvent,
@@ -622,6 +636,17 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
           body: { expected_version: version },
         },
       ),
+    getCollector: async (id) =>
+      (await http.request<CollectorInstance | undefined>(
+        `enterprise/hosts/${id}/collector`,
+      )) ?? null,
+    previewCollectorAction: (id, action, input) =>
+      http.request<PendingActionPublic>(
+        `enterprise/hosts/${id}/collector/actions/preview-${action}`,
+        { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() }, body: input },
+      ),
+    previewCollectorInstall: (id, input) =>
+      client.hosts.previewCollectorAction(id, "install", input),
   };
 
   client.kubernetes = {
@@ -710,6 +735,53 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
         `enterprise/kubernetes-clusters/${id}/pod-logs?${params}`,
       );
     },
+    listNodeBindings: (clusterId) =>
+      http.request<KubernetesNodeHostBinding[]>(
+        `enterprise/telemetry/node-host-bindings?kubernetes_cluster_id=${encodeURIComponent(clusterId)}`,
+      ),
+    verifyNodeBinding: (bindingId, input) =>
+      http.request<PendingActionPublic>(
+        `enterprise/telemetry/node-host-bindings/${bindingId}/actions/preview-confirm`,
+        { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() }, body: input },
+      ),
+    listCollectionClaims: (clusterId) =>
+      http.request<CollectionClaim[]>(
+        `enterprise/telemetry/collection-claims${clusterId ? `?resource_id=${encodeURIComponent(clusterId)}` : ""}`,
+      ),
+    getCollector: async (id) =>
+      (await http.request<CollectorInstance | undefined>(
+        `enterprise/kubernetes-clusters/${id}/collector`,
+      )) ?? null,
+    previewCollectorAction: (id, action, input) =>
+      http.request<PendingActionPublic>(
+        `enterprise/kubernetes-clusters/${id}/collector/actions/preview-${action}`,
+        { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() }, body: input },
+      ),
+    previewCollectorInstall: (id, input) =>
+      client.kubernetes.previewCollectorAction(id, "install", input),
+  };
+
+  client.telemetry = {
+    listDistributions: () => http.request<CollectorDistributionVersion[]>("enterprise/telemetry/distributions"),
+    listProfiles: () => http.request<CollectionProfile[]>("enterprise/telemetry/profiles"),
+    listCollectors: async () => (await http.request<CollectorPage>("enterprise/telemetry/collectors")).items,
+    listRoutes: () => http.request<TelemetryRoute[]>("enterprise/telemetry/routes"),
+    listClaims: (resourceId) =>
+      http.request<CollectionClaim[]>(
+        `enterprise/telemetry/collection-claims${resourceId ? `?resource_id=${encodeURIComponent(resourceId)}` : ""}`,
+      ),
+    testRoute: (input: RouteTestCreate) =>
+      http.request<RouteTestResult>("enterprise/telemetry/routes/tests", {
+        method: "POST",
+        csrf: true,
+        headers: { "Idempotency-Key": idempotencyKey() },
+        body: input,
+      }),
+    usage: () => http.request<TelemetryUsage>("enterprise/telemetry/usage"),
+    queryMetrics: (input) => http.request<MetricsResult>("enterprise/telemetry/query/metrics", { method: "POST", body: input }),
+    queryLogs: (input) => http.request<LogsResult>("enterprise/telemetry/query/logs", { method: "POST", body: input }),
+    queryTraces: (input) => http.request<TracesResult>("enterprise/telemetry/query/traces", { method: "POST", body: input }),
+    overview: (input) => http.request<TelemetryOverview>("enterprise/telemetry/query/overview", { method: "POST", body: input }),
   };
 
   client.connectors = {
@@ -1132,8 +1204,8 @@ function createUnavailableClient(): ArgusApiClient {
       previewUpdateResource: () => unavailable("hosts.previewUpdateResource"),
       previewDeleteResource: () => unavailable("hosts.previewDeleteResource"),
       getCollector: () => unavailable("hosts.getCollector"),
-      previewCollectorInstall: () =>
-        unavailable("hosts.previewCollectorInstall"),
+      previewCollectorAction: () => unavailable("hosts.previewCollectorAction"),
+      previewCollectorInstall: () => unavailable("hosts.previewCollectorInstall"),
     },
     remoteAccess: {
       listGrants: () => unavailable("remoteAccess.listGrants"),
@@ -1192,11 +1264,23 @@ function createUnavailableClient(): ArgusApiClient {
       listWorkloads: () => unavailable("kubernetes.listWorkloads"),
       listNodeBindings: () => unavailable("kubernetes.listNodeBindings"),
       verifyNodeBinding: () => unavailable("kubernetes.verifyNodeBinding"),
-      listCollectionClaims: () =>
-        unavailable("kubernetes.listCollectionClaims"),
+      listCollectionClaims: () => unavailable("kubernetes.listCollectionClaims"),
       getCollector: () => unavailable("kubernetes.getCollector"),
-      previewCollectorInstall: () =>
-        unavailable("kubernetes.previewCollectorInstall"),
+      previewCollectorAction: () => unavailable("kubernetes.previewCollectorAction"),
+      previewCollectorInstall: () => unavailable("kubernetes.previewCollectorInstall"),
+    },
+    telemetry: {
+      listDistributions: () => unavailable("telemetry.listDistributions"),
+      listProfiles: () => unavailable("telemetry.listProfiles"),
+      listCollectors: () => unavailable("telemetry.listCollectors"),
+      listRoutes: () => unavailable("telemetry.listRoutes"),
+      listClaims: () => unavailable("telemetry.listClaims"),
+      testRoute: () => unavailable("telemetry.testRoute"),
+      usage: () => unavailable("telemetry.usage"),
+      queryMetrics: () => unavailable("telemetry.queryMetrics"),
+      queryLogs: () => unavailable("telemetry.queryLogs"),
+      queryTraces: () => unavailable("telemetry.queryTraces"),
+      overview: () => unavailable("telemetry.overview"),
     },
     tasks: {
       list: () => unavailable("tasks.list"),

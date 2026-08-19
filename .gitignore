@@ -22,3 +22,6 @@ coverage.*
 .DS_Store
 .idea/
 .vscode/
+build/otelcol/dist/
+build/otelcol/artifacts/
+/build/

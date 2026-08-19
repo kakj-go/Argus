@@ -1,3 +1,4 @@
+{{- if .Values.components.minio }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -75,3 +76,4 @@ spec:
         resources:
           requests:
             storage: {{ .Values.persistence.minio }}
+{{- end }}

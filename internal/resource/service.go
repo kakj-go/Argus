@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -392,6 +393,9 @@ func (service Service) ExecutePendingAction(ctx context.Context, q *db.Queries, 
 }
 
 func (service Service) revalidateAction(ctx context.Context, q *db.Queries, action db.PendingAction, raw json.RawMessage) ([]byte, error) {
+	if strings.HasPrefix(action.ActionType, "telemetry.") && service.Extension != nil {
+		return service.Extension.RevalidateAction(ctx, q, action, raw)
+	}
 	switch action.ResourceType {
 	case "host":
 		var plan hostActionPlan
@@ -462,6 +466,9 @@ func (service Service) revalidateAction(ctx context.Context, q *db.Queries, acti
 }
 
 func (service Service) commitAction(ctx context.Context, q *db.Queries, action db.PendingAction, raw json.RawMessage) (ActionCommitResult, error) {
+	if strings.HasPrefix(action.ActionType, "telemetry.") && service.Extension != nil {
+		return service.Extension.CommitAction(ctx, q, action, raw)
+	}
 	if action.ResourceType == "host" {
 		var plan hostActionPlan
 		if err := json.Unmarshal(raw, &plan); err != nil {

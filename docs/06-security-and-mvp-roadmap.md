@@ -168,7 +168,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 - KubernetesNodeHostBinding、CollectionClaim 和 Host Collector/DaemonSet 冲突检测；默认允许进程共存但禁止同一物理资源同一 Claim 长期重复采集。
 - 第一版 Metrics、Logs、Traces Collection Profile 目录，以及 OTLP 优先、Jaeger/Zipkin 兼容、主动日志读取和受控数据库/中间件 Receiver。
 - 企业级 OTLP 凭证和可信 Enterprise/Resource/Collector 身份注入。
-- `argus-telemetry ingest`、Kafka、`otel-clickhouse-writer` 和 ClickHouse。
+- `argus-telemetry ingest`、Kafka、`argus-telemetry writer` 和 ClickHouse。
 - Altinity ClickHouse Operator、ClickHouseInstallation、Keeper、Schema Migration 和备份恢复演练。
 - Metrics/Logs 查询 Tool、基础监控页面、告警和用量界面；授权 Resource ID/标签范围、Signal、字段脱敏、Live Tail、Export 和查询预算分别授权。
 - Collector、Gateway、Kafka Consumer 自身健康监控。

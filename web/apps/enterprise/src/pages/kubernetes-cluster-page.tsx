@@ -18,9 +18,8 @@ import { CollectorStatusPanel } from "../components/kubernetes/collector-status"
 import { CollectorWizard } from "../components/kubernetes/collector-wizard";
 import { connectionStatusTone } from "../components/kubernetes/status";
 import { WorkloadExplorer } from "../components/kubernetes/workload-explorer";
+import { ResourceTelemetry } from "../components/telemetry/resource-telemetry";
 import "../styles/kubernetes.css";
-
-const realMode = import.meta.env.VITE_API_MODE === "real";
 
 /** Kubernetes 集群详情：资源查询 + Collector 安装/管理。 */
 export function KubernetesClusterPage() {
@@ -37,7 +36,7 @@ export function KubernetesClusterPage() {
   const collectorQuery = useQuery({
     queryKey: ["kubernetes", "collector", id],
     queryFn: () => api.kubernetes.getCollector(id),
-    enabled: id.length > 0 && !realMode,
+    enabled: id.length > 0,
   });
 
   const cluster = clusterQuery.data;
@@ -97,14 +96,17 @@ export function KubernetesClusterPage() {
           <TabsTrigger value="resources">
             {t("kubernetes.detail.resourcesTab")}
           </TabsTrigger>
-          {!realMode && <TabsTrigger value="collector">
+          <TabsTrigger value="collector">
             {t("kubernetes.detail.collectorTab")}
-          </TabsTrigger>}
+          </TabsTrigger>
+          <TabsTrigger value="metrics">{t("telemetry.metrics")}</TabsTrigger>
+          <TabsTrigger value="logs">{t("telemetry.logs")}</TabsTrigger>
+          <TabsTrigger value="traces">{t("telemetry.traces")}</TabsTrigger>
         </TabsList>
         <TabsContent value="resources">
           <WorkloadExplorer cluster={cluster} />
         </TabsContent>
-        {!realMode && <TabsContent value="collector">
+        <TabsContent value="collector">
           <div id="otlp-collector">
             {collectorQuery.isLoading ? (
               <Spinner label={t("common.loading")} />
@@ -124,7 +126,16 @@ export function KubernetesClusterPage() {
               </div>
             )}
           </div>
-        </TabsContent>}
+        </TabsContent>
+        <TabsContent value="metrics">
+          <ResourceTelemetry resourceId={cluster.id} signal="metrics" />
+        </TabsContent>
+        <TabsContent value="logs">
+          <ResourceTelemetry resourceId={cluster.id} signal="logs" />
+        </TabsContent>
+        <TabsContent value="traces">
+          <ResourceTelemetry resourceId={cluster.id} signal="traces" />
+        </TabsContent>
       </Tabs>
     </PageShell>
   );

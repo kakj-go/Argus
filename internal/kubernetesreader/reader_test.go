@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
+	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
 	"github.com/kakj-go/Argus/internal/resource"
 )
 
@@ -88,5 +91,29 @@ func TestRevalidatingTransportRejectsChangedDNSBeforeRequest(t *testing.T) {
 func TestKubernetesReaderRejectsRedirects(t *testing.T) {
 	if err := rejectRedirect(nil, nil); !errors.Is(err, resource.ErrDirectTargetDenied) {
 		t.Fatalf("expected redirect rejection, got %v", err)
+	}
+}
+
+func TestUnmarshalConnectorResultAcceptsStoredTypedProjection(t *testing.T) {
+	stored, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(&connectorv1.KubernetesResourceQueryResult{
+		ResourcesJson: [][]byte{[]byte(`{"metadata":{"name":"default"}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result connectorv1.KubernetesResourceQueryResult
+	if err := unmarshalConnectorResult(stored, &result); err != nil {
+		t.Fatalf("stored typed projection was rejected: %v", err)
+	}
+	if len(result.ResourcesJson) != 1 || !strings.Contains(string(result.ResourcesJson[0]), `"name":"default"`) {
+		t.Fatalf("stored typed projection was not restored: %q", result.ResourcesJson)
+	}
+}
+
+func TestUnmarshalConnectorResultRejectsLegacyAnyEnvelope(t *testing.T) {
+	legacy := []byte(`{"@type":"type.googleapis.com/argus.connector.v1.KubernetesResourceQueryResult","resources_json":[]}`)
+	var result connectorv1.KubernetesResourceQueryResult
+	if err := unmarshalConnectorResult(legacy, &result); !errors.Is(err, resource.ErrKubernetesUnavailable) {
+		t.Fatalf("legacy Any envelope was accepted: %v", err)
 	}
 }

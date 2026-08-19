@@ -14,18 +14,30 @@ M7 Collector 安装写操作复用 M4 的 Preview → Confirmation/Approval → 
 
 ## 任务
 
-- [ ] `M7-PROFILE-01` 实现版本化 Distribution、CollectionProfile、ConfigRevision 和 CollectionClaim。
-- [ ] `M7-INSTALL-01` 实现 Host Collector 与 Kubernetes DaemonSet/Gateway 的 Preview/Commit、Artifact 校验、安装、回滚和修复。
-- [ ] `M7-ROUTE-01` 第一批实现 `direct_argus` 和 `bastion_gateway`；独立 TelemetryGroup 在容量允许时再启用。
-- [ ] `M7-IDENTITY-01` 实现 Collector/Resource 凭证、轮换和可信 `EnterpriseId + ResourceId + CollectorId` 覆盖。
-- [ ] `M7-INGEST-01` 实现 OTLP gRPC/HTTP、认证、限流、大小/属性/高基数限制、脱敏和 Kafka ACK。
-- [ ] `M7-KAFKA-01` 实现 Signal Topic、ACL、至少一次语义、Offset 门禁和 DLQ/重放。
-- [ ] `M7-WRITER-01` 完成标准 Writer Gate；不满足可靠性/Schema 时实现最小 Writer。
-- [ ] `M7-CH-01` 实现 Metrics/Logs/Traces Local/Distributed Schema、Migration、TTL、分片和 Projection。
-- [ ] `M7-QUERY-01` 实现版本化 Query Schema、Enterprise/Resource 强制过滤、Signal 权限、字段脱敏、预算和 `partial`。
-- [ ] `M7-NODE-01` 实现 KubernetesNodeHostBinding 与 CollectionClaim 冲突/迁移规则。
-- [ ] `M7-WEB-01` 引入 ECharts，完成基础 Metrics/Logs/Traces 查询、Collector 状态和路由页面。
-- [ ] `M7-TOOL-01` 实现 Agent/Card 共用的 Metrics/Logs/Traces Query Tool 和安全投影。
+- [x] `M7-PROFILE-01` 实现版本化 Distribution、CollectionProfile、ConfigRevision 和 CollectionClaim。
+- [x] `M7-INSTALL-01` 实现 Host Collector 与 Kubernetes DaemonSet/Gateway 的 Preview/Commit、Artifact 校验、安装、回滚和修复。
+- [x] `M7-ROUTE-01` 第一批实现 `direct_argus` 和 `bastion_gateway`；独立 TelemetryGroup 延后。
+- [x] `M7-IDENTITY-01` 实现 Collector/Resource 凭证、轮换和可信 `EnterpriseId + ResourceId + CollectorId` 覆盖。
+- [x] `M7-INGEST-01` 实现 OTLP gRPC/HTTP、mTLS 身份解析、Redis fail-closed 限流、大小/属性限制、可信身份覆盖和 Kafka ACK。
+- [x] `M7-KAFKA-01` 实现 Signal/DLQ Topic、ACL、至少一次语义、Offset 门禁和受控 DLQ 重放。
+- [x] `M7-WRITER-01` 使用最小 Go Writer 实现 OTLP 解码、ClickHouse 写入、Offset 和 DLQ，不承担查询或授权。
+- [x] `M7-CH-01` 实现 Metrics/Logs/Traces Local/Distributed Schema、Migration、TTL、分片和 Projection。
+- [x] `M7-QUERY-01` 实现版本化 Query Schema、Enterprise/Resource 强制过滤、Signal 权限、字段脱敏、预算和 `partial`。
+- [x] `M7-NODE-01` 实现 KubernetesNodeHostBinding 与 CollectionClaim 冲突/迁移规则。
+- [x] `M7-WEB-01` 引入 ECharts，完成基础 Metrics/Logs/Traces 查询、Collector 状态和路由页面。
+- [x] `M7-TOOL-01` 实现 Agent/Card 共用的 Metrics/Logs/Traces Query Tool 和安全投影。
+
+## 2026-08-19 实施状态
+
+M7 的 Linux arm64 Host 与 Kubernetes Evaluation 遥测闭环已经完成。控制面、三种 `argus-telemetry` 运行模式、独立 Telemetry PKI、锁定 OCB Distribution、Host/Kubernetes 安装执行器、Kafka/ClickHouse 数据面以及 Web/Agent/Card Query 均已进入真实路径。
+
+Kubernetes Agent 与 Gateway 使用各自本地生成的私钥/CSR 和短期证书完成 mTLS；Gateway 只接受内嵌 Collector ID、证书序列与外层可信身份一致的同 Collector 转发，Bastion 下游仍要求独立 Route/Gateway/Leaf 关系。NodeBinding 的人工确认哈希只绑定 Node UID、Node Name、Provider ID、Machine ID 和 System UUID 等稳定强身份，IP 只参与候选匹配，不因短暂 IPv4/IPv6 集合波动误撤权；强身份漂移仍使 Binding 失效。Kubelet 采集使用宿主 kubelet 证书链和最小 `nodes/stats` RBAC，保持 `insecure_skip_verify: false`。
+
+`make e2e-m7-k8s` 于 2026-08-19 以最终运行号 `20260819140437-21054` 通过：覆盖 Linux arm64 Collector 构建与安装、Kubernetes Agent/Gateway mTLS、NodeBinding 保持与漂移、真实 Metrics/Logs/Traces、Kafka backlog、永久坏记录 DLQ 隔离与受控 replay、Redis outage 持久队列恢复、Ingest/Writer/Query Pod 删除恢复、Telemetry Card 激活、M2-M5 real Playwright 和 M7 `zh-CN/en-US × light/dark` real/a11y 流程。`bastion_gateway` 为硬门禁，验证 Leaf mTLS 身份经 Edge Gateway 覆盖后，Metrics、Logs 和 Traces 均进入 Ingest、Kafka、Writer、ClickHouse 和对应授权 Query；Gateway 下游管线禁止跨 Collector batch，避免不同可信主体被合并为一个 OTLP 请求。Query 安全矩阵覆盖跨企业拒绝、DataScope `partial`、预算、敏感字段脱敏、AuthorizationVersion 失效以及 Web/Agent/Card 投影一致性。脱敏证据位于 `artifacts/m7-e2e/20260819140437-21054`；三个临时 Namespace、运行相关 PVC 和集群 Lease均已删除。
+
+实现还固定了 canonical Operation Plan Hash、Kafka `IdempotentWrite`、严格 Artifact TLS 和 Query Redis 并发门禁。Windows amd64 Distribution 继续固定为 `validation_pending`，真实页面不可选择；Windows WinRM Collector 管理 Adapter、Windows Service 生命周期和实体兼容矩阵统一进入 M8，不属于 M7 完成条件。Linux amd64、生产容量/HA、备份恢复、供应链签名、Telemetry PKI 长期轮换与重启恢复演练同样进入 M8 阻断清单。
+
+Evaluation 阶段不增加第五个自研控制服务。Ingest 和 Writer 通过各自的窄领域 Adapter 读取或结算 PostgreSQL 中的 Telemetry 控制事实：Ingest 只能解析 Collector/Certificate/Route 身份，Writer 只能读取 Retention 并写 Usage/DLQ；二者均不能写资源、身份、权限或 Action 状态，也不能访问对方的 ClickHouse/Kafka 职责。Production 是否将这些 Adapter 改为内部 mTLS RPC，或为其签发独立 PostgreSQL Login Role，由 M8 的数据库与网络安全 ADR 固化。
 
 ## 测试
 
@@ -41,9 +53,10 @@ M7 Collector 安装写操作复用 M4 的 Preview → Confirmation/Approval → 
 - 真实资源的 Metrics/Logs/Traces 可摄入、查询、脱敏和审计。
 - Redis 清空、Ingest/Writer/Query Pod 删除后系统按既定语义恢复。
 - 查询预算、保留期和基本成本指标可观测。
+- Linux arm64 Host 与 Kubernetes 的临时 Namespace E2E 可重复通过并无条件清理。
 
 ## 不包含
 
 - 任意 SQL、任意 Collector YAML、Profiles 信号和高级尾采样。
 - 独立 TelemetryGroup 可在 `direct_argus/bastion_gateway` 稳定后延后。
-- M3 real 页面中的 Collector provisional 控件不代表本里程碑已经交付；只有本里程碑 E2E 通过后才可启用真实入口。
+- Windows amd64 在 WinRM 管理 Adapter、Windows Service 生命周期和实体兼容验证完成前保持不可选择；这些工作与 Linux amd64 支持矩阵一起进入 M8。

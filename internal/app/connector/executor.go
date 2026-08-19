@@ -28,7 +28,10 @@ import (
 	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
 )
 
-const commandTimeout = 45 * time.Second
+const (
+	commandTimeout             = 45 * time.Second
+	collectorManagementTimeout = 3 * time.Minute
+)
 
 type commandOutcome struct {
 	result *anypb.Any
@@ -40,7 +43,7 @@ type commandOutcome struct {
 type commandExecutor struct{}
 
 func (commandExecutor) execute(parent context.Context, command *connectorv1.ConnectorCommand, credential []byte) commandOutcome {
-	ctx, cancel := context.WithTimeout(parent, commandTimeout)
+	ctx, cancel := context.WithTimeout(parent, timeoutForCommand(command.GetCommandType()))
 	defer cancel()
 	if command.GetTypedPayload() == nil || command.GetCommandId() == "" || command.GetExpiresAt() == nil || time.Now().After(command.GetExpiresAt().AsTime()) {
 		return commandOutcome{code: "CONNECTOR_COMMAND_INVALID", detail: "missing, malformed, or expired command metadata"}
@@ -61,17 +64,30 @@ func (commandExecutor) execute(parent context.Context, command *connectorv1.Conn
 		if err = command.GetTypedPayload().UnmarshalTo(&request); err == nil {
 			value = &connectorv1.ConnectorUninstallResult{IdentityRemoved: true, ServiceStopped: true}
 		}
+	case "collector_management":
+		value, err = executeCollectorManagement(ctx, command.GetTypedPayload(), credential)
 	default:
 		err = errors.New("unsupported Connector command")
 	}
 	if err != nil {
-		return commandOutcome{code: "CONNECTOR_COMMAND_FAILED", detail: err.Error()}
+		code := "CONNECTOR_COMMAND_FAILED"
+		if command.GetCommandType() == "collector_management" {
+			code = collectorManagementFailureCode(err)
+		}
+		return commandOutcome{code: code, detail: err.Error()}
 	}
 	typed, err := anypb.New(value)
 	if err != nil {
 		return commandOutcome{code: "CONNECTOR_RESULT_INVALID", detail: err.Error()}
 	}
 	return commandOutcome{result: typed, stop: command.GetCommandType() == "connector_uninstall"}
+}
+
+func timeoutForCommand(commandType string) time.Duration {
+	if commandType == "collector_management" {
+		return collectorManagementTimeout
+	}
+	return commandTimeout
 }
 
 func executeHostProbe(ctx context.Context, payload *anypb.Any, credential []byte) (*connectorv1.HostConnectionProbeResult, error) {

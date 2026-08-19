@@ -87,6 +87,12 @@ func (executor Executor) Handle(ctx context.Context, task runtime.Task) error {
 			})
 			return err
 		}
+		if result.TelemetryOperationID.Valid {
+			_, err = q.MarkExecutionTelemetryResultUnknown(ctx, db.MarkExecutionTelemetryResultUnknownParams{
+				ID: execution.ID, EnterpriseID: execution.EnterpriseID, TelemetryCollectorOperationID: result.TelemetryOperationID,
+			})
+			return err
+		}
 		if result.Enrollment != nil {
 			if action.CreatorSubjectType != "user" {
 				return runtime.Error{ErrorCode: "ACTION_INVALIDATED", Cause: ErrInvalidated}
@@ -129,6 +135,20 @@ func (executor Executor) Handle(ctx context.Context, task runtime.Task) error {
 }
 
 func (executor Executor) reconcileExecution(ctx context.Context, q *db.Queries, execution db.Execution) error {
+	if execution.TelemetryCollectorOperationID.Valid {
+		operation, err := q.GetTelemetryCollectorOperation(ctx, db.GetTelemetryCollectorOperationParams{
+			ID: execution.TelemetryCollectorOperationID.UUID, EnterpriseID: execution.EnterpriseID,
+		})
+		if err != nil {
+			return err
+		}
+		status, errorCode, terminal := reconciledTelemetryOutcome(operation)
+		if !terminal {
+			return nil
+		}
+		return executor.finishReconciledExecution(ctx, q, execution, status, errorCode,
+			"Collector operation "+operation.ID.String()+" reconciled")
+	}
 	if !execution.ConnectorCommandID.Valid {
 		return nil
 	}
@@ -140,6 +160,11 @@ func (executor Executor) reconcileExecution(ctx context.Context, q *db.Queries, 
 	if !terminal {
 		return nil
 	}
+	return executor.finishReconciledExecution(ctx, q, execution, status, errorCode,
+		"Connector command "+command.CommandID+" reconciled")
+}
+
+func (executor Executor) finishReconciledExecution(ctx context.Context, q *db.Queries, execution db.Execution, status string, errorCode pgtype.Text, summary string) error {
 	action, err := q.GetPendingActionByIDForUpdate(ctx, db.GetPendingActionByIDForUpdateParams{
 		ID: execution.PendingActionID, EnterpriseID: execution.EnterpriseID,
 	})
@@ -148,7 +173,7 @@ func (executor Executor) reconcileExecution(ctx context.Context, q *db.Queries, 
 	}
 	finished, err := q.FinishPendingAction(ctx, db.FinishPendingActionParams{
 		ID: action.ID, EnterpriseID: action.EnterpriseID, Status: status,
-		ResultSummary: "Connector command " + command.CommandID + " reconciled", ErrorCode: errorCode,
+		ResultSummary: summary, ErrorCode: errorCode,
 	})
 	if err != nil {
 		return err
@@ -166,6 +191,21 @@ func (executor Executor) reconcileExecution(ctx context.Context, q *db.Queries, 
 		return enqueueVerify(ctx, q, execution, finished)
 	}
 	return nil
+}
+
+func reconciledTelemetryOutcome(operation db.TelemetryCollectorOperation) (string, pgtype.Text, bool) {
+	switch operation.Status {
+	case "succeeded":
+		return "succeeded", pgtype.Text{}, true
+	case "failed", "expired":
+		code := operation.ErrorCode
+		if !code.Valid {
+			code = pgtype.Text{String: "EXECUTION_RESULT_UNKNOWN", Valid: true}
+		}
+		return "failed", code, true
+	default:
+		return "", pgtype.Text{}, false
+	}
 }
 
 func finishAutomationRun(ctx context.Context, q *db.Queries, action db.PendingAction) error {

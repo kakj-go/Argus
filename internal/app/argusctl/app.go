@@ -25,6 +25,7 @@ const usage = `usage:
   argusctl verify --config FILE [--output text|json] [--artifacts DIR]
   argusctl setup-token rotate --config FILE
   argusctl admin reset-password --config FILE --user-id UUID
+  argusctl telemetry dlq replay --config FILE --record-id UUID
   argusctl tunnel --config FILE
   argusctl uninstall --config FILE --delete-data --delete-owned-crds --yes`
 
@@ -74,6 +75,11 @@ func (a *App) run(ctx context.Context, args []string) error {
 			return errors.New("usage: argusctl admin reset-password --config FILE --user-id UUID")
 		}
 		return a.runAdminResetPassword(ctx, args[2:])
+	case "telemetry":
+		if len(args) < 3 || args[1] != "dlq" || args[2] != "replay" {
+			return errors.New("usage: argusctl telemetry dlq replay --config FILE --record-id UUID")
+		}
+		return a.runTelemetryDLQReplay(ctx, args[3:])
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
 	}

@@ -30,6 +30,7 @@ import (
 	sandboxapi "github.com/kakj-go/Argus/internal/gen/openapi/sandboxapi"
 	secretapi "github.com/kakj-go/Argus/internal/gen/openapi/secretapi"
 	setupapi "github.com/kakj-go/Argus/internal/gen/openapi/setup"
+	telemetryapi "github.com/kakj-go/Argus/internal/gen/openapi/telemetryapi"
 	workflowapi "github.com/kakj-go/Argus/internal/gen/openapi/workflowapi"
 )
 
@@ -69,6 +70,7 @@ type RouterOptions struct {
 	Connector               *ConnectorHandler
 	Card                    *CardHandler
 	RemoteAccess            *RemoteAccessHandler
+	Telemetry               *TelemetryHandler
 	AllowedOrigins          []string
 }
 
@@ -171,7 +173,17 @@ func NewRouterWithOptions(options RouterOptions) http.Handler {
 		strict := remoteaccessapi.NewStrictHandler(*options.RemoteAccess, []remoteaccessapi.StrictMiddlewareFunc{remoteAccessRequestContext})
 		remoteaccessapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
 	}
+	if options.Telemetry != nil {
+		strict := telemetryapi.NewStrictHandler(*options.Telemetry, []telemetryapi.StrictMiddlewareFunc{telemetryRequestContext})
+		telemetryapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
 	return router
+}
+
+func telemetryRequestContext(next telemetryapi.StrictHandlerFunc, _ string) telemetryapi.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
 }
 
 func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {

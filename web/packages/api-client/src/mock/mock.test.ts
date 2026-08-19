@@ -246,7 +246,12 @@ describe("hosts CRUD", () => {
     expect(await client.hosts.getCollector("host-cache-bj-01")).toBeNull();
     const install = await client.hosts.previewCollectorInstall(
       "host-cache-bj-01",
-      { profile: "host-basic", telemetryRoute: "edge-gw-bj" },
+      {
+        distribution_version_id: "dist-linux-arm64-v1",
+        profile_ids: ["profile-host-basic"],
+        route_kind: "bastion_gateway",
+        gateway_collector_id: "col-db-01",
+      },
     );
     const { execution } = await client.approvals.confirm(install.action_ref);
     await waitFor(async () => {

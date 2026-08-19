@@ -2,8 +2,7 @@ releaseId: argus
 namespace: argus-observability
 images:
   clickhouse: clickhouse/clickhouse-server:26.3.17.110-alpine
-  otelCollector: otel/opentelemetry-collector-contrib:0.158.0
 clickhouse:
-  endpoint: tcp://argus-clickhouse-client:9000
+  endpoint: argus-clickhouse-client:9000
 kafka:
   brokers: argus-kafka-kafka-bootstrap:9092

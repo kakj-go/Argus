@@ -20,6 +20,7 @@ import (
 	"github.com/kakj-go/Argus/internal/app/component"
 	"github.com/kakj-go/Argus/internal/automation"
 	cardservice "github.com/kakj-go/Argus/internal/card"
+	"github.com/kakj-go/Argus/internal/collectormanager"
 	"github.com/kakj-go/Argus/internal/config"
 	connectorservice "github.com/kakj-go/Argus/internal/connector"
 	"github.com/kakj-go/Argus/internal/directexecutor"
@@ -33,6 +34,7 @@ import (
 	secretservice "github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
+	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 )
 
 const (
@@ -97,13 +99,32 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		Issuer: connectorservice.CertManagerIssuer{Client: kubernetesClient, Namespace: cfg.SystemNamespace,
 			IssuerName: cfg.ConnectorIssuerName, IssuerGeneration: cfg.ConnectorIssuerGeneration}}
 	bastionDomain := connectorservice.BastionService{Store: store, Actions: actionDomain, Enrollment: connectorDomain}
+	telemetryActions := telemetryservice.ActionExtension{Next: bastionDomain, Credentials: secretDomain,
+		EnrollmentEndpoint: cfg.TelemetryEnrollment, IngestGRPCEndpoint: cfg.TelemetryIngestGRPC,
+		IngestHTTPEndpoint: cfg.TelemetryIngestHTTP, ServerCABundlePath: cfg.TelemetryCABundle,
+		KubernetesImage: cfg.OtelcolKubernetesImage}
 	resourceDomain := resource.Service{Store: store, Actions: actionDomain, Access: resource.AccessService{Store: store},
 		Direct: resource.DirectTargetValidator{DeniedCIDRs: denied}, Commands: connectorDomain, DirectCommands: directDispatcher,
-		Extension: bastionDomain, ClusterEnrollment: connectorDomain,
+		Extension: telemetryActions, ClusterEnrollment: connectorDomain,
 		Kubernetes: kubernetesreader.Reader{Store: store, Secrets: secretDomain, Validator: resource.DirectTargetValidator{DeniedCIDRs: denied}, Notifier: connectorDomain}}
 	registry := mcp.NewRegistry()
 	if err := (agent.ResourceTools{Store: store, Resources: resourceDomain}).Register(registry); err != nil {
 		return err
+	}
+	if pool == PoolDefault || pool == PoolAgent || pool == PoolAutomation {
+		telemetryTLS, tlsErr := telemetryservice.ClientTLSConfig(cfg.TelemetryClientCert, cfg.TelemetryClientKey, cfg.TelemetryCABundle, cfg.TelemetryServerName)
+		if tlsErr != nil {
+			return tlsErr
+		}
+		telemetryQuery, queryErr := telemetryservice.NewGRPCQueryBackend(cfg.TelemetryQueryEndpoint, telemetryTLS)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer telemetryQuery.Close()
+		telemetryDomain := telemetryservice.Service{Store: store, Access: resource.AccessService{Store: store}, Actions: actionDomain, Query: telemetryQuery}
+		if err := (telemetryservice.Tools{Service: telemetryDomain}).Register(registry); err != nil {
+			return err
+		}
 	}
 	modelDomain := modelservice.Service{Store: store, Keyring: keyring}
 	cardDomain := cardservice.Service{Store: store, Idempotency: postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey}, Tools: registry,
@@ -206,13 +227,20 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	artifactClient, err := collectormanager.NewArtifactHTTPClient(cfg.OtelcolArtifactCABundle)
+	if err != nil {
+		return err
+	}
 	listener, err := net.Listen("tcp", cfg.GRPCAddress)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	executor := &directexecutor.Executor{Store: store, Secrets: secretservice.Service{Store: store, Keyring: keyring},
-		Validator: resource.DirectTargetValidator{DeniedCIDRs: denied}, InstanceID: cfg.InstanceID, Concurrency: 8}
+		Validator: resource.DirectTargetValidator{DeniedCIDRs: denied}, InstanceID: cfg.InstanceID, Concurrency: 8,
+		CollectorIdentity: telemetryservice.IdentityService{Store: store}, TelemetryEnrollmentEndpoint: cfg.TelemetryEnrollmentEndpoint,
+		TelemetryIngestGRPCEndpoint: cfg.TelemetryIngestGRPCEndpoint, TelemetryIngestHTTPEndpoint: cfg.TelemetryIngestHTTPEndpoint,
+		CollectorArtifactHTTPClient: artifactClient}
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)),
 		grpc.MaxRecvMsgSize(64*1024), grpc.MaxSendMsgSize(64*1024))
 	directv1.RegisterDirectExecutorServiceServer(grpcServer, directexecutor.RPCServer{Executor: executor, Context: ctx, Logger: logger})

@@ -9,7 +9,7 @@
 - M2 至 M7 的发布范围全部达到各自退出标准。
 - PostgreSQL HA/备份和 Sandbox Runtime ADR 已决策。
 
-M4 与 M6 只达到 Evaluation：Replay Provider 仅用于带 build tag 的 E2E，模型公网出口在应用层拒绝私网但尚未形成目标生产网络证明；Remote Access 已固定 SSH PTY、HTTPS WinRS 行模式和 asciicast v2 加密分片，但平台 MFA、Step-up、Break Glass、外部 KMS/HSM、CA 根轮换、录像不可变保留/恢复、真实 Windows 兼容矩阵和灾备仍是本里程碑硬阻断项。
+M4、M6 与 M7 只达到 Evaluation：Replay Provider 仅用于带 build tag 的 E2E，模型公网出口在应用层拒绝私网但尚未形成目标生产网络证明；Remote Access 已固定 SSH PTY、HTTPS WinRS 行模式和 asciicast v2 加密分片；Telemetry 已完成 Linux arm64 Host 与 Kubernetes 三信号、Agent/Gateway mTLS、Kafka `IdempotentWrite`、严格 Artifact TLS 和故障恢复闭环，但 Windows amd64 仍为 `validation_pending`，Linux amd64 尚未进入支持矩阵。平台 MFA、Step-up、Break Glass、外部 KMS/HSM、CA/Telemetry PKI 长期轮换与重启恢复、录像不可变保留/恢复、真实 Windows 兼容矩阵、遥测 HA/容量/备份和灾备仍是本里程碑硬阻断项。
 
 ## 任务
 
@@ -25,6 +25,8 @@ M4 与 M6 只达到 Evaluation：Replay Provider 仅用于带 build tag 的 E2E�
 - [ ] `M8-IDENTITY-02` 为 critical 操作实现 Step-up Authentication，并把未配置平台 MFA 设为 Production Profile 安装与发布硬阻断。
 - [ ] `M8-CAPACITY-01` 完成 API、Connector、Remote Access、Kafka、Writer、ClickHouse 和 Query 容量 Benchmark。
 - [ ] `M8-REMOTE-01` 完成真实 Windows Server 版本/认证/TLS WinRS 兼容矩阵、长会话容量、ObjectStore 生命周期锁和录像恢复演练。
+- [ ] `M8-TELEMETRY-01` 实现 Windows WinRM Collector 管理 Adapter 和 Windows Service 的安装、配置、升级、修复、卸载与回滚，完成 Linux amd64 与真实 Windows Collector 验证、Telemetry PKI 根轮换及进程/节点重启恢复演练、Kafka/ClickHouse HA 与备份恢复、容量基线和签名 Artifact 发布矩阵；验证前 Windows Distribution 必须保持 `validation_pending` 且不可选择。
+- [ ] `M8-TELEMETRY-DB-01` M7 已完成 Ingest/Writer 窄领域 Adapter 和越权代码边界；M8 通过 ADR 固化其 Production 凭证边界：要么签发独立最小权限 Login Role 并验证凭证轮换与数据库级越权拒绝，要么迁移到 argus-server 内部 mTLS 控制 RPC；不得继续共享控制面数据库凭证。
 - [ ] `M8-FAILURE-01` 演练 Redis 清空、Pod/Node 故障、Gateway Drain、Worker 接管、Kafka 积压、ClickHouse Replica 故障和网络分区。
 - [ ] `M8-E2E-01` 建立唯一 Run ID、集群 Lease、常驻服务缩容/恢复、诊断导出和无条件清理框架。
 - [ ] `M8-E2E-02` 自动化执行总计划第 7 节全部闭环场景。

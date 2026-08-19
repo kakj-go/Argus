@@ -120,3 +120,225 @@ var TelemetryIdentityService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "argus/telemetry/v1/telemetry.proto",
 }
+
+const (
+	TelemetryQueryService_QueryMetrics_FullMethodName  = "/argus.telemetry.v1.TelemetryQueryService/QueryMetrics"
+	TelemetryQueryService_QueryLogs_FullMethodName     = "/argus.telemetry.v1.TelemetryQueryService/QueryLogs"
+	TelemetryQueryService_QueryTraces_FullMethodName   = "/argus.telemetry.v1.TelemetryQueryService/QueryTraces"
+	TelemetryQueryService_QueryOverview_FullMethodName = "/argus.telemetry.v1.TelemetryQueryService/QueryOverview"
+)
+
+// TelemetryQueryServiceClient is the client API for TelemetryQueryService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// TelemetryQueryService is an internal mTLS boundary. The caller supplies a
+// server-authorized enterprise/resource set; the service never accepts SQL.
+type TelemetryQueryServiceClient interface {
+	QueryMetrics(ctx context.Context, in *QueryMetricsRequest, opts ...grpc.CallOption) (*QueryMetricsResponse, error)
+	QueryLogs(ctx context.Context, in *QueryLogsRequest, opts ...grpc.CallOption) (*QueryLogsResponse, error)
+	QueryTraces(ctx context.Context, in *QueryTracesRequest, opts ...grpc.CallOption) (*QueryTracesResponse, error)
+	QueryOverview(ctx context.Context, in *QueryOverviewRequest, opts ...grpc.CallOption) (*QueryOverviewResponse, error)
+}
+
+type telemetryQueryServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewTelemetryQueryServiceClient(cc grpc.ClientConnInterface) TelemetryQueryServiceClient {
+	return &telemetryQueryServiceClient{cc}
+}
+
+func (c *telemetryQueryServiceClient) QueryMetrics(ctx context.Context, in *QueryMetricsRequest, opts ...grpc.CallOption) (*QueryMetricsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryMetricsResponse)
+	err := c.cc.Invoke(ctx, TelemetryQueryService_QueryMetrics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *telemetryQueryServiceClient) QueryLogs(ctx context.Context, in *QueryLogsRequest, opts ...grpc.CallOption) (*QueryLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryLogsResponse)
+	err := c.cc.Invoke(ctx, TelemetryQueryService_QueryLogs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *telemetryQueryServiceClient) QueryTraces(ctx context.Context, in *QueryTracesRequest, opts ...grpc.CallOption) (*QueryTracesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryTracesResponse)
+	err := c.cc.Invoke(ctx, TelemetryQueryService_QueryTraces_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *telemetryQueryServiceClient) QueryOverview(ctx context.Context, in *QueryOverviewRequest, opts ...grpc.CallOption) (*QueryOverviewResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryOverviewResponse)
+	err := c.cc.Invoke(ctx, TelemetryQueryService_QueryOverview_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// TelemetryQueryServiceServer is the server API for TelemetryQueryService service.
+// All implementations must embed UnimplementedTelemetryQueryServiceServer
+// for forward compatibility.
+//
+// TelemetryQueryService is an internal mTLS boundary. The caller supplies a
+// server-authorized enterprise/resource set; the service never accepts SQL.
+type TelemetryQueryServiceServer interface {
+	QueryMetrics(context.Context, *QueryMetricsRequest) (*QueryMetricsResponse, error)
+	QueryLogs(context.Context, *QueryLogsRequest) (*QueryLogsResponse, error)
+	QueryTraces(context.Context, *QueryTracesRequest) (*QueryTracesResponse, error)
+	QueryOverview(context.Context, *QueryOverviewRequest) (*QueryOverviewResponse, error)
+	mustEmbedUnimplementedTelemetryQueryServiceServer()
+}
+
+// UnimplementedTelemetryQueryServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedTelemetryQueryServiceServer struct{}
+
+func (UnimplementedTelemetryQueryServiceServer) QueryMetrics(context.Context, *QueryMetricsRequest) (*QueryMetricsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryMetrics not implemented")
+}
+func (UnimplementedTelemetryQueryServiceServer) QueryLogs(context.Context, *QueryLogsRequest) (*QueryLogsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryLogs not implemented")
+}
+func (UnimplementedTelemetryQueryServiceServer) QueryTraces(context.Context, *QueryTracesRequest) (*QueryTracesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryTraces not implemented")
+}
+func (UnimplementedTelemetryQueryServiceServer) QueryOverview(context.Context, *QueryOverviewRequest) (*QueryOverviewResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryOverview not implemented")
+}
+func (UnimplementedTelemetryQueryServiceServer) mustEmbedUnimplementedTelemetryQueryServiceServer() {}
+func (UnimplementedTelemetryQueryServiceServer) testEmbeddedByValue()                               {}
+
+// UnsafeTelemetryQueryServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to TelemetryQueryServiceServer will
+// result in compilation errors.
+type UnsafeTelemetryQueryServiceServer interface {
+	mustEmbedUnimplementedTelemetryQueryServiceServer()
+}
+
+func RegisterTelemetryQueryServiceServer(s grpc.ServiceRegistrar, srv TelemetryQueryServiceServer) {
+	// If the following call pancis, it indicates UnimplementedTelemetryQueryServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&TelemetryQueryService_ServiceDesc, srv)
+}
+
+func _TelemetryQueryService_QueryMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryMetricsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TelemetryQueryServiceServer).QueryMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TelemetryQueryService_QueryMetrics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TelemetryQueryServiceServer).QueryMetrics(ctx, req.(*QueryMetricsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TelemetryQueryService_QueryLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TelemetryQueryServiceServer).QueryLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TelemetryQueryService_QueryLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TelemetryQueryServiceServer).QueryLogs(ctx, req.(*QueryLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TelemetryQueryService_QueryTraces_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryTracesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TelemetryQueryServiceServer).QueryTraces(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TelemetryQueryService_QueryTraces_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TelemetryQueryServiceServer).QueryTraces(ctx, req.(*QueryTracesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TelemetryQueryService_QueryOverview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryOverviewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TelemetryQueryServiceServer).QueryOverview(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TelemetryQueryService_QueryOverview_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TelemetryQueryServiceServer).QueryOverview(ctx, req.(*QueryOverviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// TelemetryQueryService_ServiceDesc is the grpc.ServiceDesc for TelemetryQueryService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var TelemetryQueryService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "argus.telemetry.v1.TelemetryQueryService",
+	HandlerType: (*TelemetryQueryServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "QueryMetrics",
+			Handler:    _TelemetryQueryService_QueryMetrics_Handler,
+		},
+		{
+			MethodName: "QueryLogs",
+			Handler:    _TelemetryQueryService_QueryLogs_Handler,
+		},
+		{
+			MethodName: "QueryTraces",
+			Handler:    _TelemetryQueryService_QueryTraces_Handler,
+		},
+		{
+			MethodName: "QueryOverview",
+			Handler:    _TelemetryQueryService_QueryOverview_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "argus/telemetry/v1/telemetry.proto",
+}

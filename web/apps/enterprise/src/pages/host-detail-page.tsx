@@ -25,6 +25,7 @@ import "../styles/hosts.css";
 import { ComponentsTab } from "../components/hosts/components-tab";
 import { TasksTab } from "../components/hosts/tasks-tab";
 import { RealTerminalTab } from "../components/hosts/real-terminal-tab";
+import { ResourceTelemetry } from "../components/telemetry/resource-telemetry";
 import {
   collectorTone,
   collectorStatusOf,
@@ -189,7 +190,7 @@ function OverviewTab({ host }: { host: Host }) {
         </CardContent>
       </Card>}
 
-      <Card>
+      {!realMode && <Card>
         <CardHeader title={t("hosts.overview.metrics24h")} />
         <CardContent>
           <MetricChart
@@ -204,7 +205,7 @@ function OverviewTab({ host }: { host: Host }) {
             type="area"
           />
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   );
 }
@@ -286,9 +287,12 @@ export function HostDetailPage() {
             <TabsTrigger value="terminal">
               {t("hosts.detail.tabTerminal")}
             </TabsTrigger>
-            {!realMode && <TabsTrigger value="components">
+            <TabsTrigger value="components">
               {t("hosts.detail.tabComponents")}
-            </TabsTrigger>}
+            </TabsTrigger>
+            <TabsTrigger value="metrics">{t("telemetry.metrics")}</TabsTrigger>
+            <TabsTrigger value="logs">{t("telemetry.logs")}</TabsTrigger>
+            <TabsTrigger value="traces">{t("telemetry.traces")}</TabsTrigger>
             {!realMode && <TabsTrigger value="tasks">
               {t("hosts.detail.tabTasks")}
             </TabsTrigger>}
@@ -299,7 +303,7 @@ export function HostDetailPage() {
           <TabsContent value="terminal">
             {realMode ? <RealTerminalTab host={host} /> : <EmptyState description={t("hosts.terminal.realOnlyDesc")} title={t("hosts.terminal.realOnly")} />}
           </TabsContent>
-          {!realMode && <TabsContent value="components">
+          <TabsContent value="components">
             <div id="otlp-collector">
               <ComponentsTab
                 host={host}
@@ -307,7 +311,16 @@ export function HostDetailPage() {
                 scopes={scopes}
               />
             </div>
-          </TabsContent>}
+          </TabsContent>
+          <TabsContent value="metrics">
+            <ResourceTelemetry resourceId={host.id} signal="metrics" />
+          </TabsContent>
+          <TabsContent value="logs">
+            <ResourceTelemetry resourceId={host.id} signal="logs" />
+          </TabsContent>
+          <TabsContent value="traces">
+            <ResourceTelemetry resourceId={host.id} signal="traces" />
+          </TabsContent>
           {!realMode && <TabsContent value="tasks">
             <TasksTab host={host} />
           </TabsContent>}

@@ -152,11 +152,11 @@ export function createHostsDomain(ctx: MockContext): ArgusApiClient["hosts"] {
       await ctx.pause();
       return (
         db.collectors.find(
-          (entry) => entry.targetType === "host" && entry.targetId === hostId,
+          (entry) => entry.resource_type === "host" && entry.resource_id === hostId,
         ) ?? null
       );
     },
-    async previewCollectorInstall(hostId, input) {
+    async previewCollectorAction(hostId, action, input) {
       await ctx.pause();
       const host = ctx.mustFind(
         db.hosts,
@@ -164,14 +164,20 @@ export function createHostsDomain(ctx: MockContext): ArgusApiClient["hosts"] {
         "host",
       );
       return ctx.createPendingAction({
-        tool: "telemetry.host.install",
-        title: `安装 OTLP 收集器 · ${host.name}`,
+        tool: `telemetry.host.${action}`,
+        title: `${action} OTLP 收集器 · ${host.name}`,
         input_data: {
-          hostId,
-          profile: input.profile,
-          telemetryRoute: input.telemetryRoute,
+          host_id: hostId,
+          distribution_version_id: input.distribution_version_id,
+          profile_ids: input.profile_ids,
+          route_kind: input.route_kind,
+          gateway_collector_id: input.gateway_collector_id,
+          expected_version: input.expected_version,
         },
       });
+    },
+    async previewCollectorInstall(hostId, input) {
+      return this.previewCollectorAction(hostId, "install", input);
     },
   };
 }

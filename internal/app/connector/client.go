@@ -330,7 +330,7 @@ func executeConnectorCommand(ctx context.Context, command *connectorv1.Connector
 	defer clear(credential)
 	outcome := (commandExecutor{}).execute(ctx, command, credential)
 	if outcome.code != "" {
-		slog.Warn("Connector command failed", "command_id", command.GetCommandId(), "command_type", command.GetCommandType(), "error_code", outcome.code, "error", outcome.detail)
+		slog.Warn("Connector command failed", "command_id", command.GetCommandId(), "command_type", command.GetCommandType(), "error_code", outcome.code)
 	}
 	output <- completedCommand{command: command, outcome: outcome}
 }
@@ -380,6 +380,8 @@ func emptyCommandResult(commandType string) (*anypb.Any, error) {
 		value = &connectorv1.KubernetesPodLogsResult{}
 	case "connector_uninstall":
 		value = &connectorv1.ConnectorUninstallResult{}
+	case "collector_management":
+		value = &connectorv1.CollectorManagementResult{}
 	default:
 		return nil, errors.New("unsupported Connector command result type")
 	}

@@ -25,11 +25,13 @@ import type {
   User,
 } from "../types";
 import type {
-  CollectionClaim,
-  CollectorInstallState,
-  K8sNodeBinding,
   TaskViewModel,
 } from "../provisional";
+import type {
+  CollectionClaim,
+  CollectorInstance,
+  KubernetesNodeHostBinding,
+} from "../generated/contracts";
 import type { MockChatMessage } from "./chat-types";
 import type {
   MockActionPlanRecord,
@@ -70,9 +72,9 @@ export interface MockDb {
   enrollmentTokens: ConnectorEnrollmentToken[];
   uninstallCommands: ConnectorUninstallCommand[];
   clusters: MockKubernetesCluster[];
-  nodeBindings: K8sNodeBinding[];
+  nodeBindings: KubernetesNodeHostBinding[];
   collectionClaims: CollectionClaim[];
-  collectors: CollectorInstallState[];
+  collectors: CollectorInstance[];
   tasks: TaskViewModel[];
   pendingActions: PendingActionPublic[];
   actionPlans: Record<string, MockActionPlanRecord>;

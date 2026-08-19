@@ -269,6 +269,44 @@ paths:
     $ref: ./paths/m6.yaml#/recording_item
   /enterprise/remote-access-recordings/{id}/events:
     $ref: ./paths/m6.yaml#/recording_events
+  /telemetry/collectors/enroll:
+    $ref: ./paths/m7.yaml#/collector_enrollment
+  /enterprise/telemetry/distributions:
+    $ref: ./paths/m7.yaml#/distribution_collection
+  /enterprise/telemetry/profiles:
+    $ref: ./paths/m7.yaml#/profile_collection
+  /enterprise/telemetry/collectors:
+    $ref: ./paths/m7.yaml#/collector_collection
+  /enterprise/telemetry/collectors/{id}:
+    $ref: ./paths/m7.yaml#/collector_item
+  /enterprise/telemetry/routes:
+    $ref: ./paths/m7.yaml#/route_collection
+  /enterprise/telemetry/routes/tests:
+    $ref: ./paths/m7.yaml#/route_tests
+  /enterprise/telemetry/collection-claims:
+    $ref: ./paths/m7.yaml#/claim_collection
+  /enterprise/telemetry/node-host-bindings:
+    $ref: ./paths/m7.yaml#/binding_collection
+  /enterprise/telemetry/node-host-bindings/{id}/actions/preview-confirm:
+    $ref: ./paths/m7.yaml#/binding_preview
+  /enterprise/telemetry/usage:
+    $ref: ./paths/m7.yaml#/usage_item
+  /enterprise/telemetry/query/metrics:
+    $ref: ./paths/m7.yaml#/metrics_query
+  /enterprise/telemetry/query/logs:
+    $ref: ./paths/m7.yaml#/logs_query
+  /enterprise/telemetry/query/traces:
+    $ref: ./paths/m7.yaml#/traces_query
+  /enterprise/telemetry/query/overview:
+    $ref: ./paths/m7.yaml#/overview_query
+  /enterprise/hosts/{id}/collector:
+    $ref: ./paths/m7.yaml#/host_collector_item
+  /enterprise/hosts/{id}/collector/actions/preview-{action}:
+    $ref: ./paths/m7.yaml#/host_collector_preview
+  /enterprise/kubernetes-clusters/{id}/collector:
+    $ref: ./paths/m7.yaml#/kubernetes_collector_item
+  /enterprise/kubernetes-clusters/{id}/collector/actions/preview-{action}:
+    $ref: ./paths/m7.yaml#/kubernetes_collector_preview
   /conversations/{conversation_id}/events:
     get:
       operationId: streamConversationEvents
@@ -401,6 +439,30 @@ components:
       $ref: ./components/m6.yaml#/components/schemas/SessionTicketResult
     RemoteAccessRecording:
       $ref: ./components/m6.yaml#/components/schemas/RemoteAccessRecording
+    CollectorDistributionVersion:
+      $ref: ./components/m7.yaml#/components/schemas/CollectorDistributionVersion
+    CollectionProfile:
+      $ref: ./components/m7.yaml#/components/schemas/CollectionProfile
+    CollectorInstance:
+      $ref: ./components/m7.yaml#/components/schemas/CollectorInstance
+    CollectorEnrollmentRequest:
+      $ref: ./components/m7.yaml#/components/schemas/CollectorEnrollmentRequest
+    CollectorCertificateResult:
+      $ref: ./components/m7.yaml#/components/schemas/CollectorCertificateResult
+    TelemetryRoute:
+      $ref: ./components/m7.yaml#/components/schemas/TelemetryRoute
+    CollectionClaim:
+      $ref: ./components/m7.yaml#/components/schemas/CollectionClaim
+    KubernetesNodeHostBinding:
+      $ref: ./components/m7.yaml#/components/schemas/KubernetesNodeHostBinding
+    MetricsResult:
+      $ref: ./components/m7.yaml#/components/schemas/MetricsResult
+    LogsResult:
+      $ref: ./components/m7.yaml#/components/schemas/LogsResult
+    TracesResult:
+      $ref: ./components/m7.yaml#/components/schemas/TracesResult
+    TelemetryOverview:
+      $ref: ./components/m7.yaml#/components/schemas/TelemetryOverview
     ConversationEvent:
       $ref: ../schemas/agent/agent.schema.json#/$defs/ConversationEvent
     AgentEvent:

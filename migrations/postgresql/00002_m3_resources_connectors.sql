@@ -399,7 +399,7 @@ CREATE TABLE connector_commands (
     connection_epoch bigint NOT NULL CHECK (connection_epoch > 0),
     operation_ref text NOT NULL,
     credential_lease_id uuid,
-    command_type text NOT NULL CHECK (command_type IN ('host_connection_probe','kubernetes_connection_probe','kubernetes_resource_query','kubernetes_pod_logs','connector_uninstall')),
+    command_type text NOT NULL CHECK (command_type IN ('host_connection_probe','kubernetes_connection_probe','kubernetes_resource_query','kubernetes_pod_logs','connector_uninstall','collector_management')),
     payload_schema_version text NOT NULL,
     payload jsonb NOT NULL,
     payload_hash bytea NOT NULL CHECK (octet_length(payload_hash) = 32),

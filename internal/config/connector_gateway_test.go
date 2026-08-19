@@ -14,6 +14,8 @@ func TestConnectorGatewayRequiresCertificateIssuer(t *testing.T) {
 		DirectExecutorCABundle: "direct-ca.crt", DirectExecutorRecipientID: "argus-direct-executor",
 		ObjectStoreURL: "https://minio.example.com", ObjectStoreBucket: "remote-recordings", ObjectStoreAccess: "access", ObjectStoreSecret: "secret",
 		RemoteUserLimit: 3, RemoteHostLimit: 5, RemoteTenantLimit: 50,
+		TelemetryEnrollmentEndpoint: "https://api.example.com/api/v1/telemetry/collectors/enroll",
+		TelemetryIngestGRPCEndpoint: "grpcs://otlp.example.com:4317", TelemetryIngestHTTPEndpoint: "https://otlp-http.example.com:4318",
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid Connector Gateway configuration failed: %v", err)

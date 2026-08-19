@@ -120,13 +120,13 @@ function mockResources(
   }
   if (resourceType === "node") {
     return bindings
-      .filter((entry) => entry.clusterId === clusterId)
+      .filter((entry) => entry.kubernetes_cluster_id === clusterId)
       .map((entry) => ({
         cluster_id: clusterId,
         resource_type: resourceType,
-        name: entry.nodeName,
+        name: entry.node_name,
         labels: {},
-        summary: { host: entry.hostId ?? "", status: entry.status },
+        summary: { host: entry.host_id ?? "", status: entry.status },
       }));
   }
   if (resourceType === "pod") {
@@ -298,7 +298,9 @@ export function createKubernetesDomain(
     },
     async listNodeBindings(clusterId) {
       await ctx.pause();
-      return db.nodeBindings.filter((entry) => entry.clusterId === clusterId);
+      return db.nodeBindings.filter(
+        (entry) => entry.kubernetes_cluster_id === clusterId,
+      );
     },
     async verifyNodeBinding(bindingId, input) {
       await ctx.pause();
@@ -307,23 +309,23 @@ export function createKubernetesDomain(
         (entry) => entry.id === bindingId,
         "node binding",
       );
-      binding.hostId = input.hostId;
-      binding.status = "verified";
-      binding.updatedAt = ctx.nowIso();
-      ctx.audit("kubernetes.node_binding.verify", {
-        resourceType: "kubernetes_cluster",
-        resourceId: binding.clusterId,
-        summary: `验证节点绑定 ${binding.nodeName} ↔ ${input.hostId}`,
+      return ctx.createPendingAction({
+        tool: "telemetry.node_binding.confirm",
+        title: `验证节点绑定 ${binding.node_name} ↔ ${input.host_id}`,
+        input_data: {
+          binding_id: binding.id,
+          host_id: input.host_id,
+          expected_version: input.expected_version,
+        },
       });
-      ctx.save();
-      return binding;
     },
     async listCollectionClaims(clusterId) {
       await ctx.pause();
       return db.collectionClaims.filter(
         (entry) =>
-          entry.enterpriseId === ctx.enterpriseId() &&
-          (clusterId === undefined || entry.clusterId === clusterId),
+          entry.enterprise_id === ctx.enterpriseId() &&
+          (clusterId === undefined ||
+            entry.physical_resource_ref.includes(clusterId)),
       );
     },
     async getCollector(clusterId) {
@@ -331,12 +333,12 @@ export function createKubernetesDomain(
       return (
         db.collectors.find(
           (entry) =>
-            entry.targetType === "kubernetes_cluster" &&
-            entry.targetId === clusterId,
+            entry.resource_type === "kubernetes_cluster" &&
+            entry.resource_id === clusterId,
         ) ?? null
       );
     },
-    async previewCollectorInstall(clusterId, input) {
+    async previewCollectorAction(clusterId, action, input) {
       await ctx.pause();
       const cluster = ctx.mustFind(
         db.clusters,
@@ -344,10 +346,20 @@ export function createKubernetesDomain(
         "cluster",
       );
       return ctx.createPendingAction({
-        tool: "telemetry.kubernetes.install",
-        title: `安装 DaemonSet Collector · ${cluster.name}`,
-        input_data: { clusterId, profile: input.profile },
+        tool: `telemetry.kubernetes.${action}`,
+        title: `${action} DaemonSet Collector · ${cluster.name}`,
+        input_data: {
+          cluster_id: clusterId,
+          distribution_version_id: input.distribution_version_id,
+          profile_ids: input.profile_ids,
+          route_kind: input.route_kind,
+          gateway_collector_id: input.gateway_collector_id,
+          expected_version: input.expected_version,
+        },
       });
+    },
+    async previewCollectorInstall(clusterId, input) {
+      return this.previewCollectorAction(clusterId, "install", input);
     },
   };
 }

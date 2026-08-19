@@ -25,19 +25,25 @@ import (
 	"github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
+	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 )
 
 const maxProbeResponseBytes = 64 * 1024
 
 type Executor struct {
-	Store       *postgres.Store
-	Secrets     secret.Service
-	Validator   resource.DirectTargetValidator
-	InstanceID  string
-	Concurrency int
-	Timeout     time.Duration
-	slotOnce    sync.Once
-	slots       chan struct{}
+	Store                       *postgres.Store
+	Secrets                     secret.Service
+	Validator                   resource.DirectTargetValidator
+	InstanceID                  string
+	Concurrency                 int
+	CollectorIdentity           telemetryservice.IdentityService
+	TelemetryEnrollmentEndpoint string
+	TelemetryIngestGRPCEndpoint string
+	TelemetryIngestHTTPEndpoint string
+	CollectorArtifactHTTPClient *http.Client
+	Timeout                     time.Duration
+	slotOnce                    sync.Once
+	slots                       chan struct{}
 }
 
 type connectionPlan struct {
@@ -63,6 +69,9 @@ func (executor *Executor) Run(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			_, _ = executor.Store.Queries.ExpireQueuedConnectionTests(ctx)
+			_, _ = executor.Store.Queries.RecoverTelemetryCollectorOperations(ctx)
+			_, _ = executor.Store.Queries.ExpireTelemetryCollectorOperations(ctx)
+			_, _ = executor.Store.Queries.ExpireCollectionClaimMigrations(ctx)
 			reserved := executor.reserveAvailable()
 			if reserved == 0 {
 				continue
@@ -78,6 +87,24 @@ func (executor *Executor) Run(ctx context.Context) error {
 					defer executor.release(1)
 					executor.execute(ctx, value)
 				}(test)
+			}
+			reserved = executor.reserveAvailable()
+			if reserved == 0 {
+				continue
+			}
+			operations, err := executor.Store.Queries.ClaimTelemetryCollectorOperations(ctx, db.ClaimTelemetryCollectorOperationsParams{
+				Limit: int32(reserved), LeaseOwner: pgtype.Text{String: executor.InstanceID, Valid: true},
+			})
+			if err != nil {
+				executor.release(reserved)
+				return err
+			}
+			executor.release(reserved - len(operations))
+			for _, operation := range operations {
+				go func(value db.TelemetryCollectorOperation) {
+					defer executor.release(1)
+					executor.executeCollectorOperation(ctx, value)
+				}(operation)
 			}
 		}
 	}

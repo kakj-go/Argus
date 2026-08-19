@@ -79,6 +79,17 @@ spec:
       ports:
         - {protocol: TCP, port: 9443}
     {{- end }}
+    {{- if or (eq $pool "agent") (eq $pool "automation") }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Values.namespaces.observability }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-telemetry-query
+      ports:
+        - {protocol: TCP, port: 9447}
+    {{- end }}
     {{- if or (eq $pool "agent") (eq $pool "compaction") }}
     # Model endpoint addresses are revalidated by PublicEndpointPolicy before
     # every dial and redirect. NetworkPolicy supplies the HTTPS transport gate.

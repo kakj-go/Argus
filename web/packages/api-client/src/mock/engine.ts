@@ -466,68 +466,75 @@ export function createEngine(ctx: BaseContext): Engine {
       return;
     }
     if (plan.tool === "telemetry.host.install") {
-      const hostId = String(input_data["hostId"] ?? "");
+      const hostId = String(input_data["host_id"] ?? input_data["hostId"] ?? "");
       const existing = db.collectors.find(
-        (entry) => entry.targetType === "host" && entry.targetId === hostId,
+        (entry) => entry.resource_type === "host" && entry.resource_id === hostId,
       );
       if (existing) {
         existing.status = "converged";
-        existing.progress = 100;
-        existing.updatedAt = ctx.nowIso();
+        existing.effective_revision = existing.desired_revision;
+        existing.updated_at = ctx.nowIso();
       } else {
+        const now = ctx.nowIso();
         db.collectors.push({
           id: nextId(db, "col"),
-          enterpriseId: plan.enterprise_id,
-          targetType: "host",
-          targetId: hostId,
+          enterprise_id: plan.enterprise_id,
+          resource_type: "host",
+          resource_id: hostId,
+          distribution_version_id: String(
+            input_data["distribution_version_id"] ?? "dist-linux-arm64-v1",
+          ),
+          platform: "linux_arm64",
           role: "leaf",
-          profile: String(input_data["profile"] ?? "host-basic"),
-          version: "v24.1.3",
-          desiredRevision: 1,
-          effectiveRevision: 1,
+          desired_revision: 1,
+          effective_revision: 1,
           status: "converged",
-          progress: 100,
-          updatedAt: ctx.nowIso(),
+          version: 1,
+          created_at: now,
+          updated_at: now,
         });
       }
       const host = db.hosts.find((entry) => entry.id === hostId);
       if (host) {
         host.collectorStatus = "converged";
         host.telemetryRoute = String(
-          input_data["telemetryRoute"] ?? "direct_argus",
+          input_data["route_kind"] ?? input_data["telemetryRoute"] ?? "direct_argus",
         );
         host.updatedAt = ctx.nowIso();
       }
       return;
     }
     if (plan.tool === "telemetry.kubernetes.install") {
+      const now = ctx.nowIso();
       db.collectors.push({
         id: nextId(db, "col"),
-        enterpriseId: plan.enterprise_id,
-        targetType: "kubernetes_cluster",
-        targetId: String(input_data["clusterId"] ?? ""),
+        enterprise_id: plan.enterprise_id,
+        resource_type: "kubernetes_cluster",
+        resource_id: String(input_data["cluster_id"] ?? input_data["clusterId"] ?? ""),
+        distribution_version_id: String(
+          input_data["distribution_version_id"] ?? "dist-linux-arm64-v1",
+        ),
+        platform: "linux_arm64",
         role: "daemonset",
-        profile: String(input_data["profile"] ?? "k8s-daemonset"),
-        version: "v24.1.3",
-        desiredRevision: 1,
-        effectiveRevision: 1,
+        desired_revision: 1,
+        effective_revision: 1,
         status: "converged",
-        progress: 100,
-        updatedAt: ctx.nowIso(),
+        version: 1,
+        created_at: now,
+        updated_at: now,
       });
       return;
     }
     if (plan.tool === "telemetry.collector.configure") {
-      const hostId = String(input_data["hostId"] ?? "");
+      const hostId = String(input_data["host_id"] ?? input_data["hostId"] ?? "");
       const collector = db.collectors.find(
-        (entry) => entry.targetType === "host" && entry.targetId === hostId,
+        (entry) => entry.resource_type === "host" && entry.resource_id === hostId,
       );
       if (collector) {
-        collector.profile = String(input_data["profile"] ?? collector.profile);
-        collector.desiredRevision += 1;
-        collector.effectiveRevision = collector.desiredRevision;
+        collector.desired_revision += 1;
+        collector.effective_revision = collector.desired_revision;
         collector.status = "converged";
-        collector.updatedAt = ctx.nowIso();
+        collector.updated_at = ctx.nowIso();
       }
       return;
     }
@@ -544,12 +551,12 @@ export function createEngine(ctx: BaseContext): Engine {
     if (plan.tool === "telemetry.collector.upgrade") {
       const toVersion = String(input_data["toVersion"] ?? "v24.2.0");
       for (const collector of db.collectors) {
-        if (collector.enterpriseId === plan.enterprise_id) {
-          collector.version = toVersion;
-          collector.desiredRevision += 1;
-          collector.effectiveRevision = collector.desiredRevision;
+        if (collector.enterprise_id === plan.enterprise_id) {
+          collector.distribution_version_id = toVersion;
+          collector.desired_revision += 1;
+          collector.effective_revision = collector.desired_revision;
           collector.status = "converged";
-          collector.updatedAt = ctx.nowIso();
+          collector.updated_at = ctx.nowIso();
         }
       }
       return;
@@ -611,7 +618,7 @@ export function createEngine(ctx: BaseContext): Engine {
       const id = String(input_data["id"] ?? "");
       db.clusters = db.clusters.filter((entry) => entry.id !== id);
       db.nodeBindings = db.nodeBindings.filter(
-        (entry) => entry.clusterId !== id,
+        (entry) => entry.kubernetes_cluster_id !== id,
       );
       return;
     }

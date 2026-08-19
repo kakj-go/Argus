@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const enabled = process.env.ARGUS_M3_E2E === "1";
+const preserveBastion = process.env.ARGUS_M3_PRESERVE_BASTION === "1";
 const username = process.env.ARGUS_M3_ENTERPRISE_USERNAME ?? "";
 const password = process.env.ARGUS_M3_ENTERPRISE_PASSWORD ?? "";
 
@@ -85,7 +86,11 @@ test.describe("M3 real resource flow", () => {
       page.getByText("m3-public-host", { exact: true }),
     ).toBeVisible();
     await expect(page.getByText("m3-bastion-2", { exact: true })).toBeVisible();
-    await expect(page.getByText("m3-bastion", { exact: true })).toHaveCount(0);
+    if (preserveBastion) {
+      await expect(page.getByText("m3-bastion", { exact: true })).toBeVisible();
+    } else {
+      await expect(page.getByText("m3-bastion", { exact: true })).toHaveCount(0);
+    }
     await expect(
       page.getByText("m3-private-host", { exact: true }),
     ).toHaveCount(0);

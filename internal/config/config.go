@@ -54,6 +54,17 @@ type Server struct {
 	ObjectStoreBucket         string
 	ObjectStoreAccess         string
 	ObjectStoreSecret         string
+	TelemetryQueryEndpoint    string
+	TelemetryClientCert       string
+	TelemetryClientKey        string
+	TelemetryCABundle         string
+	TelemetryServerName       string
+	TelemetryIssuerName       string
+	TelemetryIssuerGeneration int32
+	TelemetryIngestGRPC       string
+	TelemetryIngestHTTP       string
+	TelemetryEnrollment       string
+	OtelcolKubernetesImage    string
 }
 
 func LoadServer() Server {
@@ -67,6 +78,7 @@ func LoadServer() Server {
 	cursorKey, _ := base64.RawURLEncoding.DecodeString(os.Getenv("ARGUS_CURSOR_SIGNING_KEY"))
 	pendingActionKey, _ := base64.RawURLEncoding.DecodeString(os.Getenv("ARGUS_PENDING_ACTION_ENCRYPTION_KEY"))
 	issuerGeneration, _ := strconv.ParseInt(valueOrDefault("ARGUS_CONNECTOR_ISSUER_GENERATION", "1"), 10, 32)
+	telemetryIssuerGeneration, _ := strconv.ParseInt(valueOrDefault("ARGUS_TELEMETRY_ISSUER_GENERATION", "1"), 10, 32)
 	return Server{
 		Address:                   address,
 		DatabaseURL:               os.Getenv("ARGUS_DATABASE_URL"),
@@ -108,6 +120,17 @@ func LoadServer() Server {
 		ObjectStoreBucket:         os.Getenv("ARGUS_OBJECT_STORE_BUCKET"),
 		ObjectStoreAccess:         os.Getenv("ARGUS_OBJECT_STORE_ACCESS_KEY"),
 		ObjectStoreSecret:         os.Getenv("ARGUS_OBJECT_STORE_SECRET_KEY"),
+		TelemetryQueryEndpoint:    os.Getenv("ARGUS_TELEMETRY_QUERY_ENDPOINT"),
+		TelemetryClientCert:       valueOrDefault("ARGUS_TELEMETRY_CLIENT_CERT_PATH", "/var/run/secrets/argus/telemetry-client/tls.crt"),
+		TelemetryClientKey:        valueOrDefault("ARGUS_TELEMETRY_CLIENT_KEY_PATH", "/var/run/secrets/argus/telemetry-client/tls.key"),
+		TelemetryCABundle:         valueOrDefault("ARGUS_TELEMETRY_CLIENT_CA_PATH", "/var/run/secrets/argus/telemetry-ca/ca.crt"),
+		TelemetryServerName:       valueOrDefault("ARGUS_TELEMETRY_SERVER_NAME", "argus-telemetry-query"),
+		TelemetryIssuerName:       valueOrDefault("ARGUS_TELEMETRY_ISSUER_NAME", "argus-telemetry-ca"),
+		TelemetryIssuerGeneration: int32(telemetryIssuerGeneration),
+		TelemetryIngestGRPC:       os.Getenv("ARGUS_TELEMETRY_INGEST_GRPC_ENDPOINT"),
+		TelemetryIngestHTTP:       os.Getenv("ARGUS_TELEMETRY_INGEST_HTTP_ENDPOINT"),
+		TelemetryEnrollment:       os.Getenv("ARGUS_TELEMETRY_ENROLLMENT_ENDPOINT"),
+		OtelcolKubernetesImage:    os.Getenv("ARGUS_OTELCOL_KUBERNETES_IMAGE"),
 	}
 }
 
@@ -150,6 +173,12 @@ func (cfg Server) Validate() error {
 	}
 	if cfg.ObjectStoreURL == "" || cfg.ObjectStoreBucket == "" || cfg.ObjectStoreAccess == "" || cfg.ObjectStoreSecret == "" {
 		return errors.New("remote access ObjectStore configuration is required")
+	}
+	if cfg.TelemetryQueryEndpoint == "" || cfg.TelemetryClientCert == "" || cfg.TelemetryClientKey == "" || cfg.TelemetryCABundle == "" || cfg.TelemetryServerName == "" {
+		return errors.New("telemetry internal query and mTLS configuration are required")
+	}
+	if cfg.TelemetryIssuerName == "" || cfg.TelemetryIssuerGeneration < 1 || cfg.TelemetryIngestGRPC == "" || cfg.TelemetryIngestHTTP == "" || cfg.TelemetryEnrollment == "" || cfg.OtelcolKubernetesImage == "" {
+		return errors.New("telemetry Collector issuer and ingest endpoints are required")
 	}
 	return nil
 }

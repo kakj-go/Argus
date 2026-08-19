@@ -226,7 +226,7 @@ func (a *App) plan(cfg *InstallConfig, output string) error {
 		Blockers     []string   `json:"blockers,omitempty"`
 	}{
 		Profile: cfg.Spec.Profile, ReleaseID: cfg.Spec.ReleaseID, Namespaces: cfg.Spec.Namespaces,
-		Stages: []string{"foundation", "data-operators", "data", "sandbox", "schema", "platform", "telemetry-pipeline"},
+		Stages: []string{"foundation", "data-operators", "data", "sandbox", "telemetry-pipeline", "platform"},
 		Images: []string{cfg.Image("argus-backend"), cfg.Image("argus-web"), cfg.Image("minio")},
 	}
 	if cfg.Spec.Profile == "evaluation" {

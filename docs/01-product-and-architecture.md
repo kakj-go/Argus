@@ -72,7 +72,7 @@ flowchart LR
 
     Collector["argus-otelcol"] --> Ingest["argus-telemetry --mode=ingest"]
     Ingest --> Kafka["Kafka"]
-    Kafka --> Writer["otel-clickhouse-writer"]
+    Kafka --> Writer["argus-telemetry writer"]
     Writer --> ClickHouse["ClickHouse / Altinity Operator"]
 
     Server --> Query["argus-telemetry --mode=query"]
@@ -89,7 +89,7 @@ flowchart LR
 | `argus-connector-gateway` | Connector mTLS 长连接、命令流、心跳、Artifact Tunnel、人工远程会话流量中继 | 业务权限决策、AI 编排、OTLP 遥测数据接收 |
 | `argus-telemetry` | `ingest` 模式接收 OTLP 并写 Kafka；`query` 模式查询 Metrics/Logs/Traces | Connector 控制、资源变更、Agent 执行 |
 
-`otel-clickhouse-writer` 使用标准 OpenTelemetry Collector 发行物，配置 Kafka Receiver 和 ClickHouse Exporter，不作为 Argus 自研服务。企业侧只部署 `argus-connector` 和 `argus-otelcol`。
+`argus-telemetry writer` 使用标准 OpenTelemetry Collector 发行物，配置 Kafka Receiver 和 ClickHouse Exporter，不作为 Argus 自研服务。企业侧只部署 `argus-connector` 和 `argus-otelcol`。
 
 ### 4.2 运行角色
 
@@ -100,7 +100,7 @@ argus-worker --pool=direct-executor
 argus-connector-gateway
 argus-telemetry --mode=ingest
 argus-telemetry --mode=query
-otel-clickhouse-writer
+argus-telemetry writer
 ```
 
 `argus-telemetry` 复用代码与镜像但使用不同 Deployment、ServiceAccount、网络策略和数据库权限。不能为了减少 Pod 而把 ingest 与 query 运行在同一进程中。
@@ -187,7 +187,7 @@ flowchart TB
     end
 
     subgraph Push["遥测推送链路"]
-        P1["argus-otelcol"] --> P2["argus-telemetry ingest"] --> P3["Kafka"] --> P4["otel-clickhouse-writer"] --> P5["ClickHouse"]
+        P1["argus-otelcol"] --> P2["argus-telemetry ingest"] --> P3["Kafka"] --> P4["argus-telemetry writer"] --> P5["ClickHouse"]
     end
 
     subgraph Query["遥测查询链路"]
@@ -253,7 +253,7 @@ Argus 提供一键 Kubernetes 部署，但“一键”由安装器编排多个�
 - OpenSandbox 服务及其 Kubernetes Runtime。
 - Kafka。
 - Altinity ClickHouse Operator、ClickHouseInstallation 和 Keeper。
-- `otel-clickhouse-writer`、Ingress/Gateway、Migration 和初始化 Job。
+- `argus-telemetry writer`、Ingress/Gateway、Migration 和初始化 Job。
 
 第一版以上依赖全部由安装器部署到同一 Kubernetes 集群的隔离命名空间，不提供外部托管 PostgreSQL、Redis、Artifact Store、OpenSandbox、Kafka 或 ClickHouse 分支。外部中间件 Adapter 可以保留接口边界，但不进入第一版配置 Schema、发布矩阵和 E2E。
 

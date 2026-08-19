@@ -162,6 +162,11 @@ UPDATE executions SET status = 'result_unknown', connector_command_id = $3,
     error_code = 'EXECUTION_RESULT_UNKNOWN', updated_at = now()
 WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING *;
 
+-- name: MarkExecutionTelemetryResultUnknown :one
+UPDATE executions SET status = 'result_unknown', telemetry_collector_operation_id = $3,
+    error_code = 'EXECUTION_RESULT_UNKNOWN', updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING *;
+
 -- name: ListUncertainExecutions :many
 SELECT * FROM executions WHERE status = 'result_unknown'
 ORDER BY updated_at, id LIMIT $1;

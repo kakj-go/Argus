@@ -1,10 +1,12 @@
 package connector
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
@@ -59,6 +61,89 @@ func TestConnectorUninstallReconcileStaysResultUnknown(t *testing.T) {
 	}
 	if got := reconciledCommandStatus("host_connection_probe", "succeeded"); got != "succeeded" {
 		t.Fatalf("read-only probe reconciliation changed to %q", got)
+	}
+}
+
+func TestCollectorManagementFailureDoesNotRequireSuccessProjection(t *testing.T) {
+	collectorID := uuid.NewString()
+	payload, _ := json.Marshal(map[string]any{"collector_id": collectorID, "operation": "install", "desired_revision": 1, "config_sha256": "hash"})
+	if _, _, err := validateCollectorManagementOutcome(payload, "failed", json.RawMessage(`{}`)); err != nil {
+		t.Fatalf("explicit Collector failure was treated as unknown: %v", err)
+	}
+	if _, _, err := validateCollectorManagementOutcome(payload, "succeeded", json.RawMessage(`{}`)); err == nil {
+		t.Fatal("Collector success without a verifiable projection was accepted")
+	}
+}
+
+func TestCollectorManagementSuccessAcceptsStoredTypedProjection(t *testing.T) {
+	collectorID := uuid.NewString()
+	payload, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(&connectorv1.CollectorManagementCommand{
+		CollectorId: collectorID, Operation: "install", DesiredRevision: 2, ConfigSha256: "abc123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	typed, err := anypb.New(&connectorv1.CollectorManagementResult{
+		CollectorId: collectorID, EffectiveRevision: 2, AppliedConfigSha256: "abc123", Status: "converged",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := marshalTypedResult(typed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if json.Valid(stored) == false || string(stored) == "{}" {
+		t.Fatalf("stored Collector projection is invalid: %s", stored)
+	}
+	if _, _, err = validateCollectorManagementOutcome(payload, "succeeded", stored); err != nil {
+		t.Fatalf("stored Collector success projection was rejected: %v; projection=%s", err, stored)
+	}
+}
+
+func TestKubernetesCollectorManagementRequiresBoundedNodeEvidence(t *testing.T) {
+	collectorID, clusterID := uuid.NewString(), uuid.NewString()
+	payload, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(&connectorv1.CollectorManagementCommand{
+		CollectorId: collectorID, Operation: "install", ResourceId: clusterID, ResourceType: "kubernetes_cluster",
+		DesiredRevision: 2, ConfigSha256: "abc123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := &connectorv1.CollectorManagementResult{CollectorId: collectorID, EffectiveRevision: 2,
+		AppliedConfigSha256: "abc123", Status: "converged"}
+	encode := func() json.RawMessage {
+		value, encodeErr := protojson.MarshalOptions{UseProtoNames: true}.Marshal(result)
+		if encodeErr != nil {
+			t.Fatal(encodeErr)
+		}
+		return value
+	}
+	if _, _, err = validateCollectorManagementOutcome(payload, "succeeded", encode()); err == nil {
+		t.Fatal("Kubernetes Collector success without Node evidence was accepted")
+	}
+	result.KubernetesNodes = []*connectorv1.KubernetesNodeEvidence{{NodeUid: "node-uid", NodeName: "node-a", InternalIps: []string{"10.0.0.1"}}}
+	if _, _, err = validateCollectorManagementOutcome(payload, "succeeded", encode()); err != nil {
+		t.Fatalf("valid Kubernetes Node evidence was rejected: %v", err)
+	}
+	result.KubernetesNodes = append(result.KubernetesNodes, result.KubernetesNodes[0])
+	if _, _, err = validateCollectorManagementOutcome(payload, "succeeded", encode()); err == nil {
+		t.Fatal("duplicate Kubernetes Node evidence was accepted")
+	}
+}
+
+func TestHostCollectorManagementRejectsNodeEvidence(t *testing.T) {
+	collectorID := uuid.NewString()
+	payload, _ := protojson.MarshalOptions{UseProtoNames: true}.Marshal(&connectorv1.CollectorManagementCommand{
+		CollectorId: collectorID, Operation: "install", ResourceId: uuid.NewString(), ResourceType: "host",
+		DesiredRevision: 1, ConfigSha256: "abc123",
+	})
+	result, _ := protojson.MarshalOptions{UseProtoNames: true}.Marshal(&connectorv1.CollectorManagementResult{
+		CollectorId: collectorID, EffectiveRevision: 1, AppliedConfigSha256: "abc123", Status: "converged",
+		KubernetesNodes: []*connectorv1.KubernetesNodeEvidence{{NodeUid: "node-uid", NodeName: "node-a", InternalIps: []string{"10.0.0.1"}}},
+	})
+	if _, _, err := validateCollectorManagementOutcome(payload, "succeeded", result); err == nil {
+		t.Fatal("Host Collector result carrying Kubernetes Node evidence was accepted")
 	}
 }
 

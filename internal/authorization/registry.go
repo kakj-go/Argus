@@ -1,6 +1,6 @@
 package authorization
 
-const PermissionRegistryVersion int32 = 5
+const PermissionRegistryVersion int32 = 6
 
 type BuiltinRole struct {
 	Key         string
@@ -67,15 +67,22 @@ var PermissionRegistry = map[string]string{
 	"remote_access.session.approve":   "Approve eligible remote access requests",
 	"remote_access.session.terminate": "Terminate remote access sessions",
 	"remote_access.recording.read":    "Read authorized remote access recordings",
+	"telemetry.collector.read":        "Read Collector catalog and status",
+	"telemetry.collector.manage":      "Manage Collector lifecycle and routes",
+	"telemetry.query.metrics":         "Query authorized metrics",
+	"telemetry.query.logs":            "Query authorized logs",
+	"telemetry.query.traces":          "Query authorized traces",
+	"telemetry.sensitive_fields.read": "Read governed sensitive telemetry fields",
+	"telemetry.usage.read":            "Read telemetry usage and retention",
 }
 
 var BuiltinRoles = []BuiltinRole{
 	{Key: "enterprise_admin", Name: "Enterprise Admin", Permissions: registryKeys()},
 	{Key: "iam_admin", Name: "IAM Admin", Permissions: []string{"department.read", "department.manage", "identity.read", "identity.manage", "role.read", "role.manage", "data_scope.read", "data_scope.manage", "service_account.read", "service_account.manage"}},
 	{Key: "security_auditor", Name: "Security Auditor", Permissions: []string{"department.read", "identity.read", "role.read", "data_scope.read", "service_account.read", "audit.read"}},
-	{Key: "resource_admin", Name: "Resource Admin", Permissions: []string{"data_scope.read", "host.read", "host.manage", "host.test", "kubernetes.read", "kubernetes.manage", "kubernetes.logs", "secret.read", "secret.manage", "credential.read", "credential.manage", "credential.use", "managed_account.read", "managed_account.manage", "bastion_scope.read", "bastion_scope.manage", "connector.read", "connector.manage", "pending_action.read", "pending_action.confirm", "conversation.read", "conversation.use", "model.read", "approval_policy.read", "approval.read", "approval.decide", "execution.read", "automation.read", "remote_access.grant.read", "remote_access.policy.read", "remote_access.request", "remote_access.session.create", "remote_access.session.approve", "remote_access.session.terminate", "remote_access.recording.read"}},
-	{Key: "resource_operator", Name: "Resource Operator", Permissions: []string{"data_scope.read", "host.read", "host.test", "kubernetes.read", "kubernetes.logs", "secret.read", "credential.read", "credential.use", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read", "conversation.read", "conversation.use", "model.read", "approval_policy.read", "approval.read", "approval.decide", "execution.read", "automation.read", "remote_access.grant.read", "remote_access.policy.read", "remote_access.request", "remote_access.session.create", "remote_access.session.terminate"}},
-	{Key: "resource_viewer", Name: "Resource Viewer", Permissions: []string{"data_scope.read", "host.read", "kubernetes.read", "secret.read", "credential.read", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read", "conversation.read", "conversation.use", "model.read", "execution.read", "remote_access.grant.read", "remote_access.policy.read", "remote_access.request", "remote_access.session.create"}},
+	{Key: "resource_admin", Name: "Resource Admin", Permissions: []string{"data_scope.read", "host.read", "host.manage", "host.test", "kubernetes.read", "kubernetes.manage", "kubernetes.logs", "secret.read", "secret.manage", "credential.read", "credential.manage", "credential.use", "managed_account.read", "managed_account.manage", "bastion_scope.read", "bastion_scope.manage", "connector.read", "connector.manage", "pending_action.read", "pending_action.confirm", "conversation.read", "conversation.use", "model.read", "approval_policy.read", "approval.read", "approval.decide", "execution.read", "automation.read", "remote_access.grant.read", "remote_access.policy.read", "remote_access.request", "remote_access.session.create", "remote_access.session.approve", "remote_access.session.terminate", "remote_access.recording.read", "telemetry.collector.read", "telemetry.collector.manage", "telemetry.query.metrics", "telemetry.query.logs", "telemetry.query.traces", "telemetry.usage.read"}},
+	{Key: "resource_operator", Name: "Resource Operator", Permissions: []string{"data_scope.read", "host.read", "host.test", "kubernetes.read", "kubernetes.logs", "secret.read", "credential.read", "credential.use", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read", "conversation.read", "conversation.use", "model.read", "approval_policy.read", "approval.read", "approval.decide", "execution.read", "automation.read", "remote_access.grant.read", "remote_access.policy.read", "remote_access.request", "remote_access.session.create", "remote_access.session.terminate", "telemetry.collector.read", "telemetry.query.metrics", "telemetry.query.logs", "telemetry.query.traces", "telemetry.usage.read"}},
+	{Key: "resource_viewer", Name: "Resource Viewer", Permissions: []string{"data_scope.read", "host.read", "kubernetes.read", "secret.read", "credential.read", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read", "conversation.read", "conversation.use", "model.read", "execution.read", "remote_access.grant.read", "remote_access.policy.read", "remote_access.request", "remote_access.session.create", "telemetry.collector.read", "telemetry.query.metrics", "telemetry.query.logs", "telemetry.query.traces"}},
 	{Key: "resource_approver", Name: "Resource Approver", Permissions: []string{"data_scope.read", "host.read", "kubernetes.read", "secret.read", "credential.read", "managed_account.read", "bastion_scope.read", "connector.read", "pending_action.read", "audit.read", "approval_policy.read", "approval.read", "approval.decide", "execution.read", "remote_access.grant.read", "remote_access.policy.read", "remote_access.session.approve", "remote_access.session.terminate", "remote_access.recording.read"}},
 }
 

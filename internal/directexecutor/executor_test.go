@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"io"
 	"net/http"
@@ -18,6 +19,21 @@ import (
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func TestCollectorOperationPlanHashSurvivesJSONBNormalization(t *testing.T) {
+	original, err := resource.CanonicalJSON([]byte(`{"collector_id":"018f08d2-7d43-7a54-a8fb-f2f3f2f0d111","operation":"install","artifact":{"platform":"linux_arm64","byte_size":"1024"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := resource.CanonicalJSON([]byte(`{ "artifact": { "byte_size": "1024", "platform": "linux_arm64" }, "operation": "install", "collector_id": "018f08d2-7d43-7a54-a8fb-f2f3f2f0d111" }`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	left, right := sha256.Sum256(original), sha256.Sum256(stored)
+	if !bytes.Equal(left[:], right[:]) {
+		t.Fatal("jsonb-equivalent Collector plans produced different hashes")
+	}
+}
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return fn(request)

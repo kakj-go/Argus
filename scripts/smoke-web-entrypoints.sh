@@ -14,21 +14,32 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$root"
-helm lint deploy/helm/argus-platform \
-  --set-string runtime.postgresqlPassword=m1-smoke \
-  --set-string runtime.redisPassword=m1-smoke \
-  --set-string runtime.idempotencyEncryptionKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA \
-  --set-string runtime.cursorSigningKey=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB \
-  --set-string runtime.pendingActionEncryptionKey=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC \
+helm_values=(
+  --set-string runtime.postgresqlPassword=m1-smoke
+  --set-string runtime.redisPassword=m1-smoke
+  --set-string runtime.idempotencyEncryptionKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  --set-string runtime.cursorSigningKey=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+  --set-string runtime.pendingActionEncryptionKey=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+  --set-string runtime.objectStoreUrl=http://argus-minio:9000
+  --set-string runtime.objectStoreAccessKey=m1-smoke
+  --set-string runtime.objectStoreSecretKey=m1-smoke-secret
+  --set-string runtime.otelcolLinuxArm64Uri=https://artifacts.argus.invalid/linux-arm64.tar.gz
+  --set-string runtime.otelcolLinuxArm64Sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  --set-string runtime.otelcolLinuxArm64Signature=m1-smoke-signature
+  --set runtime.otelcolLinuxArm64ByteSize=1
+  --set-string runtime.otelcolWindowsAmd64Uri=https://artifacts.argus.invalid/windows-amd64.zip
+  --set-string runtime.otelcolWindowsAmd64Sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  --set-string runtime.otelcolWindowsAmd64Signature=m1-smoke-signature
+  --set runtime.otelcolWindowsAmd64ByteSize=1
+  --set-string runtime.otelcolSigningKeyId=m1-smoke
+  --set-string runtime.otelcolSigningPublicKey=m1-smoke-public-key
+  --set-string runtime.otelcolKubernetesImage=argus-otelcol:m1-smoke
   --set-json 'runtime.secretKEKKeyring={"current_version":1,"keys":{"1":"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"}}'
+)
+helm lint deploy/helm/argus-platform "${helm_values[@]}"
 helm template argus deploy/helm/argus-platform \
   --set profile=production \
-  --set-string runtime.postgresqlPassword=m1-smoke \
-  --set-string runtime.redisPassword=m1-smoke \
-  --set-string runtime.idempotencyEncryptionKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA \
-  --set-string runtime.cursorSigningKey=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB \
-  --set-string runtime.pendingActionEncryptionKey=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC \
-  --set-json 'runtime.secretKEKKeyring={"current_version":1,"keys":{"1":"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"}}' >"$rendered"
+  "${helm_values[@]}" >"$rendered"
 rg -q 'host: cards\.argus\.example\.com' "$rendered"
 rg -q 'name: cards' "$rendered"
 rg -q 'containerPort: 8083' "$rendered"
@@ -36,6 +47,19 @@ rg -q 'ARGUS_DIRECT_EXECUTOR_CLIENT_NAMES: argus-server,argus-connector-gateway'
 rg -q 'secretName: argus-server-direct-executor-client-tls' "$rendered"
 rg -q 'secretName: argus-connector-gateway-direct-executor-client-tls' "$rendered"
 rg -q 'name: argus-connector-gateway-remote-access' "$rendered"
+rg -q 'operations:.*IdempotentWrite' "$rendered"
+awk '
+  /^kind: Deployment$/ {kind = "Deployment"; block = ""}
+  /^kind: NetworkPolicy$/ {kind = "NetworkPolicy"; block = ""}
+  {block = block $0 "\n"}
+  /^---$/ {
+    if (kind == "Deployment" && block ~ /name: argus-telemetry-query/ && block ~ /name: ARGUS_REDIS_URL/) query_deployment = 1
+    if (kind == "NetworkPolicy" && block ~ /name: argus-telemetry-query/ && block ~ /port: 6379/) query_policy = 1
+    kind = ""
+    block = ""
+  }
+  END {exit !(query_deployment && query_policy)}
+' "$rendered"
 
 docker build \
   --file deploy/docker/web.Dockerfile \

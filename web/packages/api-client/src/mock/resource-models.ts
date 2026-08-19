@@ -1,4 +1,4 @@
-import type { CollectorStatus } from "../provisional";
+import type { CollectorInstance } from "../generated/contracts";
 import type { Environment, ISODateString } from "../types/common";
 
 export type MockHostConnectionMode =
@@ -22,7 +22,7 @@ export interface MockHost {
   environment: Environment;
   labels: Record<string, string>;
   connectionStatus: "online" | "offline" | "onboarding" | "degraded" | "unknown";
-  collectorStatus: CollectorStatus;
+  collectorStatus: CollectorInstance["status"] | "not_installed";
   telemetryRoute?: string;
   lastSeenAt?: ISODateString;
   createdAt: ISODateString;

@@ -1,3 +1,4 @@
+{{- if .Values.components.clickhouse }}
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
@@ -24,6 +25,26 @@ spec:
       argus/profile: default
       argus/quota: default
       argus/access_management: 1
+      argus_telemetry_migration/password:
+        valueFrom: {secretKeyRef: {name: argus-telemetry-clickhouse, key: migration-password}}
+      argus_telemetry_migration/networks/ip: "::/0"
+      argus_telemetry_migration/grants/query:
+        - GRANT ALL ON *.* WITH GRANT OPTION
+      argus_telemetry_writer/password:
+        valueFrom: {secretKeyRef: {name: argus-telemetry-clickhouse, key: writer-password}}
+      argus_telemetry_writer/networks/ip: "::/0"
+      argus_telemetry_writer/grants/query:
+        - GRANT INSERT ON argus_telemetry.*
+      argus_telemetry_query/password:
+        valueFrom: {secretKeyRef: {name: argus-telemetry-clickhouse, key: query-password}}
+      argus_telemetry_query/networks/ip: "::/0"
+      argus_telemetry_query/profile: readonly
+      argus_telemetry_query/grants/query:
+        - GRANT SELECT ON argus_telemetry.*
+    profiles:
+      # Level 2 keeps DDL/DML blocked while allowing the Query service to
+      # tighten per-request execution and scan budgets.
+      readonly/readonly: 2
     clusters:
       - name: main
         layout:
@@ -68,3 +89,4 @@ spec:
   ports:
     - {name: http, port: 8123, targetPort: 8123}
     - {name: tcp, port: 9000, targetPort: 9000}
+{{- end }}
