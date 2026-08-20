@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { createMfaLogin } from "./helpers/mfa-login";
 
 const enabled = process.env.ARGUS_M6_E2E === "1";
 const username = process.env.ARGUS_M6_ENTERPRISE_USERNAME ?? "";
@@ -8,6 +9,7 @@ const userId = process.env.ARGUS_M6_USER_ID ?? "";
 const sshHostId = process.env.ARGUS_M6_SSH_HOST_ID ?? "";
 const winrsHostId = process.env.ARGUS_M6_WINRS_HOST_ID ?? "";
 const winrsAccountId = process.env.ARGUS_M6_WINRS_ACCOUNT_ID ?? "";
+const loginWithMfa = createMfaLogin("enterprise");
 
 test.describe("M6 real remote access flow", () => {
   test.skip(!enabled, "M6 Kubernetes environment is not active");
@@ -83,11 +85,7 @@ async function login(page: Page) {
   expect(sshHostId).not.toBe("");
   expect(winrsHostId).not.toBe("");
   expect(winrsAccountId).not.toBe("");
-  await page.goto("/login");
-  await page.locator('input[autocomplete="username"]').fill(username);
-  await page.locator('input[autocomplete="current-password"]').fill(password);
-  await page.locator('form button[type="submit"]').click();
-  await expect(page).not.toHaveURL(/\/login/);
+  await loginWithMfa(page, "/login", username, password);
 }
 
 async function expectAppearance(page: Page, locale: string, theme: string) {

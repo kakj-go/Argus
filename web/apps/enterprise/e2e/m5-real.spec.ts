@@ -1,10 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createMfaLogin } from "./helpers/mfa-login";
 
 const enabled = process.env.ARGUS_M5_E2E === "1";
 const username = process.env.ARGUS_M5_ENTERPRISE_USERNAME ?? "";
 const password = process.env.ARGUS_M5_ENTERPRISE_PASSWORD ?? "";
 const cardName = process.env.ARGUS_M5_CARD_NAME ?? "";
 const revision = Number(process.env.ARGUS_M5_REVISION ?? "1");
+const loginWithMfa = createMfaLogin("enterprise");
 
 test.describe("M5 real Card publication flow", () => {
   test.skip(!enabled, "M5 Kubernetes environment is not active");
@@ -44,12 +46,11 @@ test.describe("M5 real Card publication flow", () => {
 });
 
 async function login(page: Page) {
-  expect(username).not.toBe("");
-  expect(password).not.toBe("");
   expect(cardName).not.toBe("");
-  await page.goto("http://127.0.0.1:4173/login");
-  await page.locator('input[autocomplete="username"]').fill(username);
-  await page.locator('input[autocomplete="current-password"]').fill(password);
-  await page.locator('form button[type="submit"]').click();
-  await expect(page).not.toHaveURL(/\/login/);
+  await loginWithMfa(
+    page,
+    "http://127.0.0.1:4173/login",
+    username,
+    password,
+  );
 }

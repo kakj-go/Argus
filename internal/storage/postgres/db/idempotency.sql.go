@@ -13,7 +13,8 @@ import (
 )
 
 const completeIdempotencyRecord = `-- name: CompleteIdempotencyRecord :execrows
-UPDATE idempotency_records SET response_status = $5, response_nonce = $6, response_ciphertext = $7
+UPDATE idempotency_records SET response_status = $5, response_nonce = $6, response_ciphertext = $7,
+  response_provider = $8, response_key_id = $9, response_key_version = $10
 WHERE audience = $1 AND subject_id = $2 AND operation = $3 AND idempotency_key = $4
   AND response_ciphertext IS NULL AND expires_at > now()
 `
@@ -26,6 +27,9 @@ type CompleteIdempotencyRecordParams struct {
 	ResponseStatus     pgtype.Int4 `json:"response_status"`
 	ResponseNonce      []byte      `json:"response_nonce"`
 	ResponseCiphertext []byte      `json:"response_ciphertext"`
+	ResponseProvider   pgtype.Text `json:"response_provider"`
+	ResponseKeyID      pgtype.Text `json:"response_key_id"`
+	ResponseKeyVersion pgtype.Int4 `json:"response_key_version"`
 }
 
 func (q *Queries) CompleteIdempotencyRecord(ctx context.Context, arg CompleteIdempotencyRecordParams) (int64, error) {
@@ -37,6 +41,9 @@ func (q *Queries) CompleteIdempotencyRecord(ctx context.Context, arg CompleteIde
 		arg.ResponseStatus,
 		arg.ResponseNonce,
 		arg.ResponseCiphertext,
+		arg.ResponseProvider,
+		arg.ResponseKeyID,
+		arg.ResponseKeyVersion,
 	)
 	if err != nil {
 		return 0, err
@@ -121,7 +128,7 @@ func (q *Queries) GetEffectiveRoleBindings(ctx context.Context, arg GetEffective
 }
 
 const getIdempotencyRecord = `-- name: GetIdempotencyRecord :one
-SELECT audience, subject_id, operation, idempotency_key, request_hash, response_status, response_nonce, response_ciphertext, expires_at, created_at FROM idempotency_records
+SELECT audience, subject_id, operation, idempotency_key, request_hash, response_status, response_nonce, response_ciphertext, expires_at, created_at, response_provider, response_key_id, response_key_version FROM idempotency_records
 WHERE audience = $1 AND subject_id = $2 AND operation = $3 AND idempotency_key = $4
 `
 
@@ -151,6 +158,9 @@ func (q *Queries) GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRe
 		&i.ResponseCiphertext,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.ResponseProvider,
+		&i.ResponseKeyID,
+		&i.ResponseKeyVersion,
 	)
 	return i, err
 }

@@ -1,9 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createMfaLogin } from "./helpers/mfa-login";
 
 const enabled = process.env.ARGUS_M3_E2E === "1";
 const preserveBastion = process.env.ARGUS_M3_PRESERVE_BASTION === "1";
 const username = process.env.ARGUS_M3_ENTERPRISE_USERNAME ?? "";
 const password = process.env.ARGUS_M3_ENTERPRISE_PASSWORD ?? "";
+const loginWithMfa = createMfaLogin("enterprise");
 
 test.describe("M3 real resource flow", () => {
   test.skip(!enabled, "M3 Kubernetes environment is not active");
@@ -47,10 +49,16 @@ test.describe("M3 real resource flow", () => {
     let drawer = page.getByRole("dialog", {
       name: /新建托管账号|New managed account/i,
     });
-    await drawer.locator(".argus-select").nth(0).click();
+    const hostSelect = drawer.locator(".argus-select").nth(0);
+    await expect(hostSelect).toBeVisible();
+    await page.waitForTimeout(250);
+    await hostSelect.click({ force: true });
     await page.getByRole("option", { name: "m3-public-host" }).click();
     await drawer.getByRole("textbox").fill("m3-ui-account");
-    await drawer.locator(".argus-select").nth(2).click();
+    const credentialSelect = drawer.locator(".argus-select").nth(2);
+    await expect(credentialSelect).toBeVisible();
+    await page.waitForTimeout(250);
+    await credentialSelect.click({ force: true });
     await page.getByRole("option", { name: "m3-ssh (ssh)" }).click();
     const createResponse = page.waitForResponse(
       (response) =>
@@ -66,7 +74,10 @@ test.describe("M3 real resource flow", () => {
     drawer = page.getByRole("dialog", {
       name: /编辑托管账号|Edit managed account/i,
     });
-    await drawer.locator(".argus-select").nth(3).click();
+    const statusSelect = drawer.locator(".argus-select").nth(3);
+    await expect(statusSelect).toBeVisible();
+    await page.waitForTimeout(250);
+    await statusSelect.click({ force: true });
     await page.getByRole("option", { name: /禁用|Disabled/i }).click();
     const updateResponse = page.waitForResponse(
       (response) =>
@@ -211,9 +222,5 @@ test.describe("M3 real resource flow", () => {
 });
 
 async function login(page: Page) {
-  await page.goto("/login");
-  await page.locator('input[autocomplete="username"]').fill(username);
-  await page.locator('input[autocomplete="current-password"]').fill(password);
-  await page.locator('form button[type="submit"]').click();
-  await expect(page).not.toHaveURL(/\/login/);
+  await loginWithMfa(page, "/login", username, password);
 }

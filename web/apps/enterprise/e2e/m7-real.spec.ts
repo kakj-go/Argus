@@ -1,11 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { createMfaLogin } from "./helpers/mfa-login";
 
 const enabled = process.env.ARGUS_M7_E2E === "1";
 const enterpriseUsername = process.env.ARGUS_M7_ENTERPRISE_USERNAME ?? "";
 const enterprisePassword = process.env.ARGUS_M7_ENTERPRISE_PASSWORD ?? "";
 const clusterId = process.env.ARGUS_M7_CLUSTER_ID ?? "";
 const hostId = process.env.ARGUS_M7_HOST_ID ?? "";
+const loginWithMfa = createMfaLogin("enterprise");
 
 const variants = [
   { locale: "zh-CN", theme: "light" },
@@ -97,13 +99,7 @@ for (const variant of variants) test.describe(`M7 real telemetry flow ${variant.
 });
 
 async function login(page: Page) {
-  expect(enterpriseUsername).not.toBe("");
-  expect(enterprisePassword).not.toBe("");
-  await page.goto("/login");
-  await page.locator('input[autocomplete="username"]').fill(enterpriseUsername);
-  await page.locator('input[autocomplete="current-password"]').fill(enterprisePassword);
-  await page.locator('form button[type="submit"]').click();
-  await expect(page).not.toHaveURL(/\/login/);
+  await loginWithMfa(page, "/login", enterpriseUsername, enterprisePassword);
 }
 
 async function expectNoSeriousAccessibilityViolations(page: Page) {

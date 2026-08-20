@@ -98,7 +98,8 @@ func (handler ResourceActionHandler) ConfirmPendingAction(ctx context.Context, r
 	if current, ok := RequestFromContext(ctx); ok {
 		requestID = current.RequestID
 	}
-	confirmation, err := handler.Workflow.Confirm(ctx, p.ActorID(), requestID, p.EnterpriseIDValue(), p.AuthorizationVersion(), request.ActionRef, request.Params.IdempotencyKey)
+	stepUp := handler.Identity.Auth.Identity.RequireStepUp(p) == nil
+	confirmation, err := handler.Workflow.Confirm(ctx, p.ActorID(), requestID, p.EnterpriseIDValue(), p.AuthorizationVersion(), stepUp, request.ActionRef, request.Params.IdempotencyKey)
 	if err != nil {
 		return actionapi.ConfirmPendingActiondefaultJSONResponse{Body: actionError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}
@@ -165,6 +166,8 @@ func actionError(ctx context.Context, err error) actionapi.ApiError {
 	base := hostError(ctx, err)
 	if errors.Is(err, resource.ErrActionUnavailable) {
 		base.Code, base.MessageKey = "ACTION_STATE_CONFLICT", "errors.actions.state_conflict"
+	} else if errors.Is(err, actionservice.ErrStepUpRequired) {
+		base.Code, base.MessageKey = "STEP_UP_REQUIRED", "errors.identity.step_up_required"
 	}
 	return actionapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
 }

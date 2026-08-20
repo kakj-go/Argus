@@ -18,6 +18,11 @@ export const loginZh = {
   "login.passwordTooShort": "新密码至少需要 12 位",
   "login.required": "此字段不能为空",
   "login.changePasswordSubmit": "完成改密并登录",
+  "login.mfaTitle": "验证多因素认证",
+  "login.mfaSubtitle": "请输入认证器中的 6 位验证码或一个恢复码",
+  "login.mfaCode": "验证码或恢复码",
+  "login.mfaInvalid": "请输入有效的验证码或恢复码",
+  "login.mfaSubmit": "验证并登录",
   "login.hint": "演示账号：admin / 123456",
 };
 
@@ -42,5 +47,10 @@ export const loginEn = {
   "login.passwordTooShort": "The new password must be at least 12 characters",
   "login.required": "This field is required",
   "login.changePasswordSubmit": "Change password and sign in",
+  "login.mfaTitle": "Verify multi-factor authentication",
+  "login.mfaSubtitle": "Enter the 6-digit authenticator code or a recovery code.",
+  "login.mfaCode": "Authenticator or recovery code",
+  "login.mfaInvalid": "Enter a valid authenticator or recovery code",
+  "login.mfaSubmit": "Verify and sign in",
   "login.hint": "Demo account: admin / 123456",
 };

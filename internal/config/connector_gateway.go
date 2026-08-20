@@ -22,6 +22,10 @@ type ConnectorGateway struct {
 	TLSPrivateKey               string
 	ClientCABundle              string
 	SecretKEKPath               string
+	KeyWrappingMode             string
+	OpenBaoAddress              string
+	OpenBaoToken                string
+	OpenBaoTransitKey           string
 	KubeconfigPath              string
 	SystemNamespace             string
 	IssuerName                  string
@@ -45,6 +49,7 @@ type ConnectorGateway struct {
 	TelemetryEnrollmentEndpoint string
 	TelemetryIngestGRPCEndpoint string
 	TelemetryIngestHTTPEndpoint string
+	TelemetryEnabled            bool
 }
 
 func LoadConnectorGateway() ConnectorGateway {
@@ -53,6 +58,7 @@ func LoadConnectorGateway() ConnectorGateway {
 		instanceID, _ = os.Hostname()
 	}
 	issuerGeneration, _ := strconv.ParseInt(valueOrDefault("ARGUS_CONNECTOR_ISSUER_GENERATION", "1"), 10, 32)
+	telemetryEnabled, _ := strconv.ParseBool(valueOrDefault("ARGUS_TELEMETRY_TOOL_CATALOG_ENABLED", "true"))
 	return ConnectorGateway{
 		GRPCAddress:                 valueOrDefault("ARGUS_CONNECTOR_GRPC_ADDRESS", ":9443"),
 		RemoteWSSAddress:            valueOrDefault("ARGUS_REMOTE_WSS_ADDRESS", ":9445"),
@@ -68,6 +74,10 @@ func LoadConnectorGateway() ConnectorGateway {
 		TLSPrivateKey:               valueOrDefault("ARGUS_CONNECTOR_TLS_KEY_PATH", "/var/run/secrets/argus/connector-gateway/tls.key"),
 		ClientCABundle:              valueOrDefault("ARGUS_CONNECTOR_CLIENT_CA_PATH", "/var/run/secrets/argus/connector-ca/ca.crt"),
 		SecretKEKPath:               valueOrDefault("ARGUS_SECRET_KEK_PATH", "/var/run/secrets/argus/secret-kek/keyring.json"),
+		KeyWrappingMode:             valueOrDefault("ARGUS_KEY_WRAPPING_MODE", "local_test"),
+		OpenBaoAddress:              os.Getenv("ARGUS_OPENBAO_ADDRESS"),
+		OpenBaoToken:                os.Getenv("ARGUS_OPENBAO_TOKEN"),
+		OpenBaoTransitKey:           valueOrDefault("ARGUS_OPENBAO_TRANSIT_KEY", "argus-local-hardening"),
 		KubeconfigPath:              os.Getenv("ARGUS_KUBECONFIG"),
 		SystemNamespace:             valueOrDefault("ARGUS_SYSTEM_NAMESPACE", "argus-system"),
 		IssuerName:                  valueOrDefault("ARGUS_CONNECTOR_ISSUER_NAME", "argus-connector-ca"),
@@ -91,15 +101,29 @@ func LoadConnectorGateway() ConnectorGateway {
 		TelemetryEnrollmentEndpoint: os.Getenv("ARGUS_TELEMETRY_ENROLLMENT_ENDPOINT"),
 		TelemetryIngestGRPCEndpoint: os.Getenv("ARGUS_TELEMETRY_INGEST_GRPC_ENDPOINT"),
 		TelemetryIngestHTTPEndpoint: os.Getenv("ARGUS_TELEMETRY_INGEST_HTTP_ENDPOINT"),
+		TelemetryEnabled:            telemetryEnabled,
 	}
 }
 
 func (cfg ConnectorGateway) Validate() error {
+	mode := cfg.KeyWrappingMode
+	if mode == "" {
+		mode = "local_test"
+	}
 	if cfg.GRPCAddress == "" || cfg.HealthAddress == "" || cfg.DatabaseURL == "" || cfg.RedisURL == "" || cfg.InstanceID == "" {
 		return errors.New("connector gateway address, database, Redis, and instance ID are required")
 	}
-	if cfg.TLSCertificate == "" || cfg.TLSPrivateKey == "" || cfg.ClientCABundle == "" || cfg.SecretKEKPath == "" {
+	if cfg.TLSCertificate == "" || cfg.TLSPrivateKey == "" || cfg.ClientCABundle == "" {
 		return errors.New("connector gateway mTLS files are required")
+	}
+	if mode == "local_test" && cfg.SecretKEKPath == "" {
+		return errors.New("connector gateway local keyring path is required")
+	}
+	if mode != "local_test" && mode != "openbao_transit" {
+		return errors.New("connector gateway key wrapping mode is invalid")
+	}
+	if mode == "openbao_transit" && (cfg.OpenBaoAddress == "" || cfg.OpenBaoToken == "" || cfg.OpenBaoTransitKey == "") {
+		return errors.New("connector gateway OpenBao Transit configuration is required")
 	}
 	if cfg.SystemNamespace == "" || cfg.IssuerName == "" || cfg.IssuerGeneration < 1 {
 		return errors.New("connector gateway cert-manager issuer configuration is required")
@@ -116,7 +140,7 @@ func (cfg ConnectorGateway) Validate() error {
 	if cfg.RemoteUserLimit < 1 || cfg.RemoteHostLimit < 1 || cfg.RemoteTenantLimit < 1 {
 		return errors.New("remote access capacity limits must be positive")
 	}
-	if cfg.TelemetryEnrollmentEndpoint == "" || cfg.TelemetryIngestGRPCEndpoint == "" || cfg.TelemetryIngestHTTPEndpoint == "" {
+	if cfg.TelemetryEnabled && (cfg.TelemetryEnrollmentEndpoint == "" || cfg.TelemetryIngestGRPCEndpoint == "" || cfg.TelemetryIngestHTTPEndpoint == "") {
 		return errors.New("connector gateway telemetry Collector endpoints are required")
 	}
 	return nil

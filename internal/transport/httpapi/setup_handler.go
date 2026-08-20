@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -103,6 +104,14 @@ func (handler SetupHandler) Login(ctx context.Context, request setupapi.LoginReq
 		})
 		return setupapi.Login200JSONResponse(response), nil
 	}
+	if result.MFA != nil {
+		challengeID := result.MFA.Token
+		_ = response.FromLoginResult2(setupapi.LoginResult2{
+			Status:       setupapi.MfaRequired,
+			MfaChallenge: setupapi.MfaChallenge{ChallengeId: &challengeID, Audience: setupapi.MfaChallengeAudience(result.MFA.Audience), ExpiresAt: result.MFA.ExpiresAt},
+		})
+		return setupapi.Login200JSONResponse(response), nil
+	}
 	setSessionCookies(metadata.Writer, string(request.Audience), *result.Session, handler.Config)
 	authenticated := toAuthenticatedSession(*result.Session)
 	_ = response.FromLoginResult0(setupapi.LoginResult0{Status: setupapi.Authenticated, AuthenticatedSession: authenticated})
@@ -198,6 +207,13 @@ func (handler SetupHandler) authenticate(ctx context.Context, audience string, m
 	if err != nil {
 		return identity.Principal{}, err
 	}
+	if principal.PlatformUser != nil && !principal.PlatformUser.MfaEnabled {
+		path := metadata.Request.URL.Path
+		allowed := strings.Contains(path, "/account/mfa/totp/") || strings.HasSuffix(path, "/auth/session")
+		if !allowed {
+			return identity.Principal{}, identity.ErrMFAEnrollment
+		}
+	}
 	if !mutation {
 		return principal, nil
 	}
@@ -238,7 +254,26 @@ func toAuthenticatedSession(issued identity.IssuedSession) setupapi.Authenticate
 	permissions := make([]setupapi.Permission, len(principal.Permissions))
 	copy(permissions, principal.Permissions)
 	csrf := issued.CSRFToken
-	return setupapi.AuthenticatedSession{Session: session, User: userUnion, Permissions: permissions, CsrfToken: &csrf}
+	amr := make([]setupapi.AuthenticationMethod, len(principal.Session.Amr))
+	for index, method := range principal.Session.Amr {
+		amr[index] = setupapi.AuthenticationMethod(method)
+	}
+	mfaState := setupapi.MfaStateDisabled
+	if principal.PlatformUser != nil {
+		if principal.PlatformUser.MfaEnabled {
+			mfaState = setupapi.MfaStateEnabled
+		} else {
+			mfaState = setupapi.MfaStateEnrollmentRequired
+		}
+	} else if principal.EnterpriseUser != nil && principal.EnterpriseUser.MfaEnabled {
+		mfaState = setupapi.MfaStateEnabled
+	}
+	result := setupapi.AuthenticatedSession{Session: session, User: userUnion, Permissions: permissions, CsrfToken: &csrf,
+		Amr: amr, MfaState: mfaState, AuthenticatedAt: principal.Session.AuthenticatedAt.Time}
+	if principal.Session.StepUpExpiresAt.Valid {
+		result.StepUpExpiresAt = &principal.Session.StepUpExpiresAt.Time
+	}
+	return result
 }
 
 func toPlatformUser(user db.PlatformUser) setupapi.PlatformUser {
@@ -322,6 +357,16 @@ func setupError(ctx context.Context, err error) setupapi.ApiError {
 		code, key = "IDEMPOTENCY_CONFLICT", "errors.common.idempotency_conflict"
 	case errors.Is(err, postgres.ErrIdempotencyExpired):
 		code, key = "IDEMPOTENCY_RESULT_EXPIRED", "errors.common.idempotency_result_expired"
+	case errors.Is(err, identity.ErrMFARequired):
+		code, key = "MFA_REQUIRED", "errors.identity.mfa_required"
+	case errors.Is(err, identity.ErrMFAEnrollment):
+		code, key = "MFA_ENROLLMENT_REQUIRED", "errors.identity.mfa_enrollment_required"
+	case errors.Is(err, identity.ErrMFAInvalid):
+		code, key = "MFA_PROOF_INVALID", "errors.identity.mfa_proof_invalid"
+	case errors.Is(err, identity.ErrStepUpRequired):
+		code, key = "STEP_UP_REQUIRED", "errors.identity.step_up_required"
+	case errors.Is(err, identity.ErrBreakGlassDisabled):
+		code, key = "BREAK_GLASS_DISABLED", "errors.identity.break_glass_disabled"
 	}
 	requestID := "server-generated-request"
 	if metadata, ok := RequestFromContext(ctx); ok {
@@ -331,7 +376,7 @@ func setupError(ctx context.Context, err error) setupapi.ApiError {
 }
 
 func authStatus(err error) int {
-	if errors.Is(err, identity.ErrAudienceMismatch) || errors.Is(err, identity.ErrEnterpriseSuspended) || errors.Is(err, identity.ErrEnterpriseDisabled) || errors.Is(err, identity.ErrCSRFInvalid) {
+	if errors.Is(err, identity.ErrAudienceMismatch) || errors.Is(err, identity.ErrEnterpriseSuspended) || errors.Is(err, identity.ErrEnterpriseDisabled) || errors.Is(err, identity.ErrCSRFInvalid) || errors.Is(err, identity.ErrMFAEnrollment) || errors.Is(err, identity.ErrStepUpRequired) {
 		return http.StatusForbidden
 	}
 	if errors.Is(err, identity.ErrAuthorizationVersion) {

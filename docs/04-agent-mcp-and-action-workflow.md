@@ -393,7 +393,7 @@ stateDiagram-v2
 
 创建人确认不能自动满足“非创建人审批”规则。Approval Request 为每条命中策略保存独立 Requirement Snapshot；所有 Requirement 都满足后才可进入 `ready`，任一有效拒绝会拒绝整个请求。权限撤销、企业停用、策略版本、资源版本、标签影响或计划变化会使尚未执行的审批失效。
 
-Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为发起人补齐缺失的 Role、DataScope、Tool、资源或目标账号权限。M4 不提供 Break Glass；Step-up MFA、紧急绕过和恢复演练统一由 M8 实现，在此之前不能用单管理员场景降低审批要求。
+Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为发起人补齐缺失的 Role、DataScope、Tool、资源或目标账号权限。M4 不直接实现 Break Glass；M8 本地加固提供 TOTP Step-up 和显式 Break Glass Session，但仍不能用单管理员场景降低基础权限或职责分离要求。
 
 Execution 如果产生 Bastion 或 Kubernetes Connector Enrollment，公开对象只返回 `one_time_result_available`。原发起人使用独立幂等接口领取 AES-GCM 加密保存、最长五分钟有效的一次性结果；同一 Idempotency-Key 可以重放同一响应，新 Key 二次领取稳定失败。明文安装命令不得进入 PendingAction、Execution、ConversationEvent、审计、日志或 Redis。
 

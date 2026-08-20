@@ -150,7 +150,7 @@ func (a *App) buildPreflight(ctx context.Context, cfg *InstallConfig) (Preflight
 	} else {
 		message := cfg.Spec.StorageClass
 		if storageClass.AllowVolumeExpansion == nil || !*storageClass.AllowVolumeExpansion {
-			message += " (volume expansion unavailable; accepted for evaluation)"
+			message += " (volume expansion unavailable; accepted for local profiles)"
 		}
 		add("storage-class", statusFor(cfg.Spec.Profile == "production"), message, cfg.Spec.Profile == "production")
 	}
@@ -171,12 +171,12 @@ func (a *App) buildPreflight(ctx context.Context, cfg *InstallConfig) (Preflight
 		productionChecks(ctx, clients, cfg, add)
 	} else {
 		if pods, listErr := clients.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{}); listErr == nil && hasPodPrefix(pods.Items, "kindnet") {
-			add("network-policy", "warn", "kindnet policy enforcement is unverified; Evaluation records this degradation", false)
+			add("network-policy", "warn", "kindnet policy enforcement is unverified; the local profile records this degradation", false)
 		} else {
 			add("network-policy", "warn", "NetworkPolicy enforcement was not positively verified", false)
 		}
 		if cfg.Spec.OpenSandbox.RuntimeClassName == "" && cfg.Spec.OpenSandbox.AllowSharedRuntime {
-			add("sandbox-runtime", "warn", "shared ordinary-container runtime explicitly accepted for Evaluation", false)
+			add("sandbox-runtime", "warn", "shared ordinary-container runtime explicitly accepted for the local profile", false)
 		}
 	}
 	if runtime.GOARCH != "arm64" && runtime.GOARCH != "amd64" {
@@ -231,6 +231,8 @@ func (a *App) plan(cfg *InstallConfig, output string) error {
 	}
 	if cfg.Spec.Profile == "evaluation" {
 		plan.Degradations = []string{"NETWORK_POLICY_ENFORCEMENT_UNVERIFIED", "SHARED_CONTAINER_SANDBOX_RUNTIME"}
+	} else if cfg.Spec.Profile == "local-hardening" {
+		plan.Degradations = []string{"LOCAL_SINGLE_NODE_OPENBAO", "NO_PRODUCTION_HA_OR_CAPACITY_CLAIMS", "ARM64_ONLY"}
 	} else {
 		plan.Blockers = []string{"POSTGRES_HA_ADR_REQUIRED", "SANDBOX_RUNTIME_ADR_REQUIRED"}
 	}

@@ -17,6 +17,19 @@ runtime:
   cursorSigningKey: ""
   pendingActionEncryptionKey: ""
   secretKEKKeyring: {}
+  keyWrappingMode: local_test
+  openBaoAddress: ""
+  openBaoToken: ""
+  openBaoTransitKey: argus-local-hardening
+  breakGlassEnabled: false
+  databaseRolesEnabled: false
+  serverDatabasePassword: ""
+  workerDatabasePassword: ""
+  gatewayDatabasePassword: ""
+  directExecutorDatabasePassword: ""
+  migrationDatabasePassword: ""
+  telemetryIngestDatabasePassword: ""
+  telemetryWriterDatabasePassword: ""
   connectorEnrollmentURL: http://localhost:8080
   connectorGatewayAddress: grpcs://localhost:9443
   connectorIssuerName: argus-connector-ca

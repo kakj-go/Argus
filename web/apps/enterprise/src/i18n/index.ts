@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import { aiSettingsEn, aiSettingsZh } from "./ai-settings";
+import { accountEn, accountZh } from "./account";
 import { automationsEn, automationsZh } from "./automations";
 import { chatEn, chatZh } from "./chat";
 import { commonEn, commonZh } from "./common";
@@ -21,6 +22,7 @@ import { telemetryEn, telemetryZh } from "./telemetry";
  */
 const modulesZh = [
   commonZh,
+  accountZh,
   shellZh,
   loginZh,
   chatZh,
@@ -33,6 +35,7 @@ const modulesZh = [
 ];
 const modulesEn = [
   commonEn,
+  accountEn,
   shellEn,
   loginEn,
   chatEn,

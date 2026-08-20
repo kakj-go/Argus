@@ -1,10 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createMfaLogin } from "./helpers/mfa-login";
 
 const enabled = process.env.ARGUS_M4_E2E === "1";
 const enterpriseUsername = process.env.ARGUS_M4_ENTERPRISE_USERNAME ?? "";
 const enterprisePassword = process.env.ARGUS_M4_ENTERPRISE_PASSWORD ?? "";
 const platformUsername = process.env.ARGUS_M4_PLATFORM_USERNAME ?? "";
 const platformPassword = process.env.ARGUS_M4_PLATFORM_PASSWORD ?? "";
+const enterpriseLogin = createMfaLogin("enterprise");
+const platformLogin = createMfaLogin("platform");
 
 test.describe("M4 real Agent and governance flow", () => {
   test.skip(!enabled, "M4 Kubernetes environment is not active");
@@ -13,7 +16,7 @@ test.describe("M4 real Agent and governance flow", () => {
   test("renders persisted Chat, model, approval, execution, and automation facts", async ({
     page,
   }) => {
-    await login(
+    await enterpriseLogin(
       page,
       "http://127.0.0.1:4173/login",
       enterpriseUsername,
@@ -43,7 +46,7 @@ test.describe("M4 real Agent and governance flow", () => {
   test("renders governed Sandbox objects in the platform audience", async ({
     page,
   }) => {
-    await login(
+    await platformLogin(
       page,
       "http://127.0.0.1:4174/login",
       platformUsername,
@@ -56,21 +59,6 @@ test.describe("M4 real Agent and governance flow", () => {
     await expectNoCredentialInBrowserState(page, "write-only");
   });
 });
-
-async function login(
-  page: Page,
-  url: string,
-  username: string,
-  password: string,
-) {
-  expect(username).not.toBe("");
-  expect(password).not.toBe("");
-  await page.goto(url);
-  await page.locator('input[autocomplete="username"]').fill(username);
-  await page.locator('input[autocomplete="current-password"]').fill(password);
-  await page.locator('form button[type="submit"]').click();
-  await expect(page).not.toHaveURL(/\/login/);
-}
 
 async function expectNoCredentialInBrowserState(
   page: Page,

@@ -150,6 +150,12 @@ export interface components {
             user: components["schemas"]["PlatformUser"] | components["schemas"]["EnterpriseUser"];
             permissions: components["schemas"]["Permission"][];
             csrf_token: string;
+            amr: components["schemas"]["AuthenticationMethod"][];
+            mfa_state: components["schemas"]["MfaState"];
+            /** Format: date-time */
+            authenticated_at: string;
+            /** Format: date-time */
+            step_up_expires_at?: string;
         };
         LoginResult: {
             /** @constant */
@@ -159,6 +165,10 @@ export interface components {
             /** @constant */
             status: "password_change_required";
             password_change_challenge: components["schemas"]["PasswordChangeChallenge"];
+        } | {
+            /** @constant */
+            status: "mfa_required";
+            mfa_challenge: components["schemas"]["MfaChallenge"];
         };
         CompletePasswordChangeRequest: {
             challenge_id: string;
@@ -257,6 +267,17 @@ export interface components {
             updated_at: string;
         };
         Permission: string;
+        /** @enum {string} */
+        AuthenticationMethod: "password" | "temporary_password" | "totp" | "recovery_code";
+        /** @enum {string} */
+        MfaState: "disabled" | "enrollment_required" | "enabled";
+        MfaChallenge: {
+            challenge_id: string;
+            /** @enum {string} */
+            audience: "platform" | "enterprise";
+            /** Format: date-time */
+            expires_at: string;
+        };
     };
     responses: {
         /** @description Stable Argus API error. */

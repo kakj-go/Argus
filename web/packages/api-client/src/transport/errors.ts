@@ -1,6 +1,7 @@
 import type {
   ApiError as ApiErrorBody,
   PasswordChangeChallenge,
+  MfaChallenge,
 } from "../generated/contracts";
 
 export class ApiError extends Error {
@@ -49,6 +50,15 @@ export class PasswordChangeRequiredError extends Error {
   constructor(readonly challenge: PasswordChangeChallenge) {
     super("A password change is required before the session can be created");
     this.name = "PasswordChangeRequiredError";
+  }
+}
+
+export class MfaRequiredError extends Error {
+  readonly code = "MFA_REQUIRED";
+
+  constructor(readonly challenge: MfaChallenge) {
+    super("MFA proof is required before the session can be created");
+    this.name = "MfaRequiredError";
   }
 }
 

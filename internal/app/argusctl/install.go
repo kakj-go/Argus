@@ -103,6 +103,12 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err != nil {
 		return err
 	}
+	if a.restoreOpenBaoToken != "" {
+		if err := setSecretValue(ctx, clients, cfg.Spec.Namespaces.System, cfg.Spec.ReleaseID+"-generated-credentials", "openbao-token", a.restoreOpenBaoToken); err != nil {
+			return err
+		}
+		credentials["openbao-token"] = a.restoreOpenBaoToken
+	}
 	dataChart, err := loadLocalChart(root, "argus-data")
 	if err != nil {
 		return err
@@ -188,9 +194,12 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err != nil {
 		return err
 	}
-	secretKEK, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, setupSecret, "secret-kek-v1", 32)
-	if err != nil {
-		return err
+	secretKEK := ""
+	if cfg.Spec.Profile != "local-hardening" {
+		secretKEK, err = ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, setupSecret, "secret-kek-v1", 32)
+		if err != nil {
+			return err
+		}
 	}
 	platformChart, err := loadLocalChart(root, "argus-platform")
 	if err != nil {
@@ -212,10 +221,10 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err := waitForTelemetry(ctx, clients, cfg); err != nil {
 		return err
 	}
-	if err := clients.setStage(ctx, cfg, "complete", "complete", "all Evaluation stages installed"); err != nil {
+	if err := clients.setStage(ctx, cfg, "complete", "complete", "all "+cfg.Spec.Profile+" stages installed"); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(a.stdout, "Argus Evaluation %s installed successfully\n", cfg.Spec.ReleaseID)
+	_, _ = fmt.Fprintf(a.stdout, "Argus %s %s installed successfully\n", cfg.Spec.Profile, cfg.Spec.ReleaseID)
 	return nil
 }
 
@@ -237,9 +246,20 @@ func dataValues(cfg *InstallConfig, secrets map[string]string) map[string]any {
 			"postgresql": "postgres:18.6-alpine", "redis": "redis:8.10.0-alpine", "minio": cfg.Image("minio"),
 			"clickhouse": "clickhouse/clickhouse-server:26.3.17.110-alpine",
 		},
+		"openbao": map[string]any{
+			"enabled": cfg.Spec.Profile == "local-hardening", "token": secrets["openbao-token"],
+			"transitKey": "argus-local-hardening",
+		},
+		"databaseRoles": map[string]any{
+			"enabled": cfg.Spec.Profile == "local-hardening", "serverPassword": secrets["server-database-password"],
+			"workerPassword": secrets["worker-database-password"], "gatewayPassword": secrets["gateway-database-password"],
+			"directExecutorPassword": secrets["direct-executor-database-password"], "migrationPassword": secrets["migration-database-password"],
+			"telemetryIngestPassword": secrets["telemetry-ingest-database-password"], "telemetryWriterPassword": secrets["telemetry-writer-database-password"],
+		},
 		"persistence": map[string]any{
 			"postgresql": cfg.Spec.Persistence.PostgreSQL, "redis": cfg.Spec.Persistence.Redis, "minio": cfg.Spec.Persistence.MinIO,
 			"kafka": cfg.Spec.Persistence.Kafka, "clickhouse": cfg.Spec.Persistence.ClickHouse, "keeper": cfg.Spec.Persistence.Keeper,
+			"openbao": "1Gi",
 		},
 		"secrets": map[string]any{
 			"postgresqlPassword": secrets["postgresql-password"], "redisPassword": secrets["redis-password"],
@@ -269,35 +289,49 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		connectorEnrollmentURL = "https://" + cfg.Spec.Exposure.EnterpriseHost
 		connectorGatewayAddress = "grpcs://" + cfg.Spec.Exposure.ConnectorHost + ":9443"
 	}
+	runtimeValues := map[string]any{
+		"postgresqlPassword": credentials["postgresql-password"], "redisPassword": credentials["redis-password"],
+		"idempotencyEncryptionKey": idempotencyKey, "cursorSigningKey": cursorSigningKey,
+		"pendingActionEncryptionKey": pendingActionKey,
+		"connectorEnrollmentURL":     connectorEnrollmentURL,
+		"connectorGatewayAddress":    connectorGatewayAddress,
+		"objectStoreUrl":             "http://argus-minio:9000", "objectStoreBucket": "argus-remote-recordings",
+		"objectStoreAccessKey": credentials["minio-root-user"], "objectStoreSecretKey": credentials["minio-root-password"],
+		"telemetryClickhouseMigrationPassword": credentials["telemetry-clickhouse-migration-password"],
+		"telemetryClickhouseWriterPassword":    credentials["telemetry-clickhouse-writer-password"],
+		"telemetryClickhouseQueryPassword":     credentials["telemetry-clickhouse-query-password"],
+		"telemetryToolCatalogEnabled":          true,
+		"otelcolVersion":                       cfg.Spec.Telemetry.CollectorVersion, "otelcolLinuxArm64Uri": cfg.Spec.Telemetry.LinuxARM64URI,
+		"otelcolLinuxArm64Sha256": cfg.Spec.Telemetry.LinuxARM64SHA256, "otelcolLinuxArm64Signature": cfg.Spec.Telemetry.LinuxARM64Signature,
+		"otelcolLinuxArm64ByteSize": cfg.Spec.Telemetry.LinuxARM64ByteSize,
+		"otelcolWindowsAmd64Uri":    cfg.Spec.Telemetry.WindowsAMD64URI, "otelcolWindowsAmd64Sha256": cfg.Spec.Telemetry.WindowsAMD64SHA256,
+		"otelcolWindowsAmd64Signature": cfg.Spec.Telemetry.WindowsAMD64Signature, "otelcolWindowsAmd64ByteSize": cfg.Spec.Telemetry.WindowsAMD64ByteSize,
+		"otelcolSigningKeyId": cfg.Spec.Telemetry.SigningKeyID, "otelcolSigningPublicKey": cfg.Spec.Telemetry.SigningPublicKey,
+		"otelcolKubernetesImage": cfg.Image("argus-otelcol"),
+		"allowedOrigins":         allowedOrigins, "secureCookies": secureCookies,
+		"keyWrappingMode": "local_test", "breakGlassEnabled": false, "databaseRolesEnabled": false,
+	}
+	if cfg.Spec.Profile == "local-hardening" {
+		runtimeValues["keyWrappingMode"] = "openbao_transit"
+		runtimeValues["openBaoAddress"] = "http://argus-openbao:8200"
+		runtimeValues["openBaoToken"] = credentials["openbao-token"]
+		runtimeValues["openBaoTransitKey"] = "argus-local-hardening"
+		runtimeValues["breakGlassEnabled"] = true
+		runtimeValues["databaseRolesEnabled"] = true
+		runtimeValues["serverDatabasePassword"] = credentials["server-database-password"]
+		runtimeValues["workerDatabasePassword"] = credentials["worker-database-password"]
+		runtimeValues["gatewayDatabasePassword"] = credentials["gateway-database-password"]
+		runtimeValues["directExecutorDatabasePassword"] = credentials["direct-executor-database-password"]
+		runtimeValues["migrationDatabasePassword"] = credentials["migration-database-password"]
+		runtimeValues["telemetryIngestDatabasePassword"] = credentials["telemetry-ingest-database-password"]
+		runtimeValues["telemetryWriterDatabasePassword"] = credentials["telemetry-writer-database-password"]
+	} else {
+		runtimeValues["secretKEKKeyring"] = map[string]any{"current_version": 1, "keys": map[string]any{"1": secretKEK}}
+	}
 	return map[string]any{
-		"releaseId": cfg.Spec.ReleaseID, "namespaces": namespacesValues(cfg), "replicas": 1, "setupTokenSecretName": setupSecret,
-		"images": map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
-		"runtime": map[string]any{
-			"postgresqlPassword": credentials["postgresql-password"], "redisPassword": credentials["redis-password"],
-			"idempotencyEncryptionKey": idempotencyKey, "cursorSigningKey": cursorSigningKey,
-			"pendingActionEncryptionKey": pendingActionKey,
-			"secretKEKKeyring": map[string]any{
-				"current_version": 1,
-				"keys":            map[string]any{"1": secretKEK},
-			},
-			"connectorEnrollmentURL":               connectorEnrollmentURL,
-			"connectorGatewayAddress":              connectorGatewayAddress,
-			"objectStoreUrl":                       "http://argus-minio:9000",
-			"objectStoreBucket":                    "argus-remote-recordings",
-			"objectStoreAccessKey":                 credentials["minio-root-user"],
-			"objectStoreSecretKey":                 credentials["minio-root-password"],
-			"telemetryClickhouseMigrationPassword": credentials["telemetry-clickhouse-migration-password"],
-			"telemetryClickhouseWriterPassword":    credentials["telemetry-clickhouse-writer-password"],
-			"telemetryClickhouseQueryPassword":     credentials["telemetry-clickhouse-query-password"],
-			"telemetryToolCatalogEnabled":          true,
-			"otelcolVersion":                       cfg.Spec.Telemetry.CollectorVersion,
-			"otelcolLinuxArm64Uri":                 cfg.Spec.Telemetry.LinuxARM64URI,
-			"otelcolLinuxArm64Sha256":              cfg.Spec.Telemetry.LinuxARM64SHA256,
-			"otelcolWindowsAmd64Uri":               cfg.Spec.Telemetry.WindowsAMD64URI,
-			"otelcolWindowsAmd64Sha256":            cfg.Spec.Telemetry.WindowsAMD64SHA256,
-			"otelcolSigningKeyId":                  cfg.Spec.Telemetry.SigningKeyID,
-			"allowedOrigins":                       allowedOrigins, "secureCookies": secureCookies,
-		},
+		"releaseId": cfg.Spec.ReleaseID, "profile": cfg.Spec.Profile, "namespaces": namespacesValues(cfg), "replicas": 1, "setupTokenSecretName": setupSecret,
+		"images":  map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
+		"runtime": runtimeValues,
 		"production": map[string]any{"hosts": map[string]any{"enterprise": cfg.Spec.Exposure.EnterpriseHost,
 			"platform": cfg.Spec.Exposure.PlatformHost, "setup": cfg.Spec.Exposure.SetupHost, "connector": cfg.Spec.Exposure.ConnectorHost}},
 	}
@@ -436,7 +470,10 @@ func ensureCredentials(ctx context.Context, clients *kubeClients, cfg *InstallCo
 	for key, size := range map[string]int{
 		"postgresql-password": 24, "redis-password": 24, "minio-root-password": 32, "clickhouse-password": 24,
 		"telemetry-clickhouse-migration-password": 24, "telemetry-clickhouse-writer-password": 24,
-		"telemetry-clickhouse-query-password": 24,
+		"telemetry-clickhouse-query-password": 24, "openbao-token": 32,
+		"server-database-password": 24, "worker-database-password": 24, "gateway-database-password": 24,
+		"direct-executor-database-password": 24, "migration-database-password": 24,
+		"telemetry-ingest-database-password": 24, "telemetry-writer-database-password": 24,
 	} {
 		value, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, cfg.Spec.ReleaseID+"-generated-credentials", key, size)
 		if err != nil {
@@ -475,6 +512,22 @@ func ensureSecretValue(ctx context.Context, clients *kubeClients, namespace, nam
 		return "", fmt.Errorf("persist generated secret %s/%s: %w", namespace, name, err)
 	}
 	return value, nil
+}
+
+func setSecretValue(ctx context.Context, clients *kubeClients, namespace, name, key, value string) error {
+	secrets := clients.typed.CoreV1().Secrets(namespace)
+	secret, err := secrets.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("read generated secret %s/%s: %w", namespace, name, err)
+	}
+	if secret.Data == nil {
+		secret.Data = map[string][]byte{}
+	}
+	secret.Data[key] = []byte(value)
+	if _, err := secrets.Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("update generated secret %s/%s: %w", namespace, name, err)
+	}
+	return nil
 }
 
 func ensureSetupToken(ctx context.Context, clients *kubeClients, namespace, name string) error {

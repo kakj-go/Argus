@@ -39,6 +39,7 @@ m5_wait_card_instance() {
 }
 
 run_m5_api_flow() {
+  step_up_enterprise_session
   log "running M5 Card generation, validation, selection, Binding, rollback, and recovery flow"
 
   request m5-reset-quota 200 POST /enterprise/model-quotas "$ENTERPRISE_JAR" \

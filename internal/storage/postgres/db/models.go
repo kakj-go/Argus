@@ -60,6 +60,7 @@ type AiModelCredential struct {
 	Ciphertext      []byte             `json:"ciphertext"`
 	ValueHash       []byte             `json:"value_hash"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	Provider        string             `json:"provider"`
 }
 
 type AiModelRevision struct {
@@ -254,6 +255,20 @@ type BastionScope struct {
 	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BreakGlassSession struct {
+	ID                   uuid.UUID          `json:"id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	UserID               uuid.UUID          `json:"user_id"`
+	SourceSessionID      uuid.UUID          `json:"source_session_id"`
+	AuthorizationVersion int64              `json:"authorization_version"`
+	Reason               string             `json:"reason"`
+	TicketRef            string             `json:"ticket_ref"`
+	Status               string             `json:"status"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
 type CardDataSource struct {
@@ -781,6 +796,9 @@ type IdempotencyRecord struct {
 	ResponseCiphertext []byte             `json:"response_ciphertext"`
 	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ResponseProvider   pgtype.Text        `json:"response_provider"`
+	ResponseKeyID      pgtype.Text        `json:"response_key_id"`
+	ResponseKeyVersion pgtype.Int4        `json:"response_key_version"`
 }
 
 type InteractiveCard struct {
@@ -855,6 +873,42 @@ type ManagedAccount struct {
 	Version          int64              `json:"version"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MfaChallenge struct {
+	ID            uuid.UUID          `json:"id"`
+	ChallengeHash []byte             `json:"challenge_hash"`
+	Audience      string             `json:"audience"`
+	UserID        uuid.UUID          `json:"user_id"`
+	Purpose       string             `json:"purpose"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt    pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type MfaCredential struct {
+	ID                  uuid.UUID          `json:"id"`
+	Audience            string             `json:"audience"`
+	UserID              uuid.UUID          `json:"user_id"`
+	Provider            string             `json:"provider"`
+	KeyID               string             `json:"key_id"`
+	KeyVersion          int32              `json:"key_version"`
+	EncryptedSecret     []byte             `json:"encrypted_secret"`
+	LastTotpCounter     pgtype.Int8        `json:"last_totp_counter"`
+	EnrollmentHash      []byte             `json:"enrollment_hash"`
+	EnrollmentExpiresAt pgtype.Timestamptz `json:"enrollment_expires_at"`
+	Status              string             `json:"status"`
+	VerifiedAt          pgtype.Timestamptz `json:"verified_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MfaRecoveryCode struct {
+	ID           uuid.UUID          `json:"id"`
+	CredentialID uuid.UUID          `json:"credential_id"`
+	CodeHash     []byte             `json:"code_hash"`
+	ConsumedAt   pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type ModelCall struct {
@@ -1473,6 +1527,9 @@ type Session struct {
 	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
 	RevokeReason         pgtype.Text        `json:"revoke_reason"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	AuthenticatedAt      pgtype.Timestamptz `json:"authenticated_at"`
+	StepUpExpiresAt      pgtype.Timestamptz `json:"step_up_expires_at"`
+	Amr                  []string           `json:"amr"`
 }
 
 type TelemetryCertificate struct {

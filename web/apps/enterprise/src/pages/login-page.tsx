@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { PasswordChangeRequiredError, useApi } from "@argus/api-client";
+import { MfaRequiredError, PasswordChangeRequiredError, useApi } from "@argus/api-client";
 import { useEnterpriseAuthStore } from "@argus/auth";
 import { AppearanceControls, Button, Field, Input } from "@argus/ui";
 import "../styles/auth.css";
@@ -21,19 +21,22 @@ export function LoginPage() {
   const completePasswordChange = useEnterpriseAuthStore(
     (state) => state.completePasswordChange,
   );
+  const completeMfaLogin = useEnterpriseAuthStore((state) => state.completeMfaLogin);
   const search = useSearch({ strict: false }) as { redirect?: string };
   const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const loginSchema = useMemo(
     () =>
       z
         .object({
-          mode: z.enum(["login", "change"]),
+          mode: z.enum(["login", "change", "mfa"]),
           username: z.string(),
           password: z.string(),
           newPassword: z.string(),
           confirmPassword: z.string(),
+          mfaCode: z.string(),
         })
         .superRefine((values, context) => {
           if (values.mode === "login") {
@@ -49,6 +52,11 @@ export function LoginPage() {
                 path: ["password"],
                 message: t("login.required"),
               });
+            return;
+          }
+          if (values.mode === "mfa") {
+            if (values.mfaCode.trim().length < 6)
+              context.addIssue({ code: "custom", path: ["mfaCode"], message: t("login.mfaInvalid") });
             return;
           }
           if (values.newPassword.length < 12)
@@ -80,6 +88,7 @@ export function LoginPage() {
       password: "",
       newPassword: "",
       confirmPassword: "",
+      mfaCode: "",
     },
   });
   const platformPortalUrl =
@@ -91,7 +100,9 @@ export function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const session = challengeId
+      const session = mfaChallengeId
+        ? await completeMfaLogin(api, { challenge_id: mfaChallengeId, code: values.mfaCode.trim() })
+        : challengeId
         ? await completePasswordChange(api, {
             challenge_id: challengeId,
             temporary_password: values.password,
@@ -113,6 +124,10 @@ export function LoginPage() {
       if (reason instanceof PasswordChangeRequiredError) {
         setChallengeId(reason.challenge.challenge_id);
         setValue("mode", "change", { shouldValidate: false });
+        setError(null);
+      } else if (reason instanceof MfaRequiredError) {
+        setMfaChallengeId(reason.challenge.challenge_id);
+        setValue("mode", "mfa", { shouldValidate: false });
         setError(null);
       } else
         setError(
@@ -141,16 +156,16 @@ export function LoginPage() {
             Argus<small>enterprise</small>
           </span>
         </div>
-        <h1>{t(challengeId ? "login.changePasswordTitle" : "login.title")}</h1>
+        <h1>{t(mfaChallengeId ? "login.mfaTitle" : challengeId ? "login.changePasswordTitle" : "login.title")}</h1>
         <p className="argus-login-card__subtitle">
-          {t(challengeId ? "login.changePasswordSubtitle" : "login.subtitle")}
+          {t(mfaChallengeId ? "login.mfaSubtitle" : challengeId ? "login.changePasswordSubtitle" : "login.subtitle")}
         </p>
         {error && (
           <p className="argus-login-card__error" role="alert">
             {error}
           </p>
         )}
-        {!challengeId && (
+        {!challengeId && !mfaChallengeId && (
           <Field error={errors.username?.message} label={t("login.username")}>
             <Input
               {...register("username")}
@@ -160,7 +175,7 @@ export function LoginPage() {
             />
           </Field>
         )}
-        {!challengeId && (
+        {!challengeId && !mfaChallengeId && (
           <Field error={errors.password?.message} label={t("login.password")}>
             <Input
               {...register("password")}
@@ -194,6 +209,11 @@ export function LoginPage() {
             </Field>
           </>
         )}
+        {mfaChallengeId && (
+          <Field error={errors.mfaCode?.message} label={t("login.mfaCode")}>
+            <Input {...register("mfaCode")} autoComplete="one-time-code" autoFocus inputMode="numeric" />
+          </Field>
+        )}
         <Button
           className="argus-login-card__submit"
           disabled={submitting}
@@ -202,7 +222,7 @@ export function LoginPage() {
         >
           {submitting
             ? t("login.submitting")
-            : t(challengeId ? "login.changePasswordSubmit" : "login.submit")}
+            : t(mfaChallengeId ? "login.mfaSubmit" : challengeId ? "login.changePasswordSubmit" : "login.submit")}
         </Button>
         <p className="argus-login-card__hint">
           {t("login.demoHint")}

@@ -12,9 +12,9 @@
 | M5（已完成） | [交互卡片](./M5-interactive-card.md)                  | Manifest、CSP、MessagePort、RenderPlan、Binding、发布门禁                               |
 | M6（已完成） | [远程访问](./M6-remote-access.md)                     | Grant、Ticket、SSH PTY/HTTPS WinRS、加密录像、终止与撤权                                |
 | M7（已完成） | [遥测](./M7-telemetry.md)                             | Collector、Ingest、Kafka、ClickHouse、Query 和统一权限裁剪                              |
-| M8           | [Production 就绪](./M8-production-readiness.md)       | HA、备份恢复、供应链、容量、故障演练、完整 E2E                                          |
+| M8           | [本地安全与恢复](./M8-production-readiness.md)        | MFA/Step-up、OpenBao、备份恢复、升级、供应链和本地完整 E2E                              |
 
-截至 2026-08-18，M0-M7 已完成。M7 最终 `make e2e-m7-k8s` 成功运行号为 `20260818232223-15344`，脱敏诊断保存在本地 `artifacts/m7-e2e/20260818232223-15344`，清理后三个临时 Namespace、PVC 和 Lease 均为零残留。下一实施阶段为 M8 Production 就绪；Windows amd64 Collector 仍为 `validation_pending`，Linux amd64、真实 Windows、MFA、Step-up、录像 Production 保留/恢复、Telemetry HA/容量/备份和安全发布继续由 M8 阻断。
+截至 2026-08-19，M0-M7 已完成，M8 本地安全、恢复与发布基座已经进入最终门禁验证。M8 只允许在 arm64 Docker Desktop 标记 `local_hardening_complete`；Production Profile 继续阻断。Windows/AMD64、生产 HA、容量、固定出口和跨集群灾备进入独立 Production Validation 清单。
 
 ## 状态规则
 

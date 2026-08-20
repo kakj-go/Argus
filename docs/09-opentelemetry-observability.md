@@ -18,7 +18,7 @@ Argus 根据主机已有连接路径一键安装并管理 OpenTelemetry Collecto
 - `argus-telemetry ingest` → Kafka → `argus-telemetry writer` → ClickHouse。
 - Host/Kubernetes 详情中的 Collector 安装、采集能力、推送配置和 Metrics/Logs/Traces 有界查询；告警大屏延后。
 
-截至 2026-08-19，M7 已完成 Linux arm64 Host 与 Kubernetes Evaluation 闭环：锁定 OCB Distribution、独立 Telemetry mTLS 身份、OTLP gRPC/HTTP、Kafka、Go Writer、ClickHouse、统一 Query、Web/Agent/Card 以及临时 Namespace 故障恢复 E2E 均已通过。最终成功运行号为 `20260819140437-21054`，证据位于 `artifacts/m7-e2e/20260819140437-21054`，三个 Namespace、运行相关 PVC 和 Lease 零残留。Bastion Gateway 的 Metrics/Logs/Traces 是同一次运行的硬门禁；Query 同时验证跨企业、DataScope、预算、脱敏、授权版本变化和 Web/Agent/Card 一致性。Windows amd64 Artifact 已生成但保持 `validation_pending` 且不可选择；WinRM Collector 管理、Windows Service 生命周期、Linux amd64、真实 Windows和 Production HA/容量/备份/供应链门禁归 M8。
+截至 2026-08-19，M7 已完成 Linux arm64 Host 与 Kubernetes Evaluation 闭环：锁定 OCB Distribution、独立 Telemetry mTLS 身份、OTLP gRPC/HTTP、Kafka、Go Writer、ClickHouse、统一 Query、Web/Agent/Card 以及临时 Namespace 故障恢复 E2E 均已通过。最终成功运行号为 `20260819140437-21054`，证据位于 `artifacts/m7-e2e/20260819140437-21054`，三个 Namespace、运行相关 PVC 和 Lease 零残留。M8 本地 Profile 为 Ingest/Writer 增加独立 PostgreSQL Login、OpenBao 与备份恢复；Windows/AMD64、Production HA/容量和长期 PKI 演练进入 Production Validation。
 
 Kubernetes 节点无法拉取镜像时，第一版只检测 Runtime 并提供离线导入提示，不实现镜像分发。
 

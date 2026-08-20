@@ -1,3 +1,4 @@
+{{- if .Values.runtime.telemetryToolCatalogEnabled }}
 {{- $system := .Values.namespaces.system -}}
 {{- $observability := .Values.namespaces.observability -}}
 {{- $issuer := .Values.runtime.telemetryIssuerName -}}
@@ -108,7 +109,13 @@ metadata:
   namespace: {{ $observability }}
 type: Opaque
 stringData:
-  database-url: {{ printf "postgres://argus:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.postgresqlPassword is required" .Values.runtime.postgresqlPassword) $system | quote }}
+  {{- if .Values.runtime.databaseRolesEnabled }}
+  ingest-database-url: {{ printf "postgres://argus_telemetry_ingest:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryIngestDatabasePassword is required" .Values.runtime.telemetryIngestDatabasePassword) $system | quote }}
+  writer-database-url: {{ printf "postgres://argus_telemetry_writer:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryWriterDatabasePassword is required" .Values.runtime.telemetryWriterDatabasePassword) $system | quote }}
+  {{- else }}
+  ingest-database-url: {{ printf "postgres://argus:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.postgresqlPassword is required" .Values.runtime.postgresqlPassword) $system | quote }}
+  writer-database-url: {{ printf "postgres://argus:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.postgresqlPassword is required" .Values.runtime.postgresqlPassword) $system | quote }}
+  {{- end }}
 ---
 {{- range $mode := list "ingest" "writer" "query" }}
 apiVersion: v1
@@ -142,7 +149,10 @@ spec:
             - {name: ARGUS_HEALTH_ADDRESS, value: ":8081"}
             {{- if or (eq $mode "ingest") (eq $mode "writer") }}
             - name: ARGUS_DATABASE_URL
-              valueFrom: {secretKeyRef: {name: argus-telemetry-runtime, key: database-url}}
+              valueFrom:
+                secretKeyRef:
+                  name: argus-telemetry-runtime
+                  key: {{ ternary "ingest-database-url" "writer-database-url" (eq $mode "ingest") }}
             - {name: ARGUS_KAFKA_BROKERS, value: {{ printf "argus-kafka-kafka-bootstrap.%s.svc:9093" $observability | quote }}}
             - {name: ARGUS_KAFKA_USERNAME, value: argus-telemetry}
             - name: ARGUS_KAFKA_PASSWORD
@@ -319,9 +329,12 @@ spec:
             - {name: ARGUS_OTELCOL_LINUX_ARM64_SHA256, value: {{ required "runtime.otelcolLinuxArm64Sha256 is required" .Values.runtime.otelcolLinuxArm64Sha256 | quote }}}
             - {name: ARGUS_OTELCOL_LINUX_ARM64_SIGNATURE, value: {{ required "runtime.otelcolLinuxArm64Signature is required" .Values.runtime.otelcolLinuxArm64Signature | quote }}}
             - {name: ARGUS_OTELCOL_LINUX_ARM64_BYTE_SIZE, value: {{ required "runtime.otelcolLinuxArm64ByteSize is required" .Values.runtime.otelcolLinuxArm64ByteSize | quote }}}
-            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_URI, value: {{ required "runtime.otelcolWindowsAmd64Uri is required" .Values.runtime.otelcolWindowsAmd64Uri | quote }}}
-            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_SHA256, value: {{ required "runtime.otelcolWindowsAmd64Sha256 is required" .Values.runtime.otelcolWindowsAmd64Sha256 | quote }}}
-            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_SIGNATURE, value: {{ required "runtime.otelcolWindowsAmd64Signature is required" .Values.runtime.otelcolWindowsAmd64Signature | quote }}}
-            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_BYTE_SIZE, value: {{ required "runtime.otelcolWindowsAmd64ByteSize is required" .Values.runtime.otelcolWindowsAmd64ByteSize | quote }}}
+            {{- if .Values.runtime.otelcolWindowsAmd64Uri }}
+            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_URI, value: {{ .Values.runtime.otelcolWindowsAmd64Uri | quote }}}
+            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_SHA256, value: {{ required "runtime.otelcolWindowsAmd64Sha256 is required when Windows artifact is configured" .Values.runtime.otelcolWindowsAmd64Sha256 | quote }}}
+            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_SIGNATURE, value: {{ required "runtime.otelcolWindowsAmd64Signature is required when Windows artifact is configured" .Values.runtime.otelcolWindowsAmd64Signature | quote }}}
+            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_BYTE_SIZE, value: {{ required "runtime.otelcolWindowsAmd64ByteSize is required when Windows artifact is configured" .Values.runtime.otelcolWindowsAmd64ByteSize | quote }}}
+            {{- end }}
             - {name: ARGUS_OTELCOL_SIGNING_KEY_ID, value: {{ required "runtime.otelcolSigningKeyId is required" .Values.runtime.otelcolSigningKeyId | quote }}}
             - {name: ARGUS_OTELCOL_SIGNING_PUBLIC_KEY, value: {{ required "runtime.otelcolSigningPublicKey is required" .Values.runtime.otelcolSigningPublicKey | quote }}}
+{{- end }}

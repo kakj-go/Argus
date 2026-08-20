@@ -7,6 +7,20 @@ components:
   kafka: true
   keeper: true
   clickhouse: true
+openbao:
+  enabled: false
+  image: openbao/openbao:2.3.2
+  token: ""
+  transitKey: argus-local-hardening
+databaseRoles:
+  enabled: false
+  serverPassword: ""
+  workerPassword: ""
+  gatewayPassword: ""
+  directExecutorPassword: ""
+  migrationPassword: ""
+  telemetryIngestPassword: ""
+  telemetryWriterPassword: ""
 namespaces:
   system: argus-system
   observability: argus-observability
@@ -26,6 +40,7 @@ persistence:
   kafka: 4Gi
   clickhouse: 6Gi
   keeper: 1Gi
+  openbao: 1Gi
 secrets:
   postgresqlPassword: ""
   redisPassword: ""

@@ -249,7 +249,8 @@ func (handler CardHandler) InvokeCardActionBinding(ctx context.Context, request 
 	if current, ok := RequestFromContext(ctx); ok {
 		requestID = current.RequestID
 	}
-	invocation, err := handler.Workflow.InvokeCardBinding(ctx, p.ActorID(), requestID, p.EnterpriseIDValue(), p.AuthorizationVersion(), request.BindingId, request.Params.IdempotencyKey)
+	stepUp := handler.Identity.Auth.Identity.RequireStepUp(p) == nil
+	invocation, err := handler.Workflow.InvokeCardBinding(ctx, p.ActorID(), requestID, p.EnterpriseIDValue(), p.AuthorizationVersion(), stepUp, request.BindingId, request.Params.IdempotencyKey)
 	if err != nil {
 		return cardapi.InvokeCardActionBindingdefaultJSONResponse{Body: cardError(ctx, err), StatusCode: cardStatus(err)}, nil
 	}
@@ -420,6 +421,8 @@ func cardError(ctx context.Context, err error) cardapi.ApiError {
 		code, key = "CARD_BINDING_EXPIRED", "errors.card.binding_expired"
 	case errors.Is(err, actionservice.ErrInvalidated):
 		code, key = "CARD_ACTION_INVALIDATED", "errors.card.action_invalidated"
+	case errors.Is(err, actionservice.ErrStepUpRequired):
+		code, key = "STEP_UP_REQUIRED", "errors.identity.step_up_required"
 	case errors.Is(err, cardservice.ErrPresentationInvalid):
 		code, key = "CARD_PRESENTATION_INVALIDATED", "errors.card.presentation_invalidated"
 	case errors.Is(err, cardservice.ErrBindingInvalid):
@@ -438,7 +441,7 @@ func cardStatus(err error) int {
 	switch {
 	case errors.Is(err, cardservice.ErrNotFound), errors.Is(err, pgx.ErrNoRows):
 		return http.StatusNotFound
-	case errors.Is(err, cardservice.ErrReadOnly), errors.Is(err, cardservice.ErrPresentationInvalid):
+	case errors.Is(err, cardservice.ErrReadOnly), errors.Is(err, cardservice.ErrPresentationInvalid), errors.Is(err, actionservice.ErrStepUpRequired):
 		return http.StatusForbidden
 	case errors.Is(err, cardservice.ErrBindingExpired):
 		return http.StatusGone

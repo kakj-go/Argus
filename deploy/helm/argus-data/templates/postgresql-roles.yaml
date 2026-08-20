@@ -1,0 +1,49 @@
+{{- if .Values.databaseRoles.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argus-postgresql-role-passwords
+  namespace: {{ .Values.namespaces.system }}
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+type: Opaque
+stringData:
+  server: {{ required "databaseRoles.serverPassword is required" .Values.databaseRoles.serverPassword | quote }}
+  worker: {{ required "databaseRoles.workerPassword is required" .Values.databaseRoles.workerPassword | quote }}
+  gateway: {{ required "databaseRoles.gatewayPassword is required" .Values.databaseRoles.gatewayPassword | quote }}
+  direct-executor: {{ required "databaseRoles.directExecutorPassword is required" .Values.databaseRoles.directExecutorPassword | quote }}
+  migration: {{ required "databaseRoles.migrationPassword is required" .Values.databaseRoles.migrationPassword | quote }}
+  telemetry-ingest: {{ required "databaseRoles.telemetryIngestPassword is required" .Values.databaseRoles.telemetryIngestPassword | quote }}
+  telemetry-writer: {{ required "databaseRoles.telemetryWriterPassword is required" .Values.databaseRoles.telemetryWriterPassword | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argus-postgresql-role-init
+  namespace: {{ .Values.namespaces.system }}
+data:
+  10-argus-roles.sh: |
+    #!/bin/sh
+    set -eu
+    create_role() {
+      role=$1
+      password=$2
+      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+        --set=role_name="$role" --set=role_password="$password" <<'SQL'
+    SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'role_name', :'role_password')
+    WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role_name') \gexec
+    SELECT format('ALTER ROLE %I PASSWORD %L', :'role_name', :'role_password') \gexec
+    SQL
+    }
+    create_role argus_server "$ARGUS_SERVER_PASSWORD"
+    create_role argus_worker "$ARGUS_WORKER_PASSWORD"
+    create_role argus_gateway "$ARGUS_GATEWAY_PASSWORD"
+    create_role argus_direct_executor "$ARGUS_DIRECT_EXECUTOR_PASSWORD"
+    create_role argus_migration "$ARGUS_MIGRATION_PASSWORD"
+    create_role argus_telemetry_ingest "$ARGUS_TELEMETRY_INGEST_PASSWORD"
+    create_role argus_telemetry_writer "$ARGUS_TELEMETRY_WRITER_PASSWORD"
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'SQL'
+    GRANT argus TO argus_migration;
+    SQL
+{{- end }}

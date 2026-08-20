@@ -247,6 +247,9 @@ components:
         - user
         - permissions
         - csrf_token
+        - amr
+        - mfa_state
+        - authenticated_at
       properties:
         session:
           $ref: '#/components/schemas/Session'
@@ -264,6 +267,19 @@ components:
           minLength: 32
           maxLength: 256
           writeOnly: true
+        amr:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AuthenticationMethod'
+        mfa_state:
+          $ref: '#/components/schemas/MfaState'
+        authenticated_at:
+          type: string
+          format: date-time
+        step_up_expires_at:
+          type: string
+          format: date-time
     LoginResult:
       oneOf:
         - type: object
@@ -288,6 +304,17 @@ components:
               const: password_change_required
             password_change_challenge:
               $ref: '#/components/schemas/PasswordChangeChallenge'
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - mfa_challenge
+          properties:
+            status:
+              type: string
+              const: mfa_required
+            mfa_challenge:
+              $ref: '#/components/schemas/MfaChallenge'
     CompletePasswordChangeRequest:
       type: object
       additionalProperties: false
@@ -576,6 +603,40 @@ components:
     Permission:
       type: string
       pattern: ^[a-z][a-z0-9_.]+$
+    AuthenticationMethod:
+      type: string
+      enum:
+        - password
+        - temporary_password
+        - totp
+        - recovery_code
+    MfaState:
+      type: string
+      enum:
+        - disabled
+        - enrollment_required
+        - enabled
+    MfaChallenge:
+      type: object
+      additionalProperties: false
+      required:
+        - challenge_id
+        - audience
+        - expires_at
+      properties:
+        challenge_id:
+          type: string
+          minLength: 32
+          maxLength: 256
+          writeOnly: true
+        audience:
+          type: string
+          enum:
+            - platform
+            - enterprise
+        expires_at:
+          type: string
+          format: date-time
   responses:
     Error:
       description: Stable Argus API error.

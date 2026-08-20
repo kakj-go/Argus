@@ -1,0 +1,83 @@
+account_mfa_totp_enroll:
+  parameters: [{$ref: "../argus.yaml#/components/parameters/Audience"}]
+  post:
+    operationId: enrollTotp
+    summary: Start a one-time TOTP enrollment.
+    parameters: [{$ref: "../argus.yaml#/components/parameters/CsrfToken"}, {$ref: "../argus.yaml#/components/parameters/IdempotencyKey"}]
+    responses:
+      "201": {description: One-time enrollment material., content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/TotpEnrollment"}}}}
+      default: {$ref: "../argus.yaml#/components/responses/Error"}
+account_mfa_totp_verify:
+  parameters: [{$ref: "../argus.yaml#/components/parameters/Audience"}]
+  post:
+    operationId: verifyTotpEnrollment
+    summary: Verify and enable TOTP.
+    parameters: [{$ref: "../argus.yaml#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/TotpVerifyRequest"}}}}
+    responses:
+      "200": {description: Recovery codes returned once., content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/RecoveryCodesResult"}}}}
+      default: {$ref: "../argus.yaml#/components/responses/Error"}
+account_mfa_totp_disable:
+  parameters: [{$ref: "../argus.yaml#/components/parameters/Audience"}]
+  post:
+    operationId: disableTotp
+    summary: Disable TOTP after fresh proof.
+    parameters: [{$ref: "../argus.yaml#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/MfaCodeRequest"}}}}
+    responses:
+      "204": {description: TOTP disabled and other sessions revoked.}
+      default: {$ref: "../argus.yaml#/components/responses/Error"}
+account_mfa_recovery_codes:
+  parameters: [{$ref: "../argus.yaml#/components/parameters/Audience"}]
+  post:
+    operationId: regenerateRecoveryCodes
+    summary: Replace all recovery codes after fresh proof.
+    parameters: [{$ref: "../argus.yaml#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/MfaCodeRequest"}}}}
+    responses:
+      "200": {description: Replacement recovery codes returned once., content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/RecoveryCodesResult"}}}}
+      default: {$ref: "../argus.yaml#/components/responses/Error"}
+auth_mfa_complete:
+  parameters: [{$ref: "../argus.yaml#/components/parameters/Audience"}]
+  post:
+    operationId: completeMfaLogin
+    summary: Complete an MFA login challenge.
+    security: []
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/MfaCompleteRequest"}}}}
+    responses:
+      "200": {description: Authenticated session., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/AuthenticatedSession"}}}}
+      default: {$ref: "../argus.yaml#/components/responses/Error"}
+auth_step_up:
+  parameters: [{$ref: "../argus.yaml#/components/parameters/Audience"}]
+  post:
+    operationId: stepUpAuthentication
+    summary: Bind a fresh MFA proof to the current session.
+    parameters: [{$ref: "../argus.yaml#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/MfaCodeRequest"}}}}
+    responses:
+      "200": {description: Step-up assurance., content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/StepUpSession"}}}}
+      default: {$ref: "../argus.yaml#/components/responses/Error"}
+break_glass_collection:
+  get:
+    operationId: listBreakGlassSessions
+    summary: List the current user's break-glass sessions.
+    responses:
+      "200": {description: Break-glass sessions., content: {application/json: {schema: {type: array, items: {$ref: "../components/m8.yaml#/components/schemas/BreakGlassSession"}}}}}
+      default: {$ref: "../argus.yaml#/components/responses/Error"}
+  post:
+    operationId: createBreakGlassSession
+    summary: Create a narrowly-scoped local hardening break-glass session.
+    parameters: [{$ref: "../argus.yaml#/components/parameters/CsrfToken"}, {$ref: "../argus.yaml#/components/parameters/IdempotencyKey"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/BreakGlassCreate"}}}}
+    responses:
+      "201": {description: Break-glass session., content: {application/json: {schema: {$ref: "../components/m8.yaml#/components/schemas/BreakGlassSession"}}}}
+      default: {$ref: "../argus.yaml#/components/responses/Error"}
+break_glass_revoke:
+  parameters: [{$ref: "../argus.yaml#/components/parameters/ResourceId"}]
+  post:
+    operationId: revokeBreakGlassSession
+    summary: Revoke a break-glass session.
+    parameters: [{$ref: "../argus.yaml#/components/parameters/CsrfToken"}]
+    responses:
+      "204": {description: Break-glass session revoked.}
+      default: {$ref: "../argus.yaml#/components/responses/Error"}

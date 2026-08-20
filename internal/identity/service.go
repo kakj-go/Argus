@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/kakj-go/Argus/internal/keywrap"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
@@ -31,19 +32,34 @@ var (
 	ErrLoginRateLimited     = errors.New("login rate limited")
 	ErrVersionConflict      = errors.New("resource version conflict")
 	ErrCSRFInvalid          = errors.New("csrf token invalid")
+	ErrMFARequired          = errors.New("mfa required")
+	ErrMFAInvalid           = errors.New("mfa proof invalid")
+	ErrMFAEnrollment        = errors.New("mfa enrollment required")
+	ErrStepUpRequired       = errors.New("step-up authentication required")
+	ErrBreakGlassDisabled   = errors.New("break-glass is disabled")
 )
 
 type Service struct {
-	Store       *postgres.Store
-	Redis       *redisstore.Client
-	IdleTTL     time.Duration
-	AbsoluteTTL time.Duration
-	Now         func() time.Time
+	Store             *postgres.Store
+	Redis             *redisstore.Client
+	IdleTTL           time.Duration
+	AbsoluteTTL       time.Duration
+	Now               func() time.Time
+	KeyWrapping       keywrap.Provider
+	Idempotency       postgres.Idempotency
+	BreakGlassEnabled bool
 }
 
 type LoginResult struct {
 	Challenge *PasswordChallenge
+	MFA       *MFAChallenge
 	Session   *IssuedSession
+}
+
+type MFAChallenge struct {
+	Token     string
+	Audience  string
+	ExpiresAt time.Time
 }
 
 type PasswordChallenge struct {
@@ -162,6 +178,13 @@ func (service Service) Login(ctx context.Context, audience, username, password, 
 			return LoginResult{}, err
 		}
 		return LoginResult{Challenge: &PasswordChallenge{Token: challenge, Audience: audience, ExpiresAt: temporary.ExpiresAt.Time}}, nil
+	}
+	if mfa, err := service.Store.Queries.GetMfaCredential(ctx, db.GetMfaCredentialParams{Audience: audience, UserID: userID}); err == nil && mfa.Status == "active" {
+		challenge, err := service.createMFAChallenge(ctx, audience, userID, "login")
+		if err != nil {
+			return LoginResult{}, err
+		}
+		return LoginResult{MFA: &challenge}, nil
 	}
 	issued, err := service.issueSession(ctx, service.Store.Queries, audience, userID)
 	if err != nil {
@@ -312,6 +335,10 @@ func (service Service) ChangePassword(ctx context.Context, principal Principal, 
 }
 
 func (service Service) issueSession(ctx context.Context, queries *db.Queries, audience string, userID uuid.UUID) (IssuedSession, error) {
+	return service.issueSessionWithAMR(ctx, queries, audience, userID, []string{"password"})
+}
+
+func (service Service) issueSessionWithAMR(ctx context.Context, queries *db.Queries, audience string, userID uuid.UUID, amr []string) (IssuedSession, error) {
 	token, err := RandomToken(32)
 	if err != nil {
 		return IssuedSession{}, err
@@ -325,6 +352,7 @@ func (service Service) issueSession(ctx context.Context, queries *db.Queries, au
 		ID: mustUUIDV7(), TokenHash: TokenHash(token), CsrfHash: TokenHash(csrf), Audience: audience,
 		UserID: userID, Locale: "zh-CN", IdleExpiresAt: pgtype.Timestamptz{Time: now.Add(service.idleTTL()), Valid: true},
 		AbsoluteExpiresAt: pgtype.Timestamptz{Time: now.Add(service.absoluteTTL()), Valid: true}, LastSeenAt: pgtype.Timestamptz{Time: now, Valid: true},
+		AuthenticatedAt: pgtype.Timestamptz{Time: now, Valid: true}, Amr: amr,
 	}
 	if audience == "enterprise" {
 		enterpriseUser, err := queries.GetEnterpriseUserByID(ctx, userID)

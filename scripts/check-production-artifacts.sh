@@ -48,4 +48,17 @@ if rg -n 'GO_BUILD_TAGS=.*m4e2e|tags=m4e2e' deploy/docker/backend.Dockerfile; th
   exit 1
 fi
 
-echo "Production backend image contains no Replay Provider, mock seed, or private-endpoint switch"
+if rg -n 'ARGUS_(ALLOW_PRIVATE_MODEL|REPLAY_PROVIDER|DISABLE_(ORIGIN|CSRF|TLS|AUTH)|PLAINTEXT_SECRET)' \
+  deploy/helm deploy/docker --glob '!**/*e2e*'; then
+  echo "production deployment contains a forbidden debug or security bypass switch" >&2
+  exit 1
+fi
+
+if rg -n --hidden --glob '!**/*_test.go' --glob '!**/e2e/**' \
+  '(BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY|argus_ak_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{16,}|ARGUS_OPENBAO_TOKEN=[^$<{])' \
+  cmd internal web deploy/helm deploy/docker; then
+  echo "repository contains a private key, API key, or literal OpenBao token" >&2
+  exit 1
+fi
+
+echo "Production backend image and deployment manifests contain no forbidden replay, mock, test key, or bypass artifacts"

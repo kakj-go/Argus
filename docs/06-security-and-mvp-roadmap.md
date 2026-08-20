@@ -120,7 +120,7 @@ PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。
 
 M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证了 Connector 注册竞争/证书轮换、双 Gateway 路由、Bastion Replacement、Direct SSRF 边界、Kubernetes 三种接入、DataScope 撤权、Secret 轮换、Redis 清空和 Server/Gateway 重启恢复；M3 Namespace、PVC 与 Lease 均已清理。
 
-人工 SSH/WinRS 会话、RemoteAccessGrant、AccessLease、短期会话票据、录像和终止已由 M6 完成；MFA、Step-up 和 Break Glass 仍由 M8 负责。Collector 安装、CollectionClaim、Telemetry Route 与 OTLP 链路属于 M7。M3 ConnectorCommand 仍明确禁止任意 Shell、文件写入、Remote Access Frame 和 Collector 命令，M6 使用独立类型化会话协议。
+人工 SSH/WinRS 会话、RemoteAccessGrant、AccessLease、短期会话票据、录像和终止已由 M6 完成；M8 已为本地环境补齐 TOTP、Step-up 和 Break Glass，并由统一 AuthenticationAssuranceService 约束 Critical Action 与 Remote Access。Collector 安装、CollectionClaim、Telemetry Route 与 OTLP 链路属于 M7。M3 ConnectorCommand 仍明确禁止任意 Shell、文件写入、Remote Access Frame 和 Collector 命令，M6 使用独立类型化会话协议。
 
 ## 7. 第三阶段：Chatbox 与 MCP
 
@@ -158,7 +158,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 - 录像采用 asciicast v2 NDJSON、AES-256-GCM 分片和 SHA-256 Hash Chain；ObjectStore 连续不可用 30 秒或内存缓冲超过 4 MiB 时终止会话。
 - Gateway 外部 WSS、内部 peer mTLS、Connector gRPC 和 Direct Executor RPC 使用独立端口与身份；Redis 丢失后从 PostgreSQL 和 Connector 心跳恢复。
 
-完成标准：已于 2026-08-18 达成。最终 `make e2e-m6-k8s` 运行号为 `20260818072400-79219`，验证真实 SSH、TLS WinRS 模拟器、跨 Gateway Drain、Ticket 重放、AuthorizationVersion 撤权、MinIO fail closed、录像和 real Playwright，清理后 Namespace、PVC 与 Lease 零残留。Production 仍被 M8 MFA、Step-up、备份恢复、容量和安全审计阻断。
+完成标准：已于 2026-08-18 达成。最终 `make e2e-m6-k8s` 运行号为 `20260818072400-79219`，验证真实 SSH、TLS WinRS 模拟器、跨 Gateway Drain、Ticket 重放、AuthorizationVersion 撤权、MinIO fail closed、录像和 real Playwright，清理后 Namespace、PVC 与 Lease 零残留。M8 本地加固补齐 MFA/Step-up 与本地录像恢复；Production 录像不可变保留、真实 Windows、容量和安全审计仍在 Production Validation 清单。
 
 ## 10. 第六阶段：OpenTelemetry 监控链路（M7）
 

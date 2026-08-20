@@ -70,21 +70,27 @@ spec:
                 name: argus-runtime-secrets
           {{- if or (eq $item.name "argus-server") (hasKey $item "pool") (eq $item.name "argus-direct-executor") (eq $item.name "argus-connector-gateway") }}
           volumeMounts:
+          {{- if eq $root.Values.runtime.keyWrappingMode "local_test" }}
             - name: secret-kek
               mountPath: /var/run/secrets/argus/secret-kek
               readOnly: true
+          {{- end }}
           {{- if or (eq $item.name "argus-server") (hasKey $item "pool") }}
+          {{- if $root.Values.runtime.telemetryToolCatalogEnabled }}
             - name: telemetry-ca
               mountPath: /var/run/secrets/argus/telemetry-ca
               readOnly: true
+          {{- end }}
           {{- if eq $item.name "argus-server" }}
             - name: setup-token
               mountPath: /var/run/secrets/argus/setup
               readOnly: true
           {{- end }}
+          {{- if $root.Values.runtime.telemetryToolCatalogEnabled }}
             - name: telemetry-client
               mountPath: /var/run/secrets/argus/telemetry-client
               readOnly: true
+          {{- end }}
             - name: direct-executor-client
               mountPath: /var/run/secrets/argus/direct-executor-client
               readOnly: true
@@ -120,13 +126,22 @@ spec:
               mountPath: /var/run/secrets/argus/direct-executor-ca
               readOnly: true
           {{- end }}
-          {{- if ne $item.name "argus-server" }}
+          {{- if or $root.Values.runtime.databaseRolesEnabled (ne $item.name "argus-server") }}
           env:
+          {{- if $root.Values.runtime.databaseRolesEnabled }}
+            - name: ARGUS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: argus-database-roles
+                  key: {{ if eq $item.name "argus-server" }}server-url{{ else if hasKey $item "pool" }}worker-url{{ else if eq $item.name "argus-connector-gateway" }}gateway-url{{ else }}direct-executor-url{{ end }}
+          {{- end }}
+          {{- if ne $item.name "argus-server" }}
             - {name: ARGUS_HEALTH_ADDRESS, value: ":8081"}
           {{- if eq $item.name "argus-connector-gateway" }}
             - name: ARGUS_GATEWAY_INSTANCE_ID
               valueFrom:
                 fieldRef: {fieldPath: metadata.name}
+          {{- end }}
           {{- end }}
           {{- end }}
           ports:
@@ -156,15 +171,19 @@ spec:
             {{- end }}
       {{- if or (eq $item.name "argus-server") (hasKey $item "pool") (eq $item.name "argus-direct-executor") (eq $item.name "argus-connector-gateway") }}
       volumes:
+      {{- if eq $root.Values.runtime.keyWrappingMode "local_test" }}
         - name: secret-kek
           secret:
             secretName: argus-secret-kek
+      {{- end }}
       {{- if or (eq $item.name "argus-server") (hasKey $item "pool") }}
+      {{- if $root.Values.runtime.telemetryToolCatalogEnabled }}
         - name: telemetry-ca
           secret:
             secretName: argus-server-telemetry-client-tls
             items:
               - {key: ca.crt, path: ca.crt}
+      {{- end }}
       {{- if eq $item.name "argus-server" }}
         - name: setup-token
           secret:
@@ -173,9 +192,11 @@ spec:
               - {key: setup-token, path: token}
               - {key: setup-token-expires-at, path: expires-at}
       {{- end }}
+      {{- if $root.Values.runtime.telemetryToolCatalogEnabled }}
         - name: telemetry-client
           secret:
             secretName: argus-server-telemetry-client-tls
+      {{- end }}
         - name: direct-executor-client
           secret:
             secretName: argus-server-direct-executor-client-tls

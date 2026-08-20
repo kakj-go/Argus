@@ -149,6 +149,14 @@ import type {
   SessionTicketResult,
   RemoteAccessRecording,
   RecordingEventPage,
+  MfaCompleteRequest,
+  MfaCodeRequest,
+  TotpEnrollment,
+  TotpVerifyRequest,
+  RecoveryCodesResult,
+  StepUpSession,
+  BreakGlassSession,
+  BreakGlassCreate,
 } from "./generated/contracts";
 
 export type CollectorAction =
@@ -196,6 +204,15 @@ export interface ArgusApiClient {
     completePasswordChange(
       input: CompletePasswordChangeRequest,
     ): Promise<SessionInfo>;
+    completeMfaLogin(input: MfaCompleteRequest): Promise<SessionInfo>;
+    enrollTotp(): Promise<TotpEnrollment>;
+    verifyTotpEnrollment(input: TotpVerifyRequest): Promise<RecoveryCodesResult>;
+    regenerateRecoveryCodes(input: MfaCodeRequest): Promise<RecoveryCodesResult>;
+    disableTotp(input: MfaCodeRequest): Promise<void>;
+    stepUp(input: MfaCodeRequest): Promise<StepUpSession>;
+    listBreakGlassSessions(): Promise<BreakGlassSession[]>;
+    createBreakGlassSession(input: BreakGlassCreate): Promise<BreakGlassSession>;
+    revokeBreakGlassSession(id: string): Promise<void>;
     changePassword(input: PasswordUpdateRequest): Promise<void>;
     logout(): Promise<void>;
     me(): Promise<SessionInfo>;

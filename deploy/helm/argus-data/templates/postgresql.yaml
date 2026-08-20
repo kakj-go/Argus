@@ -47,6 +47,15 @@ spec:
                   key: postgresql-password
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+            {{- if .Values.databaseRoles.enabled }}
+            - {name: ARGUS_SERVER_PASSWORD, valueFrom: {secretKeyRef: {name: argus-postgresql-role-passwords, key: server}}}
+            - {name: ARGUS_WORKER_PASSWORD, valueFrom: {secretKeyRef: {name: argus-postgresql-role-passwords, key: worker}}}
+            - {name: ARGUS_GATEWAY_PASSWORD, valueFrom: {secretKeyRef: {name: argus-postgresql-role-passwords, key: gateway}}}
+            - {name: ARGUS_DIRECT_EXECUTOR_PASSWORD, valueFrom: {secretKeyRef: {name: argus-postgresql-role-passwords, key: direct-executor}}}
+            - {name: ARGUS_MIGRATION_PASSWORD, valueFrom: {secretKeyRef: {name: argus-postgresql-role-passwords, key: migration}}}
+            - {name: ARGUS_TELEMETRY_INGEST_PASSWORD, valueFrom: {secretKeyRef: {name: argus-postgresql-role-passwords, key: telemetry-ingest}}}
+            - {name: ARGUS_TELEMETRY_WRITER_PASSWORD, valueFrom: {secretKeyRef: {name: argus-postgresql-role-passwords, key: telemetry-writer}}}
+            {{- end }}
           ports:
             - name: postgresql
               containerPort: 5432
@@ -61,6 +70,19 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            {{- if .Values.databaseRoles.enabled }}
+            - name: role-init
+              mountPath: /docker-entrypoint-initdb.d/10-argus-roles.sh
+              subPath: 10-argus-roles.sh
+              readOnly: true
+            {{- end }}
+      {{- if .Values.databaseRoles.enabled }}
+      volumes:
+        - name: role-init
+          configMap:
+            name: argus-postgresql-role-init
+            defaultMode: 0550
+      {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: data

@@ -22,7 +22,7 @@ M3 已实现 Secret/Credential、Host/Kubernetes、Bastion Scope、Connector 注
 
 ### 1.2 M6 实现边界
 
-M6 已实现 RemoteAccessGrant/Policy、AccessRequest/Lease、一次性 Ticket、SSH PTY、HTTPS WinRS PowerShell 行模式、跨 Gateway peer 路由和加密录像。Remote Access 继续与 Agent、Card、Automation、PendingAction 和 Execution 隔离；MFA、Step-up、Break Glass、Production 录像保留/恢复和真实 Windows Server 兼容矩阵仍由 M8 阻断。
+M6 已实现 RemoteAccessGrant/Policy、AccessRequest/Lease、一次性 Ticket、SSH PTY、HTTPS WinRS PowerShell 行模式、跨 Gateway peer 路由和加密录像。Remote Access 继续与 Agent、Card、Automation、PendingAction 和 Execution 隔离；M8 已补齐本地 MFA、Step-up、Break Glass 和录像备份恢复，Production 不可变保留与真实 Windows Server 兼容矩阵仍由独立 Validation 清单阻断。
 
 Connector PKI 由 cert-manager 签发。安装器复用同 major/minor 且 patch 不低于版本锁基线的实例，否则安装锁定版本。Server 和 Connector Gateway 都通过独立 ServiceAccount 与最小 CertificateRequest RBAC 使用同一个 namespaced Issuer；Gateway 缺少 Issuer 或权限时必须 fail closed，不能让轮换退化为继续使用旧证书。实例卸载不得删除被其他安装复用的 cert-manager CRD。
 
@@ -436,7 +436,7 @@ Browser
 - 平台超级管理员无权进入企业远程会话。
 - AI、Card、Automation、OpenSandbox 不获得票据。
 - 录像按 asciicast v2 NDJSON 保存 `i/o/r/m` 事件，AES-256-GCM 密文分片写入 Artifact Store，PostgreSQL 保存索引和 SHA-256 Hash Chain；Gateway Pod 不保存唯一录像。
-- M6 Evaluation 遇到 `step_up_mfa` obligation 时 fail closed；Production MFA/Step-up 由 M8 实现并作为发布硬阻断。
+- M6 Evaluation 遇到 `step_up_mfa` obligation 时 fail closed；M8 本地加固通过 AuthenticationAssuranceService 提供 TOTP Step-up，Production 仍需独立环境验证。
 - 剪贴板和文件传输默认关闭，开启时分别授权和审计。
 - 管理员可以终止活动会话，但不能静默接管用户身份。
 - 用户禁用、RoleBinding/DataScope/RemoteAccessGrant/Policy 撤销、授权敏感标签变化或企业停用时，未使用票据立即失效，等待连接的会话被拒绝，活动会话立即终止或进入有上限的安全结束窗口并审计。

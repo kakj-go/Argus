@@ -107,7 +107,7 @@ Setup Token 应具有：
 
 M1 原型中的 Sandbox 页面在 M2 real 模式保持稳定不可用，不得读取 mock；M4 补齐治理 API 后再开放服务连接、镜像、Profile、配额和活动会话。
 
-`我的账号` 在 M2 只用于修改自身密码和撤销 Session，不属于业务管理权限扩张。MFA、恢复码和 Step-up 在 M8 加入。
+`我的账号` 在 M2 只用于修改自身密码和撤销 Session，不属于业务管理权限扩张。M8 已在同一账户边界加入 TOTP、恢复码和 Step-up。
 
 超级管理员界面不出现：
 
@@ -249,7 +249,7 @@ API Key 和 ServiceAccount 固定绑定一个 `enterprise_id`、允许 Tool 和 
 M2 提供本地账号认证，并预留 OIDC/SAML Adapter：
 
 - 密码使用 Argon2id，登录、修改密码和恢复流程统一限流。
-- M2 不实现 MFA，只达到 Evaluation 身份闭环；平台超级管理员 MFA、恢复码和 Step-up 是 M8 Production Profile 的硬阻断。
+- M2 不实现 MFA，只达到 Evaluation 身份闭环；M8 本地加固已实现平台超级管理员 TOTP、恢复码和 Step-up，但 Production Profile 仍因 HA、出口、容量和灾备清单保持阻断。
 - Session 使用 256 位随机 opaque Token，数据库只保存 SHA-256 Hash；空闲超时 30 分钟，绝对有效期 12 小时。
 - Platform 与 Enterprise 使用独立 Host-only Cookie；Production 使用 `Secure + HttpOnly + SameSite=Strict`。所有已认证变更同时执行 Session 绑定 CSRF Token 和 Origin 校验。
 - 用户禁用、密码重置、企业停用时在 PostgreSQL 写入撤销事实并递增相关 AuthorizationVersion；Redis 只传播快速失效通知。

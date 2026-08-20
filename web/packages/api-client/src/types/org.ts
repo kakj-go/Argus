@@ -117,6 +117,10 @@ export interface SessionInfo {
   session: Session;
   user: PlatformUser | EnterpriseUser;
   permissions: Permission[];
+  amr: import("../generated/contracts").AuthenticationMethod[];
+  mfa_state: import("../generated/contracts").MfaState;
+  authenticated_at: string;
+  step_up_expires_at?: string;
 }
 
 export interface InviteUserInput {

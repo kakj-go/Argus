@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { aiSettingsEn, aiSettingsZh } from "./ai-settings";
+import { accountEn, accountZh } from "./account";
 import { chatEn, chatZh } from "./chat";
 import { commonEn, commonZh } from "./common";
 import { governanceEn, governanceZh } from "./governance";
@@ -19,6 +20,7 @@ function keys(value: unknown, prefix = ""): string[] {
 }
 
 const modules = [
+  ["account", accountZh, accountEn],
   ["common", commonZh, commonEn],
   ["shell", shellZh, shellEn],
   ["login", loginZh, loginEn],

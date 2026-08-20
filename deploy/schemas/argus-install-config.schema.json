@@ -21,7 +21,7 @@
       "additionalProperties": false,
       "required": ["profile", "kubeContext", "releaseId", "namespaces", "storageClass", "images", "exposure", "persistence", "cleanup"],
       "properties": {
-        "profile": {"enum": ["evaluation", "production"]},
+        "profile": {"enum": ["evaluation", "local-hardening", "production"]},
         "kubeContext": {"type": "string", "minLength": 1},
         "releaseId": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"},
         "namespaces": {
@@ -56,7 +56,8 @@
             "ingressClassName": {"type": "string"},
             "enterpriseHost": {"type": "string"},
             "platformHost": {"type": "string"},
-            "setupHost": {"type": "string"}
+            "setupHost": {"type": "string"},
+            "connectorHost": {"type": "string"}
           }
         },
         "openSandbox": {
@@ -65,6 +66,24 @@
           "properties": {
             "runtimeClassName": {"type": "string"},
             "allowSharedRuntime": {"type": "boolean"}
+          }
+        },
+        "telemetry": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["collectorVersion", "linuxArm64Uri", "linuxArm64Sha256", "linuxArm64Signature", "linuxArm64ByteSize", "signingKeyId", "signingPublicKey"],
+          "properties": {
+            "collectorVersion": {"type": "string", "minLength": 1},
+            "linuxArm64Uri": {"type": "string", "minLength": 1},
+            "linuxArm64Sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+            "linuxArm64Signature": {"type": "string", "minLength": 1},
+            "linuxArm64ByteSize": {"type": "integer", "minimum": 1},
+            "windowsAmd64Uri": {"type": "string"},
+            "windowsAmd64Sha256": {"type": "string", "pattern": "^$|^[0-9a-fA-F]{64}$"},
+            "windowsAmd64Signature": {"type": "string"},
+            "windowsAmd64ByteSize": {"type": "integer", "minimum": 0},
+            "signingKeyId": {"type": "string", "minLength": 1},
+            "signingPublicKey": {"type": "string", "minLength": 1}
           }
         },
         "persistence": {

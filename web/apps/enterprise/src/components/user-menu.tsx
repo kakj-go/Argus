@@ -26,7 +26,7 @@ export function UserMenu() {
     <PortalUserMenu
       displayName={user.display_name}
       items={[
-        { label: t("shell.profile") },
+        { label: t("shell.profile"), onSelect: () => void navigate({ to: "/account" }) },
         "separator",
         {
           label: t("shell.signOut"),

@@ -9,6 +9,7 @@ export type { components as AgentComponents, paths as AgentPaths } from "./agent
 export type { components as StreamComponents, paths as StreamPaths } from "./stream.js";
 export type { components as TelemetryComponents, paths as TelemetryPaths } from "./telemetry.js";
 export type { components as SetupComponents, paths as SetupPaths } from "./setup.js";
+export type { components as M8apiComponents, paths as M8apiPaths } from "./m8api.js";
 export type { components as PlatformComponents, paths as PlatformPaths } from "./platform.js";
 export type { components as EnterpriseidentityComponents, paths as EnterpriseidentityPaths } from "./enterpriseidentity.js";
 export type { components as EnterpriseauthzComponents, paths as EnterpriseauthzPaths } from "./enterpriseauthz.js";
@@ -77,6 +78,17 @@ export type AuthenticatedSession = import("./setup.js").components["schemas"]["A
 export type LoginResult = import("./setup.js").components["schemas"]["LoginResult"];
 export type CompletePasswordChangeRequest = import("./setup.js").components["schemas"]["CompletePasswordChangeRequest"];
 export type PasswordUpdateRequest = import("./setup.js").components["schemas"]["PasswordUpdateRequest"];
+export type AuthenticationMethod = import("./m8api.js").components["schemas"]["AuthenticationMethod"];
+export type MfaState = import("./m8api.js").components["schemas"]["MfaState"];
+export type MfaChallenge = import("./m8api.js").components["schemas"]["MfaChallenge"];
+export type MfaCompleteRequest = import("./m8api.js").components["schemas"]["MfaCompleteRequest"];
+export type MfaCodeRequest = import("./m8api.js").components["schemas"]["MfaCodeRequest"];
+export type TotpEnrollment = import("./m8api.js").components["schemas"]["TotpEnrollment"];
+export type TotpVerifyRequest = import("./m8api.js").components["schemas"]["TotpVerifyRequest"];
+export type RecoveryCodesResult = import("./m8api.js").components["schemas"]["RecoveryCodesResult"];
+export type StepUpSession = import("./m8api.js").components["schemas"]["StepUpSession"];
+export type BreakGlassSession = import("./m8api.js").components["schemas"]["BreakGlassSession"];
+export type BreakGlassCreate = import("./m8api.js").components["schemas"]["BreakGlassCreate"];
 export type EnterpriseCreate = import("./platform.js").components["schemas"]["EnterpriseCreate"];
 export type EnterpriseUpdate = import("./platform.js").components["schemas"]["EnterpriseUpdate"];
 export type EnterprisePage = import("./platform.js").components["schemas"]["EnterprisePage"];

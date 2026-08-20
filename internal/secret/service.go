@@ -92,7 +92,7 @@ func (service Service) FulfillLease(ctx context.Context, enterpriseID, leaseID u
 		if err != nil || secretRecord.Status != "active" {
 			return ErrCredentialUnavailable
 		}
-		value, err := service.Keyring.Decrypt(Envelope{Provider: version.Provider, KeyID: version.KeyID, KeyVersion: int(version.KeyVersion), WrappedDEK: version.WrappedDek,
+		value, err := service.Keyring.DecryptContext(ctx, Envelope{Provider: version.Provider, KeyID: version.KeyID, KeyVersion: int(version.KeyVersion), WrappedDEK: version.WrappedDek,
 			WrapNonce: version.WrapNonce, Nonce: version.Nonce, Ciphertext: version.Ciphertext, ValueHash: version.ValueHash},
 			secretAAD(enterpriseID, credential.SecretID, version.Version, secretRecord.Type))
 		if err != nil {
@@ -140,7 +140,7 @@ func (service Service) Create(ctx context.Context, actorID string, enterpriseID 
 	}
 	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actorID, "secret.create", idempotencyKey, input, 201, func(q *db.Queries) (SecretRecord, error) {
 		secretID := newUUID()
-		envelope, err := service.Keyring.Encrypt([]byte(input.Value), secretAAD(enterpriseID, secretID, 1, input.Type))
+		envelope, err := service.Keyring.EncryptContext(ctx, []byte(input.Value), secretAAD(enterpriseID, secretID, 1, input.Type))
 		if err != nil {
 			return SecretRecord{}, err
 		}
@@ -200,7 +200,7 @@ func (service Service) Rotate(ctx context.Context, actorID string, enterpriseID,
 		if err != nil {
 			return SecretRecord{}, err
 		}
-		envelope, err := service.Keyring.Encrypt([]byte(input.Value), secretAAD(enterpriseID, secretID, advanced.CurrentVersion, advanced.Type))
+		envelope, err := service.Keyring.EncryptContext(ctx, []byte(input.Value), secretAAD(enterpriseID, secretID, advanced.CurrentVersion, advanced.Type))
 		if err != nil {
 			return SecretRecord{}, err
 		}
@@ -346,7 +346,7 @@ func (service Service) IssueLease(ctx context.Context, actorID string, enterpris
 		if err != nil || secretRecord.Status != "active" {
 			return ErrCredentialUnavailable
 		}
-		value, err := service.Keyring.Decrypt(Envelope{Provider: version.Provider, KeyID: version.KeyID, KeyVersion: int(version.KeyVersion), WrappedDEK: version.WrappedDek,
+		value, err := service.Keyring.DecryptContext(ctx, Envelope{Provider: version.Provider, KeyID: version.KeyID, KeyVersion: int(version.KeyVersion), WrappedDEK: version.WrappedDek,
 			WrapNonce: version.WrapNonce, Nonce: version.Nonce, Ciphertext: version.Ciphertext, ValueHash: version.ValueHash},
 			secretAAD(enterpriseID, credential.SecretID, version.Version, secretRecord.Type))
 		if err != nil {

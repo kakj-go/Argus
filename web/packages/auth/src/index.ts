@@ -3,6 +3,7 @@ import type {
   ArgusApiClient,
   CompletePasswordChangeRequest,
   LoginInput,
+  MfaCompleteRequest,
   SessionInfo,
 } from "@argus/api-client";
 
@@ -28,6 +29,10 @@ export interface AuthState {
   completePasswordChange: (
     client: ArgusApiClient,
     input: CompletePasswordChangeRequest,
+  ) => Promise<SessionInfo>;
+  completeMfaLogin: (
+    client: ArgusApiClient,
+    input: MfaCompleteRequest,
   ) => Promise<SessionInfo>;
   logout: (client: ArgusApiClient) => Promise<void>;
   clear: () => void;
@@ -81,7 +86,11 @@ function createAuthStore(
     hint: loadHint(audience),
     error: null,
     restore: async (client) => {
-      set({ status: "checking", error: null, session: null });
+      set((state) => ({
+        status: state.session ? state.status : "checking",
+        error: null,
+        session: state.session,
+      }));
       try {
         const session = await client.auth.me();
         if (!isAudience(session, audience)) {
@@ -127,6 +136,16 @@ function createAuthStore(
     },
     completePasswordChange: async (client, input) => {
       const session = await client.auth.completePasswordChange(input);
+      if (!isAudience(session, audience)) {
+        await client.auth.logout().catch(() => undefined);
+        throw new Error(`Unexpected ${audience} session audience`);
+      }
+      persistHint(audience, session);
+      set({ status: "authenticated", session, hint: loadHint(audience) });
+      return session;
+    },
+    completeMfaLogin: async (client, input) => {
+      const session = await client.auth.completeMfaLogin(input);
       if (!isAudience(session, audience)) {
         await client.auth.logout().catch(() => undefined);
         throw new Error(`Unexpected ${audience} session audience`);

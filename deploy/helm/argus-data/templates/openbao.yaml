@@ -1,0 +1,196 @@
+{{- if .Values.openbao.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argus-openbao-bootstrap
+  namespace: {{ .Values.namespaces.system }}
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+type: Opaque
+stringData:
+  token: {{ required "openbao.token is required" .Values.openbao.token | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argus-openbao-config
+  namespace: {{ .Values.namespaces.system }}
+data:
+  openbao.hcl: |
+    ui = false
+    disable_mlock = true
+    api_addr = "http://argus-openbao:8200"
+    cluster_addr = "http://argus-openbao-0.argus-openbao:8201"
+    listener "tcp" {
+      address = "0.0.0.0:8200"
+      cluster_address = "0.0.0.0:8201"
+      tls_disable = true
+    }
+    storage "raft" {
+      path = "/openbao/data"
+      node_id = "argus-openbao-0"
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-openbao
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: argus-openbao
+  ports:
+    - {name: http, port: 8200, targetPort: http}
+    - {name: cluster, port: 8201, targetPort: cluster}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: argus-openbao
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  serviceName: argus-openbao
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argus-openbao
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argus-openbao
+        app.kubernetes.io/part-of: argus
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: openbao
+          image: {{ .Values.openbao.image | quote }}
+          args: ["server", "-config=/openbao/config/openbao.hcl"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {name: http, containerPort: 8200}
+            - {name: cluster, containerPort: 8201}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - {name: data, mountPath: /openbao/data}
+            - {name: config, mountPath: /openbao/config, readOnly: true}
+        - name: local-unseal
+          image: {{ .Values.openbao.image | quote }}
+          env:
+            - {name: BAO_ADDR, value: "http://127.0.0.1:8200"}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              state=/openbao/data/argus-bootstrap.json
+              while true; do
+                if test -s "$state"; then
+                  bao status -format=json >/tmp/status.json 2>/dev/null || true
+                  if grep -q '"sealed"[[:space:]]*:[[:space:]]*true' /tmp/status.json; then
+                    unseal_key=$(awk '/"unseal_keys_b64"/ {getline; gsub(/[", ]/, ""); print; exit}' "$state")
+                    test -n "$unseal_key" && bao operator unseal "$unseal_key" >/dev/null 2>&1 || true
+                  fi
+                fi
+                sleep 5
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 5m, memory: 16Mi}
+            limits: {cpu: 50m, memory: 64Mi}
+          volumeMounts:
+            - {name: data, mountPath: /openbao/data, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: argus-openbao-config}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.storageClass }}
+        resources:
+          requests: {storage: {{ .Values.persistence.openbao }}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: argus-openbao-bootstrap
+  namespace: {{ .Values.namespaces.system }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argus-openbao-bootstrap
+        app.kubernetes.io/part-of: argus
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: bootstrap
+          image: {{ .Values.openbao.image | quote }}
+          env:
+            - {name: BAO_ADDR, value: "http://argus-openbao:8200"}
+            - name: ARGUS_OPENBAO_TOKEN
+              valueFrom: {secretKeyRef: {name: argus-openbao-bootstrap, key: token}}
+            - {name: ARGUS_OPENBAO_TRANSIT_KEY, value: {{ .Values.openbao.transitKey | quote }}}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              state=/openbao/data/argus-bootstrap.json
+              until bao status -format=json >/tmp/status.json 2>/dev/null || test -s /tmp/status.json; do sleep 2; done
+              if grep -q '"initialized"[[:space:]]*:[[:space:]]*false' /tmp/status.json; then
+                umask 077
+                bao operator init -key-shares=1 -key-threshold=1 -format=json > "$state"
+              fi
+              test -s "$state"
+              unseal_key=$(awk '/"unseal_keys_b64"/ {getline; gsub(/[", ]/, ""); print; exit}' "$state")
+              root_token=$(sed -n 's/.*"root_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$state")
+              test -n "$unseal_key" && test -n "$root_token"
+              bao operator unseal "$unseal_key" >/dev/null 2>&1 || true
+              bao login "$root_token" >/dev/null
+              bao secrets list -format=json | grep -q '"transit/"' || bao secrets enable transit
+              bao read "transit/keys/$ARGUS_OPENBAO_TRANSIT_KEY" >/dev/null 2>&1 || bao write -f "transit/keys/$ARGUS_OPENBAO_TRANSIT_KEY"
+              cat >/tmp/argus-transit.hcl <<EOF
+              path "transit/encrypt/${ARGUS_OPENBAO_TRANSIT_KEY}" { capabilities = ["update"] }
+              path "transit/decrypt/${ARGUS_OPENBAO_TRANSIT_KEY}" { capabilities = ["update"] }
+              path "transit/keys/${ARGUS_OPENBAO_TRANSIT_KEY}" { capabilities = ["read"] }
+              EOF
+              bao policy write argus-transit /tmp/argus-transit.hcl
+              bao token lookup "$ARGUS_OPENBAO_TOKEN" >/dev/null 2>&1 || bao token create -id="$ARGUS_OPENBAO_TOKEN" -policy=argus-transit -orphan >/dev/null
+          volumeMounts:
+            - {name: data, mountPath: /openbao/data}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: data-argus-openbao-0}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argus-openbao
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: argus-openbao
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [argus-server, argus-worker-agent, argus-worker-action, argus-worker-compaction, argus-worker-automation, argus-worker-sandbox, argus-direct-executor, argus-connector-gateway, argus-openbao-bootstrap]
+      ports:
+        - {protocol: TCP, port: 8200}
+{{- end }}

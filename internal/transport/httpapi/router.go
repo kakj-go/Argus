@@ -23,6 +23,7 @@ import (
 	enterpriseapi "github.com/kakj-go/Argus/internal/gen/openapi/enterpriseidentity"
 	hostapi "github.com/kakj-go/Argus/internal/gen/openapi/hostapi"
 	kubernetesapi "github.com/kakj-go/Argus/internal/gen/openapi/kubernetesapi"
+	m8api "github.com/kakj-go/Argus/internal/gen/openapi/m8api"
 	machineapi "github.com/kakj-go/Argus/internal/gen/openapi/machine"
 	modelapi "github.com/kakj-go/Argus/internal/gen/openapi/modelapi"
 	platformapi "github.com/kakj-go/Argus/internal/gen/openapi/platform"
@@ -52,6 +53,7 @@ type RouterOptions struct {
 	PostgreSQL              Readiness
 	Redis                   Readiness
 	Setup                   *SetupHandler
+	M8                      *M8Handler
 	Platform                *PlatformHandler
 	EnterpriseIdentity      *EnterpriseIdentityHandler
 	EnterpriseAuthorization *EnterpriseAuthorizationHandler
@@ -94,6 +96,10 @@ func NewRouterWithOptions(options RouterOptions) http.Handler {
 			},
 		})
 		setupapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
+	}
+	if options.M8 != nil {
+		strict := m8api.NewStrictHandler(*options.M8, []m8api.StrictMiddlewareFunc{m8RequestContext})
+		m8api.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
 	}
 	if options.Platform != nil {
 		strict := platformapi.NewStrictHandler(*options.Platform, []platformapi.StrictMiddlewareFunc{
@@ -178,6 +184,12 @@ func NewRouterWithOptions(options RouterOptions) http.Handler {
 		telemetryapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
 	}
 	return router
+}
+
+func m8RequestContext(next m8api.StrictHandlerFunc, _ string) m8api.StrictHandlerFunc {
+	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
+		return next(WithRequestContext(ctx, writer, request), writer, request, value)
+	}
 }
 
 func telemetryRequestContext(next telemetryapi.StrictHandlerFunc, _ string) telemetryapi.StrictHandlerFunc {

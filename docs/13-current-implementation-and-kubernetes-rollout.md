@@ -44,7 +44,7 @@
 | 初始化门户                         | Setup Token、系统信息、平台超级管理员和永久锁定已接 real API                                                         | 全新安装可完成真实一次性初始化；不包含 OpenSandbox 配置步骤                                                 |
 | Card Runtime                       | 独立 Origin、CSP/内容哈希/MessagePort 基座已接 CardVersion、公开 RenderPlan、八场景验证和受控 Binding               | 系统/企业 Card 可真实发布、渲染、重新鉴权和触发统一 Action Executor                                         |
 | API Client                         | 生成契约、领域 Port、显式 mock/real Adapter 和 HTTP/SSE/WebSocket Transport 已完成；M2-M7 Path 已接入               | mock/real 配置错误 fail closed；未冻结操作不回退 mock                                                        |
-| `argus-server`                     | M2-M7 身份、资源、Agent/Action、Card、Remote Access、Telemetry 控制与查询 Handler 已接入                            | Evaluation 控制面可用；Production 安全与恢复门禁仍由 M8 阻断                                                |
+| `argus-server`                     | M2-M8 身份、资源、Agent/Action、Card、Remote Access、Telemetry 与本地 MFA/恢复 Handler 已接入                     | Evaluation 与 local-hardening 可用；Production Profile 继续 fail closed                                     |
 | Worker/Gateway/Telemetry/Connector | Worker、Direct Executor、Connector Gateway/Connector 和 Telemetry ingest/writer/query 已实现                       | 外部副作用先对账；远程访问与 Collector 命令类型化，Redis 不保存唯一事实                                     |
 | `argusctl`                         | 已实现 preflight、plan、镜像、install、status、verify、tunnel、uninstall                                             | 可安装和验证 Evaluation；Production 安装硬阻断                                                              |
 | OpenAPI/protobuf/migration         | M0 门禁、M2-M7 Path/DTO、Connector/Direct Executor/Telemetry protobuf 和六批 Goose/sqlc Schema 已完成               | Evaluation 第一版领域契约与数据模型已落地                                                                   |
@@ -302,7 +302,7 @@ Operator 是集群级或共享能力时，`argusctl` 必须检测兼容版本和
 - Direct Executor 只访问任务依赖和经校验的公网 SSH/WinRM；必须拒绝私网、环回、链路本地、云元数据、集群网段和平台内部地址。
 - Connector Gateway 可访问 PostgreSQL、Redis、Artifact Store；Connector 和 Remote Listener 使用独立入口策略。
 - Telemetry Ingest 只通过窄控制数据 Adapter 读取 Collector/Certificate/Route 身份并访问 Redis/Kafka，不直接写 ClickHouse，也不能修改资源、IAM 或 Action 事实。
-- Writer 只通过窄结算 Adapter 读取 Retention、登记 DLQ、累计 Usage，并消费 Kafka、写 ClickHouse；Evaluation 仍使用 PostgreSQL Adapter，Production 的独立 Login Role 或内部 mTLS RPC 由 M8 ADR 固化。
+- Writer 只通过窄结算 Adapter 读取 Retention、登记 DLQ、累计 Usage，并消费 Kafka、写 ClickHouse；`local-hardening` 已为 Ingest/Writer 签发独立表级最小权限 PostgreSQL Login，Production 凭证轮换仍需环境验证。
 - Telemetry Query 只使用 ClickHouse 只读账号。
 - Sandbox 默认只访问受控 Artifact Bucket 和明确批准的网络目标，不访问 Server 数据库、Gateway、ClickHouse 或 Kubernetes API。
 
@@ -353,15 +353,14 @@ argus-e2e-<run-id>-observability
 里程碑唯一口径为[端到端实现计划](./15-end-to-end-implementation-plan.md)和[分阶段任务文件](./plans/README.md)，不在本盘点文档维护另一套编号。
 
 - M0 契约与文档、M1 前端/API 基座、M2 身份授权、M3 资源/Connector、M4 Agent/确定性执行、M5 Card、M6 Remote Access 和 M7 Telemetry Evaluation 闭环均已完成。
-- M8 继续负责 Production MFA/Step-up、备份恢复、容量、安全、供应链和全链路发布门禁。
+- M8 本地范围已实现 MFA/Step-up、OpenBao Transit、备份恢复、升级和供应链基座；Production HA、容量、固定出口和跨集群灾备转入独立 Validation 清单。
 
 ## 12. 当前优先级结论
 
-截至 2026-08-19，M0-M7 已完成，当前优先级进入 M8 Production 就绪：
+截至 2026-08-19，M0-M7 已完成，M8 本地加固实现已进入最终门禁验证：
 
-1. 完成平台超级管理员 MFA、Step-up、Break Glass 与账号恢复硬门禁。
-2. 完成 PostgreSQL/Kafka/ClickHouse HA、备份恢复、容量和故障演练。
-3. 完成外部 KMS/HSM、Connector/Telemetry PKI 根轮换、固定出口和供应链签名门禁。
-4. 验证 Linux amd64 与真实 Windows 支持矩阵，并完成 Remote Access Production 保留/恢复。
+1. 运行 `make e2e-m8-k8s`，归档 OpenBao、故障注入、备份和新 Namespace 恢复证据。
+2. 运行 `make release-local`，归档 SBOM、漏洞、License、离线 Manifest 和本地签名。
+3. 保持 Production Profile fail closed，并维护 HA、容量、固定出口、KMS HA、AMD64/Windows 和跨集群灾备清单。
 
 详细顺序、任务拆分和阶段退出标准见[端到端实现计划](./15-end-to-end-implementation-plan.md)与[分阶段任务文件](./plans/README.md)。

@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -952,7 +953,11 @@ func (catalog fixtureCatalog) sample(t *testing.T, raw any, documentID string, m
 				value = cloneJSON(t, enumValues[index])
 			} else if index > 0 {
 				if textValue, ok := value.(string); ok {
-					value = fmt.Sprintf("%s%d", textValue, index+1)
+					suffix := strconv.Itoa(index + 1)
+					if maximum, ok := numberValue(resolvedItem["maxLength"]); ok && len(textValue)+len(suffix) > int(maximum) {
+						textValue = textValue[:int(maximum)-len(suffix)]
+					}
+					value = textValue + suffix
 				}
 			}
 			result = append(result, value)
@@ -1155,6 +1160,8 @@ func schemaString(node map[string]any, mode fixtureMode) string {
 		{"^[a-z][a-z0-9_.]+$", "resource.read"},
 		{"^[a-z][a-z0-9]*", "environment"},
 		{"^[a-z0-9]", "production"},
+		{"^[A-Z2-7]{16,128}$", "JBSWY3DPEHPK3PXP"},
+		{"^[0-9]{6}$", "123456"},
 		{"^\\$", "$.items"},
 		{"^[A-Za-z0-9", "request_00000001"},
 		{"^sha256:[a-f0-9]{64}$", "sha256:" + strings.Repeat("a", 64)},

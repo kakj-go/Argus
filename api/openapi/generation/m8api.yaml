@@ -1,0 +1,28 @@
+openapi: 3.1.0
+info: {title: Argus Local Hardening API, version: 1.0.0, license: {name: Proprietary, identifier: LicenseRef-Proprietary}}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+paths:
+  "/{audience}/account/mfa/totp/enroll": {$ref: "../argus.yaml#/paths/~1{audience}~1account~1mfa~1totp~1enroll"}
+  "/{audience}/account/mfa/totp/verify": {$ref: "../argus.yaml#/paths/~1{audience}~1account~1mfa~1totp~1verify"}
+  "/{audience}/account/mfa/totp/disable": {$ref: "../argus.yaml#/paths/~1{audience}~1account~1mfa~1totp~1disable"}
+  "/{audience}/account/mfa/recovery-codes/regenerate": {$ref: "../argus.yaml#/paths/~1{audience}~1account~1mfa~1recovery-codes~1regenerate"}
+  "/{audience}/auth/mfa/complete": {$ref: "../argus.yaml#/paths/~1{audience}~1auth~1mfa~1complete"}
+  "/{audience}/auth/step-up": {$ref: "../argus.yaml#/paths/~1{audience}~1auth~1step-up"}
+  /enterprise/break-glass-sessions: {$ref: "../argus.yaml#/paths/~1enterprise~1break-glass-sessions"}
+  "/enterprise/break-glass-sessions/{id}/revoke": {$ref: "../argus.yaml#/paths/~1enterprise~1break-glass-sessions~1{id}~1revoke"}
+components:
+  securitySchemes: {sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}}
+  schemas:
+    AuthenticationMethod: {$ref: ../components/m8.yaml#/components/schemas/AuthenticationMethod}
+    MfaState: {$ref: ../components/m8.yaml#/components/schemas/MfaState}
+    MfaChallenge: {$ref: ../components/m8.yaml#/components/schemas/MfaChallenge}
+    MfaCompleteRequest: {$ref: ../components/m8.yaml#/components/schemas/MfaCompleteRequest}
+    TotpEnrollment: {$ref: ../components/m8.yaml#/components/schemas/TotpEnrollment}
+    TotpVerifyRequest: {$ref: ../components/m8.yaml#/components/schemas/TotpVerifyRequest}
+    MfaCodeRequest: {$ref: ../components/m8.yaml#/components/schemas/MfaCodeRequest}
+    RecoveryCodesResult: {$ref: ../components/m8.yaml#/components/schemas/RecoveryCodesResult}
+    StepUpSession: {$ref: ../components/m8.yaml#/components/schemas/StepUpSession}
+    BreakGlassSession: {$ref: ../components/m8.yaml#/components/schemas/BreakGlassSession}
+    BreakGlassCreate: {$ref: ../components/m8.yaml#/components/schemas/BreakGlassCreate}
+    AuthenticatedSession: {$ref: ../components/m2.yaml#/components/schemas/AuthenticatedSession}

@@ -49,12 +49,17 @@ type InstallSpec struct {
 }
 
 type TelemetryArtifacts struct {
-	CollectorVersion   string `json:"collectorVersion"`
-	LinuxARM64URI      string `json:"linuxArm64Uri"`
-	LinuxARM64SHA256   string `json:"linuxArm64Sha256"`
-	WindowsAMD64URI    string `json:"windowsAmd64Uri"`
-	WindowsAMD64SHA256 string `json:"windowsAmd64Sha256"`
-	SigningKeyID       string `json:"signingKeyId"`
+	CollectorVersion      string `json:"collectorVersion"`
+	LinuxARM64URI         string `json:"linuxArm64Uri"`
+	LinuxARM64SHA256      string `json:"linuxArm64Sha256"`
+	LinuxARM64Signature   string `json:"linuxArm64Signature"`
+	LinuxARM64ByteSize    uint64 `json:"linuxArm64ByteSize"`
+	WindowsAMD64URI       string `json:"windowsAmd64Uri"`
+	WindowsAMD64SHA256    string `json:"windowsAmd64Sha256"`
+	WindowsAMD64Signature string `json:"windowsAmd64Signature"`
+	WindowsAMD64ByteSize  uint64 `json:"windowsAmd64ByteSize"`
+	SigningKeyID          string `json:"signingKeyId"`
+	SigningPublicKey      string `json:"signingPublicKey"`
 }
 
 type Namespaces struct {
@@ -113,8 +118,8 @@ func (c *InstallConfig) Validate() error {
 	if c.APIVersion != installAPIVersion || c.Kind != installKind {
 		return fmt.Errorf("config must be %s %s", installAPIVersion, installKind)
 	}
-	if c.Spec.Profile != "evaluation" && c.Spec.Profile != "production" {
-		return fmt.Errorf("spec.profile must be evaluation or production")
+	if !contains([]string{"evaluation", "local-hardening", "production"}, c.Spec.Profile) {
+		return fmt.Errorf("spec.profile must be evaluation, local-hardening, or production")
 	}
 	for name, value := range map[string]string{
 		"metadata.name":                 c.Metadata.Name,
@@ -133,14 +138,18 @@ func (c *InstallConfig) Validate() error {
 	if c.Spec.Images.Registry == "" || c.Spec.Images.Tag == "" {
 		return fmt.Errorf("spec.images.registry and spec.images.tag are required")
 	}
-	if c.Spec.Telemetry.CollectorVersion == "" || c.Spec.Telemetry.LinuxARM64URI == "" ||
-		c.Spec.Telemetry.WindowsAMD64URI == "" || c.Spec.Telemetry.SigningKeyID == "" {
-		return fmt.Errorf("spec.telemetry Collector version, artifact URIs, and signing key ID are required")
+	if c.Spec.Telemetry.CollectorVersion == "" || c.Spec.Telemetry.LinuxARM64URI == "" || c.Spec.Telemetry.LinuxARM64Signature == "" ||
+		c.Spec.Telemetry.LinuxARM64ByteSize == 0 || c.Spec.Telemetry.SigningKeyID == "" || c.Spec.Telemetry.SigningPublicKey == "" {
+		return fmt.Errorf("spec.telemetry Collector version, signed Linux arm64 artifact, and signing key are required")
 	}
-	for name, value := range map[string]string{
-		"spec.telemetry.linuxArm64Sha256":   c.Spec.Telemetry.LinuxARM64SHA256,
-		"spec.telemetry.windowsAmd64Sha256": c.Spec.Telemetry.WindowsAMD64SHA256,
-	} {
+	digests := map[string]string{"spec.telemetry.linuxArm64Sha256": c.Spec.Telemetry.LinuxARM64SHA256}
+	if c.Spec.Profile != "local-hardening" || c.Spec.Telemetry.WindowsAMD64URI != "" || c.Spec.Telemetry.WindowsAMD64SHA256 != "" || c.Spec.Telemetry.WindowsAMD64Signature != "" || c.Spec.Telemetry.WindowsAMD64ByteSize != 0 {
+		if c.Spec.Telemetry.WindowsAMD64URI == "" || c.Spec.Telemetry.WindowsAMD64Signature == "" || c.Spec.Telemetry.WindowsAMD64ByteSize == 0 {
+			return fmt.Errorf("complete spec.telemetry Windows artifact metadata is required outside local-hardening")
+		}
+		digests["spec.telemetry.windowsAmd64Sha256"] = c.Spec.Telemetry.WindowsAMD64SHA256
+	}
+	for name, value := range digests {
 		if matched, _ := regexp.MatchString(`^[0-9a-fA-F]{64}$`, value); !matched {
 			return fmt.Errorf("%s must be a SHA-256 hex digest", name)
 		}

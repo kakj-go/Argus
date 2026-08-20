@@ -39,10 +39,19 @@ type bastionPlan struct {
 }
 
 type bastionSnapshot struct {
-	ResourceVersion   int64  `json:"resource_version"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	MemberCount       int64  `json:"member_count"`
-	Status            string `json:"status"`
+	ResourceVersion   int64 `json:"resource_version"`
+	FencingGeneration int64 `json:"fencing_generation"`
+	MemberCount       int64 `json:"member_count"`
+	// Replacement is intentionally tolerant of the expected offline transition
+	// between preview and commit. Other lifecycle actions retain exact status.
+	Status string `json:"status"`
+}
+
+func bastionSnapshotStatus(operation, status string) string {
+	if operation == "replace" && (status == "suspected_offline" || status == "offline" || status == "uninstalled") {
+		return "disconnected"
+	}
+	return status
 }
 
 type connectorUninstallPlan struct {
@@ -143,7 +152,7 @@ func (service BastionService) PreviewLifecycle(ctx context.Context, subject reso
 	if operation == "replace" && current.Status != "offline" && current.Status != "uninstalled" && current.Status != "suspected_offline" {
 		return db.PendingAction{}, ErrBastionState
 	}
-	snapshot := bastionSnapshot{ResourceVersion: current.ResourceVersion, FencingGeneration: current.FencingGeneration, MemberCount: current.MemberCount, Status: current.Status}
+	snapshot := bastionSnapshot{ResourceVersion: current.ResourceVersion, FencingGeneration: current.FencingGeneration, MemberCount: current.MemberCount, Status: bastionSnapshotStatus(operation, current.Status)}
 	plan := bastionPlan{Operation: operation, ScopeID: scopeID, HostID: current.ConnectorHostID.UUID, Input: BastionInput{ExpectedVersion: expectedVersion}}
 	risk, verb := "dangerous", "Delete"
 	if operation == "replace" {
@@ -251,7 +260,7 @@ func (service BastionService) RevalidateAction(ctx context.Context, q *db.Querie
 		_, hash, err := resource.ComputeLabelImpact(ctx, q, action.EnterpriseID, "host", plan.HostID.String(), before, after)
 		return hash, err
 	}
-	snapshot := bastionSnapshot{ResourceVersion: current.ResourceVersion, FencingGeneration: current.FencingGeneration, MemberCount: current.MemberCount, Status: current.Status}
+	snapshot := bastionSnapshot{ResourceVersion: current.ResourceVersion, FencingGeneration: current.FencingGeneration, MemberCount: current.MemberCount, Status: bastionSnapshotStatus(plan.Operation, current.Status)}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, err

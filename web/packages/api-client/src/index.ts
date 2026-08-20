@@ -11,6 +11,14 @@ export type {
   BastionScopePage,
   BastionPreviewCreate,
   CompletePasswordChangeRequest,
+  MfaCompleteRequest,
+  MfaCodeRequest,
+  TotpEnrollment,
+  TotpVerifyRequest,
+  RecoveryCodesResult,
+  StepUpSession,
+  BreakGlassSession,
+  BreakGlassCreate,
   Automation,
   AutomationRun,
   AutomationWrite,
@@ -103,6 +111,7 @@ export {
   ClientConfigurationError,
   ClientOperationUnavailableError,
   PasswordChangeRequiredError,
+  MfaRequiredError,
   StreamTerminatedError,
 } from "./transport/errors";
 export { ApiProvider, useApi } from "./react";

@@ -14,6 +14,10 @@ const LoginPage = lazyRouteComponent(
   () => import("./pages/login-page"),
   "LoginPage",
 );
+const AccountPage = lazyRouteComponent(
+  () => import("./pages/account-page"),
+  "AccountPage",
+);
 const ConversationPage = lazyRouteComponent(
   () => import("./pages/conversation-page"),
   "ConversationPage",
@@ -157,6 +161,11 @@ const automationsRoute = createRoute({
   path: "/automations",
   component: AutomationsPage,
 });
+const accountRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "/account",
+  component: AccountPage,
+});
 const settingsOrgRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "/settings/org",
@@ -204,6 +213,7 @@ const routeTree = rootRoute.addChildren([
       tasksRoute,
       approvalsRoute,
       automationsRoute,
+      accountRoute,
       settingsOrgRoute,
       settingsAiRoute,
       settingsInteractiveCardsRoute,

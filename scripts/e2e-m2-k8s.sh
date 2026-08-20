@@ -29,11 +29,20 @@ WORK_DIR=$(mktemp -d)
 PLATFORM_JAR="${WORK_DIR}/platform.cookies"
 ENTERPRISE_JAR="${WORK_DIR}/enterprise.cookies"
 OTHER_ENTERPRISE_JAR="${WORK_DIR}/other-enterprise.cookies"
+PLATFORM_RECOVERY_FILE="${WORK_DIR}/platform-recovery-codes.json"
+ENTERPRISE_RECOVERY_FILE="${WORK_DIR}/enterprise-recovery-codes.json"
+PLATFORM_TOTP_FILE="${WORK_DIR}/platform-totp-secret"
+ENTERPRISE_TOTP_FILE="${WORK_DIR}/enterprise-totp-secret"
+PLATFORM_RECOVERY_INDEX=0
+ENTERPRISE_RECOVERY_INDEX=0
+PLATFORM_LAST_TOTP_CODE=""
+ENTERPRISE_LAST_TOTP_CODE=""
 PF_PIDS=()
 API_PF_PID=""
 WEB_PF_PID=""
 LEASE_ACQUIRED=false
 NAMESPACES_CREATED=false
+E2E_COMPLETED=false
 RESPONSE_FILE=""
 LAST_REQUEST_NAME="none"
 M7_HELM_ARGS=()
@@ -93,6 +102,7 @@ diagnostics() {
 
 cleanup() {
   status=$?
+  if [[ $status -eq 0 && "$E2E_COMPLETED" != true ]]; then status=1; fi
   set +e
   diagnostics
   unset POSTGRES_PASSWORD REDIS_PASSWORD
@@ -409,8 +419,8 @@ install_argus() {
     --set-string runtime.objectStoreAccessKey="$OBJECT_STORE_ACCESS" \
     --set-string runtime.objectStoreSecretKey="$OBJECT_STORE_SECRET" \
     --set-string runtime.secureCookies=false \
-	--set-string runtime.telemetryToolCatalogEnabled="$telemetry_catalog_enabled" \
-    "${M7_HELM_ARGS[@]}" >/dev/null
+		--set runtime.telemetryToolCatalogEnabled="$telemetry_catalog_enabled" \
+    "${M7_HELM_ARGS[@]+"${M7_HELM_ARGS[@]}"}" >/dev/null
   k -n "$SYSTEM_NS" get job argus-postgresql-migration -o jsonpath='{.status.succeeded}' | grep -q '^1$'
 }
 
@@ -472,25 +482,133 @@ request() {
   if [[ "$status" != "$expected" ]]; then
     jq -c '{code: .code, message_key: .message_key}' "$RESPONSE_FILE" >&2 2>/dev/null || true
     if [[ -n "${ARTIFACT_DIR:-}" && -f "$RESPONSE_FILE" ]]; then
-      jq 'del(.temporary_password, .password_change_challenge.temporary_password, .authenticated_session.csrf_token, .csrf_token)' "$RESPONSE_FILE" \
+      jq 'del(.temporary_password, .password_change_challenge.temporary_password, .authenticated_session.csrf_token, .csrf_token, .mfa_challenge.challenge_id, .enrollment_id, .secret, .otpauth_uri, .codes)' "$RESPONSE_FILE" \
         >"${ARTIFACT_DIR}/${name}-response.json" 2>/dev/null || cp "$RESPONSE_FILE" "${ARTIFACT_DIR}/${name}-response.json"
     fi
     fail "${name}: expected HTTP ${expected}, got ${status}"
   fi
 }
 
+next_mfa_proof() {
+  local audience=$1 file index
+  if [[ "$audience" == "platform" ]]; then
+    file=$PLATFORM_RECOVERY_FILE
+    index=$PLATFORM_RECOVERY_INDEX
+    PLATFORM_RECOVERY_INDEX=$((PLATFORM_RECOVERY_INDEX + 1))
+  else
+    file=$ENTERPRISE_RECOVERY_FILE
+    index=$ENTERPRISE_RECOVERY_INDEX
+    ENTERPRISE_RECOVERY_INDEX=$((ENTERPRISE_RECOVERY_INDEX + 1))
+  fi
+  [[ -f "$file" ]] || fail "${audience} MFA recovery codes are unavailable"
+  MFA_PROOF=$(jq -er --argjson index "$index" '.codes[$index]' "$file")
+}
+
+enroll_mfa() {
+  local audience=$1 jar=$2 csrf=$3 origin=$4 enrollment_id secret code recovery_file totp_file
+  request "${audience}-mfa-enroll" 201 POST "/${audience}/account/mfa/totp/enroll" "$jar" - \
+    --header "Origin: ${origin}" --header "X-CSRF-Token: ${csrf}" --header "Idempotency-Key: ${audience}-mfa-${RUN_ID}"
+  enrollment_id=$(jq -er '.enrollment_id' "$RESPONSE_FILE")
+  secret=$(jq -er '.secret' "$RESPONSE_FILE")
+  code=$(printf '%s' "$secret" | node scripts/totp-code.mjs)
+  request "${audience}-mfa-verify" 200 POST "/${audience}/account/mfa/totp/verify" "$jar" \
+    "$(jq -nc --arg enrollment "$enrollment_id" --arg code "$code" '{enrollment_id:$enrollment,code:$code}')" \
+    --header "Origin: ${origin}" --header "X-CSRF-Token: ${csrf}"
+  jq -e '.codes | length == 10' "$RESPONSE_FILE" >/dev/null
+  if [[ "$audience" == "platform" ]]; then
+    recovery_file=$PLATFORM_RECOVERY_FILE
+    totp_file=$PLATFORM_TOTP_FILE
+    PLATFORM_LAST_TOTP_CODE=$code
+    export ARGUS_E2E_PLATFORM_TOTP_LAST_CODE=$code
+  else
+    recovery_file=$ENTERPRISE_RECOVERY_FILE
+    totp_file=$ENTERPRISE_TOTP_FILE
+    ENTERPRISE_LAST_TOTP_CODE=$code
+    export ARGUS_E2E_ENTERPRISE_TOTP_LAST_CODE=$code
+  fi
+  cp "$RESPONSE_FILE" "$recovery_file"
+  printf '%s' "$secret" >"$totp_file"
+  chmod 600 "$recovery_file" "$totp_file"
+  if [[ "$audience" == "platform" ]]; then
+    export ARGUS_E2E_PLATFORM_TOTP_SECRET=$secret
+  else
+    export ARGUS_E2E_ENTERPRISE_TOTP_SECRET=$secret
+  fi
+  unset enrollment_id secret code
+}
+
+next_totp_proof() {
+  local audience=$1 file last code
+  if [[ "$audience" == "platform" ]]; then
+    file=$PLATFORM_TOTP_FILE
+    last=$PLATFORM_LAST_TOTP_CODE
+  else
+    file=$ENTERPRISE_TOTP_FILE
+    last=$ENTERPRISE_LAST_TOTP_CODE
+  fi
+  [[ -f "$file" ]] || fail "${audience} TOTP secret is unavailable"
+  while true; do
+    code=$(node scripts/totp-code.mjs <"$file")
+    [[ "$code" != "$last" ]] && break
+    sleep 1
+  done
+  MFA_PROOF=$code
+  if [[ "$audience" == "platform" ]]; then
+    PLATFORM_LAST_TOTP_CODE=$code
+    export ARGUS_E2E_PLATFORM_TOTP_LAST_CODE=$code
+  else
+    ENTERPRISE_LAST_TOTP_CODE=$code
+    export ARGUS_E2E_ENTERPRISE_TOTP_LAST_CODE=$code
+  fi
+}
+
+step_up_enterprise_session() {
+  local code
+  next_totp_proof enterprise
+  code=$MFA_PROOF
+  request enterprise-step-up 200 POST /enterprise/auth/step-up "$ENTERPRISE_JAR" \
+    "$(jq -nc --arg code "$code" '{code:$code}')" \
+    --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
+  jq -e '.amr | index("totp") != null' "$RESPONSE_FILE" >/dev/null
+  unset code
+}
+
 platform_login() {
   request platform-login 200 POST /platform/auth/login "$PLATFORM_JAR" \
     "$(jq -nc --arg username "$PLATFORM_USERNAME" --arg password "$PLATFORM_PASSWORD" '{username:$username,password:$password}')" \
     --header "Origin: ${PLATFORM_ORIGIN}"
-  PLATFORM_CSRF=$(jq -er '.authenticated_session.csrf_token' "$RESPONSE_FILE")
+  if [[ $(jq -r '.status' "$RESPONSE_FILE") == "mfa_required" ]]; then
+    local challenge code
+    challenge=$(jq -er '.mfa_challenge.challenge_id' "$RESPONSE_FILE")
+    if [[ -f "$PLATFORM_TOTP_FILE" ]]; then next_totp_proof platform; else next_mfa_proof platform; fi
+    code=$MFA_PROOF
+    request platform-mfa-complete 200 POST /platform/auth/mfa/complete "$PLATFORM_JAR" \
+      "$(jq -nc --arg challenge "$challenge" --arg code "$code" '{challenge_id:$challenge,code:$code}')" \
+      --header "Origin: ${PLATFORM_ORIGIN}"
+    PLATFORM_CSRF=$(jq -er '.csrf_token' "$RESPONSE_FILE")
+    unset challenge code
+  else
+    PLATFORM_CSRF=$(jq -er '.authenticated_session.csrf_token' "$RESPONSE_FILE")
+  fi
 }
 
 enterprise_login() {
   request enterprise-login 200 POST /enterprise/auth/login "$ENTERPRISE_JAR" \
     "$(jq -nc --arg username "$ENTERPRISE_USERNAME" --arg password "$ENTERPRISE_PASSWORD" '{username:$username,password:$password}')" \
     --header "Origin: ${ENTERPRISE_ORIGIN}"
-  ENTERPRISE_CSRF=$(jq -er '.authenticated_session.csrf_token' "$RESPONSE_FILE")
+  if [[ $(jq -r '.status' "$RESPONSE_FILE") == "mfa_required" ]]; then
+    local challenge code
+    challenge=$(jq -er '.mfa_challenge.challenge_id' "$RESPONSE_FILE")
+    next_totp_proof enterprise
+    code=$MFA_PROOF
+    request enterprise-mfa-complete 200 POST /enterprise/auth/mfa/complete "$ENTERPRISE_JAR" \
+      "$(jq -nc --arg challenge "$challenge" --arg code "$code" '{challenge_id:$challenge,code:$code}')" \
+      --header "Origin: ${ENTERPRISE_ORIGIN}"
+    ENTERPRISE_CSRF=$(jq -er '.csrf_token' "$RESPONSE_FILE")
+    unset challenge code
+  else
+    ENTERPRISE_CSRF=$(jq -er '.authenticated_session.csrf_token' "$RESPONSE_FILE")
+  fi
 }
 
 run_api_flow() {
@@ -510,6 +628,11 @@ run_api_flow() {
   platform_login
   request platform-session 200 GET /platform/auth/session "$PLATFORM_JAR" - --header "Origin: ${PLATFORM_ORIGIN}"
   jq -e '.session.audience == "platform" and (.csrf_token | length) >= 32' "$RESPONSE_FILE" >/dev/null
+  if [[ $(jq -r '.mfa_state' "$RESPONSE_FILE") == "enrollment_required" ]]; then
+    enroll_mfa platform "$PLATFORM_JAR" "$PLATFORM_CSRF" "$PLATFORM_ORIGIN"
+    request platform-session-mfa-enabled 200 GET /platform/auth/session "$PLATFORM_JAR" - --header "Origin: ${PLATFORM_ORIGIN}"
+    jq -e '.mfa_state == "enabled"' "$RESPONSE_FILE" >/dev/null
+  fi
   request wrong-enterprise-audience 401 GET /enterprise/auth/session "$PLATFORM_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
 
   request enterprise-create 201 POST /platform/enterprises "$PLATFORM_JAR" \
@@ -635,6 +758,12 @@ run_api_flow() {
 
   run_real_playwright
 
+  request enterprise-session-before-mfa 200 GET /enterprise/auth/session "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
+  if [[ $(jq -r '.mfa_state' "$RESPONSE_FILE") != "enabled" ]]; then
+    enroll_mfa enterprise "$ENTERPRISE_JAR" "$ENTERPRISE_CSRF" "$ENTERPRISE_ORIGIN"
+  fi
+  step_up_enterprise_session
+
   if declare -F run_m3_api_flow >/dev/null; then
     run_m3_api_flow
   fi
@@ -686,15 +815,21 @@ run_api_flow() {
   request disabled-api-key 403 GET /enterprise/departments - - --header "Authorization: Bearer ${SUSPEND_API_KEY}"
 
   unset PLATFORM_PASSWORD ENTERPRISE_PASSWORD OTHER_ENTERPRISE_PASSWORD PLATFORM_CSRF ENTERPRISE_CSRF OTHER_ENTERPRISE_CSRF SUSPEND_API_KEY SETUP_TOKEN IDEMPOTENCY_KEY CURSOR_KEY PENDING_ACTION_KEY SECRET_KEK SECRET_KEK_KEYRING
+  unset ARGUS_E2E_PLATFORM_TOTP_SECRET ARGUS_E2E_ENTERPRISE_TOTP_SECRET ARGUS_E2E_PLATFORM_TOTP_LAST_CODE ARGUS_E2E_ENTERPRISE_TOTP_LAST_CODE
 }
 
 run_real_playwright() {
   log "running Playwright against four real origins"
+  local platform_mfa_code
+  next_mfa_proof platform
+  platform_mfa_code=$MFA_PROOF
   ARGUS_E2E_EXTERNAL=1 ARGUS_M2_E2E=1 \
     ARGUS_M2_PLATFORM_USERNAME="$PLATFORM_USERNAME" ARGUS_M2_PLATFORM_PASSWORD="$PLATFORM_PASSWORD" \
+    ARGUS_M2_PLATFORM_MFA_CODE="$platform_mfa_code" \
     ARGUS_M2_ENTERPRISE_USERNAME="$ENTERPRISE_USERNAME" ARGUS_M2_ENTERPRISE_PASSWORD="$ENTERPRISE_PASSWORD" \
     ARGUS_E2E_ARTIFACTS="$ARTIFACT_DIR/playwright" \
     pnpm --filter @argus/enterprise exec playwright test e2e/m2-real.spec.ts --workers=1
+  unset platform_mfa_code
 }
 
 main() {
@@ -724,6 +859,7 @@ main() {
   run_api_flow
   phase_label=$(printf '%s' "$PHASE" | tr '[:lower:]' '[:upper:]')
   log "${phase_label} Kubernetes E2E passed; diagnostics: ${ARTIFACT_DIR}"
+  E2E_COMPLETED=true
 }
 
 if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" ]]; then

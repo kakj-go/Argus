@@ -71,14 +71,15 @@ func (q *Queries) CreateAIModel(ctx context.Context, arg CreateAIModelParams) (A
 }
 
 const createAIModelCredential = `-- name: CreateAIModelCredential :one
-INSERT INTO ai_model_credentials (id, model_revision_id, enterprise_id, key_id, key_version, wrapped_dek, wrap_nonce, nonce, ciphertext, value_hash)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, model_revision_id, enterprise_id, key_id, key_version, wrapped_dek, wrap_nonce, nonce, ciphertext, value_hash, created_at
+INSERT INTO ai_model_credentials (id, model_revision_id, enterprise_id, provider, key_id, key_version, wrapped_dek, wrap_nonce, nonce, ciphertext, value_hash)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, model_revision_id, enterprise_id, key_id, key_version, wrapped_dek, wrap_nonce, nonce, ciphertext, value_hash, created_at, provider
 `
 
 type CreateAIModelCredentialParams struct {
 	ID              uuid.UUID `json:"id"`
 	ModelRevisionID uuid.UUID `json:"model_revision_id"`
 	EnterpriseID    uuid.UUID `json:"enterprise_id"`
+	Provider        string    `json:"provider"`
 	KeyID           string    `json:"key_id"`
 	KeyVersion      int32     `json:"key_version"`
 	WrappedDek      []byte    `json:"wrapped_dek"`
@@ -93,6 +94,7 @@ func (q *Queries) CreateAIModelCredential(ctx context.Context, arg CreateAIModel
 		arg.ID,
 		arg.ModelRevisionID,
 		arg.EnterpriseID,
+		arg.Provider,
 		arg.KeyID,
 		arg.KeyVersion,
 		arg.WrappedDek,
@@ -114,6 +116,7 @@ func (q *Queries) CreateAIModelCredential(ctx context.Context, arg CreateAIModel
 		&i.Ciphertext,
 		&i.ValueHash,
 		&i.CreatedAt,
+		&i.Provider,
 	)
 	return i, err
 }
@@ -404,7 +407,7 @@ func (q *Queries) GetAIModel(ctx context.Context, arg GetAIModelParams) (AiModel
 }
 
 const getAIModelCredential = `-- name: GetAIModelCredential :one
-SELECT id, model_revision_id, enterprise_id, key_id, key_version, wrapped_dek, wrap_nonce, nonce, ciphertext, value_hash, created_at FROM ai_model_credentials WHERE model_revision_id = $1 AND enterprise_id = $2
+SELECT id, model_revision_id, enterprise_id, key_id, key_version, wrapped_dek, wrap_nonce, nonce, ciphertext, value_hash, created_at, provider FROM ai_model_credentials WHERE model_revision_id = $1 AND enterprise_id = $2
 `
 
 type GetAIModelCredentialParams struct {
@@ -427,6 +430,7 @@ func (q *Queries) GetAIModelCredential(ctx context.Context, arg GetAIModelCreden
 		&i.Ciphertext,
 		&i.ValueHash,
 		&i.CreatedAt,
+		&i.Provider,
 	)
 	return i, err
 }

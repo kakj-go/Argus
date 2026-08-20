@@ -1,0 +1,689 @@
+openapi: 3.1.0
+info:
+  title: Argus Local Hardening API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /{audience}/account/mfa/totp/enroll:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    post:
+      operationId: enrollTotp
+      summary: Start a one-time TOTP enrollment.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: One-time enrollment material.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TotpEnrollment'
+        default:
+          $ref: '#/components/responses/Error'
+  /{audience}/account/mfa/totp/verify:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    post:
+      operationId: verifyTotpEnrollment
+      summary: Verify and enable TOTP.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpVerifyRequest'
+      responses:
+        '200':
+          description: Recovery codes returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryCodesResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /{audience}/account/mfa/totp/disable:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    post:
+      operationId: disableTotp
+      summary: Disable TOTP after fresh proof.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCodeRequest'
+      responses:
+        '204':
+          description: TOTP disabled and other sessions revoked.
+        default:
+          $ref: '#/components/responses/Error'
+  /{audience}/account/mfa/recovery-codes/regenerate:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    post:
+      operationId: regenerateRecoveryCodes
+      summary: Replace all recovery codes after fresh proof.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCodeRequest'
+      responses:
+        '200':
+          description: Replacement recovery codes returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryCodesResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /{audience}/auth/mfa/complete:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    post:
+      operationId: completeMfaLogin
+      summary: Complete an MFA login challenge.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCompleteRequest'
+      responses:
+        '200':
+          description: Authenticated session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticatedSession'
+        default:
+          $ref: '#/components/responses/Error'
+  /{audience}/auth/step-up:
+    parameters:
+      - $ref: '#/components/parameters/Audience'
+    post:
+      operationId: stepUpAuthentication
+      summary: Bind a fresh MFA proof to the current session.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCodeRequest'
+      responses:
+        '200':
+          description: Step-up assurance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepUpSession'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/break-glass-sessions:
+    get:
+      operationId: listBreakGlassSessions
+      summary: List the current user's break-glass sessions.
+      responses:
+        '200':
+          description: Break-glass sessions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BreakGlassSession'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createBreakGlassSession
+      summary: Create a narrowly-scoped local hardening break-glass session.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BreakGlassCreate'
+      responses:
+        '201':
+          description: Break-glass session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BreakGlassSession'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/break-glass-sessions/{id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: revokeBreakGlassSession
+      summary: Revoke a break-glass session.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Break-glass session revoked.
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: argus_session
+  schemas:
+    AuthenticationMethod:
+      type: string
+      enum:
+        - password
+        - temporary_password
+        - totp
+        - recovery_code
+    MfaState:
+      type: string
+      enum:
+        - disabled
+        - enrollment_required
+        - enabled
+    MfaChallenge:
+      type: object
+      additionalProperties: false
+      required:
+        - challenge_id
+        - audience
+        - expires_at
+      properties:
+        challenge_id:
+          type: string
+          minLength: 32
+          maxLength: 256
+          writeOnly: true
+        audience:
+          type: string
+          enum:
+            - platform
+            - enterprise
+        expires_at:
+          type: string
+          format: date-time
+    MfaCompleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - challenge_id
+        - code
+      properties:
+        challenge_id:
+          type: string
+          minLength: 32
+          maxLength: 256
+          writeOnly: true
+        code:
+          type: string
+          minLength: 6
+          maxLength: 64
+          writeOnly: true
+    TotpEnrollment:
+      type: object
+      additionalProperties: false
+      required:
+        - enrollment_id
+        - secret
+        - otpauth_uri
+        - expires_at
+      properties:
+        enrollment_id:
+          type: string
+          minLength: 32
+          maxLength: 256
+          writeOnly: true
+        secret:
+          type: string
+          pattern: ^[A-Z2-7]{16,128}$
+          example: JBSWY3DPEHPK3PXP
+          writeOnly: true
+        otpauth_uri:
+          type: string
+          format: uri
+          writeOnly: true
+        expires_at:
+          type: string
+          format: date-time
+    TotpVerifyRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - enrollment_id
+        - code
+      properties:
+        enrollment_id:
+          type: string
+          minLength: 32
+          maxLength: 256
+          writeOnly: true
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+          example: '123456'
+          writeOnly: true
+    MfaCodeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          minLength: 6
+          maxLength: 64
+          writeOnly: true
+    RecoveryCodesResult:
+      type: object
+      additionalProperties: false
+      required:
+        - codes
+        - generated_at
+      properties:
+        codes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items:
+            type: string
+            minLength: 12
+            maxLength: 32
+            example: ABCD-EFGH-JKLM-NPQR
+            writeOnly: true
+        generated_at:
+          type: string
+          format: date-time
+    StepUpSession:
+      type: object
+      additionalProperties: false
+      required:
+        - expires_at
+        - amr
+      properties:
+        expires_at:
+          type: string
+          format: date-time
+        amr:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AuthenticationMethod'
+    BreakGlassSession:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - user_id
+        - reason
+        - ticket_ref
+        - status
+        - expires_at
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        ticket_ref:
+          type: string
+          minLength: 1
+          maxLength: 256
+        status:
+          type: string
+          enum:
+            - active
+            - revoked
+            - expired
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: string
+          format: date-time
+    BreakGlassCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+        - ticket_ref
+      properties:
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 2048
+        ticket_ref:
+          type: string
+          minLength: 1
+          maxLength: 256
+    AuthenticatedSession:
+      type: object
+      additionalProperties: false
+      required:
+        - session
+        - user
+        - permissions
+        - csrf_token
+        - amr
+        - mfa_state
+        - authenticated_at
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/PlatformUser'
+            - $ref: '#/components/schemas/EnterpriseUser'
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Permission'
+        csrf_token:
+          type: string
+          minLength: 32
+          maxLength: 256
+          writeOnly: true
+        amr:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AuthenticationMethod'
+        mfa_state:
+          $ref: '#/components/schemas/MfaState'
+        authenticated_at:
+          type: string
+          format: date-time
+        step_up_expires_at:
+          type: string
+          format: date-time
+    IdempotencyKey:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._:-]+$
+    RequestId:
+      type: string
+      minLength: 16
+      maxLength: 128
+      pattern: ^[A-Za-z0-9._-]+$
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message_key
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        message_key:
+          type: string
+          pattern: ^errors\.[a-z0-9_.]+$
+        params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        message:
+          type: string
+        request_id:
+          $ref: '#/components/schemas/RequestId'
+        trace_id:
+          type: string
+          minLength: 1
+        retryable:
+          type: boolean
+          default: false
+    AuthorizationVersion:
+      type: integer
+      format: int64
+      minimum: 1
+    Session:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - audience
+        - user_id
+        - locale
+        - issued_at
+        - expires_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        audience:
+          type: string
+          enum:
+            - platform
+            - enterprise
+        user_id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        department_id:
+          type: string
+          minLength: 1
+        authorization_version:
+          $ref: '#/components/schemas/AuthorizationVersion'
+        locale:
+          type: string
+          enum:
+            - zh-CN
+            - en-US
+        csrf_required:
+          type: boolean
+          default: true
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+      oneOf:
+        - properties:
+            audience:
+              const: platform
+          not:
+            anyOf:
+              - required:
+                  - enterprise_id
+              - required:
+                  - department_id
+              - required:
+                  - authorization_version
+        - properties:
+            audience:
+              const: enterprise
+          required:
+            - enterprise_id
+            - department_id
+            - authorization_version
+    PlatformUser:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - username
+        - display_name
+        - role
+        - status
+        - mfa_enabled
+        - version
+        - created_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        username:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          const: platform_super_admin
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        mfa_enabled:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+    EnterpriseUser:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - department_id
+        - username
+        - display_name
+        - status
+        - mfa_enabled
+        - authorization_version
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+        enterprise_id:
+          type: string
+          minLength: 1
+        department_id:
+          type: string
+          minLength: 1
+        username:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum:
+            - active
+            - invited
+            - disabled
+        mfa_enabled:
+          type: boolean
+        authorization_version:
+          $ref: '#/components/schemas/AuthorizationVersion'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        last_login_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Permission:
+      type: string
+      pattern: ^[a-z][a-z0-9_.]+$
+  parameters:
+    Audience:
+      name: audience
+      in: path
+      required: true
+      schema:
+        type: string
+        enum:
+          - platform
+          - enterprise
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 256
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdempotencyKey'
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Error:
+      description: Stable API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

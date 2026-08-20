@@ -65,6 +65,12 @@ type Server struct {
 	TelemetryIngestHTTP       string
 	TelemetryEnrollment       string
 	OtelcolKubernetesImage    string
+	TelemetryEnabled          bool
+	KeyWrappingMode           string
+	OpenBaoAddress            string
+	OpenBaoToken              string
+	OpenBaoTransitKey         string
+	BreakGlassEnabled         bool
 }
 
 func LoadServer() Server {
@@ -74,11 +80,13 @@ func LoadServer() Server {
 	}
 
 	secureCookies, _ := strconv.ParseBool(os.Getenv("ARGUS_SECURE_COOKIES"))
+	breakGlassEnabled, _ := strconv.ParseBool(os.Getenv("ARGUS_BREAK_GLASS_ENABLED"))
 	key, _ := base64.RawURLEncoding.DecodeString(os.Getenv("ARGUS_IDEMPOTENCY_ENCRYPTION_KEY"))
 	cursorKey, _ := base64.RawURLEncoding.DecodeString(os.Getenv("ARGUS_CURSOR_SIGNING_KEY"))
 	pendingActionKey, _ := base64.RawURLEncoding.DecodeString(os.Getenv("ARGUS_PENDING_ACTION_ENCRYPTION_KEY"))
 	issuerGeneration, _ := strconv.ParseInt(valueOrDefault("ARGUS_CONNECTOR_ISSUER_GENERATION", "1"), 10, 32)
 	telemetryIssuerGeneration, _ := strconv.ParseInt(valueOrDefault("ARGUS_TELEMETRY_ISSUER_GENERATION", "1"), 10, 32)
+	telemetryEnabled, _ := strconv.ParseBool(valueOrDefault("ARGUS_TELEMETRY_TOOL_CATALOG_ENABLED", "true"))
 	return Server{
 		Address:                   address,
 		DatabaseURL:               os.Getenv("ARGUS_DATABASE_URL"),
@@ -131,6 +139,12 @@ func LoadServer() Server {
 		TelemetryIngestHTTP:       os.Getenv("ARGUS_TELEMETRY_INGEST_HTTP_ENDPOINT"),
 		TelemetryEnrollment:       os.Getenv("ARGUS_TELEMETRY_ENROLLMENT_ENDPOINT"),
 		OtelcolKubernetesImage:    os.Getenv("ARGUS_OTELCOL_KUBERNETES_IMAGE"),
+		TelemetryEnabled:          telemetryEnabled,
+		KeyWrappingMode:           valueOrDefault("ARGUS_KEY_WRAPPING_MODE", "local_test"),
+		OpenBaoAddress:            os.Getenv("ARGUS_OPENBAO_ADDRESS"),
+		OpenBaoToken:              os.Getenv("ARGUS_OPENBAO_TOKEN"),
+		OpenBaoTransitKey:         valueOrDefault("ARGUS_OPENBAO_TRANSIT_KEY", "argus-local-hardening"),
+		BreakGlassEnabled:         breakGlassEnabled,
 	}
 }
 
@@ -153,7 +167,7 @@ func (cfg Server) Validate() error {
 	if len(cfg.PendingActionKey) != 32 {
 		return errors.New("ARGUS_PENDING_ACTION_ENCRYPTION_KEY must be 32 bytes in base64url form")
 	}
-	if cfg.SecretKEKPath == "" {
+	if cfg.KeyWrappingMode == "local_test" && cfg.SecretKEKPath == "" {
 		return errors.New("ARGUS_SECRET_KEK_PATH is required")
 	}
 	if cfg.ConnectorEnrollmentURL == "" || cfg.ConnectorGatewayAddress == "" || cfg.SystemNamespace == "" || cfg.ConnectorIssuerName == "" || cfg.ConnectorIssuerGeneration < 1 {
@@ -174,11 +188,25 @@ func (cfg Server) Validate() error {
 	if cfg.ObjectStoreURL == "" || cfg.ObjectStoreBucket == "" || cfg.ObjectStoreAccess == "" || cfg.ObjectStoreSecret == "" {
 		return errors.New("remote access ObjectStore configuration is required")
 	}
-	if cfg.TelemetryQueryEndpoint == "" || cfg.TelemetryClientCert == "" || cfg.TelemetryClientKey == "" || cfg.TelemetryCABundle == "" || cfg.TelemetryServerName == "" {
-		return errors.New("telemetry internal query and mTLS configuration are required")
+	if cfg.TelemetryEnabled {
+		if cfg.TelemetryQueryEndpoint == "" || cfg.TelemetryClientCert == "" || cfg.TelemetryClientKey == "" || cfg.TelemetryCABundle == "" || cfg.TelemetryServerName == "" {
+			return errors.New("telemetry internal query and mTLS configuration are required")
+		}
+		if cfg.TelemetryIssuerName == "" || cfg.TelemetryIssuerGeneration < 1 || cfg.TelemetryIngestGRPC == "" || cfg.TelemetryIngestHTTP == "" || cfg.TelemetryEnrollment == "" || cfg.OtelcolKubernetesImage == "" {
+			return errors.New("telemetry Collector issuer and ingest endpoints are required")
+		}
 	}
-	if cfg.TelemetryIssuerName == "" || cfg.TelemetryIssuerGeneration < 1 || cfg.TelemetryIngestGRPC == "" || cfg.TelemetryIngestHTTP == "" || cfg.TelemetryEnrollment == "" || cfg.OtelcolKubernetesImage == "" {
-		return errors.New("telemetry Collector issuer and ingest endpoints are required")
+	if cfg.KeyWrappingMode != "local_test" && cfg.KeyWrappingMode != "openbao_transit" {
+		return errors.New("ARGUS_KEY_WRAPPING_MODE must be local_test or openbao_transit")
+	}
+	if cfg.DeploymentProfile == "local-hardening" && cfg.KeyWrappingMode != "openbao_transit" {
+		return errors.New("local-hardening requires ARGUS_KEY_WRAPPING_MODE=openbao_transit")
+	}
+	if cfg.DeploymentProfile == "local-hardening" && !cfg.BreakGlassEnabled {
+		return errors.New("local-hardening requires explicit ARGUS_BREAK_GLASS_ENABLED=true")
+	}
+	if cfg.KeyWrappingMode == "openbao_transit" && (cfg.OpenBaoAddress == "" || cfg.OpenBaoToken == "" || cfg.OpenBaoTransitKey == "") {
+		return errors.New("OpenBao address, token, and Transit key are required")
 	}
 	return nil
 }

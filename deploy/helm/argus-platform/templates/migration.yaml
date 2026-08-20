@@ -26,3 +26,7 @@ spec:
                 name: argus-runtime-secrets
           env:
             - {name: ARGUS_MIGRATIONS_DIR, value: /usr/local/share/argus/migrations/postgresql}
+            {{- if .Values.runtime.databaseRolesEnabled }}
+            - name: ARGUS_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: argus-database-roles, key: migration-url}}
+            {{- end }}

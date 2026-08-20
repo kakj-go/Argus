@@ -168,7 +168,7 @@ func (service GatewayService) OpenRecording(ctx context.Context, sessionID uuid.
 	if json.Unmarshal(record.WrappedDek, &envelope) != nil {
 		return GatewayRecording{}, ErrRecordingUnavailable
 	}
-	dek, err := service.Credentials.Keyring.Decrypt(envelope, recordingKeyAAD(record.EnterpriseID, record.ID, record.SessionID))
+	dek, err := service.Credentials.Keyring.DecryptContext(ctx, envelope, recordingKeyAAD(record.EnterpriseID, record.ID, record.SessionID))
 	if err != nil || len(dek) != 32 {
 		clear(dek)
 		return GatewayRecording{}, ErrRecordingUnavailable

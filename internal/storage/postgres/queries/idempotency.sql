@@ -7,7 +7,8 @@ SELECT * FROM idempotency_records
 WHERE audience = $1 AND subject_id = $2 AND operation = $3 AND idempotency_key = $4;
 
 -- name: CompleteIdempotencyRecord :execrows
-UPDATE idempotency_records SET response_status = $5, response_nonce = $6, response_ciphertext = $7
+UPDATE idempotency_records SET response_status = $5, response_nonce = $6, response_ciphertext = $7,
+  response_provider = $8, response_key_id = $9, response_key_version = $10
 WHERE audience = $1 AND subject_id = $2 AND operation = $3 AND idempotency_key = $4
   AND response_ciphertext IS NULL AND expires_at > now();
 

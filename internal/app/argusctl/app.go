@@ -26,6 +26,9 @@ const usage = `usage:
   argusctl setup-token rotate --config FILE
   argusctl admin reset-password --config FILE --user-id UUID
   argusctl telemetry dlq replay --config FILE --record-id UUID
+  argusctl backup create|verify|list --config FILE [--artifacts DIR] [--backup FILE] [--key-file FILE]
+  argusctl restore plan|apply|verify --config FILE --backup FILE [--key-file FILE]
+  argusctl upgrade plan|apply|status|rollback --config FILE [--artifacts DIR]
   argusctl tunnel --config FILE
   argusctl uninstall --config FILE --delete-data --delete-owned-crds --yes`
 
@@ -51,9 +54,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 }
 
 type App struct {
-	stdout io.Writer
-	stderr io.Writer
-	runner commandRunner
+	stdout              io.Writer
+	stderr              io.Writer
+	runner              commandRunner
+	restoreOpenBaoToken string
 }
 
 func (a *App) run(ctx context.Context, args []string) error {
@@ -80,6 +84,21 @@ func (a *App) run(ctx context.Context, args []string) error {
 			return errors.New("usage: argusctl telemetry dlq replay --config FILE --record-id UUID")
 		}
 		return a.runTelemetryDLQReplay(ctx, args[3:])
+	case "backup":
+		if len(args) < 2 || !contains([]string{"create", "verify", "list"}, args[1]) {
+			return errors.New("usage: argusctl backup create|verify|list --config FILE")
+		}
+		return a.runBackup(ctx, args[1], args[2:])
+	case "restore":
+		if len(args) < 2 || !contains([]string{"plan", "apply", "verify"}, args[1]) {
+			return errors.New("usage: argusctl restore plan|apply|verify --config FILE --backup FILE")
+		}
+		return a.runRestore(ctx, args[1], args[2:])
+	case "upgrade":
+		if len(args) < 2 || !contains([]string{"plan", "apply", "status", "rollback"}, args[1]) {
+			return errors.New("usage: argusctl upgrade plan|apply|status|rollback --config FILE")
+		}
+		return a.runUpgrade(ctx, args[1], args[2:])
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
 	}

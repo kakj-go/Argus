@@ -197,7 +197,7 @@ Agent Loop、ContextAssembler、Compactor 和 Provider Adapter 保持独立接�
 - 第一版企业级 RoleBinding、DataScope、RemoteAccessGrant、ManagedAccount、AuthorizationVersion 和类型化 Policy 在 Go 领域服务中实现；标签选择器使用独立的版本化白名单语法，受限 Policy 条件可以使用 CEL-Go，二者都不接受用户 SQL。
 - API Key 和 ServiceAccount 凭证只显示一次，数据库只保存哈希，并固定企业、Tool/DataScope 和 AuthorizationVersion。
 - M2 真实写表单统一使用 React Hook Form + Zod，DTO 继续直接消费生成的 `snake_case` 契约；Zod 只改善交互，服务端仍执行权威校验。
-- 业务对象只保存 `secret_ref`。Secret Store 使用 Envelope Encryption，并预留外部 Vault/OpenBao/云 KMS Adapter；第一版不因此引入集群外依赖。
+- 业务对象只保存 `secret_ref`。Secret Store 使用 Envelope Encryption；Evaluation 可用静态本地 KEK，M8 `local-hardening` 强制使用单节点 OpenBao Transit 的版本化 Key Reference，Production KMS/OpenBao HA 另行验证。
 
 ## 5. 测试与质量门禁
 

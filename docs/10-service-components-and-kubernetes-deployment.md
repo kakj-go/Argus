@@ -324,9 +324,9 @@ Production Profile 必须在同一 Kubernetes 集群内选择强化隔离，例�
 - `argus-telemetry writer` 依赖 Kafka 可读和 ClickHouse Schema 就绪。
 - `argus-telemetry-query` 依赖 ClickHouse Schema 版本兼容。
 
-PostgreSQL Migration 和 ClickHouse Migration 是独立 Job 和独立版本。Telemetry Ingest 依赖 Collector 身份控制数据、Redis 配额和 Kafka 可写，但不依赖 ClickHouse，因此可以在 ClickHouse Migration/Writer 尚未就绪时先接收并由 Kafka 缓冲数据；安装验证只有在 Writer 和 Query 全链路成功后才通过。Evaluation 的身份控制数据通过窄 PostgreSQL Adapter 读取，Production 凭证与网络边界由 M8 ADR 固化。
+PostgreSQL Migration 和 ClickHouse Migration 是独立 Job 和独立版本。Telemetry Ingest 依赖 Collector 身份控制数据、Redis 配额和 Kafka 可写，但不依赖 ClickHouse，因此可以在 ClickHouse Migration/Writer 尚未就绪时先接收并由 Kafka 缓冲数据；安装验证只有在 Writer 和 Query 全链路成功后才通过。`local-hardening` 为 Ingest/Writer 使用独立表级最小权限 PostgreSQL Login。
 
-M7 Evaluation 已验证 Ingest/Writer/Query Pod 删除、Redis 清空、Kafka backlog、DLQ replay 和 Collector 持久队列恢复。Kafka Producer 固定启用 `IdempotentWrite`，Artifact 下载要求严格 TLS，Collector 变更使用 canonical Operation Plan Hash；Production 的多副本容量、跨节点故障、备份恢复、供应链签名和 Telemetry PKI 长周期轮换继续由 M8 阻断。
+M7 Evaluation 已验证 Ingest/Writer/Query Pod 删除、Redis 清空、Kafka backlog、DLQ replay 和 Collector 持久队列恢复。M8 本地范围增加 OpenBao、加密备份恢复和供应链证据；Production 多副本容量、跨节点故障和 Telemetry PKI 长周期轮换继续由 Production Validation 阻断。
 
 ## 8. ClickHouse 与 Altinity Operator
 
@@ -414,7 +414,7 @@ Token 过期时间
 
 ## 12. 高可用与容量 Profile
 
-建议提供两个明确 Profile：
+安装配置提供三个明确 Profile：
 
 ### 12.1 Evaluation
 
@@ -423,7 +423,14 @@ Token 过期时间
 - 较小 PVC 和短 TTL。
 - 仅用于开发、演示和功能验证，不承诺节点故障可用性。
 
-### 12.2 Production
+### 12.2 Local Hardening
+
+- 保持 Evaluation 的单节点拓扑，只面向 arm64 Docker Desktop。
+- 强制使用单节点 OpenBao Transit、独立 PostgreSQL Login、TOTP/Step-up 和本地加密备份恢复。
+- 允许共享容器 Sandbox Runtime，但明确输出安全降级。
+- 完成状态为 `local_hardening_complete`，不产生生产 SLO、RPO 或 RTO。
+
+### 12.3 Production
 
 - `argus-server`、普通 Worker、Direct Executor、Connector Gateway、Telemetry Ingest/Query 至少 2 副本；Direct Executor 使用固定 NAT/Egress Gateway，扩容不能改变用户防火墙白名单地址。
 - Pod Anti-Affinity/Topology Spread 和 PodDisruptionBudget。
@@ -434,7 +441,7 @@ Token 过期时间
 - 对象存储开启版本控制/生命周期；有状态 PVC 使用可扩容 StorageClass。
 - HPA 不对有状态数据组件做无约束自动缩容。
 
-安装器必须要求显式选择 Profile，不能把 Evaluation 配置伪装成生产默认。
+安装器必须要求显式选择 Profile，不能把 Evaluation 或 Local Hardening 配置伪装成生产默认。Production 当前只允许 schema validate、lint 和 render，实际安装 fail closed。
 
 ## 13. 升级、回滚与备份
 
@@ -505,7 +512,7 @@ deploy/
     └── air-gapped.example.yaml
 ```
 
-第一版先完成联网 Kubernetes 的 `evaluation` 和 `production` Profile，两者都安装完整中间件。`air-gapped.example.yaml` 只表达私有 Registry、镜像和 Artifact 配置边界，不代表第一版已经支持完整离线安装。外部托管中间件、离线镜像 Bundle、跨集群灾备、多地域 Kafka/ClickHouse 和自动 StorageClass 安装作为后续能力。
+当前完成联网 Kubernetes 的 `evaluation` 与 `local-hardening` Profile；`production` 只允许校验和渲染，实际安装保持 fail closed。`air-gapped.example.yaml` 只表达私有 Registry、镜像和 Artifact 配置边界，不代表已经支持完整离线安装。外部托管中间件、离线镜像 Bundle、跨集群灾备、多地域 Kafka/ClickHouse 和自动 StorageClass 安装作为后续能力。
 
 ### 15.1 卸载和数据保留
 

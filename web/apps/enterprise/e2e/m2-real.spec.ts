@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const enabled = process.env.ARGUS_M2_E2E === "1";
 const platformUsername = process.env.ARGUS_M2_PLATFORM_USERNAME ?? "";
 const platformPassword = process.env.ARGUS_M2_PLATFORM_PASSWORD ?? "";
+const platformMfaCode = process.env.ARGUS_M2_PLATFORM_MFA_CODE ?? "";
 const enterpriseUsername = process.env.ARGUS_M2_ENTERPRISE_USERNAME ?? "";
 const enterprisePassword = process.env.ARGUS_M2_ENTERPRISE_PASSWORD ?? "";
 
@@ -28,6 +29,7 @@ test.describe("M2 real identity flow", () => {
       "http://127.0.0.1:4174/login",
       platformUsername,
       platformPassword,
+      platformMfaCode,
     );
     await expect(page).toHaveURL("http://127.0.0.1:4174/");
     await expectNoCredentialInBrowserState(page, platformPassword);
@@ -56,6 +58,7 @@ async function login(
   url: string,
   username: string,
   password: string,
+  mfaCode = "",
 ) {
   expect(username).not.toBe("");
   expect(password).not.toBe("");
@@ -63,6 +66,15 @@ async function login(
   await page.locator('input[autocomplete="username"]').fill(username);
   await page.locator('input[autocomplete="current-password"]').fill(password);
   await page.locator('form button[type="submit"]').click();
+  const mfaInput = page.locator('input[autocomplete="one-time-code"]');
+  await expect
+    .poll(async () => (await mfaInput.isVisible()) || !/\/login/.test(page.url()))
+    .toBe(true);
+  if (await mfaInput.isVisible()) {
+    expect(mfaCode).not.toBe("");
+    await mfaInput.fill(mfaCode);
+    await page.locator('form button[type="submit"]').click();
+  }
   await expect(page).not.toHaveURL(/\/login/);
 }
 

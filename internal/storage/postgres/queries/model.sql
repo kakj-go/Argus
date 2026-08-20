@@ -9,8 +9,8 @@ INSERT INTO ai_model_revisions (id, model_id, enterprise_id, revision, base_url,
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *;
 
 -- name: CreateAIModelCredential :one
-INSERT INTO ai_model_credentials (id, model_revision_id, enterprise_id, key_id, key_version, wrapped_dek, wrap_nonce, nonce, ciphertext, value_hash)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *;
+INSERT INTO ai_model_credentials (id, model_revision_id, enterprise_id, provider, key_id, key_version, wrapped_dek, wrap_nonce, nonce, ciphertext, value_hash)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *;
 
 -- name: CreateModelCompatibilityResult :one
 INSERT INTO model_compatibility_results (id, model_revision_id, enterprise_id, compatible, checks, error_code)

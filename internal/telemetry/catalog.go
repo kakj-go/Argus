@@ -39,16 +39,23 @@ func (sync CatalogSync) Run(ctx context.Context) error {
 	if sync.Version == "" {
 		sync.Version = "0.1.0-m7"
 	}
-	if sync.Service.Store == nil || sync.LinuxArtifactURI == "" || sync.WindowsArtifactURI == "" || sync.SigningKeyID == "" {
-		return errors.New("telemetry catalog artifact URIs, signing key, and store are required")
+	if sync.Service.Store == nil || sync.LinuxArtifactURI == "" || sync.SigningKeyID == "" {
+		return errors.New("telemetry Linux arm64 artifact URI, signing key, and store are required")
 	}
 	linuxHash, err := validateArtifactHash(sync.LinuxArtifactSHA256)
 	if err != nil {
 		return err
 	}
-	windowsHash, err := validateArtifactHash(sync.WindowsArtifactSHA256)
-	if err != nil {
-		return err
+	windowsConfigured := sync.WindowsArtifactURI != "" || sync.WindowsArtifactSHA256 != "" || sync.WindowsArtifactSignature != "" || sync.WindowsArtifactByteSize != 0
+	var windowsHash string
+	if windowsConfigured {
+		if sync.WindowsArtifactURI == "" || sync.WindowsArtifactSHA256 == "" || sync.WindowsArtifactSignature == "" || sync.WindowsArtifactByteSize == 0 {
+			return errors.New("telemetry Windows artifact must be configured completely")
+		}
+		windowsHash, err = validateArtifactHash(sync.WindowsArtifactSHA256)
+		if err != nil {
+			return err
+		}
 	}
 	publicKey, err := base64.RawStdEncoding.DecodeString(sync.SigningPublicKey)
 	if err != nil || len(publicKey) != ed25519.PublicKeySize {
@@ -57,8 +64,10 @@ func (sync CatalogSync) Run(ctx context.Context) error {
 	if err = validateArtifactSignature(publicKey, linuxHash, sync.LinuxArtifactSignature, sync.LinuxArtifactByteSize); err != nil {
 		return err
 	}
-	if err = validateArtifactSignature(publicKey, windowsHash, sync.WindowsArtifactSignature, sync.WindowsArtifactByteSize); err != nil {
-		return err
+	if windowsConfigured {
+		if err = validateArtifactSignature(publicKey, windowsHash, sync.WindowsArtifactSignature, sync.WindowsArtifactByteSize); err != nil {
+			return err
+		}
 	}
 	distributions := []struct {
 		name, platform, uri, hash, signature, status string
@@ -67,8 +76,14 @@ func (sync CatalogSync) Run(ctx context.Context) error {
 	}{
 		{LinuxARM64DistributionName, "linux_arm64", sync.LinuxArtifactURI, linuxHash, sync.LinuxArtifactSignature, "supported", sync.LinuxArtifactByteSize,
 			[]string{"otlp", "hostmetrics", "kubeletstats", "filelog", "journald", "prometheus", "batch", "memory_limiter", "file_storage", "argus_identity"}},
-		{WindowsAMD64DistributionName, "windows_amd64", sync.WindowsArtifactURI, windowsHash, sync.WindowsArtifactSignature, "validation_pending", sync.WindowsArtifactByteSize,
-			[]string{"otlp", "hostmetrics", "filelog", "windowseventlog", "prometheus", "batch", "memory_limiter", "file_storage", "argus_identity"}},
+	}
+	if windowsConfigured {
+		distributions = append(distributions, struct {
+			name, platform, uri, hash, signature, status string
+			byteSize                                     uint64
+			components                                   []string
+		}{WindowsAMD64DistributionName, "windows_amd64", sync.WindowsArtifactURI, windowsHash, sync.WindowsArtifactSignature, "validation_pending", sync.WindowsArtifactByteSize,
+			[]string{"otlp", "hostmetrics", "filelog", "windowseventlog", "prometheus", "batch", "memory_limiter", "file_storage", "argus_identity"}})
 	}
 	for _, distribution := range distributions {
 		artifacts, marshalErr := json.Marshal([]map[string]any{{
@@ -100,7 +115,12 @@ func (sync CatalogSync) Run(ctx context.Context) error {
 		{"k8s-cluster", "Kubernetes cluster", "Cluster metadata telemetry.", "supported", []string{"metrics"}, []string{"k8scluster"}, []string{"linux_arm64"}, []string{"kubernetes-cluster"}},
 		{"k8s-otlp-gateway", "Kubernetes OTLP gateway", "In-cluster aggregation gateway.", "supported", []string{"metrics", "logs", "traces"}, []string{"otlp", "batch"}, []string{"linux_arm64"}, []string{"kubernetes-gateway"}},
 		{"collector-self", "Collector self", "Collector health and queue telemetry.", "supported", []string{"metrics", "logs"}, []string{"collector-self"}, []string{"linux_arm64"}, []string{"collector"}},
-		{"windows-event-log", "Windows event log", "Windows Event Log profile pending physical validation.", "validation_pending", []string{"logs"}, []string{"windowseventlog"}, []string{"windows_amd64"}, []string{"host-log"}},
+	}
+	if windowsConfigured {
+		profiles = append(profiles, struct {
+			key, name, description, status         string
+			signals, components, platforms, claims []string
+		}{"windows-event-log", "Windows event log", "Windows Event Log profile pending physical validation.", "validation_pending", []string{"logs"}, []string{"windowseventlog"}, []string{"windows_amd64"}, []string{"host-log"}})
 	}
 	for _, profile := range profiles {
 		_, err = sync.Service.Store.Queries.UpsertCollectionProfile(ctx, db.UpsertCollectionProfileParams{

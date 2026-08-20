@@ -23,6 +23,22 @@ paths:
     $ref: ./paths/m2.yaml#/auth_complete_password_change
   /{audience}/account/password:
     $ref: ./paths/m2.yaml#/account_password
+  /{audience}/account/mfa/totp/enroll:
+    $ref: ./paths/m8.yaml#/account_mfa_totp_enroll
+  /{audience}/account/mfa/totp/verify:
+    $ref: ./paths/m8.yaml#/account_mfa_totp_verify
+  /{audience}/account/mfa/totp/disable:
+    $ref: ./paths/m8.yaml#/account_mfa_totp_disable
+  /{audience}/account/mfa/recovery-codes/regenerate:
+    $ref: ./paths/m8.yaml#/account_mfa_recovery_codes
+  /{audience}/auth/mfa/complete:
+    $ref: ./paths/m8.yaml#/auth_mfa_complete
+  /{audience}/auth/step-up:
+    $ref: ./paths/m8.yaml#/auth_step_up
+  /enterprise/break-glass-sessions:
+    $ref: ./paths/m8.yaml#/break_glass_collection
+  /enterprise/break-glass-sessions/{id}/revoke:
+    $ref: ./paths/m8.yaml#/break_glass_revoke
   /platform/enterprises:
     $ref: ./paths/m2.yaml#/platform_enterprises
   /platform/enterprises/{id}:
@@ -613,6 +629,11 @@ components:
       in: header
       name: X-Argus-Enrollment-Token
   parameters:
+    Audience:
+      name: audience
+      in: path
+      required: true
+      schema: {type: string, enum: [platform, enterprise]}
     RequestId:
       name: X-Request-ID
       in: header

@@ -184,7 +184,7 @@ func (service Service) LeaseCredential(ctx context.Context, enterpriseID, revisi
 	if err != nil {
 		return nil, ErrCredentialUnavailable
 	}
-	plaintext, err := service.Keyring.Decrypt(secret.Envelope{Provider: "local", KeyID: value.KeyID, KeyVersion: int(value.KeyVersion),
+	plaintext, err := service.Keyring.DecryptContext(ctx, secret.Envelope{Provider: value.Provider, KeyID: value.KeyID, KeyVersion: int(value.KeyVersion),
 		WrappedDEK: value.WrappedDek, WrapNonce: value.WrapNonce, Nonce: value.Nonce, Ciphertext: value.Ciphertext, ValueHash: value.ValueHash}, modelAAD(enterpriseID, revisionID))
 	if err != nil {
 		return nil, ErrCredentialUnavailable
@@ -260,12 +260,12 @@ func (service Service) storeCredential(ctx context.Context, q *db.Queries, enter
 	if value == "" {
 		return ErrCredentialUnavailable
 	}
-	envelope, err := service.Keyring.Encrypt([]byte(value), modelAAD(enterpriseID, revision.ID))
+	envelope, err := service.Keyring.EncryptContext(ctx, []byte(value), modelAAD(enterpriseID, revision.ID))
 	if err != nil {
 		return err
 	}
 	_, err = q.CreateAIModelCredential(ctx, db.CreateAIModelCredentialParams{ID: newID(), ModelRevisionID: revision.ID,
-		EnterpriseID: enterpriseID, KeyID: envelope.KeyID, KeyVersion: int32(envelope.KeyVersion), WrappedDek: envelope.WrappedDEK,
+		EnterpriseID: enterpriseID, Provider: envelope.Provider, KeyID: envelope.KeyID, KeyVersion: int32(envelope.KeyVersion), WrappedDek: envelope.WrappedDEK,
 		WrapNonce: envelope.WrapNonce, Nonce: envelope.Nonce, Ciphertext: envelope.Ciphertext, ValueHash: envelope.ValueHash})
 	return err
 }

@@ -184,6 +184,7 @@ EOF
 }
 
 run_m6_api_flow() {
+  step_up_enterprise_session
   log "running M6 Grant, Lease, Ticket, SSH PTY, recording, and revocation flow"
   m6_install_winrs_target
   M6_OLD_SSH_HOST_KEY=$(m3_psql "SELECT pinned_host_key FROM hosts WHERE id='${M3_DIRECT_HOST_ID}';")

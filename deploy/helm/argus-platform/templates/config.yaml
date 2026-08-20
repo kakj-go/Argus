@@ -18,6 +18,10 @@ data:
   ARGUS_CONNECTOR_ISSUER_NAME: {{ .Values.runtime.connectorIssuerName | quote }}
   ARGUS_CONNECTOR_ISSUER_GENERATION: {{ .Values.runtime.connectorIssuerGeneration | quote }}
   ARGUS_DEPLOYMENT_PROFILE: {{ .Values.profile | quote }}
+  ARGUS_KEY_WRAPPING_MODE: {{ .Values.runtime.keyWrappingMode | quote }}
+  ARGUS_OPENBAO_ADDRESS: {{ .Values.runtime.openBaoAddress | quote }}
+  ARGUS_OPENBAO_TRANSIT_KEY: {{ .Values.runtime.openBaoTransitKey | quote }}
+  ARGUS_BREAK_GLASS_ENABLED: {{ .Values.runtime.breakGlassEnabled | quote }}
   ARGUS_DIRECT_ADVERTISED_EGRESS: {{ join "," .Values.runtime.directAdvertisedEgress | quote }}
   ARGUS_DIRECT_VERIFICATION_URL: {{ .Values.runtime.directVerificationUrl | quote }}
   ARGUS_DIRECT_DENIED_CIDRS: {{ join "," .Values.runtime.directDeniedCidrs | quote }}
@@ -47,8 +51,13 @@ data:
   ARGUS_TELEMETRY_ENROLLMENT_ENDPOINT: {{ .Values.runtime.telemetryEnrollmentEndpoint | quote }}
   ARGUS_TELEMETRY_TOOL_CATALOG_ENABLED: {{ .Values.runtime.telemetryToolCatalogEnabled | quote }}
   ARGUS_TELEMETRY_CERTIFICATE_REQUEST_NAMESPACE: {{ .Values.namespaces.observability | quote }}
+  {{- if .Values.runtime.telemetryToolCatalogEnabled }}
   ARGUS_OTELCOL_SIGNING_PUBLIC_KEYS: {{ dict .Values.runtime.otelcolSigningKeyId .Values.runtime.otelcolSigningPublicKey | toJson | quote }}
   ARGUS_OTELCOL_KUBERNETES_IMAGE: {{ required "runtime.otelcolKubernetesImage is required" .Values.runtime.otelcolKubernetesImage | quote }}
+  {{- else }}
+  ARGUS_OTELCOL_SIGNING_PUBLIC_KEYS: "{}"
+  ARGUS_OTELCOL_KUBERNETES_IMAGE: ""
+  {{- end }}
   ARGUS_OTELCOL_ARTIFACT_CA_PATH: {{ if .Values.runtime.otelcolArtifactCABundleSecretName }}"/var/run/secrets/argus/otelcol-artifact-ca/ca.crt"{{ else }}""{{ end }}
 ---
 apiVersion: v1
@@ -68,6 +77,28 @@ stringData:
   ARGUS_PENDING_ACTION_ENCRYPTION_KEY: {{ required "runtime.pendingActionEncryptionKey is required" .Values.runtime.pendingActionEncryptionKey | quote }}
   ARGUS_OBJECT_STORE_ACCESS_KEY: {{ required "runtime.objectStoreAccessKey is required" .Values.runtime.objectStoreAccessKey | quote }}
   ARGUS_OBJECT_STORE_SECRET_KEY: {{ required "runtime.objectStoreSecretKey is required" .Values.runtime.objectStoreSecretKey | quote }}
+  {{- if eq .Values.runtime.keyWrappingMode "openbao_transit" }}
+  ARGUS_OPENBAO_TOKEN: {{ required "runtime.openBaoToken is required" .Values.runtime.openBaoToken | quote }}
+  {{- end }}
+{{- if .Values.runtime.databaseRolesEnabled }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argus-database-roles
+  namespace: {{ .Values.namespaces.system }}
+type: Opaque
+stringData:
+  server-url: {{ printf "postgres://argus_server:%s@argus-postgresql:5432/argus?sslmode=disable" (required "runtime.serverDatabasePassword is required" .Values.runtime.serverDatabasePassword) | quote }}
+  worker-url: {{ printf "postgres://argus_worker:%s@argus-postgresql:5432/argus?sslmode=disable" (required "runtime.workerDatabasePassword is required" .Values.runtime.workerDatabasePassword) | quote }}
+  gateway-url: {{ printf "postgres://argus_gateway:%s@argus-postgresql:5432/argus?sslmode=disable" (required "runtime.gatewayDatabasePassword is required" .Values.runtime.gatewayDatabasePassword) | quote }}
+  direct-executor-url: {{ printf "postgres://argus_direct_executor:%s@argus-postgresql:5432/argus?sslmode=disable" (required "runtime.directExecutorDatabasePassword is required" .Values.runtime.directExecutorDatabasePassword) | quote }}
+  migration-url: {{ printf "postgres://argus_migration:%s@argus-postgresql:5432/argus?sslmode=disable" (required "runtime.migrationDatabasePassword is required" .Values.runtime.migrationDatabasePassword) | quote }}
+  telemetry-ingest-url: {{ printf "postgres://argus_telemetry_ingest:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryIngestDatabasePassword is required" .Values.runtime.telemetryIngestDatabasePassword) .Values.namespaces.system | quote }}
+  telemetry-writer-url: {{ printf "postgres://argus_telemetry_writer:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryWriterDatabasePassword is required" .Values.runtime.telemetryWriterDatabasePassword) .Values.namespaces.system | quote }}
+{{- end }}
+---
+{{- if eq .Values.runtime.keyWrappingMode "local_test" }}
 ---
 apiVersion: v1
 kind: Secret
@@ -77,3 +108,4 @@ metadata:
 type: Opaque
 stringData:
   keyring.json: {{ required "runtime.secretKEKKeyring is required" .Values.runtime.secretKEKKeyring | toJson | quote }}
+{{- end }}

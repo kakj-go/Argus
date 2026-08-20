@@ -13,6 +13,7 @@ import {
   CardContent,
   CardHeader,
   DataTable,
+  Dialog,
   Field,
   Input,
   KeyValueGrid,
@@ -34,7 +35,13 @@ export function AccountPage() {
   const api = useApi();
   const session = usePlatformAuthStore((state) => state.session);
   const clearAuth = usePlatformAuthStore((state) => state.clear);
+  const restoreAuth = usePlatformAuthStore((state) => state.restore);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [mfaError, setMfaError] = useState<string | null>(null);
+  const [enrollment, setEnrollment] = useState<Awaited<ReturnType<typeof api.auth.enrollTotp>> | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [proofCode, setProofCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const passwordSchema = useMemo(
     () =>
       z
@@ -95,6 +102,51 @@ export function AccountPage() {
     },
   ];
 
+  const beginEnrollment = async () => {
+    setMfaError(null);
+    try {
+      setEnrollment(await api.auth.enrollTotp());
+      setMfaCode("");
+    } catch {
+      setMfaError(t("account.mfa.failed"));
+    }
+  };
+
+  const verifyEnrollment = async () => {
+    if (!enrollment?.enrollment_id) return;
+    setMfaError(null);
+    try {
+      const result = await api.auth.verifyTotpEnrollment({ enrollment_id: enrollment.enrollment_id, code: mfaCode.trim() });
+      setRecoveryCodes(result.codes);
+      setEnrollment(null);
+      await restoreAuth(api);
+    } catch {
+      setMfaError(t("account.mfa.invalid"));
+    }
+  };
+
+  const regenerateCodes = async () => {
+    setMfaError(null);
+    try {
+      const result = await api.auth.regenerateRecoveryCodes({ code: proofCode.trim() });
+      setRecoveryCodes(result.codes);
+      setProofCode("");
+    } catch {
+      setMfaError(t("account.mfa.invalid"));
+    }
+  };
+
+  const stepUp = async () => {
+    setMfaError(null);
+    try {
+      await api.auth.stepUp({ code: proofCode.trim() });
+      setProofCode("");
+      await restoreAuth(api);
+    } catch {
+      setMfaError(t("account.mfa.invalid"));
+    }
+  };
+
   return (
     <PageShell
       description={t("account.description")}
@@ -136,6 +188,33 @@ export function AccountPage() {
                 },
               ]}
             />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader
+            action={<Badge tone={session.mfa_state === "enabled" ? "success" : "warning"}>{t(`account.mfa.state.${session.mfa_state}`)}</Badge>}
+            title={t("account.mfa.title")}
+          />
+          <CardContent>
+            <div className="argus-account-mfa">
+              {mfaError && <Alert description={mfaError} title={t("account.mfa.title")} tone="danger" />}
+              <p>{t("account.mfa.description")}</p>
+              {session.mfa_state !== "enabled" ? (
+                <Button onClick={() => void beginEnrollment()} variant="primary">{t("account.mfa.enroll")}</Button>
+              ) : (
+                <div className="argus-account-mfa__proof">
+                  <Field label={t("account.mfa.proof")}>
+                    <Input autoComplete="one-time-code" inputMode="numeric" onChange={(event) => setProofCode(event.target.value)} value={proofCode} />
+                  </Field>
+                  <div className="argus-account-mfa__actions">
+                    <Button disabled={!proofCode.trim()} onClick={() => void stepUp()}>{t("account.mfa.stepUp")}</Button>
+                    <Button disabled={!proofCode.trim()} onClick={() => void regenerateCodes()} variant="secondary">{t("account.mfa.regenerate")}</Button>
+                  </div>
+                </div>
+              )}
+              {session.step_up_expires_at && <Alert description={formatDateTime(session.step_up_expires_at, i18n.language)} title={t("account.mfa.stepUpActive")} tone="success" />}
+            </div>
           </CardContent>
         </Card>
 
@@ -230,6 +309,29 @@ export function AccountPage() {
           </CardContent>
         </Card>
       </div>
+      <Dialog
+        description={t("account.mfa.enrollmentDescription")}
+        onOpenChange={(open) => { if (!open) setEnrollment(null); }}
+        open={Boolean(enrollment)}
+        title={t("account.mfa.enrollmentTitle")}
+        footer={<Button disabled={mfaCode.trim().length !== 6} onClick={() => void verifyEnrollment()} variant="primary">{t("account.mfa.verify")}</Button>}
+      >
+        {enrollment && <div className="argus-account-mfa__enrollment">
+          <Field label={t("account.mfa.secret")}><code className="argus-mono argus-account-mfa__secret">{enrollment.secret}</code></Field>
+          <Field label={t("account.mfa.code")}><Input autoComplete="one-time-code" autoFocus inputMode="numeric" maxLength={6} onChange={(event) => setMfaCode(event.target.value)} value={mfaCode} /></Field>
+        </div>}
+      </Dialog>
+      <Dialog
+        description={t("account.mfa.recoveryDescription")}
+        onOpenChange={(open) => { if (!open) setRecoveryCodes(null); }}
+        open={Boolean(recoveryCodes)}
+        title={t("account.mfa.recoveryTitle")}
+        footer={<Button onClick={() => setRecoveryCodes(null)} variant="primary">{t("common.close")}</Button>}
+      >
+        <div className="argus-account-mfa__codes" role="list">
+          {recoveryCodes?.map((code) => <code className="argus-mono" key={code} role="listitem">{code}</code>)}
+        </div>
+      </Dialog>
     </PageShell>
   );
 }

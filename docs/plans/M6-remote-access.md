@@ -6,7 +6,7 @@
 
 `RemoteAccessGrant → AccessRequest/Approval → AccessLease → Session/Ticket → SSH/WinRS → 录像/终止/撤权`
 
-M6 只达到 Evaluation 完成标准。Production 仍由 M8 的 MFA、Step-up、备份恢复、容量、Windows 兼容矩阵和安全审计阻断。
+M6 只达到 Evaluation 完成标准。M8 已补齐本地 TOTP/Step-up、OpenBao 与录像备份恢复；Production 容量、Object Lock、真实 Windows 兼容矩阵和安全审计仍由独立 Production Validation 阻断。
 
 ## 已完成任务
 
@@ -54,9 +54,9 @@ M6 只达到 Evaluation 完成标准。Production 仍由 M8 的 MFA、Step-up、
 
 ## 不包含
 
-- MFA、Step-up、Break Glass。
+- MFA、Step-up、Break Glass 已由 M8 本地加固实现，不属于 M6 自身状态机。
 - RDP、SFTP、剪贴板、文件传输、分享和通用端口转发。
 - Production 录像不可变保留、跨故障域备份恢复和真实 Windows Server 兼容矩阵。
 - Production 容量基线、渗透测试和安全审计。
 
-以上项目继续由 M8 作为 Production 硬阻断项管理。
+以上 Production 项目继续由独立 Production Validation 清单管理，不影响 M8 的 `local_hardening_complete` 判断。

@@ -12,6 +12,30 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AuthenticationMethod.
+const (
+	Password          AuthenticationMethod = "password"
+	RecoveryCode      AuthenticationMethod = "recovery_code"
+	TemporaryPassword AuthenticationMethod = "temporary_password"
+	Totp              AuthenticationMethod = "totp"
+)
+
+// Valid indicates whether the value is a known member of the AuthenticationMethod enum.
+func (e AuthenticationMethod) Valid() bool {
+	switch e {
+	case Password:
+		return true
+	case RecoveryCode:
+		return true
+	case TemporaryPassword:
+		return true
+	case Totp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EnterpriseUserStatus.
 const (
 	EnterpriseUserStatusActive   EnterpriseUserStatus = "active"
@@ -75,6 +99,60 @@ const (
 func (e LoginResult1Status) Valid() bool {
 	switch e {
 	case PasswordChangeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LoginResult2Status.
+const (
+	MfaRequired LoginResult2Status = "mfa_required"
+)
+
+// Valid indicates whether the value is a known member of the LoginResult2Status enum.
+func (e LoginResult2Status) Valid() bool {
+	switch e {
+	case MfaRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MfaChallengeAudience.
+const (
+	MfaChallengeAudienceEnterprise MfaChallengeAudience = "enterprise"
+	MfaChallengeAudiencePlatform   MfaChallengeAudience = "platform"
+)
+
+// Valid indicates whether the value is a known member of the MfaChallengeAudience enum.
+func (e MfaChallengeAudience) Valid() bool {
+	switch e {
+	case MfaChallengeAudienceEnterprise:
+		return true
+	case MfaChallengeAudiencePlatform:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MfaState.
+const (
+	MfaStateDisabled           MfaState = "disabled"
+	MfaStateEnabled            MfaState = "enabled"
+	MfaStateEnrollmentRequired MfaState = "enrollment_required"
+)
+
+// Valid indicates whether the value is a known member of the MfaState enum.
+func (e MfaState) Valid() bool {
+	switch e {
+	case MfaStateDisabled:
+		return true
+	case MfaStateEnabled:
+		return true
+	case MfaStateEnrollmentRequired:
 		return true
 	default:
 		return false
@@ -249,16 +327,23 @@ type ApiError_Params_AdditionalProperties struct {
 
 // AuthenticatedSession defines model for AuthenticatedSession.
 type AuthenticatedSession struct {
-	CsrfToken   *string                   `json:"csrf_token,omitempty"`
-	Permissions []Permission              `json:"permissions"`
-	Session     Session                   `json:"session"`
-	User        AuthenticatedSession_User `json:"user"`
+	Amr             []AuthenticationMethod    `json:"amr"`
+	AuthenticatedAt time.Time                 `json:"authenticated_at"`
+	CsrfToken       *string                   `json:"csrf_token,omitempty"`
+	MfaState        MfaState                  `json:"mfa_state"`
+	Permissions     []Permission              `json:"permissions"`
+	Session         Session                   `json:"session"`
+	StepUpExpiresAt *time.Time                `json:"step_up_expires_at,omitempty"`
+	User            AuthenticatedSession_User `json:"user"`
 }
 
 // AuthenticatedSession_User defines model for AuthenticatedSession.User.
 type AuthenticatedSession_User struct {
 	union json.RawMessage
 }
+
+// AuthenticationMethod defines model for AuthenticationMethod.
+type AuthenticationMethod string
 
 // AuthorizationVersion defines model for AuthorizationVersion.
 type AuthorizationVersion = int64
@@ -324,6 +409,28 @@ type LoginResult1 struct {
 
 // LoginResult1Status defines model for LoginResult.1.Status.
 type LoginResult1Status string
+
+// LoginResult2 defines model for LoginResult.2.
+type LoginResult2 struct {
+	MfaChallenge MfaChallenge       `json:"mfa_challenge"`
+	Status       LoginResult2Status `json:"status"`
+}
+
+// LoginResult2Status defines model for LoginResult.2.Status.
+type LoginResult2Status string
+
+// MfaChallenge defines model for MfaChallenge.
+type MfaChallenge struct {
+	Audience    MfaChallengeAudience `json:"audience"`
+	ChallengeId *string              `json:"challenge_id,omitempty"`
+	ExpiresAt   time.Time            `json:"expires_at"`
+}
+
+// MfaChallengeAudience defines model for MfaChallenge.Audience.
+type MfaChallengeAudience string
+
+// MfaState defines model for MfaState.
+type MfaState string
 
 // PasswordChangeChallenge defines model for PasswordChangeChallenge.
 type PasswordChangeChallenge struct {
@@ -661,6 +768,32 @@ func (t *LoginResult) FromLoginResult1(v LoginResult1) error {
 
 // MergeLoginResult1 performs a merge with any union data inside the LoginResult, using the provided LoginResult1
 func (t *LoginResult) MergeLoginResult1(v LoginResult1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsLoginResult2 returns the union data inside the LoginResult as a LoginResult2
+func (t LoginResult) AsLoginResult2() (LoginResult2, error) {
+	var body LoginResult2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromLoginResult2 overwrites any union data inside the LoginResult as the provided LoginResult2
+func (t *LoginResult) FromLoginResult2(v LoginResult2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeLoginResult2 performs a merge with any union data inside the LoginResult, using the provided LoginResult2
+func (t *LoginResult) MergeLoginResult2(v LoginResult2) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

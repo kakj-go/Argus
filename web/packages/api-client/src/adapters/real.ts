@@ -48,6 +48,14 @@ import type {
   TelemetryOverview,
   RouteTestCreate,
   RouteTestResult,
+  BreakGlassCreate,
+  BreakGlassSession,
+  MfaCodeRequest,
+  MfaCompleteRequest,
+  RecoveryCodesResult,
+  StepUpSession,
+  TotpEnrollment,
+  TotpVerifyRequest,
 } from "../generated/contracts";
 import type {
   AuditEvent,
@@ -66,6 +74,7 @@ import type {
 } from "../types";
 import {
   ClientOperationUnavailableError,
+  MfaRequiredError,
   PasswordChangeRequiredError,
 } from "../transport/errors";
 import { HttpTransport, type HttpTransportOptions } from "../transport/http";
@@ -112,6 +121,10 @@ function sessionInfo(value: AuthenticatedSession): SessionInfo {
     session: value.session,
     user: value.user,
     permissions: value.permissions,
+    amr: value.amr,
+    mfa_state: value.mfa_state,
+    authenticated_at: value.authenticated_at,
+    step_up_expires_at: value.step_up_expires_at,
   };
 }
 
@@ -245,6 +258,9 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
       if (result.status === "password_change_required") {
         throw new PasswordChangeRequiredError(result.password_change_challenge);
       }
+      if (result.status === "mfa_required") {
+        throw new MfaRequiredError(result.mfa_challenge);
+      }
       return authenticated(result.authenticated_session);
     },
     async completePasswordChange(input) {
@@ -255,6 +271,37 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
           { method: "POST", body: input },
         ),
       );
+    },
+    async completeMfaLogin(input: MfaCompleteRequest) {
+      return authenticated(await http.request<AuthenticatedSession>(`${requireAudience()}/auth/mfa/complete`, { method: "POST", body: input }));
+    },
+    async enrollTotp(): Promise<TotpEnrollment> {
+      return http.request<TotpEnrollment>(`${requireAudience()}/account/mfa/totp/enroll`, { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() } });
+    },
+    async verifyTotpEnrollment(input: TotpVerifyRequest): Promise<RecoveryCodesResult> {
+      return http.request<RecoveryCodesResult>(`${requireAudience()}/account/mfa/totp/verify`, { method: "POST", csrf: true, body: input });
+    },
+    async regenerateRecoveryCodes(input: MfaCodeRequest): Promise<RecoveryCodesResult> {
+      return http.request<RecoveryCodesResult>(`${requireAudience()}/account/mfa/recovery-codes/regenerate`, { method: "POST", csrf: true, body: input });
+    },
+    async disableTotp(input: MfaCodeRequest): Promise<void> {
+      await http.request<void>(`${requireAudience()}/account/mfa/totp/disable`, { method: "POST", csrf: true, body: input });
+      csrfToken = undefined;
+    },
+    async stepUp(input: MfaCodeRequest): Promise<StepUpSession> {
+      return http.request<StepUpSession>(`${requireAudience()}/auth/step-up`, { method: "POST", csrf: true, body: input });
+    },
+    async listBreakGlassSessions(): Promise<BreakGlassSession[]> {
+      if (portal !== "enterprise") throw new ClientOperationUnavailableError("break-glass");
+      return http.request<BreakGlassSession[]>("enterprise/break-glass-sessions");
+    },
+    async createBreakGlassSession(input: BreakGlassCreate): Promise<BreakGlassSession> {
+      if (portal !== "enterprise") throw new ClientOperationUnavailableError("break-glass");
+      return http.request<BreakGlassSession>("enterprise/break-glass-sessions", { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() }, body: input });
+    },
+    async revokeBreakGlassSession(id: string): Promise<void> {
+      if (portal !== "enterprise") throw new ClientOperationUnavailableError("break-glass");
+      await http.request<void>(`enterprise/break-glass-sessions/${encodeURIComponent(id)}/revoke`, { method: "POST", csrf: true });
     },
     async changePassword(input) {
       await http.request<void>(`${requireAudience()}/account/password`, {
@@ -1171,6 +1218,15 @@ function createUnavailableClient(): ArgusApiClient {
     auth: {
       login: () => unavailable("auth.login"),
       completePasswordChange: () => unavailable("auth.completePasswordChange"),
+      completeMfaLogin: () => unavailable("auth.completeMfaLogin"),
+      enrollTotp: () => unavailable("auth.enrollTotp"),
+      verifyTotpEnrollment: () => unavailable("auth.verifyTotpEnrollment"),
+      regenerateRecoveryCodes: () => unavailable("auth.regenerateRecoveryCodes"),
+      disableTotp: () => unavailable("auth.disableTotp"),
+      stepUp: () => unavailable("auth.stepUp"),
+      listBreakGlassSessions: () => unavailable("auth.listBreakGlassSessions"),
+      createBreakGlassSession: () => unavailable("auth.createBreakGlassSession"),
+      revokeBreakGlassSession: () => unavailable("auth.revokeBreakGlassSession"),
       changePassword: () => unavailable("auth.changePassword"),
       logout: () => unavailable("auth.logout"),
       me: () => unavailable("auth.me"),

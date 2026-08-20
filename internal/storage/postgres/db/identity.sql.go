@@ -12,6 +12,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateMfaCredential = `-- name: ActivateMfaCredential :one
+UPDATE mfa_credentials SET status = 'active', enrollment_hash = NULL,
+  enrollment_expires_at = NULL, verified_at = now(), updated_at = now()
+WHERE id = $1 AND status = 'pending'
+RETURNING id, audience, user_id, provider, key_id, key_version, encrypted_secret, last_totp_counter, enrollment_hash, enrollment_expires_at, status, verified_at, created_at, updated_at
+`
+
+func (q *Queries) ActivateMfaCredential(ctx context.Context, id uuid.UUID) (MfaCredential, error) {
+	row := q.db.QueryRow(ctx, activateMfaCredential, id)
+	var i MfaCredential
+	err := row.Scan(
+		&i.ID,
+		&i.Audience,
+		&i.UserID,
+		&i.Provider,
+		&i.KeyID,
+		&i.KeyVersion,
+		&i.EncryptedSecret,
+		&i.LastTotpCounter,
+		&i.EnrollmentHash,
+		&i.EnrollmentExpiresAt,
+		&i.Status,
+		&i.VerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const bumpAuthorizationVersionRecord = `-- name: BumpAuthorizationVersionRecord :exec
 UPDATE authorization_versions SET version = version + 1, updated_at = now()
 WHERE enterprise_id = $1 AND subject_type = $2 AND subject_id = $3
@@ -185,6 +214,69 @@ func (q *Queries) ClaimOutboxEvents(ctx context.Context, limit int32) ([]OutboxE
 	return items, nil
 }
 
+const clearSubjectStepUp = `-- name: ClearSubjectStepUp :exec
+UPDATE sessions SET step_up_expires_at = NULL, amr = ARRAY['password']::text[]
+WHERE audience = $1 AND user_id = $2 AND revoked_at IS NULL
+`
+
+type ClearSubjectStepUpParams struct {
+	Audience string    `json:"audience"`
+	UserID   uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) ClearSubjectStepUp(ctx context.Context, arg ClearSubjectStepUpParams) error {
+	_, err := q.db.Exec(ctx, clearSubjectStepUp, arg.Audience, arg.UserID)
+	return err
+}
+
+const consumeMfaChallenge = `-- name: ConsumeMfaChallenge :execrows
+UPDATE mfa_challenges SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL AND expires_at > now()
+`
+
+func (q *Queries) ConsumeMfaChallenge(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeMfaChallenge, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const consumeMfaRecoveryCode = `-- name: ConsumeMfaRecoveryCode :execrows
+UPDATE mfa_recovery_codes SET consumed_at = now()
+WHERE credential_id = $1 AND code_hash = $2 AND consumed_at IS NULL
+`
+
+type ConsumeMfaRecoveryCodeParams struct {
+	CredentialID uuid.UUID `json:"credential_id"`
+	CodeHash     []byte    `json:"code_hash"`
+}
+
+func (q *Queries) ConsumeMfaRecoveryCode(ctx context.Context, arg ConsumeMfaRecoveryCodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeMfaRecoveryCode, arg.CredentialID, arg.CodeHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const consumeMfaTotpCounter = `-- name: ConsumeMfaTotpCounter :execrows
+UPDATE mfa_credentials SET last_totp_counter = $2, updated_at = now()
+WHERE id = $1 AND status = 'active' AND (last_totp_counter IS NULL OR last_totp_counter < $2)
+`
+
+type ConsumeMfaTotpCounterParams struct {
+	ID              uuid.UUID   `json:"id"`
+	LastTotpCounter pgtype.Int8 `json:"last_totp_counter"`
+}
+
+func (q *Queries) ConsumeMfaTotpCounter(ctx context.Context, arg ConsumeMfaTotpCounterParams) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeMfaTotpCounter, arg.ID, arg.LastTotpCounter)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const consumeTemporaryCredential = `-- name: ConsumeTemporaryCredential :execrows
 UPDATE temporary_credentials SET status = 'consumed', consumed_at = now()
 WHERE id = $1 AND status = 'active'
@@ -212,6 +304,53 @@ func (q *Queries) CountDepartmentUsers(ctx context.Context, arg CountDepartmentU
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createBreakGlassSession = `-- name: CreateBreakGlassSession :one
+INSERT INTO break_glass_sessions (
+  id, enterprise_id, user_id, source_session_id, authorization_version,
+  reason, ticket_ref, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, enterprise_id, user_id, source_session_id, authorization_version, reason, ticket_ref, status, expires_at, revoked_at, created_at
+`
+
+type CreateBreakGlassSessionParams struct {
+	ID                   uuid.UUID          `json:"id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	UserID               uuid.UUID          `json:"user_id"`
+	SourceSessionID      uuid.UUID          `json:"source_session_id"`
+	AuthorizationVersion int64              `json:"authorization_version"`
+	Reason               string             `json:"reason"`
+	TicketRef            string             `json:"ticket_ref"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) CreateBreakGlassSession(ctx context.Context, arg CreateBreakGlassSessionParams) (BreakGlassSession, error) {
+	row := q.db.QueryRow(ctx, createBreakGlassSession,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.UserID,
+		arg.SourceSessionID,
+		arg.AuthorizationVersion,
+		arg.Reason,
+		arg.TicketRef,
+		arg.ExpiresAt,
+	)
+	var i BreakGlassSession
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.UserID,
+		&i.SourceSessionID,
+		&i.AuthorizationVersion,
+		&i.Reason,
+		&i.TicketRef,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const createDepartment = `-- name: CreateDepartment :one
@@ -294,6 +433,59 @@ func (q *Queries) CreateEnterpriseUser(ctx context.Context, arg CreateEnterprise
 	return i, err
 }
 
+const createMfaChallenge = `-- name: CreateMfaChallenge :one
+INSERT INTO mfa_challenges (id, challenge_hash, audience, user_id, purpose, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, challenge_hash, audience, user_id, purpose, expires_at, consumed_at, created_at
+`
+
+type CreateMfaChallengeParams struct {
+	ID            uuid.UUID          `json:"id"`
+	ChallengeHash []byte             `json:"challenge_hash"`
+	Audience      string             `json:"audience"`
+	UserID        uuid.UUID          `json:"user_id"`
+	Purpose       string             `json:"purpose"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) CreateMfaChallenge(ctx context.Context, arg CreateMfaChallengeParams) (MfaChallenge, error) {
+	row := q.db.QueryRow(ctx, createMfaChallenge,
+		arg.ID,
+		arg.ChallengeHash,
+		arg.Audience,
+		arg.UserID,
+		arg.Purpose,
+		arg.ExpiresAt,
+	)
+	var i MfaChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.ChallengeHash,
+		&i.Audience,
+		&i.UserID,
+		&i.Purpose,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createMfaRecoveryCode = `-- name: CreateMfaRecoveryCode :exec
+INSERT INTO mfa_recovery_codes (id, credential_id, code_hash) VALUES ($1, $2, $3)
+`
+
+type CreateMfaRecoveryCodeParams struct {
+	ID           uuid.UUID `json:"id"`
+	CredentialID uuid.UUID `json:"credential_id"`
+	CodeHash     []byte    `json:"code_hash"`
+}
+
+func (q *Queries) CreateMfaRecoveryCode(ctx context.Context, arg CreateMfaRecoveryCodeParams) error {
+	_, err := q.db.Exec(ctx, createMfaRecoveryCode, arg.ID, arg.CredentialID, arg.CodeHash)
+	return err
+}
+
 const createPasswordCredential = `-- name: CreatePasswordCredential :one
 INSERT INTO password_credentials (id, audience, subject_id, encoded_hash, temporary, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -344,9 +536,9 @@ func (q *Queries) CreatePasswordCredential(ctx context.Context, arg CreatePasswo
 const createSession = `-- name: CreateSession :one
 INSERT INTO sessions (
   id, token_hash, csrf_hash, audience, user_id, enterprise_id, department_id,
-  authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, token_hash, csrf_hash, audience, user_id, enterprise_id, department_id, authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at, revoked_at, revoke_reason, created_at
+  authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at, authenticated_at, amr
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+RETURNING id, token_hash, csrf_hash, audience, user_id, enterprise_id, department_id, authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at, revoked_at, revoke_reason, created_at, authenticated_at, step_up_expires_at, amr
 `
 
 type CreateSessionParams struct {
@@ -362,6 +554,8 @@ type CreateSessionParams struct {
 	IdleExpiresAt        pgtype.Timestamptz `json:"idle_expires_at"`
 	AbsoluteExpiresAt    pgtype.Timestamptz `json:"absolute_expires_at"`
 	LastSeenAt           pgtype.Timestamptz `json:"last_seen_at"`
+	AuthenticatedAt      pgtype.Timestamptz `json:"authenticated_at"`
+	Amr                  []string           `json:"amr"`
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
@@ -378,6 +572,8 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		arg.IdleExpiresAt,
 		arg.AbsoluteExpiresAt,
 		arg.LastSeenAt,
+		arg.AuthenticatedAt,
+		arg.Amr,
 	)
 	var i Session
 	err := row.Scan(
@@ -396,6 +592,9 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.RevokedAt,
 		&i.RevokeReason,
 		&i.CreatedAt,
+		&i.AuthenticatedAt,
+		&i.StepUpExpiresAt,
+		&i.Amr,
 	)
 	return i, err
 }
@@ -432,6 +631,34 @@ func (q *Queries) CreateTemporaryCredential(ctx context.Context, arg CreateTempo
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const deleteMfaRecoveryCodes = `-- name: DeleteMfaRecoveryCodes :exec
+DELETE FROM mfa_recovery_codes WHERE credential_id = $1
+`
+
+func (q *Queries) DeleteMfaRecoveryCodes(ctx context.Context, credentialID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMfaRecoveryCodes, credentialID)
+	return err
+}
+
+const disableMfaCredential = `-- name: DisableMfaCredential :execrows
+UPDATE mfa_credentials SET status = 'disabled', enrollment_hash = NULL,
+  enrollment_expires_at = NULL, updated_at = now()
+WHERE audience = $1 AND user_id = $2 AND status = 'active'
+`
+
+type DisableMfaCredentialParams struct {
+	Audience string    `json:"audience"`
+	UserID   uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DisableMfaCredential(ctx context.Context, arg DisableMfaCredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableMfaCredential, arg.Audience, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getActiveTemporaryCredential = `-- name: GetActiveTemporaryCredential :one
@@ -612,6 +839,85 @@ func (q *Queries) GetEnterpriseUserByUsername(ctx context.Context, lower string)
 	return i, err
 }
 
+const getMfaChallengeByHash = `-- name: GetMfaChallengeByHash :one
+SELECT id, challenge_hash, audience, user_id, purpose, expires_at, consumed_at, created_at FROM mfa_challenges
+WHERE challenge_hash = $1 AND consumed_at IS NULL AND expires_at > now()
+`
+
+func (q *Queries) GetMfaChallengeByHash(ctx context.Context, challengeHash []byte) (MfaChallenge, error) {
+	row := q.db.QueryRow(ctx, getMfaChallengeByHash, challengeHash)
+	var i MfaChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.ChallengeHash,
+		&i.Audience,
+		&i.UserID,
+		&i.Purpose,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getMfaCredential = `-- name: GetMfaCredential :one
+SELECT id, audience, user_id, provider, key_id, key_version, encrypted_secret, last_totp_counter, enrollment_hash, enrollment_expires_at, status, verified_at, created_at, updated_at FROM mfa_credentials WHERE audience = $1 AND user_id = $2
+`
+
+type GetMfaCredentialParams struct {
+	Audience string    `json:"audience"`
+	UserID   uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetMfaCredential(ctx context.Context, arg GetMfaCredentialParams) (MfaCredential, error) {
+	row := q.db.QueryRow(ctx, getMfaCredential, arg.Audience, arg.UserID)
+	var i MfaCredential
+	err := row.Scan(
+		&i.ID,
+		&i.Audience,
+		&i.UserID,
+		&i.Provider,
+		&i.KeyID,
+		&i.KeyVersion,
+		&i.EncryptedSecret,
+		&i.LastTotpCounter,
+		&i.EnrollmentHash,
+		&i.EnrollmentExpiresAt,
+		&i.Status,
+		&i.VerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getMfaEnrollmentByHash = `-- name: GetMfaEnrollmentByHash :one
+SELECT id, audience, user_id, provider, key_id, key_version, encrypted_secret, last_totp_counter, enrollment_hash, enrollment_expires_at, status, verified_at, created_at, updated_at FROM mfa_credentials
+WHERE enrollment_hash = $1 AND status = 'pending' AND enrollment_expires_at > now()
+`
+
+func (q *Queries) GetMfaEnrollmentByHash(ctx context.Context, enrollmentHash []byte) (MfaCredential, error) {
+	row := q.db.QueryRow(ctx, getMfaEnrollmentByHash, enrollmentHash)
+	var i MfaCredential
+	err := row.Scan(
+		&i.ID,
+		&i.Audience,
+		&i.UserID,
+		&i.Provider,
+		&i.KeyID,
+		&i.KeyVersion,
+		&i.EncryptedSecret,
+		&i.LastTotpCounter,
+		&i.EnrollmentHash,
+		&i.EnrollmentExpiresAt,
+		&i.Status,
+		&i.VerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPasswordCredential = `-- name: GetPasswordCredential :one
 SELECT id, audience, subject_id, encoded_hash, status, temporary, expires_at, version, created_at, updated_at FROM password_credentials WHERE audience = $1 AND subject_id = $2 AND status = 'active'
 `
@@ -640,7 +946,7 @@ func (q *Queries) GetPasswordCredential(ctx context.Context, arg GetPasswordCred
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT id, token_hash, csrf_hash, audience, user_id, enterprise_id, department_id, authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at, revoked_at, revoke_reason, created_at FROM sessions WHERE token_hash = $1
+SELECT id, token_hash, csrf_hash, audience, user_id, enterprise_id, department_id, authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at, revoked_at, revoke_reason, created_at, authenticated_at, step_up_expires_at, amr FROM sessions WHERE token_hash = $1
 `
 
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error) {
@@ -662,6 +968,9 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 		&i.RevokedAt,
 		&i.RevokeReason,
 		&i.CreatedAt,
+		&i.AuthenticatedAt,
+		&i.StepUpExpiresAt,
+		&i.Amr,
 	)
 	return i, err
 }
@@ -725,6 +1034,49 @@ func (q *Queries) InsertOutboxEvent(ctx context.Context, arg InsertOutboxEventPa
 		arg.Payload,
 	)
 	return err
+}
+
+const listBreakGlassSessions = `-- name: ListBreakGlassSessions :many
+SELECT id, enterprise_id, user_id, source_session_id, authorization_version, reason, ticket_ref, status, expires_at, revoked_at, created_at FROM break_glass_sessions
+WHERE enterprise_id = $1 AND user_id = $2
+ORDER BY created_at DESC, id DESC
+`
+
+type ListBreakGlassSessionsParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	UserID       uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) ListBreakGlassSessions(ctx context.Context, arg ListBreakGlassSessionsParams) ([]BreakGlassSession, error) {
+	rows, err := q.db.Query(ctx, listBreakGlassSessions, arg.EnterpriseID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BreakGlassSession{}
+	for rows.Next() {
+		var i BreakGlassSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.UserID,
+			&i.SourceSessionID,
+			&i.AuthorizationVersion,
+			&i.Reason,
+			&i.TicketRef,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.RevokedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDepartments = `-- name: ListDepartments :many
@@ -841,6 +1193,25 @@ func (q *Queries) RetryOutboxEvent(ctx context.Context, arg RetryOutboxEventPara
 	return err
 }
 
+const revokeBreakGlassSession = `-- name: RevokeBreakGlassSession :execrows
+UPDATE break_glass_sessions SET status = 'revoked', revoked_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND user_id = $3 AND status = 'active'
+`
+
+type RevokeBreakGlassSessionParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	UserID       uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) RevokeBreakGlassSession(ctx context.Context, arg RevokeBreakGlassSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeBreakGlassSession, arg.ID, arg.EnterpriseID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeEnterpriseSessions = `-- name: RevokeEnterpriseSessions :exec
 UPDATE sessions SET revoked_at = now(), revoke_reason = $2
 WHERE enterprise_id = $1 AND revoked_at IS NULL
@@ -853,6 +1224,28 @@ type RevokeEnterpriseSessionsParams struct {
 
 func (q *Queries) RevokeEnterpriseSessions(ctx context.Context, arg RevokeEnterpriseSessionsParams) error {
 	_, err := q.db.Exec(ctx, revokeEnterpriseSessions, arg.EnterpriseID, arg.RevokeReason)
+	return err
+}
+
+const revokeOtherSubjectSessions = `-- name: RevokeOtherSubjectSessions :exec
+UPDATE sessions SET revoked_at = now(), revoke_reason = $4
+WHERE audience = $1 AND user_id = $2 AND id <> $3 AND revoked_at IS NULL
+`
+
+type RevokeOtherSubjectSessionsParams struct {
+	Audience     string      `json:"audience"`
+	UserID       uuid.UUID   `json:"user_id"`
+	ID           uuid.UUID   `json:"id"`
+	RevokeReason pgtype.Text `json:"revoke_reason"`
+}
+
+func (q *Queries) RevokeOtherSubjectSessions(ctx context.Context, arg RevokeOtherSubjectSessionsParams) error {
+	_, err := q.db.Exec(ctx, revokeOtherSubjectSessions,
+		arg.Audience,
+		arg.UserID,
+		arg.ID,
+		arg.RevokeReason,
+	)
 	return err
 }
 
@@ -874,6 +1267,16 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) (i
 	return result.RowsAffected(), nil
 }
 
+const revokeSubjectBreakGlassSessions = `-- name: RevokeSubjectBreakGlassSessions :exec
+UPDATE break_glass_sessions SET status = 'revoked', revoked_at = now()
+WHERE user_id = $1 AND status = 'active'
+`
+
+func (q *Queries) RevokeSubjectBreakGlassSessions(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeSubjectBreakGlassSessions, userID)
+	return err
+}
+
 const revokeSubjectSessions = `-- name: RevokeSubjectSessions :exec
 UPDATE sessions SET revoked_at = now(), revoke_reason = $3
 WHERE audience = $1 AND user_id = $2 AND revoked_at IS NULL
@@ -888,6 +1291,72 @@ type RevokeSubjectSessionsParams struct {
 func (q *Queries) RevokeSubjectSessions(ctx context.Context, arg RevokeSubjectSessionsParams) error {
 	_, err := q.db.Exec(ctx, revokeSubjectSessions, arg.Audience, arg.UserID, arg.RevokeReason)
 	return err
+}
+
+const setEnterpriseMfaEnabled = `-- name: SetEnterpriseMfaEnabled :exec
+UPDATE enterprise_users SET mfa_enabled = $2, version = version + 1, updated_at = now() WHERE id = $1
+`
+
+type SetEnterpriseMfaEnabledParams struct {
+	ID         uuid.UUID `json:"id"`
+	MfaEnabled bool      `json:"mfa_enabled"`
+}
+
+func (q *Queries) SetEnterpriseMfaEnabled(ctx context.Context, arg SetEnterpriseMfaEnabledParams) error {
+	_, err := q.db.Exec(ctx, setEnterpriseMfaEnabled, arg.ID, arg.MfaEnabled)
+	return err
+}
+
+const setPlatformMfaEnabled = `-- name: SetPlatformMfaEnabled :exec
+UPDATE platform_users SET mfa_enabled = $2, version = version + 1, updated_at = now() WHERE id = $1
+`
+
+type SetPlatformMfaEnabledParams struct {
+	ID         uuid.UUID `json:"id"`
+	MfaEnabled bool      `json:"mfa_enabled"`
+}
+
+func (q *Queries) SetPlatformMfaEnabled(ctx context.Context, arg SetPlatformMfaEnabledParams) error {
+	_, err := q.db.Exec(ctx, setPlatformMfaEnabled, arg.ID, arg.MfaEnabled)
+	return err
+}
+
+const setSessionStepUp = `-- name: SetSessionStepUp :one
+UPDATE sessions SET step_up_expires_at = $2, amr = $3
+WHERE id = $1 AND revoked_at IS NULL
+RETURNING id, token_hash, csrf_hash, audience, user_id, enterprise_id, department_id, authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at, revoked_at, revoke_reason, created_at, authenticated_at, step_up_expires_at, amr
+`
+
+type SetSessionStepUpParams struct {
+	ID              uuid.UUID          `json:"id"`
+	StepUpExpiresAt pgtype.Timestamptz `json:"step_up_expires_at"`
+	Amr             []string           `json:"amr"`
+}
+
+func (q *Queries) SetSessionStepUp(ctx context.Context, arg SetSessionStepUpParams) (Session, error) {
+	row := q.db.QueryRow(ctx, setSessionStepUp, arg.ID, arg.StepUpExpiresAt, arg.Amr)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.TokenHash,
+		&i.CsrfHash,
+		&i.Audience,
+		&i.UserID,
+		&i.EnterpriseID,
+		&i.DepartmentID,
+		&i.AuthorizationVersion,
+		&i.Locale,
+		&i.IdleExpiresAt,
+		&i.AbsoluteExpiresAt,
+		&i.LastSeenAt,
+		&i.RevokedAt,
+		&i.RevokeReason,
+		&i.CreatedAt,
+		&i.AuthenticatedAt,
+		&i.StepUpExpiresAt,
+		&i.Amr,
+	)
+	return i, err
 }
 
 const setTemporaryCredentialChallenge = `-- name: SetTemporaryCredentialChallenge :one
@@ -920,7 +1389,7 @@ func (q *Queries) SetTemporaryCredentialChallenge(ctx context.Context, arg SetTe
 const touchSession = `-- name: TouchSession :one
 UPDATE sessions SET last_seen_at = $2, idle_expires_at = $3
 WHERE id = $1 AND revoked_at IS NULL AND absolute_expires_at > $2
-RETURNING id, token_hash, csrf_hash, audience, user_id, enterprise_id, department_id, authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at, revoked_at, revoke_reason, created_at
+RETURNING id, token_hash, csrf_hash, audience, user_id, enterprise_id, department_id, authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at, revoked_at, revoke_reason, created_at, authenticated_at, step_up_expires_at, amr
 `
 
 type TouchSessionParams struct {
@@ -948,6 +1417,9 @@ func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) (Ses
 		&i.RevokedAt,
 		&i.RevokeReason,
 		&i.CreatedAt,
+		&i.AuthenticatedAt,
+		&i.StepUpExpiresAt,
+		&i.Amr,
 	)
 	return i, err
 }
@@ -1081,6 +1553,68 @@ func (q *Queries) UpdatePasswordCredential(ctx context.Context, arg UpdatePasswo
 		&i.Temporary,
 		&i.ExpiresAt,
 		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertMfaEnrollment = `-- name: UpsertMfaEnrollment :one
+INSERT INTO mfa_credentials (
+  id, audience, user_id, provider, key_id, key_version, encrypted_secret,
+  enrollment_hash, enrollment_expires_at, status
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+ON CONFLICT (audience, user_id) DO UPDATE SET
+  provider = EXCLUDED.provider,
+  key_id = EXCLUDED.key_id,
+  key_version = EXCLUDED.key_version,
+  encrypted_secret = EXCLUDED.encrypted_secret,
+  enrollment_hash = EXCLUDED.enrollment_hash,
+  enrollment_expires_at = EXCLUDED.enrollment_expires_at,
+  status = 'pending',
+  verified_at = NULL,
+  updated_at = now()
+RETURNING id, audience, user_id, provider, key_id, key_version, encrypted_secret, last_totp_counter, enrollment_hash, enrollment_expires_at, status, verified_at, created_at, updated_at
+`
+
+type UpsertMfaEnrollmentParams struct {
+	ID                  uuid.UUID          `json:"id"`
+	Audience            string             `json:"audience"`
+	UserID              uuid.UUID          `json:"user_id"`
+	Provider            string             `json:"provider"`
+	KeyID               string             `json:"key_id"`
+	KeyVersion          int32              `json:"key_version"`
+	EncryptedSecret     []byte             `json:"encrypted_secret"`
+	EnrollmentHash      []byte             `json:"enrollment_hash"`
+	EnrollmentExpiresAt pgtype.Timestamptz `json:"enrollment_expires_at"`
+}
+
+func (q *Queries) UpsertMfaEnrollment(ctx context.Context, arg UpsertMfaEnrollmentParams) (MfaCredential, error) {
+	row := q.db.QueryRow(ctx, upsertMfaEnrollment,
+		arg.ID,
+		arg.Audience,
+		arg.UserID,
+		arg.Provider,
+		arg.KeyID,
+		arg.KeyVersion,
+		arg.EncryptedSecret,
+		arg.EnrollmentHash,
+		arg.EnrollmentExpiresAt,
+	)
+	var i MfaCredential
+	err := row.Scan(
+		&i.ID,
+		&i.Audience,
+		&i.UserID,
+		&i.Provider,
+		&i.KeyID,
+		&i.KeyVersion,
+		&i.EncryptedSecret,
+		&i.LastTotpCounter,
+		&i.EnrollmentHash,
+		&i.EnrollmentExpiresAt,
+		&i.Status,
+		&i.VerifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

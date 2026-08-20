@@ -367,6 +367,47 @@ kbd,
   max-width: 420px;
 }
 
+.argus-account-mfa,
+.argus-account-mfa__proof,
+.argus-account-mfa__enrollment {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.argus-account-mfa__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.argus-account-mfa__secret {
+  display: block;
+  overflow-wrap: anywhere;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-subtle);
+}
+
+.argus-account-mfa__codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.argus-account-mfa__codes code {
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .argus-account-mfa__codes {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- Tabs 内容间距 ---------- */
 .argus-tabs__content {
   padding-top: var(--space-px-14);

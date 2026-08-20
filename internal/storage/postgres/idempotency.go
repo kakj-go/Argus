@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/kakj-go/Argus/internal/keywrap"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
@@ -22,7 +23,10 @@ var (
 	ErrIdempotencyExpired  = errors.New("idempotency result expired")
 )
 
-type Idempotency struct{ Key []byte }
+type Idempotency struct {
+	Key      []byte
+	Provider keywrap.Provider
+}
 
 type IdempotencyResult struct {
 	Replay bool
@@ -82,7 +86,16 @@ func (service Idempotency) Begin(ctx context.Context, queries *db.Queries, audie
 	if !record.ResponseStatus.Valid || len(record.ResponseCiphertext) == 0 {
 		return IdempotencyResult{}, ErrIdempotencyConflict
 	}
-	body, err := service.decrypt(record.ResponseNonce, record.ResponseCiphertext, []byte(audience+"\x00"+subjectID+"\x00"+operation+"\x00"+key))
+	var body []byte
+	if record.ResponseProvider.Valid {
+		if service.Provider == nil {
+			return IdempotencyResult{}, keywrap.ErrUnavailable
+		}
+		body, err = service.Provider.Decrypt(ctx, keywrap.Ciphertext{Provider: record.ResponseProvider.String, KeyID: record.ResponseKeyID.String,
+			KeyVersion: record.ResponseKeyVersion.Int32, Value: record.ResponseCiphertext})
+	} else {
+		body, err = service.decrypt(record.ResponseNonce, record.ResponseCiphertext, []byte(audience+"\x00"+subjectID+"\x00"+operation+"\x00"+key))
+	}
 	if err != nil {
 		return IdempotencyResult{}, err
 	}
@@ -91,12 +104,27 @@ func (service Idempotency) Begin(ctx context.Context, queries *db.Queries, audie
 
 func (service Idempotency) Complete(ctx context.Context, queries *db.Queries, audience, subjectID, operation, key string, status int, body []byte) error {
 	aad := []byte(audience + "\x00" + subjectID + "\x00" + operation + "\x00" + key)
-	nonce, ciphertext, err := service.encrypt(body, aad)
-	if err != nil {
-		return err
+	var nonce, ciphertext []byte
+	var provider, keyID pgtype.Text
+	var keyVersion pgtype.Int4
+	if service.Provider != nil {
+		wrapped, err := service.Provider.Encrypt(ctx, body)
+		if err != nil {
+			return err
+		}
+		ciphertext = wrapped.Value
+		provider, keyID = pgtype.Text{String: wrapped.Provider, Valid: true}, pgtype.Text{String: wrapped.KeyID, Valid: true}
+		keyVersion = pgtype.Int4{Int32: wrapped.KeyVersion, Valid: true}
+	} else {
+		var err error
+		nonce, ciphertext, err = service.encrypt(body, aad)
+		if err != nil {
+			return err
+		}
 	}
 	rows, err := queries.CompleteIdempotencyRecord(ctx, db.CompleteIdempotencyRecordParams{Audience: audience, SubjectID: subjectID, Operation: operation, IdempotencyKey: key,
-		ResponseStatus: pgtype.Int4{Int32: int32(status), Valid: true}, ResponseNonce: nonce, ResponseCiphertext: ciphertext})
+		ResponseStatus: pgtype.Int4{Int32: int32(status), Valid: true}, ResponseNonce: nonce, ResponseCiphertext: ciphertext,
+		ResponseProvider: provider, ResponseKeyID: keyID, ResponseKeyVersion: keyVersion})
 	if err != nil {
 		return err
 	}

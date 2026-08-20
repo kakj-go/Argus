@@ -30,7 +30,7 @@
 - Setup Token 由 `argusctl` 生成到独立 Kubernetes Secret，Server 每次从只读 Volume 读取；初始化后禁止轮换。
 - Setup 不收集 OpenSandbox 配置。OpenSandbox 仍由 Helm 部署，治理 API 是 M4 Agent/Sandbox 接入前置任务。
 - PostgreSQL 保存 Session、授权版本、审计、Outbox 和幂等事实；Redis 不可用时 Server 以 degraded 状态运行，已有 Session 继续校验，新登录 fail closed。
-- M2 的授权决策只产生 `ALLOW` 或 `DENY`。平台超级管理员 MFA、恢复码和 Step-up 属于 M8 Production 硬阻断。
+- M2 的授权决策只产生 `ALLOW` 或 `DENY`。平台超级管理员 MFA、恢复码和 Step-up 已由 M8 本地加固补齐，不改变 M2 的完成边界。
 - RoleBinding 更新显式提交可空的 `valid_from`、`valid_until`；APIKey 固定绑定创建时的 ServiceAccount AuthorizationVersion。
 
 ## 测试
@@ -55,7 +55,7 @@
 - 三个门户核心身份流程完全脱离 mock。
 - 企业隔离、功能权限和资源范围由同一授权服务执行。
 - 平台管理员无法读取企业业务正文，企业管理员不因 IAM 权限获得 Secret/远程执行权限。
-- 完成状态仅代表 Evaluation 身份授权闭环，不代表 Production 身份安全就绪；平台超级管理员 MFA 仍阻断 M8 Production Profile。
+- 完成状态仅代表 Evaluation 身份授权闭环，不代表 Production 身份安全就绪；M8 本地 MFA 完成后 Production Profile 仍由环境验证清单阻断。
 
 ## 不包含
 

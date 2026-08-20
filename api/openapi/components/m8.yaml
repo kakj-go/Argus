@@ -1,0 +1,87 @@
+components:
+  schemas:
+    MfaState:
+      type: string
+      enum: [disabled, enrollment_required, enabled]
+    AuthenticationMethod:
+      type: string
+      enum: [password, temporary_password, totp, recovery_code]
+    MfaChallenge:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, audience, expires_at]
+      properties:
+        challenge_id: {type: string, minLength: 32, maxLength: 256, writeOnly: true}
+        audience: {type: string, enum: [platform, enterprise]}
+        expires_at: {type: string, format: date-time}
+    MfaCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, code]
+      properties:
+        challenge_id: {type: string, minLength: 32, maxLength: 256, writeOnly: true}
+        code: {type: string, minLength: 6, maxLength: 64, writeOnly: true}
+    TotpEnrollment:
+      type: object
+      additionalProperties: false
+      required: [enrollment_id, secret, otpauth_uri, expires_at]
+      properties:
+        enrollment_id: {type: string, minLength: 32, maxLength: 256, writeOnly: true}
+        secret: {type: string, pattern: "^[A-Z2-7]{16,128}$", example: JBSWY3DPEHPK3PXP, writeOnly: true}
+        otpauth_uri: {type: string, format: uri, writeOnly: true}
+        expires_at: {type: string, format: date-time}
+    TotpVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [enrollment_id, code]
+      properties:
+        enrollment_id: {type: string, minLength: 32, maxLength: 256, writeOnly: true}
+        code: {type: string, pattern: "^[0-9]{6}$", example: "123456", writeOnly: true}
+    MfaCodeRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: {type: string, minLength: 6, maxLength: 64, writeOnly: true}
+    RecoveryCodesResult:
+      type: object
+      additionalProperties: false
+      required: [codes, generated_at]
+      properties:
+        codes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items: {type: string, minLength: 12, maxLength: 32, example: ABCD-EFGH-JKLM-NPQR, writeOnly: true}
+        generated_at: {type: string, format: date-time}
+    StepUpSession:
+      type: object
+      additionalProperties: false
+      required: [expires_at, amr]
+      properties:
+        expires_at: {type: string, format: date-time}
+        amr:
+          type: array
+          uniqueItems: true
+          items: {$ref: "#/components/schemas/AuthenticationMethod"}
+    BreakGlassSession:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, user_id, reason, ticket_ref, status, expires_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        reason: {type: string, minLength: 1, maxLength: 2048}
+        ticket_ref: {type: string, minLength: 1, maxLength: 256}
+        status: {type: string, enum: [active, revoked, expired]}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time}
+    BreakGlassCreate:
+      type: object
+      additionalProperties: false
+      required: [reason, ticket_ref]
+      properties:
+        reason: {type: string, minLength: 8, maxLength: 2048}
+        ticket_ref: {type: string, minLength: 1, maxLength: 256}

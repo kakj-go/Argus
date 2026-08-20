@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
+	actionservice "github.com/kakj-go/Argus/internal/action"
 	hostapi "github.com/kakj-go/Argus/internal/gen/openapi/hostapi"
 	"github.com/kakj-go/Argus/internal/identity"
 	"github.com/kakj-go/Argus/internal/resource"
@@ -299,6 +300,8 @@ func resourceStatus(err error) int {
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, resource.ErrResourceDenied):
 		return http.StatusNotFound
 	case errors.Is(err, resource.ErrDirectTargetDenied):
+		return http.StatusForbidden
+	case errors.Is(err, actionservice.ErrStepUpRequired):
 		return http.StatusForbidden
 	case errors.Is(err, resource.ErrConnectionTestNeeded), errors.Is(err, resource.ErrWinRMTLSRequired):
 		return http.StatusUnprocessableEntity

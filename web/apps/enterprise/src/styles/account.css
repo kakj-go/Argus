@@ -1,0 +1,61 @@
+.argus-account-stack,
+.argus-account-security,
+.argus-account-security__proof,
+.argus-account-enrollment,
+.argus-account-break-glass {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.argus-account-password-form,
+.argus-account-break-glass__form {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 480px;
+}
+
+.argus-account-security__actions,
+.argus-account-break-glass__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.argus-account-secret {
+  display: block;
+  overflow-wrap: anywhere;
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+}
+
+.argus-account-recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.argus-account-recovery-codes code {
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.argus-account-break-glass__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 640px) {
+  .argus-account-recovery-codes,
+  .argus-account-break-glass__item {
+    grid-template-columns: 1fr;
+  }
+}

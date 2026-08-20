@@ -61,7 +61,7 @@ resource_approver
 
 `enterprise_admin` 是企业控制面管理员，可以管理用户、部门、角色、策略、模型和资源配置，但不自动获得生产 Shell、目标账号、Secret 原值或 AI 生产执行权限。管理员扩大自己的 DataScope 或 RemoteAccessGrant 必须经过 Step-up Authentication 并写入高优先级审计。
 
-M2 只实现 `ALLOW | DENY` 和本地密码认证，用于 Evaluation 身份授权闭环。MFA、恢复码、Step-up 和 Production 强制策略在 M8 完成；在此之前不能把 Evaluation Profile 声明为 Production 身份安全就绪。
+M2 的 Evaluation 闭环以本地密码和 `ALLOW | DENY` 为基础。M8 已增加 TOTP、恢复码、登录 Challenge、五分钟 Step-up 和短期 Break Glass，并要求平台超级管理员完成 Enrollment；这些能力只构成本地加固，不把 Evaluation 或 `local-hardening` 声明为 Production 身份安全就绪。
 
 ## 3. 资源标签和 DataScope
 

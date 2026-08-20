@@ -35,9 +35,9 @@ Kubernetes Agent 与 Gateway 使用各自本地生成的私钥/CSR 和短期证�
 
 `make e2e-m7-k8s` 于 2026-08-19 以最终运行号 `20260819140437-21054` 通过：覆盖 Linux arm64 Collector 构建与安装、Kubernetes Agent/Gateway mTLS、NodeBinding 保持与漂移、真实 Metrics/Logs/Traces、Kafka backlog、永久坏记录 DLQ 隔离与受控 replay、Redis outage 持久队列恢复、Ingest/Writer/Query Pod 删除恢复、Telemetry Card 激活、M2-M5 real Playwright 和 M7 `zh-CN/en-US × light/dark` real/a11y 流程。`bastion_gateway` 为硬门禁，验证 Leaf mTLS 身份经 Edge Gateway 覆盖后，Metrics、Logs 和 Traces 均进入 Ingest、Kafka、Writer、ClickHouse 和对应授权 Query；Gateway 下游管线禁止跨 Collector batch，避免不同可信主体被合并为一个 OTLP 请求。Query 安全矩阵覆盖跨企业拒绝、DataScope `partial`、预算、敏感字段脱敏、AuthorizationVersion 失效以及 Web/Agent/Card 投影一致性。脱敏证据位于 `artifacts/m7-e2e/20260819140437-21054`；三个临时 Namespace、运行相关 PVC 和集群 Lease均已删除。
 
-实现还固定了 canonical Operation Plan Hash、Kafka `IdempotentWrite`、严格 Artifact TLS 和 Query Redis 并发门禁。Windows amd64 Distribution 继续固定为 `validation_pending`，真实页面不可选择；Windows WinRM Collector 管理 Adapter、Windows Service 生命周期和实体兼容矩阵统一进入 M8，不属于 M7 完成条件。Linux amd64、生产容量/HA、备份恢复、供应链签名、Telemetry PKI 长期轮换与重启恢复演练同样进入 M8 阻断清单。
+实现还固定了 canonical Operation Plan Hash、Kafka `IdempotentWrite`、严格 Artifact TLS 和 Query Redis 并发门禁。M8 本地 Profile 只同步 Linux arm64 Distribution；Windows amd64 保持不可选择，Linux amd64、真实 Windows、生产容量/HA 和长期 PKI 演练进入 Production Validation 清单。M8 本地范围补齐 OpenBao、最小 PostgreSQL Login、备份恢复和发布证据。
 
-Evaluation 阶段不增加第五个自研控制服务。Ingest 和 Writer 通过各自的窄领域 Adapter 读取或结算 PostgreSQL 中的 Telemetry 控制事实：Ingest 只能解析 Collector/Certificate/Route 身份，Writer 只能读取 Retention 并写 Usage/DLQ；二者均不能写资源、身份、权限或 Action 状态，也不能访问对方的 ClickHouse/Kafka 职责。Production 是否将这些 Adapter 改为内部 mTLS RPC，或为其签发独立 PostgreSQL Login Role，由 M8 的数据库与网络安全 ADR 固化。
+Evaluation 阶段不增加第五个自研控制服务。Ingest 和 Writer 通过各自的窄领域 Adapter 读取或结算 PostgreSQL 中的 Telemetry 控制事实。M8 `local-hardening` 已为两者签发独立 Login Role：Ingest 只读 Collector/Certificate/Route，Writer 只读写 Retention、Usage 与 DLQ；数据库级权限不允许访问身份、资源或 Action 表。
 
 ## 测试
 
@@ -59,4 +59,4 @@ Evaluation 阶段不增加第五个自研控制服务。Ingest 和 Writer 通过
 
 - 任意 SQL、任意 Collector YAML、Profiles 信号和高级尾采样。
 - 独立 TelemetryGroup 可在 `direct_argus/bastion_gateway` 稳定后延后。
-- Windows amd64 在 WinRM 管理 Adapter、Windows Service 生命周期和实体兼容验证完成前保持不可选择；这些工作与 Linux amd64 支持矩阵一起进入 M8。
+- Windows amd64 在 WinRM 管理 Adapter、Windows Service 生命周期和实体兼容验证完成前保持不可选择；这些工作与 Linux amd64 支持矩阵一起进入 Production Validation。

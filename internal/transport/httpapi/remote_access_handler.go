@@ -393,7 +393,8 @@ func (handler RemoteAccessHandler) actorAny(ctx context.Context, mutation bool, 
 		}
 		return remoteaccess.Actor{EnterpriseID: principal.EnterpriseUser.EnterpriseID, UserID: principal.EnterpriseUser.ID,
 			DepartmentID: principal.EnterpriseUser.DepartmentID, HTTPSessionID: principal.Session.ID,
-			AuthorizationVersion: principal.EnterpriseUser.AuthorizationVersion, DataScopeIDs: slices.Clone(principal.DataScopeIDs)}, principal, nil
+			AuthorizationVersion: principal.EnterpriseUser.AuthorizationVersion, DataScopeIDs: slices.Clone(principal.DataScopeIDs),
+			StepUpAuthenticated: handler.Identity.Auth.Identity.RequireStepUp(principal) == nil}, principal, nil
 	}
 	if last == nil {
 		value := remoteAccessError(ctx, identity.ErrSessionInvalid)

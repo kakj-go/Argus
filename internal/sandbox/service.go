@@ -458,7 +458,7 @@ func (service Service) client(ctx context.Context, id uuid.UUID) (db.SandboxBack
 	}
 	apiKey := ""
 	if backend.CredentialCiphertext != nil {
-		plaintext, err := service.Keyring.Decrypt(backendEnvelope(backend), []byte("argus.sandbox_backend/v1\x00"+backend.ID.String()))
+		plaintext, err := service.Keyring.DecryptContext(ctx, backendEnvelope(backend), []byte("argus.sandbox_backend/v1\x00"+backend.ID.String()))
 		if err != nil {
 			return db.SandboxBackend{}, nil, err
 		}
@@ -473,7 +473,7 @@ func (service Service) encryptCredential(id uuid.UUID, value string) (secret.Env
 	if value == "" {
 		return secret.Envelope{}, nil
 	}
-	return service.Keyring.Encrypt([]byte(value), []byte("argus.sandbox_backend/v1\x00"+id.String()))
+	return service.Keyring.EncryptContext(context.Background(), []byte(value), []byte("argus.sandbox_backend/v1\x00"+id.String()))
 }
 
 func upstreamStatus(value string) string {

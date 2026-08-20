@@ -25,6 +25,7 @@ import (
 	connectorservice "github.com/kakj-go/Argus/internal/connector"
 	"github.com/kakj-go/Argus/internal/directexecutor"
 	directv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/directexecutor/v1"
+	"github.com/kakj-go/Argus/internal/keywrap"
 	"github.com/kakj-go/Argus/internal/kubernetesreader"
 	"github.com/kakj-go/Argus/internal/mcp"
 	modelservice "github.com/kakj-go/Argus/internal/model"
@@ -62,10 +63,15 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 	if cfg.DatabaseURL == "" || len(cfg.PendingActionKey) != 32 || cfg.SecretKEKPath == "" {
 		return errors.New("runtime worker requires PostgreSQL, pending-action key, and secret KEK")
 	}
-	keyring, err := secretservice.LoadKeyring(cfg.SecretKEKPath)
+	keyring, err := secretservice.LoadConfiguredKeyring(cfg.SecretKEKPath, cfg.KeyWrappingMode, cfg.OpenBaoAddress, cfg.OpenBaoToken, cfg.OpenBaoTransitKey)
 	if err != nil {
 		return err
 	}
+	var wrapping keywrap.Provider = keywrap.Local{Key: cfg.IdempotencyEncryptionKey, KeyID: "argus-evaluation"}
+	if cfg.KeyWrappingMode == "openbao_transit" {
+		wrapping = keywrap.OpenBao{Address: cfg.OpenBaoAddress, Token: cfg.OpenBaoToken, KeyID: cfg.OpenBaoTransitKey}
+	}
+	idempotency := postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey, Provider: wrapping}
 	store, err := postgres.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
@@ -93,7 +99,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 	}
 	defer directDispatcher.Close()
 	secretDomain := secretservice.Service{Store: store, Keyring: keyring}
-	actionDomain := resource.PendingActionService{Store: store, Idempotency: postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey}, Key: cfg.PendingActionKey}
+	actionDomain := resource.PendingActionService{Store: store, Idempotency: idempotency, Key: cfg.PendingActionKey}
 	connectorDomain := connectorservice.Service{Store: store, Redis: redisClient, GatewayEndpoint: cfg.ConnectorGatewayAddress,
 		EnrollmentURL: cfg.ConnectorEnrollmentURL, Credentials: secretDomain,
 		Issuer: connectorservice.CertManagerIssuer{Client: kubernetesClient, Namespace: cfg.SystemNamespace,
@@ -111,7 +117,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 	if err := (agent.ResourceTools{Store: store, Resources: resourceDomain}).Register(registry); err != nil {
 		return err
 	}
-	if pool == PoolDefault || pool == PoolAgent || pool == PoolAutomation {
+	if cfg.TelemetryEnabled && (pool == PoolDefault || pool == PoolAgent || pool == PoolAutomation) {
 		telemetryTLS, tlsErr := telemetryservice.ClientTLSConfig(cfg.TelemetryClientCert, cfg.TelemetryClientKey, cfg.TelemetryCABundle, cfg.TelemetryServerName)
 		if tlsErr != nil {
 			return tlsErr
@@ -127,12 +133,12 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		}
 	}
 	modelDomain := modelservice.Service{Store: store, Keyring: keyring}
-	cardDomain := cardservice.Service{Store: store, Idempotency: postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey}, Tools: registry,
+	cardDomain := cardservice.Service{Store: store, Idempotency: idempotency, Tools: registry,
 		PresentationTTL: cfg.CardPresentationTTL, ValidationTTL: cfg.CardValidationTTL, RuntimeVersion: cfg.CardRuntimeVersion, MaxPresentation: cfg.CardMaxPresentationBytes}
 	if err := cardDomain.RegisterRenderTool(registry); err != nil {
 		return err
 	}
-	workflowDomain := action.Service{Store: store, Idempotency: postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey}, Resources: resourceDomain,
+	workflowDomain := action.Service{Store: store, Idempotency: idempotency, Resources: resourceDomain,
 		OneTimeResultKey: cfg.PendingActionKey}
 	handlers := map[string]runtime.Handler{
 		PoolAgent:      agent.Loop{Store: store, Models: modelDomain, Tools: registry, Cards: cardDomain},
@@ -207,7 +213,7 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
-	keyring, err := secretservice.LoadKeyring(cfg.SecretKEKPath)
+	keyring, err := secretservice.LoadConfiguredKeyring(cfg.SecretKEKPath, cfg.KeyWrappingMode, cfg.OpenBaoAddress, cfg.OpenBaoToken, cfg.OpenBaoTransitKey)
 	if err != nil {
 		return err
 	}

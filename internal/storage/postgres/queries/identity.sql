@@ -112,8 +112,8 @@ WHERE id = $1 AND status = 'active';
 -- name: CreateSession :one
 INSERT INTO sessions (
   id, token_hash, csrf_hash, audience, user_id, enterprise_id, department_id,
-  authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  authorization_version, locale, idle_expires_at, absolute_expires_at, last_seen_at, authenticated_at, amr
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 RETURNING *;
 
 -- name: GetSessionByTokenHash :one
@@ -135,6 +135,106 @@ WHERE audience = $1 AND user_id = $2 AND revoked_at IS NULL;
 -- name: RevokeEnterpriseSessions :exec
 UPDATE sessions SET revoked_at = now(), revoke_reason = $2
 WHERE enterprise_id = $1 AND revoked_at IS NULL;
+
+-- name: RevokeOtherSubjectSessions :exec
+UPDATE sessions SET revoked_at = now(), revoke_reason = $4
+WHERE audience = $1 AND user_id = $2 AND id <> $3 AND revoked_at IS NULL;
+
+-- name: SetSessionStepUp :one
+UPDATE sessions SET step_up_expires_at = $2, amr = $3
+WHERE id = $1 AND revoked_at IS NULL
+RETURNING *;
+
+-- name: ClearSubjectStepUp :exec
+UPDATE sessions SET step_up_expires_at = NULL, amr = ARRAY['password']::text[]
+WHERE audience = $1 AND user_id = $2 AND revoked_at IS NULL;
+
+-- name: UpsertMfaEnrollment :one
+INSERT INTO mfa_credentials (
+  id, audience, user_id, provider, key_id, key_version, encrypted_secret,
+  enrollment_hash, enrollment_expires_at, status
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+ON CONFLICT (audience, user_id) DO UPDATE SET
+  provider = EXCLUDED.provider,
+  key_id = EXCLUDED.key_id,
+  key_version = EXCLUDED.key_version,
+  encrypted_secret = EXCLUDED.encrypted_secret,
+  enrollment_hash = EXCLUDED.enrollment_hash,
+  enrollment_expires_at = EXCLUDED.enrollment_expires_at,
+  status = 'pending',
+  verified_at = NULL,
+  updated_at = now()
+RETURNING *;
+
+-- name: GetMfaCredential :one
+SELECT * FROM mfa_credentials WHERE audience = $1 AND user_id = $2;
+
+-- name: GetMfaEnrollmentByHash :one
+SELECT * FROM mfa_credentials
+WHERE enrollment_hash = $1 AND status = 'pending' AND enrollment_expires_at > now();
+
+-- name: ActivateMfaCredential :one
+UPDATE mfa_credentials SET status = 'active', enrollment_hash = NULL,
+  enrollment_expires_at = NULL, verified_at = now(), updated_at = now()
+WHERE id = $1 AND status = 'pending'
+RETURNING *;
+
+-- name: DisableMfaCredential :execrows
+UPDATE mfa_credentials SET status = 'disabled', enrollment_hash = NULL,
+  enrollment_expires_at = NULL, updated_at = now()
+WHERE audience = $1 AND user_id = $2 AND status = 'active';
+
+-- name: SetPlatformMfaEnabled :exec
+UPDATE platform_users SET mfa_enabled = $2, version = version + 1, updated_at = now() WHERE id = $1;
+
+-- name: SetEnterpriseMfaEnabled :exec
+UPDATE enterprise_users SET mfa_enabled = $2, version = version + 1, updated_at = now() WHERE id = $1;
+
+-- name: DeleteMfaRecoveryCodes :exec
+DELETE FROM mfa_recovery_codes WHERE credential_id = $1;
+
+-- name: CreateMfaRecoveryCode :exec
+INSERT INTO mfa_recovery_codes (id, credential_id, code_hash) VALUES ($1, $2, $3);
+
+-- name: ConsumeMfaRecoveryCode :execrows
+UPDATE mfa_recovery_codes SET consumed_at = now()
+WHERE credential_id = $1 AND code_hash = $2 AND consumed_at IS NULL;
+
+-- name: ConsumeMfaTotpCounter :execrows
+UPDATE mfa_credentials SET last_totp_counter = $2, updated_at = now()
+WHERE id = $1 AND status = 'active' AND (last_totp_counter IS NULL OR last_totp_counter < $2);
+
+-- name: CreateMfaChallenge :one
+INSERT INTO mfa_challenges (id, challenge_hash, audience, user_id, purpose, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: GetMfaChallengeByHash :one
+SELECT * FROM mfa_challenges
+WHERE challenge_hash = $1 AND consumed_at IS NULL AND expires_at > now();
+
+-- name: ConsumeMfaChallenge :execrows
+UPDATE mfa_challenges SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL AND expires_at > now();
+
+-- name: CreateBreakGlassSession :one
+INSERT INTO break_glass_sessions (
+  id, enterprise_id, user_id, source_session_id, authorization_version,
+  reason, ticket_ref, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: ListBreakGlassSessions :many
+SELECT * FROM break_glass_sessions
+WHERE enterprise_id = $1 AND user_id = $2
+ORDER BY created_at DESC, id DESC;
+
+-- name: RevokeBreakGlassSession :execrows
+UPDATE break_glass_sessions SET status = 'revoked', revoked_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND user_id = $3 AND status = 'active';
+
+-- name: RevokeSubjectBreakGlassSessions :exec
+UPDATE break_glass_sessions SET status = 'revoked', revoked_at = now()
+WHERE user_id = $1 AND status = 'active';
 
 -- name: UpdatePasswordCredential :one
 UPDATE password_credentials SET encoded_hash = $3, temporary = false, expires_at = NULL,

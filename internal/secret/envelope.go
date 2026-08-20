@@ -1,6 +1,7 @@
 package secret
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -11,6 +12,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/kakj-go/Argus/internal/keywrap"
 )
 
 const (
@@ -29,6 +32,7 @@ type keyringFile struct {
 type Keyring struct {
 	currentVersion int
 	keys           map[int][]byte
+	provider       keywrap.Provider
 }
 
 type Envelope struct {
@@ -72,7 +76,33 @@ func LoadKeyring(path string) (Keyring, error) {
 	return Keyring{currentVersion: file.CurrentVersion, keys: keys}, nil
 }
 
+// NewProviderKeyring delegates DEK wrapping to a versioned external provider.
+// Payload encryption remains local AES-256-GCM with resource-bound AAD.
+func NewProviderKeyring(provider keywrap.Provider) (Keyring, error) {
+	if provider == nil {
+		return Keyring{}, keywrap.ErrUnavailable
+	}
+	return Keyring{provider: provider}, nil
+}
+
+// LoadConfiguredKeyring selects exactly one wrapping authority. External mode
+// never falls back to the local key file when OpenBao is unavailable.
+func LoadConfiguredKeyring(path, mode, address, token, keyID string) (Keyring, error) {
+	switch mode {
+	case "local_test":
+		return LoadKeyring(path)
+	case "openbao_transit":
+		return NewProviderKeyring(keywrap.OpenBao{Address: address, Token: token, KeyID: keyID})
+	default:
+		return Keyring{}, fmt.Errorf("unsupported key wrapping mode %q", mode)
+	}
+}
+
 func (keyring Keyring) Encrypt(plaintext, aad []byte) (Envelope, error) {
+	return keyring.EncryptContext(context.Background(), plaintext, aad)
+}
+
+func (keyring Keyring) EncryptContext(ctx context.Context, plaintext, aad []byte) (Envelope, error) {
 	dek := make([]byte, keySize)
 	if _, err := rand.Read(dek); err != nil {
 		return Envelope{}, fmt.Errorf("generate secret DEK: %w", err)
@@ -80,6 +110,16 @@ func (keyring Keyring) Encrypt(plaintext, aad []byte) (Envelope, error) {
 	nonce, ciphertext, err := seal(dek, plaintext, aad)
 	if err != nil {
 		return Envelope{}, err
+	}
+	if keyring.provider != nil {
+		wrapped, wrapErr := keyring.provider.Encrypt(ctx, dek)
+		clear(dek)
+		if wrapErr != nil {
+			return Envelope{}, wrapErr
+		}
+		hash := sha256.Sum256(plaintext)
+		return Envelope{Provider: wrapped.Provider, KeyID: wrapped.KeyID, KeyVersion: int(wrapped.KeyVersion), WrappedDEK: wrapped.Value,
+			Nonce: nonce, Ciphertext: ciphertext, ValueHash: hash[:]}, nil
 	}
 	wrapAAD := append([]byte("argus.secret_dek/v1\x00"), aad...)
 	wrapNonce, wrappedDEK, err := seal(keyring.keys[keyring.currentVersion], dek, wrapAAD)
@@ -93,15 +133,26 @@ func (keyring Keyring) Encrypt(plaintext, aad []byte) (Envelope, error) {
 }
 
 func (keyring Keyring) Decrypt(envelope Envelope, aad []byte) ([]byte, error) {
-	if envelope.Provider != localProvider || envelope.KeyID != localKeyID {
-		return nil, errors.New("unsupported secret envelope provider")
+	return keyring.DecryptContext(context.Background(), envelope, aad)
+}
+
+func (keyring Keyring) DecryptContext(ctx context.Context, envelope Envelope, aad []byte) ([]byte, error) {
+	var dek []byte
+	var err error
+	if keyring.provider != nil {
+		dek, err = keyring.provider.Decrypt(ctx, keywrap.Ciphertext{Provider: envelope.Provider, KeyID: envelope.KeyID,
+			KeyVersion: int32(envelope.KeyVersion), Value: envelope.WrappedDEK})
+	} else {
+		if envelope.Provider != localProvider || envelope.KeyID != localKeyID {
+			return nil, errors.New("unsupported secret envelope provider")
+		}
+		kek, ok := keyring.keys[envelope.KeyVersion]
+		if !ok {
+			return nil, ErrUnknownKeyVersion
+		}
+		wrapAAD := append([]byte("argus.secret_dek/v1\x00"), aad...)
+		dek, err = open(kek, envelope.WrapNonce, envelope.WrappedDEK, wrapAAD)
 	}
-	kek, ok := keyring.keys[envelope.KeyVersion]
-	if !ok {
-		return nil, ErrUnknownKeyVersion
-	}
-	wrapAAD := append([]byte("argus.secret_dek/v1\x00"), aad...)
-	dek, err := open(kek, envelope.WrapNonce, envelope.WrappedDEK, wrapAAD)
 	if err != nil {
 		return nil, fmt.Errorf("unwrap secret DEK: %w", err)
 	}
@@ -119,6 +170,25 @@ func (keyring Keyring) Decrypt(envelope Envelope, aad []byte) ([]byte, error) {
 }
 
 func (keyring Keyring) Rewrap(envelope Envelope, aad []byte) (Envelope, error) {
+	return keyring.RewrapContext(context.Background(), envelope, aad)
+}
+
+func (keyring Keyring) RewrapContext(ctx context.Context, envelope Envelope, aad []byte) (Envelope, error) {
+	if keyring.provider != nil {
+		dek, err := keyring.provider.Decrypt(ctx, keywrap.Ciphertext{Provider: envelope.Provider, KeyID: envelope.KeyID,
+			KeyVersion: int32(envelope.KeyVersion), Value: envelope.WrappedDEK})
+		if err != nil {
+			return Envelope{}, err
+		}
+		defer clear(dek)
+		wrapped, err := keyring.provider.Encrypt(ctx, dek)
+		if err != nil {
+			return Envelope{}, err
+		}
+		envelope.Provider, envelope.KeyID, envelope.KeyVersion = wrapped.Provider, wrapped.KeyID, int(wrapped.KeyVersion)
+		envelope.WrappedDEK, envelope.WrapNonce = wrapped.Value, nil
+		return envelope, nil
+	}
 	if envelope.KeyVersion == keyring.currentVersion {
 		return envelope, nil
 	}

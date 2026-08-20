@@ -84,11 +84,11 @@
 | M5 | Card 闭环 | 系统 Card 通过 CSP/MessagePort/Manifest/Binding 安全展示和触发动作，企业 Card 通过发布门禁 |
 | M6 | 人工远程访问闭环 | Grant、短期票据、SSH PTY/HTTPS WinRS、加密录像、终止、撤权和审计完整 |
 | M7 | 遥测闭环 | Collector、Ingest/Kafka/ClickHouse/Query、可信资源身份和统一数据裁剪贯通 |
-| M8 | Production 门禁 | HA、备份恢复、供应链、容量、故障演练和完整 Kubernetes E2E 达标 |
+| M8 | 本地安全与恢复 | TOTP/Step-up、OpenBao、备份恢复、升级、供应链和本地 Kubernetes E2E 达标 |
 
 详细任务见[分阶段任务文件](./plans/README.md)。
 
-截至 2026-08-18，M0-M7 已按各自退出标准完成；下一实施阶段为 M8 Production 就绪。M7 的最终临时集群验收运行号为 `20260818232223-15344`，脱敏证据位于 `artifacts/m7-e2e/20260818232223-15344`，结束后三个 Namespace、PVC 和 Lease 均为零残留。
+截至 2026-08-19，M0-M7 已按各自退出标准完成；M8 改为 arm64 Docker Desktop 本地加固，不承担 Production Ready。完成状态固定为 `local_hardening_complete`，Production Profile 继续 fail closed。
 
 ## 5. 依赖关系
 
@@ -105,7 +105,7 @@ flowchart LR
     M4 --> M6
     M3 --> M7["M7 遥测"]
     M4 --> M7
-    M5 --> M8["M8 Production"]
+    M5 --> M8["M8 Local Hardening"]
     M6 --> M8
     M7 --> M8
 ```
@@ -182,12 +182,12 @@ M8 结束时至少通过以下全链路场景：
 
 ## 9. 当前建议起点
 
-截至 2026-08-18，M0-M7 已完成：契约与生成门禁、显式 mock/real 前端基座、身份授权、资源/Connector、Agent/审批/确定性执行、Card 发布/渲染/Binding、人工 Remote Access，以及 Linux arm64 Host/Kubernetes Telemetry 均已有代码、测试和临时 Kubernetes Namespace 证据。
+截至 2026-08-19，M0-M7 已完成：契约与生成门禁、显式 mock/real 前端基座、身份授权、资源/Connector、Agent/审批/确定性执行、Card 发布/渲染/Binding、人工 Remote Access，以及 Linux arm64 Host/Kubernetes Telemetry 均已有代码、测试和临时 Kubernetes Namespace 证据。
 
-下一步从 M8 开始：
+M8 本地实现重点：
 
-- 完成 MFA/Step-up、Break Glass、外部 KMS/HSM、CA/Telemetry PKI 根轮换和生产出口证明。
-- 完成 PostgreSQL/Kafka/ClickHouse HA、备份恢复、容量、故障演练与供应链发布门禁。
-- 验证 Linux amd64、真实 Windows、Remote Access Production 保留/恢复和完整生产支持矩阵。
+- 完成 MFA/Step-up、Break Glass、单节点 OpenBao Transit 和敏感材料统一 Key Reference。
+- 完成本地加密备份恢复、可恢复升级、故障注入和供应链发布证据。
+- 保持 Production Profile 阻断，把 HA、容量、真实出口、AMD64/Windows 和跨集群灾备移入 Production Validation。
 
 M1 完成后进入 M2，建立第一条真实 Setup → Platform → Enterprise 授权垂直闭环。这条路径是后续 Connector、Agent、Card、远程访问和遥测的共同根基。

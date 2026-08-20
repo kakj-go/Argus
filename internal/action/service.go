@@ -29,6 +29,7 @@ var (
 	ErrBindingExpired     = errors.New("action binding expired")
 	ErrApprovalIneligible = errors.New("approval actor is not eligible")
 	ErrApprovalRequired   = errors.New("approval policy is required")
+	ErrStepUpRequired     = errors.New("step-up authentication required")
 )
 
 const (
@@ -104,7 +105,7 @@ func (service Service) StartAutomationApproval(ctx context.Context, enterpriseID
 	return result, err
 }
 
-func (service Service) Confirm(ctx context.Context, actorID, requestID string, enterpriseID uuid.UUID, authorizationVersion int64, actionRef, idempotencyKey string) (Confirmation, error) {
+func (service Service) Confirm(ctx context.Context, actorID, requestID string, enterpriseID uuid.UUID, authorizationVersion int64, stepUp bool, actionRef, idempotencyKey string) (Confirmation, error) {
 	actor, err := uuid.Parse(actorID)
 	if err != nil {
 		return Confirmation{}, ErrUnavailable
@@ -118,11 +119,11 @@ func (service Service) Confirm(ctx context.Context, actorID, requestID string, e
 	}{actionRef, authorizationVersion}
 	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actorID, "pending_action.confirm", idempotencyKey, request, 200,
 		func(q *db.Queries) (Confirmation, error) {
-			return service.confirmWithQueries(ctx, q, actor, actorID, requestID, enterpriseID, authorizationVersion, actionRef, idempotencyKey, true)
+			return service.confirmWithQueries(ctx, q, actor, actorID, requestID, enterpriseID, authorizationVersion, stepUp, actionRef, idempotencyKey, true)
 		})
 }
 
-func (service Service) InvokeCardBinding(ctx context.Context, actorID, requestID string, enterpriseID uuid.UUID, authorizationVersion int64, bindingRef, idempotencyKey string) (CardBindingInvocation, error) {
+func (service Service) InvokeCardBinding(ctx context.Context, actorID, requestID string, enterpriseID uuid.UUID, authorizationVersion int64, stepUp bool, bindingRef, idempotencyKey string) (CardBindingInvocation, error) {
 	actor, err := uuid.Parse(actorID)
 	if err != nil {
 		return CardBindingInvocation{}, ErrUnavailable
@@ -163,7 +164,7 @@ func (service Service) InvokeCardBinding(ctx context.Context, actorID, requestID
 			if binding.Action != "confirm" {
 				return CardBindingInvocation{}, ErrInvalidated
 			}
-			confirmation, err := service.confirmWithQueries(ctx, q, actor, actorID, requestID, enterpriseID, authorizationVersion, pending.ActionRef, idempotencyKey, false)
+			confirmation, err := service.confirmWithQueries(ctx, q, actor, actorID, requestID, enterpriseID, authorizationVersion, stepUp, pending.ActionRef, idempotencyKey, false)
 			return CardBindingInvocation{Action: "confirm", Confirmation: confirmation, PendingAction: confirmation.PendingAction}, err
 		})
 }
@@ -181,10 +182,13 @@ func cardBindingStateError(status string, expiresAt, now time.Time) error {
 	return nil
 }
 
-func (service Service) confirmWithQueries(ctx context.Context, q *db.Queries, actor uuid.UUID, actorID, requestID string, enterpriseID uuid.UUID, authorizationVersion int64, actionRef, idempotencyKey string, createTextBinding bool) (Confirmation, error) {
+func (service Service) confirmWithQueries(ctx context.Context, q *db.Queries, actor uuid.UUID, actorID, requestID string, enterpriseID uuid.UUID, authorizationVersion int64, stepUp bool, actionRef, idempotencyKey string, createTextBinding bool) (Confirmation, error) {
 	action, plan, err := service.lockAndRevalidate(ctx, q, enterpriseID, actionRef, "awaiting_confirmation", authorizationVersion)
 	if err != nil || action.CreatorSubjectType != "user" || action.CreatorSubjectID != actor {
 		return Confirmation{}, ErrInvalidated
+	}
+	if action.Risk == "critical" && !stepUp {
+		return Confirmation{}, ErrStepUpRequired
 	}
 	if _, err := q.CreateUserConfirmation(ctx, db.CreateUserConfirmationParams{ID: newID(), PendingActionID: action.ID,
 		EnterpriseID: enterpriseID, ActorUserID: actor, AuthorizationVersion: authorizationVersion}); err != nil {

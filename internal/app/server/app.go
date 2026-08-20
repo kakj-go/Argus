@@ -19,6 +19,7 @@ import (
 	"github.com/kakj-go/Argus/internal/conversation"
 	"github.com/kakj-go/Argus/internal/directexecutor"
 	"github.com/kakj-go/Argus/internal/identity"
+	"github.com/kakj-go/Argus/internal/keywrap"
 	"github.com/kakj-go/Argus/internal/kubernetesreader"
 	"github.com/kakj-go/Argus/internal/mcp"
 	modelservice "github.com/kakj-go/Argus/internal/model"
@@ -51,7 +52,8 @@ func (a *App) Run(ctx context.Context) error {
 	if err := a.config.Validate(); err != nil {
 		return err
 	}
-	secretKeyring, err := secretservice.LoadKeyring(a.config.SecretKEKPath)
+	secretKeyring, err := secretservice.LoadConfiguredKeyring(a.config.SecretKEKPath, a.config.KeyWrappingMode,
+		a.config.OpenBaoAddress, a.config.OpenBaoToken, a.config.OpenBaoTransitKey)
 	if err != nil {
 		return err
 	}
@@ -86,36 +88,46 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	identityService := identity.Service{Store: postgresStore, Redis: redisClient, IdleTTL: a.config.SessionIdleTTL, AbsoluteTTL: a.config.SessionAbsoluteTTL}
+	var wrapping keywrap.Provider = keywrap.Local{Key: a.config.IdempotencyEncryptionKey, KeyID: "argus-evaluation"}
+	if a.config.KeyWrappingMode == "openbao_transit" {
+		wrapping = keywrap.OpenBao{Address: a.config.OpenBaoAddress, Token: a.config.OpenBaoToken, KeyID: a.config.OpenBaoTransitKey}
+	}
+	idempotency := postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey, Provider: wrapping}
+	identityService := identity.Service{Store: postgresStore, Redis: redisClient, IdleTTL: a.config.SessionIdleTTL, AbsoluteTTL: a.config.SessionAbsoluteTTL,
+		KeyWrapping: wrapping, Idempotency: idempotency, BreakGlassEnabled: a.config.BreakGlassEnabled}
 	cursorSigner := pagination.Signer{Key: a.config.CursorSigningKey}
 	setupHandler := httpapi.SetupHandler{
-		Config: a.config, Setup: platform.SetupService{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}}, Identity: identityService,
+		Config: a.config, Setup: platform.SetupService{Store: postgresStore, Idempotency: idempotency}, Identity: identityService,
 		Token: platform.SetupTokenProvider{TokenPath: a.config.SetupTokenPath, ExpiresPath: a.config.SetupTokenExpiresPath},
 	}
-	platformHandler := httpapi.PlatformHandler{Auth: setupHandler, Enterprise: platform.EnterpriseService{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}}, Cursor: cursorSigner}
-	machineService := identity.MachineService{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}}
-	enterpriseIdentityHandler := httpapi.EnterpriseIdentityHandler{Auth: setupHandler, Service: identity.EnterpriseService{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}}, Machine: machineService, Cursor: cursorSigner}
-	enterpriseAuthorizationHandler := httpapi.EnterpriseAuthorizationHandler{Identity: enterpriseIdentityHandler, Service: authorization.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}}, Cursor: cursorSigner}
+	m8Handler := httpapi.M8Handler{Auth: setupHandler}
+	platformHandler := httpapi.PlatformHandler{Auth: setupHandler, Enterprise: platform.EnterpriseService{Store: postgresStore, Idempotency: idempotency}, Cursor: cursorSigner}
+	machineService := identity.MachineService{Store: postgresStore, Idempotency: idempotency}
+	enterpriseIdentityHandler := httpapi.EnterpriseIdentityHandler{Auth: setupHandler, Service: identity.EnterpriseService{Store: postgresStore, Idempotency: idempotency}, Machine: machineService, Cursor: cursorSigner}
+	enterpriseAuthorizationHandler := httpapi.EnterpriseAuthorizationHandler{Identity: enterpriseIdentityHandler, Service: authorization.Service{Store: postgresStore, Idempotency: idempotency}, Cursor: cursorSigner}
 	machineHandler := httpapi.MachineHandler{Identity: enterpriseIdentityHandler, Service: machineService, Cursor: cursorSigner}
 	auditHandler := httpapi.AuditHandler{Auth: setupHandler, Enterprise: enterpriseIdentityHandler, Store: postgresStore, Cursor: cursorSigner}
-	secretDomain := secretservice.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Keyring: secretKeyring}
-	actionDomain := resource.PendingActionService{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Key: a.config.PendingActionKey}
+	secretDomain := secretservice.Service{Store: postgresStore, Idempotency: idempotency, Keyring: secretKeyring}
+	actionDomain := resource.PendingActionService{Store: postgresStore, Idempotency: idempotency, Key: a.config.PendingActionKey}
 	connectorDomain := connectorservice.Service{Store: postgresStore, Redis: redisClient, GatewayEndpoint: a.config.ConnectorGatewayAddress,
 		EnrollmentURL: a.config.ConnectorEnrollmentURL,
 		Credentials:   secretDomain,
 		Issuer: connectorservice.CertManagerIssuer{Client: kubernetesClient, Namespace: a.config.SystemNamespace,
 			IssuerName: a.config.ConnectorIssuerName, IssuerGeneration: a.config.ConnectorIssuerGeneration}}
 	bastionDomain := connectorservice.BastionService{Store: postgresStore, Actions: actionDomain, Enrollment: connectorDomain}
-	telemetryActions := telemetryservice.ActionExtension{Next: bastionDomain, Credentials: secretDomain,
-		EnrollmentEndpoint: a.config.TelemetryEnrollment, IngestGRPCEndpoint: a.config.TelemetryIngestGRPC,
-		IngestHTTPEndpoint: a.config.TelemetryIngestHTTP, ServerCABundlePath: a.config.TelemetryCABundle,
-		KubernetesImage: a.config.OtelcolKubernetesImage}
+	var actionExtension resource.ActionExtension = bastionDomain
+	if a.config.TelemetryEnabled {
+		actionExtension = telemetryservice.ActionExtension{Next: bastionDomain, Credentials: secretDomain,
+			EnrollmentEndpoint: a.config.TelemetryEnrollment, IngestGRPCEndpoint: a.config.TelemetryIngestGRPC,
+			IngestHTTPEndpoint: a.config.TelemetryIngestHTTP, ServerCABundlePath: a.config.TelemetryCABundle,
+			KubernetesImage: a.config.OtelcolKubernetesImage}
+	}
 	resourceDomain := resource.Service{Store: postgresStore, Actions: actionDomain, Access: resource.AccessService{Store: postgresStore},
-		Direct: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs}, Commands: connectorDomain, DirectCommands: directDispatcher, Extension: telemetryActions,
+		Direct: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs}, Commands: connectorDomain, DirectCommands: directDispatcher, Extension: actionExtension,
 		ClusterEnrollment: connectorDomain,
 		Kubernetes: kubernetesreader.Reader{Store: postgresStore, Secrets: secretDomain, Validator: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs},
 			Notifier: connectorDomain}}
-	workflowDomain := action.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Resources: resourceDomain,
+	workflowDomain := action.Service{Store: postgresStore, Idempotency: idempotency, Resources: resourceDomain,
 		OneTimeResultKey: a.config.PendingActionKey}
 	secretHandler := httpapi.SecretHandler{Identity: enterpriseIdentityHandler, Service: secretDomain}
 	hostHandler := httpapi.HostHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
@@ -124,21 +136,21 @@ func (a *App) Run(ctx context.Context) error {
 	actionHandler := httpapi.ResourceActionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain, Workflow: workflowDomain}
 	workflowHandler := httpapi.WorkflowHandler{Identity: enterpriseIdentityHandler, Service: workflowDomain}
 	conversationHandler := httpapi.ConversationHandler{Identity: enterpriseIdentityHandler,
-		Service: conversation.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}}}
+		Service: conversation.Service{Store: postgresStore, Idempotency: idempotency}}
 	modelHandler := httpapi.ModelHandler{Identity: enterpriseIdentityHandler,
-		Service: modelservice.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Keyring: secretKeyring}}
+		Service: modelservice.Service{Store: postgresStore, Idempotency: idempotency, Keyring: secretKeyring}}
 	toolRegistry := mcp.NewRegistry()
 	if err := (agent.ResourceTools{Store: postgresStore, Resources: resourceDomain}).Register(toolRegistry); err != nil {
 		return err
 	}
-	cardDomain := cardservice.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Tools: toolRegistry, PresentationTTL: a.config.CardPresentationTTL,
+	cardDomain := cardservice.Service{Store: postgresStore, Idempotency: idempotency, Tools: toolRegistry, PresentationTTL: a.config.CardPresentationTTL,
 		ValidationTTL: a.config.CardValidationTTL, RuntimeVersion: a.config.CardRuntimeVersion, MaxPresentation: a.config.CardMaxPresentationBytes}
 	if err := cardDomain.RegisterRenderTool(toolRegistry); err != nil {
 		return err
 	}
 	cardHandler := httpapi.CardHandler{Identity: enterpriseIdentityHandler, Service: cardDomain, Workflow: workflowDomain}
 	automationHandler := httpapi.AutomationHandler{Identity: enterpriseIdentityHandler,
-		Service: automation.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey}, Tools: toolRegistry}}
+		Service: automation.Service{Store: postgresStore, Idempotency: idempotency, Tools: toolRegistry}}
 	sandboxHandler := httpapi.SandboxHandler{Auth: setupHandler, Service: sandbox.Service{Store: postgresStore, Keyring: secretKeyring}}
 	connectorHandler := httpapi.ConnectorHandler{Identity: enterpriseIdentityHandler, Service: connectorDomain, Bastion: bastionDomain}
 	remoteWebsocketURL, err := websocketURL(a.config.RemoteOrigin)
@@ -146,35 +158,38 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 	remoteAccessHandler := httpapi.RemoteAccessHandler{Identity: enterpriseIdentityHandler, WebsocketURL: remoteWebsocketURL,
-		Service: remoteaccessservice.Service{Store: postgresStore, Idempotency: postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey},
+		Service: remoteaccessservice.Service{Store: postgresStore, Idempotency: idempotency,
 			Access: resource.AccessService{Store: postgresStore}, Keyring: secretKeyring, ObjectStore: objects, UserLimit: a.config.RemoteUserLimit,
 			HostLimit: a.config.RemoteHostLimit, EnterpriseLimit: a.config.RemoteEnterpriseLimit}}
-	telemetryTLS, err := telemetryservice.ClientTLSConfig(a.config.TelemetryClientCert, a.config.TelemetryClientKey, a.config.TelemetryCABundle, a.config.TelemetryServerName)
-	if err != nil {
-		return err
+	var telemetryHandler *httpapi.TelemetryHandler
+	if a.config.TelemetryEnabled {
+		telemetryTLS, telemetryErr := telemetryservice.ClientTLSConfig(a.config.TelemetryClientCert, a.config.TelemetryClientKey, a.config.TelemetryCABundle, a.config.TelemetryServerName)
+		if telemetryErr != nil {
+			return telemetryErr
+		}
+		telemetryQuery, telemetryErr := telemetryservice.NewGRPCQueryBackend(a.config.TelemetryQueryEndpoint, telemetryTLS)
+		if telemetryErr != nil {
+			return telemetryErr
+		}
+		defer telemetryQuery.Close()
+		telemetryDomain := telemetryservice.Service{Store: postgresStore, Access: resource.AccessService{Store: postgresStore}, Actions: actionDomain,
+			Query: telemetryQuery, OtelcolKubernetesImage: a.config.OtelcolKubernetesImage}
+		telemetryIdentity := telemetryservice.IdentityService{Store: postgresStore, Issuer: connectorservice.CertManagerIssuer{
+			Client: kubernetesClient, Namespace: a.config.SystemNamespace, IssuerName: a.config.TelemetryIssuerName, IssuerKind: "ClusterIssuer",
+			RequestPrefix: "argus-telemetry-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: a.config.TelemetryIssuerGeneration,
+			Usages: []string{"client auth", "server auth"},
+		}}
+		if err := (telemetryservice.Tools{Service: telemetryDomain}).Register(toolRegistry); err != nil {
+			return err
+		}
+		telemetryHandler = &httpapi.TelemetryHandler{Identity: enterpriseIdentityHandler, Service: telemetryDomain, CollectorIdentity: telemetryIdentity,
+			IngestGRPCEndpoint: a.config.TelemetryIngestGRPC, IngestHTTPEndpoint: a.config.TelemetryIngestHTTP}
 	}
-	telemetryQuery, err := telemetryservice.NewGRPCQueryBackend(a.config.TelemetryQueryEndpoint, telemetryTLS)
-	if err != nil {
-		return err
-	}
-	defer telemetryQuery.Close()
-	telemetryDomain := telemetryservice.Service{Store: postgresStore, Access: resource.AccessService{Store: postgresStore}, Actions: actionDomain,
-		Query: telemetryQuery, OtelcolKubernetesImage: a.config.OtelcolKubernetesImage}
-	telemetryIdentity := telemetryservice.IdentityService{Store: postgresStore, Issuer: connectorservice.CertManagerIssuer{
-		Client: kubernetesClient, Namespace: a.config.SystemNamespace, IssuerName: a.config.TelemetryIssuerName, IssuerKind: "ClusterIssuer",
-		RequestPrefix: "argus-telemetry-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: a.config.TelemetryIssuerGeneration,
-		Usages: []string{"client auth", "server auth"},
-	}}
-	if err := (telemetryservice.Tools{Service: telemetryDomain}).Register(toolRegistry); err != nil {
-		return err
-	}
-	telemetryHandler := httpapi.TelemetryHandler{Identity: enterpriseIdentityHandler, Service: telemetryDomain, CollectorIdentity: telemetryIdentity,
-		IngestGRPCEndpoint: a.config.TelemetryIngestGRPC, IngestHTTPEndpoint: a.config.TelemetryIngestHTTP}
 	go (outbox.Relay{Store: postgresStore, Redis: redisClient, Logger: a.logger}).Run(ctx)
 	server := &http.Server{
 		Addr: a.config.Address,
 		Handler: httpapi.NewRouterWithOptions(httpapi.RouterOptions{
-			PostgreSQL: postgresStore, Redis: redisClient, Setup: &setupHandler, Platform: &platformHandler,
+			PostgreSQL: postgresStore, Redis: redisClient, Setup: &setupHandler, M8: &m8Handler, Platform: &platformHandler,
 			EnterpriseIdentity: &enterpriseIdentityHandler, EnterpriseAuthorization: &enterpriseAuthorizationHandler,
 			Machine: &machineHandler, Audit: &auditHandler, Secret: &secretHandler, Host: &hostHandler, Kubernetes: &kubernetesHandler,
 			Connection: &connectionHandler, ResourceAction: &actionHandler, Workflow: &workflowHandler, Conversation: &conversationHandler, Model: &modelHandler,
@@ -184,7 +199,7 @@ func (a *App) Run(ctx context.Context) error {
 			Connector:      &connectorHandler,
 			Card:           &cardHandler,
 			RemoteAccess:   &remoteAccessHandler,
-			Telemetry:      &telemetryHandler,
+			Telemetry:      telemetryHandler,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

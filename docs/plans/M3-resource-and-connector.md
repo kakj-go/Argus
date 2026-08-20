@@ -19,7 +19,7 @@
 - Connector PKI 使用 cert-manager。`argusctl` 复用同 major/minor 且 patch 不低于锁定基线的实例，否则安装锁定版本；Gateway 使用独立 ServiceAccount 和最小 CertificateRequest RBAC，卸载不得误删共享 CRD。
 - Host/Kubernetes 的地址、端口、连接模式或 Bastion Scope 等网络路径变化必须引用与新路径完全匹配的成功 ConnectionTest；Confirm 必须再次校验同一冻结测试。
 - Connector 主动卸载使用 PendingAction 和类型化 `connector_uninstall` 命令；客户端只有在 Gateway ACK 覆盖成功结果序号后才能删除本地身份并退出。无法证明本地清理结果的 reconcile 保持 `result_unknown`。
-- Production 继续由 M8 阻断 MFA、外部 KMS/HSM、CA 根轮换演练、灾备和固定出口生产验证。
+- M8 本地范围已补齐 MFA、OpenBao Transit 与备份恢复；Production KMS/CA HA、灾备和固定出口证明继续由 Production Validation 阻断。
 
 ## 任务
 

@@ -1,0 +1,41 @@
+apiVersion: install.argus.io/v1alpha1
+kind: ArgusInstallConfig
+metadata:
+  name: argus-local-hardening
+spec:
+  profile: local-hardening
+  kubeContext: docker-desktop
+  releaseId: argus-m8-local
+  namespaces:
+    system: argus-m8-local-system
+    sandbox: argus-m8-local-sandbox
+    observability: argus-m8-local-observability
+  storageClass: standard
+  images:
+    mode: local-registry
+    registry: host.docker.internal:5001
+    tag: dev
+    pullPolicy: Never
+  exposure:
+    mode: port-forward
+  openSandbox:
+    runtimeClassName: ""
+    allowSharedRuntime: true
+  telemetry:
+    collectorVersion: 0.1.0-m7
+    linuxArm64Uri: https://artifacts.argus.local/argus-otelcol/0.1.0-m7/linux-arm64.tar.gz
+    linuxArm64Sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    linuxArm64Signature: ZADUlWDG+q0NxibHhlT6TEaLacc3/LFwv/LnuDTtQtaCBjMUQbgT+c1TzVkZdhtwiTyAWxgrdwS6Y7lBGsM+Dw
+    linuxArm64ByteSize: 1
+    signingKeyId: argus-local-hardening-collector-signing-v1
+    signingPublicKey: KipqW8DuwdLu1utyo6JbL5u+vtVT/4ZFVKSjOuK8s64
+  persistence:
+    postgresql: 2Gi
+    redis: 1Gi
+    minio: 5Gi
+    kafka: 4Gi
+    clickhouse: 6Gi
+    keeper: 1Gi
+  cleanup:
+    retainData: false
+    deleteOwnedCrds: true

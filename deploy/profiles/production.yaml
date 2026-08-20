@@ -31,9 +31,14 @@ spec:
     collectorVersion: 0.1.0-m7
     linuxArm64Uri: https://artifacts.example.com/argus-otelcol/0.1.0-m7/linux-arm64.tar.gz
     linuxArm64Sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    linuxArm64Signature: ZADUlWDG+q0NxibHhlT6TEaLacc3/LFwv/LnuDTtQtaCBjMUQbgT+c1TzVkZdhtwiTyAWxgrdwS6Y7lBGsM+Dw
+    linuxArm64ByteSize: 1
     windowsAmd64Uri: https://artifacts.example.com/argus-otelcol/0.1.0-m7/windows-amd64.zip
     windowsAmd64Sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    windowsAmd64Signature: ZADUlWDG+q0NxibHhlT6TEaLacc3/LFwv/LnuDTtQtaCBjMUQbgT+c1TzVkZdhtwiTyAWxgrdwS6Y7lBGsM+Dw
+    windowsAmd64ByteSize: 1
     signingKeyId: replace-before-production
+    signingPublicKey: KipqW8DuwdLu1utyo6JbL5u+vtVT/4ZFVKSjOuK8s64
   persistence:
     postgresql: 200Gi
     redis: 20Gi

@@ -38,6 +38,7 @@ type Actor struct {
 	HTTPSessionID        uuid.UUID
 	AuthorizationVersion int64
 	DataScopeIDs         []uuid.UUID
+	StepUpAuthenticated  bool
 }
 
 type GrantInput struct {
@@ -257,6 +258,9 @@ func (service Service) DisablePolicy(ctx context.Context, actor Actor, id uuid.U
 }
 
 func (service Service) CreateRequest(ctx context.Context, actor Actor, input RequestInput, idempotencyKey string) (RequestView, error) {
+	if !actor.StepUpAuthenticated {
+		return RequestView{}, ErrMFARequired
+	}
 	if actor.UserID == uuid.Nil || input.HostID == uuid.Nil || input.ManagedAccountID == uuid.Nil || !validProtocol(input.Protocol) || input.Action != "terminal" || strings.TrimSpace(input.Reason) == "" {
 		return RequestView{}, ErrInvalidRequest
 	}
@@ -289,7 +293,7 @@ func (service Service) CreateRequest(ctx context.Context, actor Actor, input Req
 		if err != nil {
 			return RequestView{}, err
 		}
-		matched, err := matchPolicyRecords(policies, actor.EnterpriseID, input.HostID, labels, input.Protocol)
+		matched, err := matchPolicyRecords(policies, actor.EnterpriseID, input.HostID, labels, input.Protocol, actor.StepUpAuthenticated)
 		if err != nil {
 			return RequestView{}, err
 		}
@@ -500,7 +504,7 @@ func (service Service) CreateSession(ctx context.Context, actor Actor, leaseID u
 		if _, err := rand.Read(dek); err != nil {
 			return err
 		}
-		envelope, err := service.Keyring.Encrypt(dek, recordingKeyAAD(actor.EnterpriseID, recordingID, session.ID))
+		envelope, err := service.Keyring.EncryptContext(ctx, dek, recordingKeyAAD(actor.EnterpriseID, recordingID, session.ID))
 		clear(dek)
 		if err != nil {
 			return err
@@ -628,7 +632,7 @@ func (service Service) ReadRecordingEvents(ctx context.Context, actor Actor, id 
 	if json.Unmarshal(recording.WrappedDek, &envelope) != nil {
 		return RecordingEventPage{}, ErrRecordingUnavailable
 	}
-	dek, err := service.Keyring.Decrypt(envelope, recordingKeyAAD(recording.EnterpriseID, recording.ID, recording.SessionID))
+	dek, err := service.Keyring.DecryptContext(ctx, envelope, recordingKeyAAD(recording.EnterpriseID, recording.ID, recording.SessionID))
 	if err != nil || len(dek) != 32 {
 		return RecordingEventPage{}, ErrRecordingUnavailable
 	}
@@ -801,13 +805,13 @@ func selectGrant(grants []db.RemoteAccessGrant, input RequestInput, labels map[s
 	return db.RemoteAccessGrant{}, false
 }
 
-func matchPolicyRecords(policies []db.RemoteAccessPolicy, enterpriseID, hostID uuid.UUID, labels map[string]string, protocol string) ([]db.RemoteAccessPolicy, error) {
+func matchPolicyRecords(policies []db.RemoteAccessPolicy, enterpriseID, hostID uuid.UUID, labels map[string]string, protocol string, stepUp bool) ([]db.RemoteAccessPolicy, error) {
 	result := make([]db.RemoteAccessPolicy, 0, len(policies))
 	for _, policy := range policies {
 		if !policy.Enabled || !slices.Contains(policy.Protocols, protocol) || (len(policy.HostSelector) > 0 && string(policy.HostSelector) != "{}" && !selectorMatches(policy.HostSelector, enterpriseID, hostID, labels)) {
 			continue
 		}
-		if policy.RequireMfa {
+		if policy.RequireMfa && !stepUp {
 			return nil, ErrMFARequired
 		}
 		result = append(result, policy)

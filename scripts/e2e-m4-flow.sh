@@ -201,6 +201,7 @@ m4_enterprise_get() {
 }
 
 run_m4_api_flow() {
+  step_up_enterprise_session
   log "running M4 Model, Agent, approval, execution, automation, and Sandbox flow"
   local model_base="https://${M4_REPLAY_HOST}/v1"
 

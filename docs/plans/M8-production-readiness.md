@@ -1,57 +1,68 @@
-# M8：Production 就绪与全链路闭环
+# M8：本地安全、恢复与发布基座
 
-## 目标
+## 目标与边界
 
-把已完成的业务闭环提升到可生产发布：具备 HA、备份恢复、容量基线、供应链安全、故障演练和可重复的全链路 E2E。
+M8 只在 arm64 Docker Desktop、本地临时 Kubernetes Namespace 和本地对象存储完成。完成状态固定为 `local_hardening_complete`，不代表 Production Ready。
 
-## 前置条件
+- `local-hardening` 使用单副本 PostgreSQL、Redis、Kafka、ClickHouse、MinIO 和单节点 OpenBao。
+- Production Profile 只允许 schema validate、lint 和 render；`argusctl install` 继续 fail closed。
+- Linux amd64、Windows amd64、真实 WinRM、跨可用区灾备、生产固定出口、HA 和容量证明不进入退出标准。
+- 本地性能与故障测试只形成回归证据，不形成生产 SLO、RPO 或 RTO 承诺。
 
-- M2 至 M7 的发布范围全部达到各自退出标准。
-- PostgreSQL HA/备份和 Sandbox Runtime ADR 已决策。
+## 已实现
 
-M4、M6 与 M7 只达到 Evaluation：Replay Provider 仅用于带 build tag 的 E2E，模型公网出口在应用层拒绝私网但尚未形成目标生产网络证明；Remote Access 已固定 SSH PTY、HTTPS WinRS 行模式和 asciicast v2 加密分片；Telemetry 已完成 Linux arm64 Host 与 Kubernetes 三信号、Agent/Gateway mTLS、Kafka `IdempotentWrite`、严格 Artifact TLS 和故障恢复闭环，但 Windows amd64 仍为 `validation_pending`，Linux amd64 尚未进入支持矩阵。平台 MFA、Step-up、Break Glass、外部 KMS/HSM、CA/Telemetry PKI 长期轮换与重启恢复、录像不可变保留/恢复、真实 Windows 兼容矩阵、遥测 HA/容量/备份和灾备仍是本里程碑硬阻断项。
+- [x] `M8-IDENTITY-01` TOTP Enrollment、登录 Challenge、十个单次 Recovery Code、五分钟 Step-up 和平台超级管理员强制 Enrollment。
+- [x] `M8-IDENTITY-02` MFA/密码变化撤销其他 Session、Step-up 和 Break Glass；TOTP counter 原子消费阻止重放。
+- [x] `M8-BREAKGLASS-01` 企业 Break Glass 要求 Step-up、原因、工单引用、十五分钟 TTL、显式开关和高优先级审计；不扩大 RBAC/DataScope。
+- [x] `M8-CRYPTO-01` 建立 `KeyWrappingProvider` 与 OpenBao Transit Adapter，Secret、模型凭证、MFA Secret、录像 DEK 和一次性结果使用版本化 Key Reference。
+- [x] `M8-DEPLOY-01` 增加 `local-hardening` Profile、单节点 OpenBao Raft、幂等 Bootstrap、受限 Transit Token 和最小 NetworkPolicy；静态 KEK 仅保留 Evaluation。
+- [x] `M8-DB-01` Server、Worker、Gateway、Direct Executor、Migration、Telemetry Ingest/Writer 使用独立 PostgreSQL Login；Telemetry 角色使用表级最小权限。
+- [x] `M8-BACKUP-01` 增加 `argusctl backup create|verify|list`，生成分块 AES-256-GCM 归档、组件 SHA-256 清单和 `0600` 恢复密钥。
+- [x] `M8-RESTORE-01` 增加 `argusctl restore plan|apply|verify`；仅允许唯一、空目标 Namespace，恢复 PostgreSQL、OpenBao Raft、MinIO、ClickHouse 和配置引用。
+- [x] `M8-UPGRADE-01` 增加 `argusctl upgrade plan|apply|status|rollback`；阶段状态可恢复，Schema 前进后禁止破坏性回滚。
+- [x] `M8-SUPPLY-01` 增加本地 SBOM、漏洞检查、License 门禁、离线 Hash Manifest、Ed25519 签名和 `make release-local`。
+- [x] `M8-SECURITY-01` 扩展生产制品扫描，拒绝 Replay/mock、测试私钥/API Key 和安全绕过开关。
+- [x] `M8-E2E-01` 增加 `make e2e-m8-k8s`，使用 Run ID、Lease、故障注入、加密备份、新 Namespace 恢复、诊断和无条件清理。
 
-## 任务
+## 本地验证
 
-- [ ] `M8-ADR-01` 完成 PostgreSQL Operator/HA/PITR、Sandbox Runtime、Card Origin，以及 Remote Access 录像 Production 保留、不可变性、跨故障域恢复和格式兼容 ADR；M6 已固定 asciicast v2，不重新选格式。
-- [ ] `M8-HA-01` 为无状态服务配置 HPA/PDB/TopologySpread/Drain，为状态组件配置副本与反亲和。
-- [ ] `M8-BACKUP-01` 实现 PostgreSQL、Artifact、ClickHouse 和必要配置的备份、校验、保留与恢复流程。
-- [ ] `M8-UPGRADE-01` 实现 `argusctl upgrade`、兼容 Schema 顺序、失败回滚和版本矩阵。
-- [ ] `M8-SUPPLY-01` 生成 SBOM、镜像/Chart 签名、漏洞扫描、License 门禁和离线制品清单。
-- [ ] `M8-SECURITY-01` 完成渗透测试、Secret/Token 泄漏扫描、NetworkPolicy 和最小权限审计。
-- [ ] `M8-CRYPTO-01` 接入 Production 外部 KMS/HSM，演练 Secret KEK 与 Connector CA 根轮换、旧证书吊销和恢复。
-- [ ] `M8-EGRESS-01` 在目标生产网络验证 Direct Executor NAT/Egress Gateway、声明出口地址、deny CIDR 和故障时 fail closed。
-- [ ] `M8-IDENTITY-01` 为平台超级管理员实现强制 MFA、恢复码、凭证轮换和账号恢复演练。
-- [ ] `M8-IDENTITY-02` 为 critical 操作实现 Step-up Authentication，并把未配置平台 MFA 设为 Production Profile 安装与发布硬阻断。
-- [ ] `M8-CAPACITY-01` 完成 API、Connector、Remote Access、Kafka、Writer、ClickHouse 和 Query 容量 Benchmark。
-- [ ] `M8-REMOTE-01` 完成真实 Windows Server 版本/认证/TLS WinRS 兼容矩阵、长会话容量、ObjectStore 生命周期锁和录像恢复演练。
-- [ ] `M8-TELEMETRY-01` 实现 Windows WinRM Collector 管理 Adapter 和 Windows Service 的安装、配置、升级、修复、卸载与回滚，完成 Linux amd64 与真实 Windows Collector 验证、Telemetry PKI 根轮换及进程/节点重启恢复演练、Kafka/ClickHouse HA 与备份恢复、容量基线和签名 Artifact 发布矩阵；验证前 Windows Distribution 必须保持 `validation_pending` 且不可选择。
-- [ ] `M8-TELEMETRY-DB-01` M7 已完成 Ingest/Writer 窄领域 Adapter 和越权代码边界；M8 通过 ADR 固化其 Production 凭证边界：要么签发独立最小权限 Login Role 并验证凭证轮换与数据库级越权拒绝，要么迁移到 argus-server 内部 mTLS 控制 RPC；不得继续共享控制面数据库凭证。
-- [ ] `M8-FAILURE-01` 演练 Redis 清空、Pod/Node 故障、Gateway Drain、Worker 接管、Kafka 积压、ClickHouse Replica 故障和网络分区。
-- [ ] `M8-E2E-01` 建立唯一 Run ID、集群 Lease、常驻服务缩容/恢复、诊断导出和无条件清理框架。
-- [ ] `M8-E2E-02` 自动化执行总计划第 7 节全部闭环场景。
-- [ ] `M8-E2E-03` 增加长会话、大 ToolResult、多轮 Compaction、Compactor/Worker 故障接管、Provider 切换边界和 ContextSnapshot 恢复测试。
-- [ ] `M8-SLO-01` 定义服务 SLI/SLO、告警、Runbook、RPO/RTO 和支持边界。
-- [ ] `M8-RELEASE-01` 完成 Production Profile 阻断项清单、发布说明和已知限制。
+常规门禁：
 
-## 测试
+```text
+make contract-check contract-breaking
+go test ./...
+go vet ./...
+pnpm typecheck lint test build check:bundle check:real-build e2e
+make check-production-artifacts
+git diff --check
+```
 
-- 从空集群安装、初始化、业务接入、执行、Card、远程访问、遥测到卸载/恢复全链路通过。
-- 从备份恢复到新 Namespace，业务状态、审计索引、录像引用和遥测查询达到 RPO/RTO。
-- 每种故障均验证无跨企业泄漏、无重复危险执行、无不可恢复唯一状态。
-- 验证平台超级管理员未完成 MFA 时 Production Profile fail closed；恢复码、MFA 重置和 Step-up 均有高优先级平台审计。
-- 验证外部 KMS/HSM 不可用、CA 根轮换和固定出口漂移时 Production 连接路径 fail closed，且不存在回退到集群内明文密钥或任意出口。
-- 长会话压缩后原始 Event、ToolResult 和审计可追溯，恢复上下文不包含已撤销权限或私有 Token。
-- E2E 成功和故意失败两种情况下都清理 Namespace/PVC/Topic/Bucket 并恢复常驻副本。
+M8 Kubernetes 验证：
 
-## 退出标准
+```text
+make e2e-m8-k8s
+```
 
-- Production Profile 不再有未决硬阻断 ADR。
-- 所有启用的平台超级管理员均完成 MFA，恢复与 Step-up 流程通过自动化和人工演练。
-- 安全、容量、恢复和升级证据可随 Release 归档。
-- 第一版范围内的端到端用户闭环可重复部署、验证、升级和恢复。
+该流程先复用 M2-M7 已完成的真实闭环证据，再安装 `local-hardening`，注入 Redis 清空、Server/Worker/Gateway/Writer/Query Pod 删除和 OpenBao 重启，随后创建加密备份、删除源 Namespace、恢复到唯一新 Namespace，并重新执行身份、授权、Card、录像和遥测验证。成功或失败都必须释放 Lease 并删除 Namespace/PVC。
 
-## 不包含
+## 完成规则
 
-- 第二版产品能力扩张。
-- 为赶发布绕过未完成安全或恢复门禁。
+只有契约、Migration、Go/前端门禁、Helm render、`release-local` 和临时 Kubernetes E2E 均有本地证据后，状态才能写为：
+
+```text
+local_hardening_complete
+```
+
+该状态明确包含 `production_ready: false` 和 `production_profile_installable: false`。
+
+## Production Validation 清单
+
+以下内容不属于 M8 本地完成范围，未来必须在真实生产环境单独验证：
+
+- PostgreSQL/Kafka/ClickHouse/OpenBao 多节点 HA、PITR、跨故障域恢复和容量。
+- Kata/gVisor 等强化 Sandbox Runtime、真实 NAT/Egress Gateway 和出口地址证明。
+- 生产 KMS/OpenBao HA、CA 根轮换、Object Lock、签名密钥托管和供应链平台集成。
+- Linux amd64、Windows amd64、Windows Collector/Service 和真实 Windows Server WinRM 矩阵。
+- 生产告警、值班 Runbook、SLO、RPO/RTO、渗透测试和跨集群灾备。
+
+Production Profile 在上述清单完成前继续返回明确阻断，不因 `local_hardening_complete` 自动解除。

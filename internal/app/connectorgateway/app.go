@@ -49,7 +49,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	keyring, err := secretservice.LoadKeyring(cfg.SecretKEKPath)
+	keyring, err := secretservice.LoadConfiguredKeyring(cfg.SecretKEKPath, cfg.KeyWrappingMode, cfg.OpenBaoAddress, cfg.OpenBaoToken, cfg.OpenBaoTransitKey)
 	if err != nil {
 		return err
 	}
