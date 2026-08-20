@@ -43,6 +43,16 @@ cmd/
 
 `argus-telemetry-ingest` 与 `argus-telemetry-query` 使用相同镜像、不同启动参数。它们必须拥有不同的 Service、ServiceAccount、NetworkPolicy、PodDisruptionBudget、HPA 和数据库凭证。
 
+普通 Worker 在所有 Profile 中都保留 `agent`、`action`、`compaction`、`automation`、`sandbox` 五条 PostgreSQL Task Queue 和对应 Processor；此次 Profile 差异只影响 Kubernetes Deployment 拓扑，不合并领域职责：
+
+| Profile | 普通 Worker Deployment 拓扑 | 隔离与扩缩容边界 |
+| ------- | ---------------------------- | ---------------- |
+| Evaluation | 一个 `argus-worker --pool=default`，同时运行五条队列 | 五类任务共享一个 Pod 的资源与故障域，并使用五个 Pool 所需网络权限的并集 |
+| Local Hardening | `argus-worker-{agent,action,compaction,automation,sandbox}` 五个 Deployment | 各 Pool 可独立扩缩容并保持最小 NetworkPolicy |
+| Production | `argus-worker-{agent,action,compaction,automation,sandbox}` 五个 Deployment | 各 Pool 独立配置副本、PDB、HPA、拓扑分布和最小 NetworkPolicy |
+
+Evaluation 合并 Worker 的默认资源为 `requests: 100m/256Mi`、`limits: 2 CPU/1Gi`。任一 Processor 发生导致进程退出的致命错误时，五类任务会随同一个 Worker Pod 一起重启；该取舍只适用于开发、演示和功能验证。`argus-direct-executor` 在所有 Profile 中始终保持独立 Deployment、队列和网络边界。
+
 七类工作负载都支持横向扩展，但扩展条件不同：
 
 | 工作负载                  | 横向扩展方式                                    | 必要条件                                                                           |
@@ -419,20 +429,21 @@ Token 过期时间
 ### 12.1 Evaluation
 
 - 单副本 Argus 服务。
+- 普通 Worker 使用一个 `argus-worker --pool=default` Deployment 运行五条队列；Direct Executor 仍独立部署。
 - 单节点或低副本 PostgreSQL、Redis、Kafka 和 ClickHouse。
 - 较小 PVC 和短 TTL。
 - 仅用于开发、演示和功能验证，不承诺节点故障可用性。
 
 ### 12.2 Local Hardening
 
-- 保持 Evaluation 的单节点拓扑，只面向 arm64 Docker Desktop。
+- 保持单节点、单副本规模，只面向 arm64 Docker Desktop；普通 Worker 仍使用五个拆分 Deployment，不沿用 Evaluation 的合并拓扑。
 - 强制使用单节点 OpenBao Transit、独立 PostgreSQL Login、TOTP/Step-up 和本地加密备份恢复。
 - 允许共享容器 Sandbox Runtime，但明确输出安全降级。
 - 完成状态为 `local_hardening_complete`，不产生生产 SLO、RPO 或 RTO。
 
 ### 12.3 Production
 
-- `argus-server`、普通 Worker、Direct Executor、Connector Gateway、Telemetry Ingest/Query 至少 2 副本；Direct Executor 使用固定 NAT/Egress Gateway，扩容不能改变用户防火墙白名单地址。
+- `argus-server`、五个拆分的普通 Worker、Direct Executor、Connector Gateway、Telemetry Ingest/Query 至少 2 副本；Direct Executor 使用固定 NAT/Egress Gateway，扩容不能改变用户防火墙白名单地址。
 - Pod Anti-Affinity/Topology Spread 和 PodDisruptionBudget。
 - PostgreSQL 在集群内使用高可用拓扑和反亲和；具体 Operator 与备份实现按 ADR 固化。
 - Kafka 至少 3 Broker，跨节点分布。

@@ -33,6 +33,71 @@ spec:
               app.kubernetes.io/name: argus-postgresql
       ports:
         - {protocol: TCP, port: 5432}
+{{- if eq .Values.profile "evaluation" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argus-worker
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: argus-worker
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-postgresql
+      ports: [{protocol: TCP, port: 5432}]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-redis
+      ports: [{protocol: TCP, port: 6379}]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-direct-executor
+      ports: [{protocol: TCP, port: 9444}]
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-connector-gateway
+      ports: [{protocol: TCP, port: 9443}]
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespaces.observability }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-telemetry-query
+      ports: [{protocol: TCP, port: 9447}]
+    # Model endpoint addresses are revalidated by PublicEndpointPolicy before
+    # every dial and redirect. NetworkPolicy supplies the HTTPS transport gate.
+    - ports: [{protocol: TCP, port: 443}]
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespaces.sandbox }}
+      ports:
+        - {protocol: TCP, port: 80}
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 8080}
+    {{- range .Values.runtime.sandboxAllowedCidrs }}
+    - to:
+        - ipBlock: {cidr: {{ . | quote }}}
+      ports: [{protocol: TCP, port: 443}]
+    {{- end }}
+{{- else }}
 {{- range $pool := list "agent" "action" "compaction" "automation" "sandbox" }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -112,6 +177,7 @@ spec:
         - {protocol: TCP, port: 443}
     {{- end }}
     {{- end }}
+{{- end }}
 {{- end }}
 ---
 apiVersion: networking.k8s.io/v1

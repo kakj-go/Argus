@@ -89,7 +89,8 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 	} {
 		add("health/"+service.name, a.httpProbe(ctx, cfg, service.namespace, service.name, service.port))
 	}
-	for _, deployment := range []string{"argus-worker", "argus-direct-executor"} {
+	workerDeployments := append(expectedWorkerDeployments(cfg.Spec.Profile), "argus-direct-executor")
+	for _, deployment := range workerDeployments {
 		add("health/"+deployment, a.podHealthProbe(ctx, cfg, clients, cfg.Spec.Namespaces.System, deployment, 8081))
 	}
 

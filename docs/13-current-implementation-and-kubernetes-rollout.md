@@ -87,7 +87,7 @@ Agent 运行时已完成 Provider-neutral 单 Agent 小内核：PostgreSQL 持�
 | 二进制                    | 部署位置                 | 目标职责                                          | 当前状态                                                                                         |
 | ------------------------- | ------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `argus-server`            | `argus-system`           | Web/API、身份、权限、领域服务、Action Executor    | M2-M7 Evaluation API 可用                                                                         |
-| `argus-worker`            | `argus-system`           | Agent、Tool Run、任务、Sandbox、安装执行          | 五个 M4 Pool、Direct Executor、Collector 与 Remote Access 执行可用                               |
+| `argus-worker`            | `argus-system`           | Agent、Tool Run、任务、Sandbox、安装执行          | 五个 M4 Pool 可按 Profile 合并或拆分部署；Direct Executor、Collector 与 Remote Access 执行可用    |
 | `argus-connector-gateway` | `argus-system`           | Connector 长连接、命令流、Artifact、Remote Access | mTLS、Registry、epoch、Drain、类型化命令和远程会话跨副本路由可用                                 |
 | `argus-telemetry`         | `argus-observability`    | `ingest`、`writer`、`query` 三种模式              | OTLP → Kafka → ClickHouse 与授权 Query 可用                                                       |
 | `argus-connector`         | 受管主机/堡垒机          | 主动 mTLS 接入、命令和 Artifact/会话隧道          | Probe、Kubernetes Read、Collector 管理、SSH/WinRS 会话和 Uninstall 可用                           |
@@ -99,11 +99,13 @@ Agent 运行时已完成 Provider-neutral 单 Agent 小内核：PostgreSQL 持�
 | `argus-replay-model`      | 临时 E2E Namespace       | 固定 Model/Sandbox 回放                            | 仅 `m4e2e` 测试构建使用，生产制品扫描禁止携带                                                     |
 | `argus-telemetry-e2e`     | 临时 E2E Namespace       | 生成确定性 OTLP 三信号                            | 仅 E2E 镜像包含，生产制品扫描禁止携带                                                            |
 
-`argus-worker` 已以独立 Deployment 运行 Direct Executor Pool，并为 M4 增加 agent、action、compaction、automation、sandbox 五个独立 Deployment。所有 Pool 使用 PostgreSQL Lease/Fence 恢复；Redis 只唤醒。Tool Gateway 当前是 Worker 进程内可信 Registry，未来拆分时才增加内部 mTLS 网络边界。
+`argus-worker` 保留 agent、action、compaction、automation、sandbox 五条队列和 Processor。Evaluation 通过一个 `argus-worker --pool=default` Deployment 运行这五类任务；Local Hardening 与 Production 使用五个独立 Deployment，以便分别扩缩容和限制网络权限。Direct Executor Pool 在所有 Profile 中均由独立 Deployment 运行。所有 Pool 使用 PostgreSQL Lease/Fence 恢复，Redis 只唤醒；Tool Gateway 当前是 Worker 进程内可信 Registry，未来拆分时才增加内部 mTLS 网络边界。
+
+Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector Gateway、Telemetry Ingest/Writer/Query 共 8 个 Argus 常驻运行角色；相较五个普通 Worker 全拆分的拓扑减少 4 个常驻 Pod，完整 Evaluation 环境预计约 22 个常驻 Pod。代价是五类任务共享 Worker 资源、进程故障域和 NetworkPolicy 权限并集，任一 Processor 致命退出会使整个 Worker Pod 重启。
 
 ### 3.4 已交付部署基础与剩余边界
 
-截至 2026-08-18 已交付：
+截至 2026-08-20 已交付：
 
 - Backend/Web/安全修复 MinIO 多阶段 Dockerfile，ARM64 实际构建和 AMD64 OCI 构建路径。
 - `ArgusInstallConfig v1alpha1` JSON Schema、Evaluation/Production Profile 和版本锁定清单。
@@ -314,6 +316,7 @@ Kubernetes NetworkPolicy 通常不能独立保证固定公网出口和 DNS Rebin
 | ---------- | -------------------------- | ----------------------------------------- |
 | 用途       | 开发、演示、功能 E2E       | 正式业务                                  |
 | Argus 副本 | 每角色 1 个                | 无状态关键角色至少 2 个                   |
+| Worker 拓扑 | 一个 default Pool Deployment | 五个按 Pool 拆分的 Deployment             |
 | PostgreSQL | 单实例、较小 PVC           | HA、反亲和、PITR；具体 Operator 待 ADR    |
 | Redis      | 单实例                     | HA/故障转移，仍不保存唯一事实             |
 | Kafka      | Strimzi 低副本 KRaft       | 至少 3 Broker，`min.insync.replicas >= 2` |

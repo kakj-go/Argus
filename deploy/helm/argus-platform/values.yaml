@@ -84,6 +84,11 @@ runtime:
   otelcolArtifactCABundleSecretName: ""
   certManagerNamespace: cert-manager
 replicas: 1
+worker:
+  replicas: 1
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "2", memory: 1Gi}
 workerPools:
   agent:
     replicas: 1

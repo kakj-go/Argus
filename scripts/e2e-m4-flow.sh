@@ -65,7 +65,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/name
         operator: In
-        values: [argus-worker-agent, argus-worker-compaction]
+        values: [argus-worker]
   policyTypes: [Egress]
   egress:
     - to:
@@ -80,7 +80,7 @@ kind: NetworkPolicy
 metadata: {name: argus-m4-e2e-sandbox-egress, namespace: ${SYSTEM_NS}}
 spec:
   podSelector:
-    matchLabels: {app.kubernetes.io/name: argus-worker-sandbox}
+    matchLabels: {app.kubernetes.io/name: argus-worker}
   policyTypes: [Egress]
   egress:
     - to:
@@ -314,7 +314,7 @@ run_m4_api_flow() {
   M4_APPROVAL_ID=$(jq -er '.approval_request.approval_request_id' "$RESPONSE_FILE")
   request m4-approval-requirements 200 GET "/enterprise/approval-requests/${M4_APPROVAL_ID}" "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
   jq -e '.status == "pending" and (.requirements | length) == 2 and all(.requirements[]; .status == "pending")' "$RESPONSE_FILE" >/dev/null
-  k -n "$SYSTEM_NS" delete pod -l app.kubernetes.io/name=argus-worker-action --wait=false >/dev/null
+	k -n "$SYSTEM_NS" delete pod -l app.kubernetes.io/name=argus-worker --wait=false >/dev/null
   k -n "$SYSTEM_NS" exec statefulset/argus-redis -- redis-cli -a "$REDIS_PASSWORD" FLUSHALL >/dev/null 2>&1
   request m4-approve 200 POST "/enterprise/approval-requests/${M4_APPROVAL_ID}/decisions" "$APPROVER_JAR" \
     '{"decision":"approved","reason":"independent M4 approval"}' \
@@ -348,8 +348,6 @@ run_m4_api_flow() {
   done
 	jq -e 'any(.[]; .status == "succeeded" and (.result_ref | length) > 0)' "$RESPONSE_FILE" >/dev/null || fail "M4 read-only Automation did not persist an Artifact"
 
-	k -n "$SYSTEM_NS" scale deployment/argus-worker-automation --replicas=0 >/dev/null
-	k -n "$SYSTEM_NS" rollout status deployment/argus-worker-automation --timeout=120s >/dev/null
 	M4_HOST_VERSION=$(m4_psql "SELECT resource_version FROM hosts WHERE id='${M4_HOST_ID}';")
 	request m4-write-automation-create 201 POST /enterprise/automations "$ENTERPRISE_JAR" \
 		"$(jq -nc --arg account "$M4_AUTOMATION_ACCOUNT_ID" --arg host "$M4_HOST_ID" --argjson version "$M4_HOST_VERSION" '{name:"M4 governed host update",service_account_id:$account,tool_id:"host.update.preview",tool_input:{host_id:$host,expected_version:$version,labels:{environment:"prod",team:"m4",release:"automation-v1"}},cron:"* * * * *",timezone:"UTC"}')" \
@@ -358,13 +356,12 @@ run_m4_api_flow() {
 	M4_WRITE_AUTOMATION_VERSION=$(jq -er '.version' "$RESPONSE_FILE")
 	M4_WRITE_RUN_ID=$(m4_uuid)
 	M4_WRITE_TASK_ID=$(m4_uuid)
-	m4_psql "INSERT INTO runtime_tasks (id,enterprise_id,queue,payload) VALUES ('${M4_WRITE_TASK_ID}','${ENTERPRISE_ID}','automation',jsonb_build_object('run_id','${M4_WRITE_RUN_ID}','enterprise_id','${ENTERPRISE_ID}')); INSERT INTO automation_runs (id,automation_id,enterprise_id,automation_revision,scheduled_for,status,task_id) VALUES ('${M4_WRITE_RUN_ID}','${M4_WRITE_AUTOMATION_ID}','${ENTERPRISE_ID}',1,now(),'pending','${M4_WRITE_TASK_ID}');" >/dev/null
+	m4_psql "INSERT INTO runtime_tasks (id,enterprise_id,queue,payload,available_at) VALUES ('${M4_WRITE_TASK_ID}','${ENTERPRISE_ID}','automation',jsonb_build_object('run_id','${M4_WRITE_RUN_ID}','enterprise_id','${ENTERPRISE_ID}'),now()+interval '10 minutes'); INSERT INTO automation_runs (id,automation_id,enterprise_id,automation_revision,scheduled_for,status,task_id) VALUES ('${M4_WRITE_RUN_ID}','${M4_WRITE_AUTOMATION_ID}','${ENTERPRISE_ID}',1,now(),'pending','${M4_WRITE_TASK_ID}');" >/dev/null
 	request m4-write-automation-update 200 PUT "/enterprise/automations/${M4_WRITE_AUTOMATION_ID}" "$ENTERPRISE_JAR" \
 		"$(jq -nc --arg account "$M4_AUTOMATION_ACCOUNT_ID" --arg host "$M4_HOST_ID" --argjson version "$M4_HOST_VERSION" --argjson expected "$M4_WRITE_AUTOMATION_VERSION" '{name:"M4 governed host update revision 2",service_account_id:$account,tool_id:"host.update.preview",tool_input:{host_id:$host,expected_version:$version,labels:{environment:"prod",team:"m4",release:"automation-v2"}},cron:"* * * * *",timezone:"UTC",expected_version:$expected}')" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
 	jq -e '.version == 2' "$RESPONSE_FILE" >/dev/null
-	k -n "$SYSTEM_NS" scale deployment/argus-worker-automation --replicas=1 >/dev/null
-	k -n "$SYSTEM_NS" rollout status deployment/argus-worker-automation --timeout=180s >/dev/null
+	m4_psql "UPDATE runtime_tasks SET available_at=now(),updated_at=now() WHERE id='${M4_WRITE_TASK_ID}';" >/dev/null
 	for _ in $(seq 1 90); do
 		request m4-write-automation-runs 200 GET "/enterprise/automations/${M4_WRITE_AUTOMATION_ID}/runs" "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
 		M4_AUTOMATION_ACTION_REF=$(jq -er --arg run "$M4_WRITE_RUN_ID" '.[] | select(.id == $run and .status == "waiting_approval" and .automation_revision == 1) | .pending_action_ref' "$RESPONSE_FILE" 2>/dev/null || true)

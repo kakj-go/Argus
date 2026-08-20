@@ -11,7 +11,7 @@
 
 ## 已冻结实现边界
 
-- `argus-worker` 使用 `agent`、`action`、`compaction`、`automation`、`sandbox` 五个独立队列和 Deployment；PostgreSQL Task Lease/Fence 是唯一领取事实，Redis 只负责唤醒。
+- `argus-worker` 使用 `agent`、`action`、`compaction`、`automation`、`sandbox` 五个独立 PostgreSQL Task Queue 和 Processor；Evaluation 由一个 `--pool=default` Deployment 同时运行五类任务，Local Hardening/Production 使用五个拆分 Deployment。PostgreSQL Task Lease/Fence 是唯一领取事实，Redis 只负责唤醒。
 - Tool Gateway 在 M4 内实现为 Worker 进程内可信 Registry，统一执行 Tool 权限、ServiceAccount `allowed_tool_ids` 和严格 Input Schema 校验。`.commit` 只接受 `action_executor` 身份；未来若拆成独立服务，必须使用内部 mTLS 且不得经公共 Ingress 暴露。
 - 首批模型可见 Catalog 已冻结 Host、Connector、PendingAction 和 Kubernetes Cluster/Namespace/Node/Pod/Deployment/StatefulSet/DaemonSet/Service/Pod Logs 查询，以及 Host/Kubernetes create/update/delete Preview；对应 Commit 只存在于隐藏 Action Catalog。
 - ToolResult 完整内容以 Artifact 保存；列表投影最多 50 项、Pod Logs 最多 32 KiB、模型投影总量最多 64 KiB，并保存稳定 Projection Hash、`projected_bytes`、资源引用和公开 `result_ref`。

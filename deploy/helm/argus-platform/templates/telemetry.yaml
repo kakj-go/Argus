@@ -241,7 +241,7 @@ spec:
         - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $system }}}}
           podSelector:
             matchExpressions:
-              - {key: app.kubernetes.io/name, operator: In, values: [argus-server, argus-worker-agent, argus-worker-automation]}
+              - {key: app.kubernetes.io/name, operator: In, values: [argus-server, argus-worker, argus-worker-agent, argus-worker-automation]}
       ports: [{protocol: TCP, port: 9447}]
     {{- end }}
   {{- end }}

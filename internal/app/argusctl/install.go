@@ -602,13 +602,28 @@ func waitForData(ctx context.Context, clients *kubeClients, cfg *InstallConfig) 
 }
 
 func waitForPlatform(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
-	names := []string{"argus-web", "argus-server", "argus-worker", "argus-direct-executor", "argus-connector-gateway"}
+	names := []string{"argus-web", "argus-server"}
+	names = append(names, expectedWorkerDeployments(cfg.Spec.Profile)...)
+	names = append(names, "argus-direct-executor", "argus-connector-gateway")
 	for _, name := range names {
 		if err := waitForDeployment(ctx, clients, cfg.Spec.Namespaces.System, name, 10*time.Minute); err != nil {
 			return err
 		}
 	}
 	return waitForJob(ctx, clients, cfg.Spec.Namespaces.System, "argus-postgresql-migration", 10*time.Minute)
+}
+
+func expectedWorkerDeployments(profile string) []string {
+	if profile == "evaluation" {
+		return []string{"argus-worker"}
+	}
+	return []string{
+		"argus-worker-agent",
+		"argus-worker-action",
+		"argus-worker-compaction",
+		"argus-worker-automation",
+		"argus-worker-sandbox",
+	}
 }
 
 func waitForTelemetry(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
