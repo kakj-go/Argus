@@ -16,7 +16,8 @@ export interface HttpRequestOptions extends Omit<RequestInit, "body"> {
 }
 
 function normalizeBaseUrl(base_url: string): URL {
-  const url = new URL(base_url);
+  const browserOrigin = globalThis.location?.origin ?? "http://localhost";
+  const url = new URL(base_url, browserOrigin);
   url.pathname = `${url.pathname.replace(/\/$/, "")}/api/v1/`;
   return url;
 }

@@ -17,7 +17,6 @@ import {
   StatCard,
   StatusBadge,
 } from "@argus/ui";
-import "../i18n/governance";
 import "../styles/governance.css";
 import { ApprovalDetail } from "../components/governance/approval-detail";
 import { RemoteAccessApprovals } from "../components/governance/remote-access-approvals";

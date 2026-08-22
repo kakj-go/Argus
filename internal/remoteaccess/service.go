@@ -628,9 +628,9 @@ func (service Service) ReadRecordingEvents(ctx context.Context, actor Actor, id 
 	if len(chunks) == 0 {
 		return RecordingEventPage{Recording: recording, Events: []RecordingEvent{}, Next: after, Complete: recording.Status == "available" || recording.Status == "incomplete"}, nil
 	}
-	var envelope secret.Envelope
-	if json.Unmarshal(recording.WrappedDek, &envelope) != nil {
-		return RecordingEventPage{}, ErrRecordingUnavailable
+	envelope, err := recordingEnvelope(recording)
+	if err != nil {
+		return RecordingEventPage{}, err
 	}
 	dek, err := service.Keyring.DecryptContext(ctx, envelope, recordingKeyAAD(recording.EnterpriseID, recording.ID, recording.SessionID))
 	if err != nil || len(dek) != 32 {

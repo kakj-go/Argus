@@ -35,7 +35,7 @@ CREATE UNIQUE INDEX platform_users_username_unique ON platform_users (lower(user
 CREATE TABLE enterprises (
     id uuid PRIMARY KEY,
     name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 128),
-    code text NOT NULL CHECK (code ~ '^[a-z][a-z0-9-]{1,62}$'),
+    code text NOT NULL CHECK (char_length(code) BETWEEN 1 AND 63 AND code ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
     status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'disabled')),
     timezone text NOT NULL,
     default_locale text NOT NULL DEFAULT 'zh-CN' CHECK (default_locale IN ('zh-CN', 'en-US')),

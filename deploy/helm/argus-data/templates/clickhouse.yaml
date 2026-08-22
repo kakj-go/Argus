@@ -35,6 +35,7 @@ spec:
       argus_telemetry_writer/networks/ip: "::/0"
       argus_telemetry_writer/grants/query:
         - GRANT INSERT ON argus_telemetry.*
+        - GRANT SELECT(version) ON argus_telemetry.schema_versions
       argus_telemetry_query/password:
         valueFrom: {secretKeyRef: {name: argus-telemetry-clickhouse, key: query-password}}
       argus_telemetry_query/networks/ip: "::/0"

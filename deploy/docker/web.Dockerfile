@@ -10,9 +10,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY web ./web
 RUN pnpm install --frozen-lockfile
 ARG VITE_API_MODE=real
-ARG VITE_API_BASE_URL=https://api.argus.invalid
-ARG VITE_CARD_ORIGIN=https://cards.argus.invalid
-ARG VITE_PLATFORM_URL=https://platform.argus.invalid
+ARG VITE_API_BASE_URL=/
+ARG VITE_CARD_ORIGIN=http://localhost:4176
+ARG VITE_PLATFORM_URL=http://localhost:4174
 ARG VITE_DIRECT_EGRESS_ADDRESSES=
 RUN VITE_API_MODE=$VITE_API_MODE \
     VITE_API_BASE_URL=$VITE_API_BASE_URL \

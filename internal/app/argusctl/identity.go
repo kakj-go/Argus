@@ -6,11 +6,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 )
 
 func (a *App) runSetupTokenRotate(ctx context.Context, args []string) error {
@@ -53,13 +55,45 @@ func (a *App) runSetupTokenRotate(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 	secret.Data["setup-token"] = []byte(token)
-	secret.Data["setup-token-expires-at"] = []byte(time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339))
+	secret.Data["setup-token-expires-at"] = []byte(expiresAt.Format(time.RFC3339))
 	if _, err := clients.typed.CoreV1().Secrets(cfg.Spec.Namespaces.System).Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("rotate setup token: %w", err)
 	}
-	_, _ = fmt.Fprintln(a.stdout, token)
+	for _, deployment := range []string{"argus-server", "argus-web"} {
+		if err := restartDeployment(ctx, clients, cfg.Spec.Namespaces.System, deployment, "setup-token-rotation"); err != nil {
+			return fmt.Errorf("activate rotated setup token in %s: %w", deployment, err)
+		}
+	}
+	printSetupToken(a.stdout, token, expiresAt)
 	return nil
+}
+
+func restartDeployment(ctx context.Context, clients *kubeClients, namespace, name, reason string) error {
+	deployments := clients.typed.AppsV1().Deployments(namespace)
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		deployment, err := deployments.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = map[string]string{}
+		}
+		deployment.Spec.Template.Annotations["argus.io/restarted-at"] = time.Now().UTC().Format(time.RFC3339Nano)
+		deployment.Spec.Template.Annotations["argus.io/restart-reason"] = reason
+		_, err = deployments.Update(ctx, deployment, metav1.UpdateOptions{})
+		return err
+	}); err != nil {
+		return fmt.Errorf("restart deployment %s/%s: %w", namespace, name, err)
+	}
+	return waitForDeployment(ctx, clients, namespace, name, 5*time.Minute)
+}
+
+func printSetupToken(writer io.Writer, token string, expiresAt time.Time) {
+	_, _ = fmt.Fprintln(writer, "Setup Token (copy and store it now; shown only once):")
+	_, _ = fmt.Fprintln(writer, token)
+	_, _ = fmt.Fprintf(writer, "Expires at: %s\n", expiresAt.UTC().Format(time.RFC3339))
 }
 
 func (a *App) runAdminResetPassword(ctx context.Context, args []string) error {

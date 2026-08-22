@@ -46,7 +46,7 @@ export function createAuthDomain(ctx: MockContext): ArgusApiClient["auth"] {
         },
         permissions: ["*"],
         amr: ["password"],
-        mfa_state: user.mfaEnabled ? "enabled" : "enrollment_required",
+		mfa_state: user.mfaEnabled ? "enabled" : "disabled",
         authenticated_at: now,
       });
     }

@@ -10,6 +10,7 @@ import (
 	v1 "github.com/kakj-go/Argus/internal/gen/proto/argus/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -278,6 +279,7 @@ type TelemetryQueryScope struct {
 	AllowedSignals       []string               `protobuf:"bytes,3,rep,name=allowed_signals,json=allowedSignals,proto3" json:"allowed_signals,omitempty"`
 	AuthorizationVersion uint64                 `protobuf:"varint,4,opt,name=authorization_version,json=authorizationVersion,proto3" json:"authorization_version,omitempty"`
 	ScopeHash            string                 `protobuf:"bytes,5,opt,name=scope_hash,json=scopeHash,proto3" json:"scope_hash,omitempty"`
+	SensitiveFields      bool                   `protobuf:"varint,6,opt,name=sensitive_fields,json=sensitiveFields,proto3" json:"sensitive_fields,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -347,36 +349,39 @@ func (x *TelemetryQueryScope) GetScopeHash() string {
 	return ""
 }
 
-type TelemetryQueryRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SchemaVersion   string                 `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	Scope           *TelemetryQueryScope   `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	From            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
-	To              *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
-	Limit           uint32                 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor          string                 `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	FilterJson      []byte                 `protobuf:"bytes,7,opt,name=filter_json,json=filterJson,proto3" json:"filter_json,omitempty"`
-	SensitiveFields bool                   `protobuf:"varint,8,opt,name=sensitive_fields,json=sensitiveFields,proto3" json:"sensitive_fields,omitempty"`
-	MaxScanBytes    uint64                 `protobuf:"varint,9,opt,name=max_scan_bytes,json=maxScanBytes,proto3" json:"max_scan_bytes,omitempty"`
-	TimeoutMillis   uint32                 `protobuf:"varint,10,opt,name=timeout_millis,json=timeoutMillis,proto3" json:"timeout_millis,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+func (x *TelemetryQueryScope) GetSensitiveFields() bool {
+	if x != nil {
+		return x.SensitiveFields
+	}
+	return false
 }
 
-func (x *TelemetryQueryRequest) Reset() {
-	*x = TelemetryQueryRequest{}
+type QueryOverviewRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaVersion string                 `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	Scope         *TelemetryQueryScope   `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	MaxScanBytes  uint64                 `protobuf:"varint,5,opt,name=max_scan_bytes,json=maxScanBytes,proto3" json:"max_scan_bytes,omitempty"`
+	TimeoutMillis uint32                 `protobuf:"varint,6,opt,name=timeout_millis,json=timeoutMillis,proto3" json:"timeout_millis,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryOverviewRequest) Reset() {
+	*x = QueryOverviewRequest{}
 	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TelemetryQueryRequest) String() string {
+func (x *QueryOverviewRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TelemetryQueryRequest) ProtoMessage() {}
+func (*QueryOverviewRequest) ProtoMessage() {}
 
-func (x *TelemetryQueryRequest) ProtoReflect() protoreflect.Message {
+func (x *QueryOverviewRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -388,75 +393,47 @@ func (x *TelemetryQueryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TelemetryQueryRequest.ProtoReflect.Descriptor instead.
-func (*TelemetryQueryRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use QueryOverviewRequest.ProtoReflect.Descriptor instead.
+func (*QueryOverviewRequest) Descriptor() ([]byte, []int) {
 	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *TelemetryQueryRequest) GetSchemaVersion() string {
+func (x *QueryOverviewRequest) GetSchemaVersion() string {
 	if x != nil {
 		return x.SchemaVersion
 	}
 	return ""
 }
 
-func (x *TelemetryQueryRequest) GetScope() *TelemetryQueryScope {
+func (x *QueryOverviewRequest) GetScope() *TelemetryQueryScope {
 	if x != nil {
 		return x.Scope
 	}
 	return nil
 }
 
-func (x *TelemetryQueryRequest) GetFrom() *timestamppb.Timestamp {
+func (x *QueryOverviewRequest) GetFrom() *timestamppb.Timestamp {
 	if x != nil {
 		return x.From
 	}
 	return nil
 }
 
-func (x *TelemetryQueryRequest) GetTo() *timestamppb.Timestamp {
+func (x *QueryOverviewRequest) GetTo() *timestamppb.Timestamp {
 	if x != nil {
 		return x.To
 	}
 	return nil
 }
 
-func (x *TelemetryQueryRequest) GetLimit() uint32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-func (x *TelemetryQueryRequest) GetCursor() string {
-	if x != nil {
-		return x.Cursor
-	}
-	return ""
-}
-
-func (x *TelemetryQueryRequest) GetFilterJson() []byte {
-	if x != nil {
-		return x.FilterJson
-	}
-	return nil
-}
-
-func (x *TelemetryQueryRequest) GetSensitiveFields() bool {
-	if x != nil {
-		return x.SensitiveFields
-	}
-	return false
-}
-
-func (x *TelemetryQueryRequest) GetMaxScanBytes() uint64 {
+func (x *QueryOverviewRequest) GetMaxScanBytes() uint64 {
 	if x != nil {
 		return x.MaxScanBytes
 	}
 	return 0
 }
 
-func (x *TelemetryQueryRequest) GetTimeoutMillis() uint32 {
+func (x *QueryOverviewRequest) GetTimeoutMillis() uint32 {
 	if x != nil {
 		return x.TimeoutMillis
 	}
@@ -547,314 +524,6 @@ func (x *TelemetryQueryResponse) GetElapsedMillis() uint64 {
 	return 0
 }
 
-type QueryMetricsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         *TelemetryQueryRequest `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryMetricsRequest) Reset() {
-	*x = QueryMetricsRequest{}
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryMetricsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryMetricsRequest) ProtoMessage() {}
-
-func (x *QueryMetricsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryMetricsRequest.ProtoReflect.Descriptor instead.
-func (*QueryMetricsRequest) Descriptor() ([]byte, []int) {
-	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *QueryMetricsRequest) GetQuery() *TelemetryQueryRequest {
-	if x != nil {
-		return x.Query
-	}
-	return nil
-}
-
-type QueryMetricsResponse struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Result        *TelemetryQueryResponse `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryMetricsResponse) Reset() {
-	*x = QueryMetricsResponse{}
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryMetricsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryMetricsResponse) ProtoMessage() {}
-
-func (x *QueryMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryMetricsResponse.ProtoReflect.Descriptor instead.
-func (*QueryMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *QueryMetricsResponse) GetResult() *TelemetryQueryResponse {
-	if x != nil {
-		return x.Result
-	}
-	return nil
-}
-
-type QueryLogsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         *TelemetryQueryRequest `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryLogsRequest) Reset() {
-	*x = QueryLogsRequest{}
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryLogsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryLogsRequest) ProtoMessage() {}
-
-func (x *QueryLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryLogsRequest.ProtoReflect.Descriptor instead.
-func (*QueryLogsRequest) Descriptor() ([]byte, []int) {
-	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *QueryLogsRequest) GetQuery() *TelemetryQueryRequest {
-	if x != nil {
-		return x.Query
-	}
-	return nil
-}
-
-type QueryLogsResponse struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Result        *TelemetryQueryResponse `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryLogsResponse) Reset() {
-	*x = QueryLogsResponse{}
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryLogsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryLogsResponse) ProtoMessage() {}
-
-func (x *QueryLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryLogsResponse.ProtoReflect.Descriptor instead.
-func (*QueryLogsResponse) Descriptor() ([]byte, []int) {
-	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *QueryLogsResponse) GetResult() *TelemetryQueryResponse {
-	if x != nil {
-		return x.Result
-	}
-	return nil
-}
-
-type QueryTracesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         *TelemetryQueryRequest `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryTracesRequest) Reset() {
-	*x = QueryTracesRequest{}
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryTracesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryTracesRequest) ProtoMessage() {}
-
-func (x *QueryTracesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryTracesRequest.ProtoReflect.Descriptor instead.
-func (*QueryTracesRequest) Descriptor() ([]byte, []int) {
-	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *QueryTracesRequest) GetQuery() *TelemetryQueryRequest {
-	if x != nil {
-		return x.Query
-	}
-	return nil
-}
-
-type QueryTracesResponse struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Result        *TelemetryQueryResponse `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryTracesResponse) Reset() {
-	*x = QueryTracesResponse{}
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryTracesResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryTracesResponse) ProtoMessage() {}
-
-func (x *QueryTracesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryTracesResponse.ProtoReflect.Descriptor instead.
-func (*QueryTracesResponse) Descriptor() ([]byte, []int) {
-	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *QueryTracesResponse) GetResult() *TelemetryQueryResponse {
-	if x != nil {
-		return x.Result
-	}
-	return nil
-}
-
-type QueryOverviewRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         *TelemetryQueryRequest `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryOverviewRequest) Reset() {
-	*x = QueryOverviewRequest{}
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryOverviewRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryOverviewRequest) ProtoMessage() {}
-
-func (x *QueryOverviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryOverviewRequest.ProtoReflect.Descriptor instead.
-func (*QueryOverviewRequest) Descriptor() ([]byte, []int) {
-	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *QueryOverviewRequest) GetQuery() *TelemetryQueryRequest {
-	if x != nil {
-		return x.Query
-	}
-	return nil
-}
-
 type QueryOverviewResponse struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
 	Result        *TelemetryQueryResponse `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
@@ -864,7 +533,7 @@ type QueryOverviewResponse struct {
 
 func (x *QueryOverviewResponse) Reset() {
 	*x = QueryOverviewResponse{}
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[14]
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -876,7 +545,7 @@ func (x *QueryOverviewResponse) String() string {
 func (*QueryOverviewResponse) ProtoMessage() {}
 
 func (x *QueryOverviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[14]
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -889,7 +558,7 @@ func (x *QueryOverviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryOverviewResponse.ProtoReflect.Descriptor instead.
 func (*QueryOverviewResponse) Descriptor() ([]byte, []int) {
-	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{14}
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *QueryOverviewResponse) GetResult() *TelemetryQueryResponse {
@@ -899,11 +568,848 @@ func (x *QueryOverviewResponse) GetResult() *TelemetryQueryResponse {
 	return nil
 }
 
+type EnsureTenantSchemaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EnterpriseId  string                 `protobuf:"bytes,1,opt,name=enterprise_id,json=enterpriseId,proto3" json:"enterprise_id,omitempty"`
+	SchemaVersion uint32                 `protobuf:"varint,2,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnsureTenantSchemaRequest) Reset() {
+	*x = EnsureTenantSchemaRequest{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnsureTenantSchemaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnsureTenantSchemaRequest) ProtoMessage() {}
+
+func (x *EnsureTenantSchemaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnsureTenantSchemaRequest.ProtoReflect.Descriptor instead.
+func (*EnsureTenantSchemaRequest) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *EnsureTenantSchemaRequest) GetEnterpriseId() string {
+	if x != nil {
+		return x.EnterpriseId
+	}
+	return ""
+}
+
+func (x *EnsureTenantSchemaRequest) GetSchemaVersion() uint32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
+type DropTenantSchemaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EnterpriseId  string                 `protobuf:"bytes,1,opt,name=enterprise_id,json=enterpriseId,proto3" json:"enterprise_id,omitempty"`
+	SchemaVersion uint32                 `protobuf:"varint,2,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DropTenantSchemaRequest) Reset() {
+	*x = DropTenantSchemaRequest{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DropTenantSchemaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DropTenantSchemaRequest) ProtoMessage() {}
+
+func (x *DropTenantSchemaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DropTenantSchemaRequest.ProtoReflect.Descriptor instead.
+func (*DropTenantSchemaRequest) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DropTenantSchemaRequest) GetEnterpriseId() string {
+	if x != nil {
+		return x.EnterpriseId
+	}
+	return ""
+}
+
+func (x *DropTenantSchemaRequest) GetSchemaVersion() uint32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
+type EnsureTenantSchemaResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaVersion uint32                 `protobuf:"varint,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnsureTenantSchemaResponse) Reset() {
+	*x = EnsureTenantSchemaResponse{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnsureTenantSchemaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnsureTenantSchemaResponse) ProtoMessage() {}
+
+func (x *EnsureTenantSchemaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnsureTenantSchemaResponse.ProtoReflect.Descriptor instead.
+func (*EnsureTenantSchemaResponse) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *EnsureTenantSchemaResponse) GetSchemaVersion() uint32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
+func (x *EnsureTenantSchemaResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type DropTenantSchemaResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaVersion uint32                 `protobuf:"varint,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DropTenantSchemaResponse) Reset() {
+	*x = DropTenantSchemaResponse{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DropTenantSchemaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DropTenantSchemaResponse) ProtoMessage() {}
+
+func (x *DropTenantSchemaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DropTenantSchemaResponse.ProtoReflect.Descriptor instead.
+func (*DropTenantSchemaResponse) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DropTenantSchemaResponse) GetSchemaVersion() uint32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
+func (x *DropTenantSchemaResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+// ExecuteQueryV2Request is the single-process query contract. The oneof keeps
+// language-specific syntax out of a shared DSL/IR while preserving one RPC
+// boundary for auth, budget and audit enforcement.
+type ExecuteQueryV2Request struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaVersion string                 `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	Scope         *TelemetryQueryScope   `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	Budget        *QueryBudget           `protobuf:"bytes,3,opt,name=budget,proto3" json:"budget,omitempty"`
+	// Types that are valid to be assigned to Query:
+	//
+	//	*ExecuteQueryV2Request_Promql
+	//	*ExecuteQueryV2Request_Kql
+	//	*ExecuteQueryV2Request_TraceGraphql
+	Query         isExecuteQueryV2Request_Query `protobuf_oneof:"query"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecuteQueryV2Request) Reset() {
+	*x = ExecuteQueryV2Request{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteQueryV2Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteQueryV2Request) ProtoMessage() {}
+
+func (x *ExecuteQueryV2Request) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteQueryV2Request.ProtoReflect.Descriptor instead.
+func (*ExecuteQueryV2Request) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ExecuteQueryV2Request) GetSchemaVersion() string {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return ""
+}
+
+func (x *ExecuteQueryV2Request) GetScope() *TelemetryQueryScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *ExecuteQueryV2Request) GetBudget() *QueryBudget {
+	if x != nil {
+		return x.Budget
+	}
+	return nil
+}
+
+func (x *ExecuteQueryV2Request) GetQuery() isExecuteQueryV2Request_Query {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *ExecuteQueryV2Request) GetPromql() *PromQLQuery {
+	if x != nil {
+		if x, ok := x.Query.(*ExecuteQueryV2Request_Promql); ok {
+			return x.Promql
+		}
+	}
+	return nil
+}
+
+func (x *ExecuteQueryV2Request) GetKql() *KQLQuery {
+	if x != nil {
+		if x, ok := x.Query.(*ExecuteQueryV2Request_Kql); ok {
+			return x.Kql
+		}
+	}
+	return nil
+}
+
+func (x *ExecuteQueryV2Request) GetTraceGraphql() *TraceGraphQLQuery {
+	if x != nil {
+		if x, ok := x.Query.(*ExecuteQueryV2Request_TraceGraphql); ok {
+			return x.TraceGraphql
+		}
+	}
+	return nil
+}
+
+type isExecuteQueryV2Request_Query interface {
+	isExecuteQueryV2Request_Query()
+}
+
+type ExecuteQueryV2Request_Promql struct {
+	Promql *PromQLQuery `protobuf:"bytes,10,opt,name=promql,proto3,oneof"`
+}
+
+type ExecuteQueryV2Request_Kql struct {
+	Kql *KQLQuery `protobuf:"bytes,11,opt,name=kql,proto3,oneof"`
+}
+
+type ExecuteQueryV2Request_TraceGraphql struct {
+	TraceGraphql *TraceGraphQLQuery `protobuf:"bytes,12,opt,name=trace_graphql,json=traceGraphql,proto3,oneof"`
+}
+
+func (*ExecuteQueryV2Request_Promql) isExecuteQueryV2Request_Query() {}
+
+func (*ExecuteQueryV2Request_Kql) isExecuteQueryV2Request_Query() {}
+
+func (*ExecuteQueryV2Request_TraceGraphql) isExecuteQueryV2Request_Query() {}
+
+type QueryBudget struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	MaxScanBytes   uint64                 `protobuf:"varint,1,opt,name=max_scan_bytes,json=maxScanBytes,proto3" json:"max_scan_bytes,omitempty"`
+	MaxRows        uint32                 `protobuf:"varint,2,opt,name=max_rows,json=maxRows,proto3" json:"max_rows,omitempty"`
+	MaxSamples     uint32                 `protobuf:"varint,3,opt,name=max_samples,json=maxSamples,proto3" json:"max_samples,omitempty"`
+	TimeoutMillis  uint32                 `protobuf:"varint,4,opt,name=timeout_millis,json=timeoutMillis,proto3" json:"timeout_millis,omitempty"`
+	MaxResultBytes uint64                 `protobuf:"varint,5,opt,name=max_result_bytes,json=maxResultBytes,proto3" json:"max_result_bytes,omitempty"`
+	MaxSeries      uint32                 `protobuf:"varint,6,opt,name=max_series,json=maxSeries,proto3" json:"max_series,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *QueryBudget) Reset() {
+	*x = QueryBudget{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryBudget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryBudget) ProtoMessage() {}
+
+func (x *QueryBudget) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryBudget.ProtoReflect.Descriptor instead.
+func (*QueryBudget) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *QueryBudget) GetMaxScanBytes() uint64 {
+	if x != nil {
+		return x.MaxScanBytes
+	}
+	return 0
+}
+
+func (x *QueryBudget) GetMaxRows() uint32 {
+	if x != nil {
+		return x.MaxRows
+	}
+	return 0
+}
+
+func (x *QueryBudget) GetMaxSamples() uint32 {
+	if x != nil {
+		return x.MaxSamples
+	}
+	return 0
+}
+
+func (x *QueryBudget) GetTimeoutMillis() uint32 {
+	if x != nil {
+		return x.TimeoutMillis
+	}
+	return 0
+}
+
+func (x *QueryBudget) GetMaxResultBytes() uint64 {
+	if x != nil {
+		return x.MaxResultBytes
+	}
+	return 0
+}
+
+func (x *QueryBudget) GetMaxSeries() uint32 {
+	if x != nil {
+		return x.MaxSeries
+	}
+	return 0
+}
+
+type PromQLQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Expression    string                 `protobuf:"bytes,1,opt,name=expression,proto3" json:"expression,omitempty"`
+	Start         *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=start,proto3" json:"start,omitempty"`
+	End           *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=end,proto3" json:"end,omitempty"`
+	StepSeconds   uint64                 `protobuf:"varint,4,opt,name=step_seconds,json=stepSeconds,proto3" json:"step_seconds,omitempty"`
+	Instant       bool                   `protobuf:"varint,5,opt,name=instant,proto3" json:"instant,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PromQLQuery) Reset() {
+	*x = PromQLQuery{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PromQLQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PromQLQuery) ProtoMessage() {}
+
+func (x *PromQLQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PromQLQuery.ProtoReflect.Descriptor instead.
+func (*PromQLQuery) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PromQLQuery) GetExpression() string {
+	if x != nil {
+		return x.Expression
+	}
+	return ""
+}
+
+func (x *PromQLQuery) GetStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Start
+	}
+	return nil
+}
+
+func (x *PromQLQuery) GetEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.End
+	}
+	return nil
+}
+
+func (x *PromQLQuery) GetStepSeconds() uint64 {
+	if x != nil {
+		return x.StepSeconds
+	}
+	return 0
+}
+
+func (x *PromQLQuery) GetInstant() bool {
+	if x != nil {
+		return x.Instant
+	}
+	return false
+}
+
+type KQLQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Expression    string                 `protobuf:"bytes,1,opt,name=expression,proto3" json:"expression,omitempty"`
+	Pipeline      string                 `protobuf:"bytes,2,opt,name=pipeline,proto3" json:"pipeline,omitempty"`
+	Start         *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start,proto3" json:"start,omitempty"`
+	End           *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=end,proto3" json:"end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KQLQuery) Reset() {
+	*x = KQLQuery{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KQLQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KQLQuery) ProtoMessage() {}
+
+func (x *KQLQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KQLQuery.ProtoReflect.Descriptor instead.
+func (*KQLQuery) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *KQLQuery) GetExpression() string {
+	if x != nil {
+		return x.Expression
+	}
+	return ""
+}
+
+func (x *KQLQuery) GetPipeline() string {
+	if x != nil {
+		return x.Pipeline
+	}
+	return ""
+}
+
+func (x *KQLQuery) GetStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Start
+	}
+	return nil
+}
+
+func (x *KQLQuery) GetEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.End
+	}
+	return nil
+}
+
+type TraceGraphQLQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Document      string                 `protobuf:"bytes,1,opt,name=document,proto3" json:"document,omitempty"`
+	OperationName string                 `protobuf:"bytes,2,opt,name=operation_name,json=operationName,proto3" json:"operation_name,omitempty"`
+	Variables     *structpb.Struct       `protobuf:"bytes,3,opt,name=variables,proto3" json:"variables,omitempty"`
+	Start         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start,proto3" json:"start,omitempty"`
+	End           *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end,proto3" json:"end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TraceGraphQLQuery) Reset() {
+	*x = TraceGraphQLQuery{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TraceGraphQLQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TraceGraphQLQuery) ProtoMessage() {}
+
+func (x *TraceGraphQLQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TraceGraphQLQuery.ProtoReflect.Descriptor instead.
+func (*TraceGraphQLQuery) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *TraceGraphQLQuery) GetDocument() string {
+	if x != nil {
+		return x.Document
+	}
+	return ""
+}
+
+func (x *TraceGraphQLQuery) GetOperationName() string {
+	if x != nil {
+		return x.OperationName
+	}
+	return ""
+}
+
+func (x *TraceGraphQLQuery) GetVariables() *structpb.Struct {
+	if x != nil {
+		return x.Variables
+	}
+	return nil
+}
+
+func (x *TraceGraphQLQuery) GetStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Start
+	}
+	return nil
+}
+
+func (x *TraceGraphQLQuery) GetEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.End
+	}
+	return nil
+}
+
+type ExecuteQueryV2Response struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaVersion string                 `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	Language      string                 `protobuf:"bytes,2,opt,name=language,proto3" json:"language,omitempty"`
+	ResultType    string                 `protobuf:"bytes,3,opt,name=result_type,json=resultType,proto3" json:"result_type,omitempty"`
+	ResultJson    []byte                 `protobuf:"bytes,4,opt,name=result_json,json=resultJson,proto3" json:"result_json,omitempty"`
+	Warnings      []string               `protobuf:"bytes,5,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	Partial       bool                   `protobuf:"varint,6,opt,name=partial,proto3" json:"partial,omitempty"`
+	Meta          *QueryMeta             `protobuf:"bytes,7,opt,name=meta,proto3" json:"meta,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecuteQueryV2Response) Reset() {
+	*x = ExecuteQueryV2Response{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteQueryV2Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteQueryV2Response) ProtoMessage() {}
+
+func (x *ExecuteQueryV2Response) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteQueryV2Response.ProtoReflect.Descriptor instead.
+func (*ExecuteQueryV2Response) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ExecuteQueryV2Response) GetSchemaVersion() string {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return ""
+}
+
+func (x *ExecuteQueryV2Response) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *ExecuteQueryV2Response) GetResultType() string {
+	if x != nil {
+		return x.ResultType
+	}
+	return ""
+}
+
+func (x *ExecuteQueryV2Response) GetResultJson() []byte {
+	if x != nil {
+		return x.ResultJson
+	}
+	return nil
+}
+
+func (x *ExecuteQueryV2Response) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
+}
+
+func (x *ExecuteQueryV2Response) GetPartial() bool {
+	if x != nil {
+		return x.Partial
+	}
+	return false
+}
+
+func (x *ExecuteQueryV2Response) GetMeta() *QueryMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+type QueryMeta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlanHash      string                 `protobuf:"bytes,1,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"`
+	Engine        string                 `protobuf:"bytes,2,opt,name=engine,proto3" json:"engine,omitempty"`
+	EngineVersion string                 `protobuf:"bytes,3,opt,name=engine_version,json=engineVersion,proto3" json:"engine_version,omitempty"`
+	ScannedBytes  uint64                 `protobuf:"varint,4,opt,name=scanned_bytes,json=scannedBytes,proto3" json:"scanned_bytes,omitempty"`
+	ScannedRows   uint64                 `protobuf:"varint,5,opt,name=scanned_rows,json=scannedRows,proto3" json:"scanned_rows,omitempty"`
+	ReturnedRows  uint64                 `protobuf:"varint,6,opt,name=returned_rows,json=returnedRows,proto3" json:"returned_rows,omitempty"`
+	LoadedSamples uint64                 `protobuf:"varint,7,opt,name=loaded_samples,json=loadedSamples,proto3" json:"loaded_samples,omitempty"`
+	ElapsedMillis uint64                 `protobuf:"varint,8,opt,name=elapsed_millis,json=elapsedMillis,proto3" json:"elapsed_millis,omitempty"`
+	Partial       bool                   `protobuf:"varint,9,opt,name=partial,proto3" json:"partial,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryMeta) Reset() {
+	*x = QueryMeta{}
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryMeta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryMeta) ProtoMessage() {}
+
+func (x *QueryMeta) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_telemetry_v1_telemetry_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryMeta.ProtoReflect.Descriptor instead.
+func (*QueryMeta) Descriptor() ([]byte, []int) {
+	return file_argus_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *QueryMeta) GetPlanHash() string {
+	if x != nil {
+		return x.PlanHash
+	}
+	return ""
+}
+
+func (x *QueryMeta) GetEngine() string {
+	if x != nil {
+		return x.Engine
+	}
+	return ""
+}
+
+func (x *QueryMeta) GetEngineVersion() string {
+	if x != nil {
+		return x.EngineVersion
+	}
+	return ""
+}
+
+func (x *QueryMeta) GetScannedBytes() uint64 {
+	if x != nil {
+		return x.ScannedBytes
+	}
+	return 0
+}
+
+func (x *QueryMeta) GetScannedRows() uint64 {
+	if x != nil {
+		return x.ScannedRows
+	}
+	return 0
+}
+
+func (x *QueryMeta) GetReturnedRows() uint64 {
+	if x != nil {
+		return x.ReturnedRows
+	}
+	return 0
+}
+
+func (x *QueryMeta) GetLoadedSamples() uint64 {
+	if x != nil {
+		return x.LoadedSamples
+	}
+	return 0
+}
+
+func (x *QueryMeta) GetElapsedMillis() uint64 {
+	if x != nil {
+		return x.ElapsedMillis
+	}
+	return 0
+}
+
+func (x *QueryMeta) GetPartial() bool {
+	if x != nil {
+		return x.Partial
+	}
+	return false
+}
+
 var File_argus_telemetry_v1_telemetry_proto protoreflect.FileDescriptor
 
 const file_argus_telemetry_v1_telemetry_proto_rawDesc = "" +
 	"\n" +
-	"\"argus/telemetry/v1/telemetry.proto\x12\x12argus.telemetry.v1\x1a\x1cargus/common/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"w\n" +
+	"\"argus/telemetry/v1/telemetry.proto\x12\x12argus.telemetry.v1\x1a\x1cargus/common/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\"w\n" +
 	"\x17ResolveCollectorRequest\x12#\n" +
 	"\rcredential_id\x18\x01 \x01(\tR\fcredentialId\x127\n" +
 	"\x17certificate_fingerprint\x18\x02 \x01(\tR\x16certificateFingerprint\"\xd4\x01\n" +
@@ -923,27 +1429,22 @@ const file_argus_telemetry_v1_telemetry_proto_rawDesc = "" +
 	"\x0eschema_version\x18\x03 \x01(\tR\rschemaVersion\x12!\n" +
 	"\fpayload_hash\x18\x04 \x01(\tR\vpayloadHash\x12;\n" +
 	"\vreceived_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"receivedAt\"\x88\x02\n" +
+	"receivedAt\"\xb3\x02\n" +
 	"\x13TelemetryQueryScope\x12#\n" +
 	"\renterprise_id\x18\x01 \x01(\tR\fenterpriseId\x12O\n" +
 	"\x14authorized_resources\x18\x02 \x03(\v2\x1c.argus.common.v1.ResourceRefR\x13authorizedResources\x12'\n" +
 	"\x0fallowed_signals\x18\x03 \x03(\tR\x0eallowedSignals\x123\n" +
 	"\x15authorization_version\x18\x04 \x01(\x04R\x14authorizationVersion\x12\x1d\n" +
 	"\n" +
-	"scope_hash\x18\x05 \x01(\tR\tscopeHash\"\xa0\x03\n" +
-	"\x15TelemetryQueryRequest\x12%\n" +
+	"scope_hash\x18\x05 \x01(\tR\tscopeHash\x12)\n" +
+	"\x10sensitive_fields\x18\x06 \x01(\bR\x0fsensitiveFields\"\xa5\x02\n" +
+	"\x14QueryOverviewRequest\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12=\n" +
 	"\x05scope\x18\x02 \x01(\v2'.argus.telemetry.v1.TelemetryQueryScopeR\x05scope\x12.\n" +
 	"\x04from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
-	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x14\n" +
-	"\x05limit\x18\x05 \x01(\rR\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x06 \x01(\tR\x06cursor\x12\x1f\n" +
-	"\vfilter_json\x18\a \x01(\fR\n" +
-	"filterJson\x12)\n" +
-	"\x10sensitive_fields\x18\b \x01(\bR\x0fsensitiveFields\x12$\n" +
-	"\x0emax_scan_bytes\x18\t \x01(\x04R\fmaxScanBytes\x12%\n" +
-	"\x0etimeout_millis\x18\n" +
-	" \x01(\rR\rtimeoutMillis\"\xef\x01\n" +
+	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12$\n" +
+	"\x0emax_scan_bytes\x18\x05 \x01(\x04R\fmaxScanBytes\x12%\n" +
+	"\x0etimeout_millis\x18\x06 \x01(\rR\rtimeoutMillis\"\xef\x01\n" +
 	"\x16TelemetryQueryResponse\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12\x1f\n" +
 	"\vresult_json\x18\x02 \x01(\fR\n" +
@@ -951,30 +1452,87 @@ const file_argus_telemetry_v1_telemetry_proto_rawDesc = "" +
 	"\apartial\x18\x03 \x01(\bR\apartial\x12'\n" +
 	"\x0fpartial_reasons\x18\x04 \x03(\tR\x0epartialReasons\x12#\n" +
 	"\rscanned_bytes\x18\x05 \x01(\x04R\fscannedBytes\x12%\n" +
-	"\x0eelapsed_millis\x18\x06 \x01(\x04R\relapsedMillis\"V\n" +
-	"\x13QueryMetricsRequest\x12?\n" +
-	"\x05query\x18\x01 \x01(\v2).argus.telemetry.v1.TelemetryQueryRequestR\x05query\"Z\n" +
-	"\x14QueryMetricsResponse\x12B\n" +
-	"\x06result\x18\x01 \x01(\v2*.argus.telemetry.v1.TelemetryQueryResponseR\x06result\"S\n" +
-	"\x10QueryLogsRequest\x12?\n" +
-	"\x05query\x18\x01 \x01(\v2).argus.telemetry.v1.TelemetryQueryRequestR\x05query\"W\n" +
-	"\x11QueryLogsResponse\x12B\n" +
-	"\x06result\x18\x01 \x01(\v2*.argus.telemetry.v1.TelemetryQueryResponseR\x06result\"U\n" +
-	"\x12QueryTracesRequest\x12?\n" +
-	"\x05query\x18\x01 \x01(\v2).argus.telemetry.v1.TelemetryQueryRequestR\x05query\"Y\n" +
-	"\x13QueryTracesResponse\x12B\n" +
-	"\x06result\x18\x01 \x01(\v2*.argus.telemetry.v1.TelemetryQueryResponseR\x06result\"W\n" +
-	"\x14QueryOverviewRequest\x12?\n" +
-	"\x05query\x18\x01 \x01(\v2).argus.telemetry.v1.TelemetryQueryRequestR\x05query\"[\n" +
+	"\x0eelapsed_millis\x18\x06 \x01(\x04R\relapsedMillis\"[\n" +
 	"\x15QueryOverviewResponse\x12B\n" +
-	"\x06result\x18\x01 \x01(\v2*.argus.telemetry.v1.TelemetryQueryResponseR\x06result2\x89\x01\n" +
+	"\x06result\x18\x01 \x01(\v2*.argus.telemetry.v1.TelemetryQueryResponseR\x06result\"g\n" +
+	"\x19EnsureTenantSchemaRequest\x12#\n" +
+	"\renterprise_id\x18\x01 \x01(\tR\fenterpriseId\x12%\n" +
+	"\x0eschema_version\x18\x02 \x01(\rR\rschemaVersion\"e\n" +
+	"\x17DropTenantSchemaRequest\x12#\n" +
+	"\renterprise_id\x18\x01 \x01(\tR\fenterpriseId\x12%\n" +
+	"\x0eschema_version\x18\x02 \x01(\rR\rschemaVersion\"[\n" +
+	"\x1aEnsureTenantSchemaResponse\x12%\n" +
+	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"Y\n" +
+	"\x18DropTenantSchemaResponse\x12%\n" +
+	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"\xfa\x02\n" +
+	"\x15ExecuteQueryV2Request\x12%\n" +
+	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12=\n" +
+	"\x05scope\x18\x02 \x01(\v2'.argus.telemetry.v1.TelemetryQueryScopeR\x05scope\x127\n" +
+	"\x06budget\x18\x03 \x01(\v2\x1f.argus.telemetry.v1.QueryBudgetR\x06budget\x129\n" +
+	"\x06promql\x18\n" +
+	" \x01(\v2\x1f.argus.telemetry.v1.PromQLQueryH\x00R\x06promql\x120\n" +
+	"\x03kql\x18\v \x01(\v2\x1c.argus.telemetry.v1.KQLQueryH\x00R\x03kql\x12L\n" +
+	"\rtrace_graphql\x18\f \x01(\v2%.argus.telemetry.v1.TraceGraphQLQueryH\x00R\ftraceGraphqlB\a\n" +
+	"\x05query\"\xdf\x01\n" +
+	"\vQueryBudget\x12$\n" +
+	"\x0emax_scan_bytes\x18\x01 \x01(\x04R\fmaxScanBytes\x12\x19\n" +
+	"\bmax_rows\x18\x02 \x01(\rR\amaxRows\x12\x1f\n" +
+	"\vmax_samples\x18\x03 \x01(\rR\n" +
+	"maxSamples\x12%\n" +
+	"\x0etimeout_millis\x18\x04 \x01(\rR\rtimeoutMillis\x12(\n" +
+	"\x10max_result_bytes\x18\x05 \x01(\x04R\x0emaxResultBytes\x12\x1d\n" +
+	"\n" +
+	"max_series\x18\x06 \x01(\rR\tmaxSeries\"\xca\x01\n" +
+	"\vPromQLQuery\x12\x1e\n" +
+	"\n" +
+	"expression\x18\x01 \x01(\tR\n" +
+	"expression\x120\n" +
+	"\x05start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
+	"\x03end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12!\n" +
+	"\fstep_seconds\x18\x04 \x01(\x04R\vstepSeconds\x12\x18\n" +
+	"\ainstant\x18\x05 \x01(\bR\ainstant\"\xa6\x01\n" +
+	"\bKQLQuery\x12\x1e\n" +
+	"\n" +
+	"expression\x18\x01 \x01(\tR\n" +
+	"expression\x12\x1a\n" +
+	"\bpipeline\x18\x02 \x01(\tR\bpipeline\x120\n" +
+	"\x05start\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
+	"\x03end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xed\x01\n" +
+	"\x11TraceGraphQLQuery\x12\x1a\n" +
+	"\bdocument\x18\x01 \x01(\tR\bdocument\x12%\n" +
+	"\x0eoperation_name\x18\x02 \x01(\tR\roperationName\x125\n" +
+	"\tvariables\x18\x03 \x01(\v2\x17.google.protobuf.StructR\tvariables\x120\n" +
+	"\x05start\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
+	"\x03end\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\x86\x02\n" +
+	"\x16ExecuteQueryV2Response\x12%\n" +
+	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\tR\blanguage\x12\x1f\n" +
+	"\vresult_type\x18\x03 \x01(\tR\n" +
+	"resultType\x12\x1f\n" +
+	"\vresult_json\x18\x04 \x01(\fR\n" +
+	"resultJson\x12\x1a\n" +
+	"\bwarnings\x18\x05 \x03(\tR\bwarnings\x12\x18\n" +
+	"\apartial\x18\x06 \x01(\bR\apartial\x121\n" +
+	"\x04meta\x18\a \x01(\v2\x1d.argus.telemetry.v1.QueryMetaR\x04meta\"\xbc\x02\n" +
+	"\tQueryMeta\x12\x1b\n" +
+	"\tplan_hash\x18\x01 \x01(\tR\bplanHash\x12\x16\n" +
+	"\x06engine\x18\x02 \x01(\tR\x06engine\x12%\n" +
+	"\x0eengine_version\x18\x03 \x01(\tR\rengineVersion\x12#\n" +
+	"\rscanned_bytes\x18\x04 \x01(\x04R\fscannedBytes\x12!\n" +
+	"\fscanned_rows\x18\x05 \x01(\x04R\vscannedRows\x12#\n" +
+	"\rreturned_rows\x18\x06 \x01(\x04R\freturnedRows\x12%\n" +
+	"\x0eloaded_samples\x18\a \x01(\x04R\rloadedSamples\x12%\n" +
+	"\x0eelapsed_millis\x18\b \x01(\x04R\relapsedMillis\x12\x18\n" +
+	"\apartial\x18\t \x01(\bR\apartial2\x89\x01\n" +
 	"\x18TelemetryIdentityService\x12m\n" +
-	"\x10ResolveCollector\x12+.argus.telemetry.v1.ResolveCollectorRequest\x1a,.argus.telemetry.v1.ResolveCollectorResponse2\x9a\x03\n" +
-	"\x15TelemetryQueryService\x12a\n" +
-	"\fQueryMetrics\x12'.argus.telemetry.v1.QueryMetricsRequest\x1a(.argus.telemetry.v1.QueryMetricsResponse\x12X\n" +
-	"\tQueryLogs\x12$.argus.telemetry.v1.QueryLogsRequest\x1a%.argus.telemetry.v1.QueryLogsResponse\x12^\n" +
-	"\vQueryTraces\x12&.argus.telemetry.v1.QueryTracesRequest\x1a'.argus.telemetry.v1.QueryTracesResponse\x12d\n" +
-	"\rQueryOverview\x12(.argus.telemetry.v1.QueryOverviewRequest\x1a).argus.telemetry.v1.QueryOverviewResponseBLZJgithub.com/kakj-go/Argus/internal/gen/proto/argus/telemetry/v1;telemetryv1b\x06proto3"
+	"\x10ResolveCollector\x12+.argus.telemetry.v1.ResolveCollectorRequest\x1a,.argus.telemetry.v1.ResolveCollectorResponse2\xca\x03\n" +
+	"\x15TelemetryQueryService\x12g\n" +
+	"\x0eExecuteQueryV2\x12).argus.telemetry.v1.ExecuteQueryV2Request\x1a*.argus.telemetry.v1.ExecuteQueryV2Response\x12d\n" +
+	"\rQueryOverview\x12(.argus.telemetry.v1.QueryOverviewRequest\x1a).argus.telemetry.v1.QueryOverviewResponse\x12s\n" +
+	"\x12EnsureTenantSchema\x12-.argus.telemetry.v1.EnsureTenantSchemaRequest\x1a..argus.telemetry.v1.EnsureTenantSchemaResponse\x12m\n" +
+	"\x10DropTenantSchema\x12+.argus.telemetry.v1.DropTenantSchemaRequest\x1a,.argus.telemetry.v1.DropTenantSchemaResponseBLZJgithub.com/kakj-go/Argus/internal/gen/proto/argus/telemetry/v1;telemetryv1b\x06proto3"
 
 var (
 	file_argus_telemetry_v1_telemetry_proto_rawDescOnce sync.Once
@@ -988,58 +1546,69 @@ func file_argus_telemetry_v1_telemetry_proto_rawDescGZIP() []byte {
 	return file_argus_telemetry_v1_telemetry_proto_rawDescData
 }
 
-var file_argus_telemetry_v1_telemetry_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_argus_telemetry_v1_telemetry_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_argus_telemetry_v1_telemetry_proto_goTypes = []any{
-	(*ResolveCollectorRequest)(nil),  // 0: argus.telemetry.v1.ResolveCollectorRequest
-	(*ResolveCollectorResponse)(nil), // 1: argus.telemetry.v1.ResolveCollectorResponse
-	(*TrustedTelemetryIdentity)(nil), // 2: argus.telemetry.v1.TrustedTelemetryIdentity
-	(*TelemetryIngestContext)(nil),   // 3: argus.telemetry.v1.TelemetryIngestContext
-	(*TelemetryQueryScope)(nil),      // 4: argus.telemetry.v1.TelemetryQueryScope
-	(*TelemetryQueryRequest)(nil),    // 5: argus.telemetry.v1.TelemetryQueryRequest
-	(*TelemetryQueryResponse)(nil),   // 6: argus.telemetry.v1.TelemetryQueryResponse
-	(*QueryMetricsRequest)(nil),      // 7: argus.telemetry.v1.QueryMetricsRequest
-	(*QueryMetricsResponse)(nil),     // 8: argus.telemetry.v1.QueryMetricsResponse
-	(*QueryLogsRequest)(nil),         // 9: argus.telemetry.v1.QueryLogsRequest
-	(*QueryLogsResponse)(nil),        // 10: argus.telemetry.v1.QueryLogsResponse
-	(*QueryTracesRequest)(nil),       // 11: argus.telemetry.v1.QueryTracesRequest
-	(*QueryTracesResponse)(nil),      // 12: argus.telemetry.v1.QueryTracesResponse
-	(*QueryOverviewRequest)(nil),     // 13: argus.telemetry.v1.QueryOverviewRequest
-	(*QueryOverviewResponse)(nil),    // 14: argus.telemetry.v1.QueryOverviewResponse
-	(*timestamppb.Timestamp)(nil),    // 15: google.protobuf.Timestamp
-	(*v1.ResourceRef)(nil),           // 16: argus.common.v1.ResourceRef
+	(*ResolveCollectorRequest)(nil),    // 0: argus.telemetry.v1.ResolveCollectorRequest
+	(*ResolveCollectorResponse)(nil),   // 1: argus.telemetry.v1.ResolveCollectorResponse
+	(*TrustedTelemetryIdentity)(nil),   // 2: argus.telemetry.v1.TrustedTelemetryIdentity
+	(*TelemetryIngestContext)(nil),     // 3: argus.telemetry.v1.TelemetryIngestContext
+	(*TelemetryQueryScope)(nil),        // 4: argus.telemetry.v1.TelemetryQueryScope
+	(*QueryOverviewRequest)(nil),       // 5: argus.telemetry.v1.QueryOverviewRequest
+	(*TelemetryQueryResponse)(nil),     // 6: argus.telemetry.v1.TelemetryQueryResponse
+	(*QueryOverviewResponse)(nil),      // 7: argus.telemetry.v1.QueryOverviewResponse
+	(*EnsureTenantSchemaRequest)(nil),  // 8: argus.telemetry.v1.EnsureTenantSchemaRequest
+	(*DropTenantSchemaRequest)(nil),    // 9: argus.telemetry.v1.DropTenantSchemaRequest
+	(*EnsureTenantSchemaResponse)(nil), // 10: argus.telemetry.v1.EnsureTenantSchemaResponse
+	(*DropTenantSchemaResponse)(nil),   // 11: argus.telemetry.v1.DropTenantSchemaResponse
+	(*ExecuteQueryV2Request)(nil),      // 12: argus.telemetry.v1.ExecuteQueryV2Request
+	(*QueryBudget)(nil),                // 13: argus.telemetry.v1.QueryBudget
+	(*PromQLQuery)(nil),                // 14: argus.telemetry.v1.PromQLQuery
+	(*KQLQuery)(nil),                   // 15: argus.telemetry.v1.KQLQuery
+	(*TraceGraphQLQuery)(nil),          // 16: argus.telemetry.v1.TraceGraphQLQuery
+	(*ExecuteQueryV2Response)(nil),     // 17: argus.telemetry.v1.ExecuteQueryV2Response
+	(*QueryMeta)(nil),                  // 18: argus.telemetry.v1.QueryMeta
+	(*timestamppb.Timestamp)(nil),      // 19: google.protobuf.Timestamp
+	(*v1.ResourceRef)(nil),             // 20: argus.common.v1.ResourceRef
+	(*structpb.Struct)(nil),            // 21: google.protobuf.Struct
 }
 var file_argus_telemetry_v1_telemetry_proto_depIdxs = []int32{
 	2,  // 0: argus.telemetry.v1.ResolveCollectorResponse.identity:type_name -> argus.telemetry.v1.TrustedTelemetryIdentity
-	15, // 1: argus.telemetry.v1.ResolveCollectorResponse.expires_at:type_name -> google.protobuf.Timestamp
+	19, // 1: argus.telemetry.v1.ResolveCollectorResponse.expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 2: argus.telemetry.v1.TelemetryIngestContext.identity:type_name -> argus.telemetry.v1.TrustedTelemetryIdentity
-	15, // 3: argus.telemetry.v1.TelemetryIngestContext.received_at:type_name -> google.protobuf.Timestamp
-	16, // 4: argus.telemetry.v1.TelemetryQueryScope.authorized_resources:type_name -> argus.common.v1.ResourceRef
-	4,  // 5: argus.telemetry.v1.TelemetryQueryRequest.scope:type_name -> argus.telemetry.v1.TelemetryQueryScope
-	15, // 6: argus.telemetry.v1.TelemetryQueryRequest.from:type_name -> google.protobuf.Timestamp
-	15, // 7: argus.telemetry.v1.TelemetryQueryRequest.to:type_name -> google.protobuf.Timestamp
-	5,  // 8: argus.telemetry.v1.QueryMetricsRequest.query:type_name -> argus.telemetry.v1.TelemetryQueryRequest
-	6,  // 9: argus.telemetry.v1.QueryMetricsResponse.result:type_name -> argus.telemetry.v1.TelemetryQueryResponse
-	5,  // 10: argus.telemetry.v1.QueryLogsRequest.query:type_name -> argus.telemetry.v1.TelemetryQueryRequest
-	6,  // 11: argus.telemetry.v1.QueryLogsResponse.result:type_name -> argus.telemetry.v1.TelemetryQueryResponse
-	5,  // 12: argus.telemetry.v1.QueryTracesRequest.query:type_name -> argus.telemetry.v1.TelemetryQueryRequest
-	6,  // 13: argus.telemetry.v1.QueryTracesResponse.result:type_name -> argus.telemetry.v1.TelemetryQueryResponse
-	5,  // 14: argus.telemetry.v1.QueryOverviewRequest.query:type_name -> argus.telemetry.v1.TelemetryQueryRequest
-	6,  // 15: argus.telemetry.v1.QueryOverviewResponse.result:type_name -> argus.telemetry.v1.TelemetryQueryResponse
-	0,  // 16: argus.telemetry.v1.TelemetryIdentityService.ResolveCollector:input_type -> argus.telemetry.v1.ResolveCollectorRequest
-	7,  // 17: argus.telemetry.v1.TelemetryQueryService.QueryMetrics:input_type -> argus.telemetry.v1.QueryMetricsRequest
-	9,  // 18: argus.telemetry.v1.TelemetryQueryService.QueryLogs:input_type -> argus.telemetry.v1.QueryLogsRequest
-	11, // 19: argus.telemetry.v1.TelemetryQueryService.QueryTraces:input_type -> argus.telemetry.v1.QueryTracesRequest
-	13, // 20: argus.telemetry.v1.TelemetryQueryService.QueryOverview:input_type -> argus.telemetry.v1.QueryOverviewRequest
-	1,  // 21: argus.telemetry.v1.TelemetryIdentityService.ResolveCollector:output_type -> argus.telemetry.v1.ResolveCollectorResponse
-	8,  // 22: argus.telemetry.v1.TelemetryQueryService.QueryMetrics:output_type -> argus.telemetry.v1.QueryMetricsResponse
-	10, // 23: argus.telemetry.v1.TelemetryQueryService.QueryLogs:output_type -> argus.telemetry.v1.QueryLogsResponse
-	12, // 24: argus.telemetry.v1.TelemetryQueryService.QueryTraces:output_type -> argus.telemetry.v1.QueryTracesResponse
-	14, // 25: argus.telemetry.v1.TelemetryQueryService.QueryOverview:output_type -> argus.telemetry.v1.QueryOverviewResponse
-	21, // [21:26] is the sub-list for method output_type
-	16, // [16:21] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	19, // 3: argus.telemetry.v1.TelemetryIngestContext.received_at:type_name -> google.protobuf.Timestamp
+	20, // 4: argus.telemetry.v1.TelemetryQueryScope.authorized_resources:type_name -> argus.common.v1.ResourceRef
+	4,  // 5: argus.telemetry.v1.QueryOverviewRequest.scope:type_name -> argus.telemetry.v1.TelemetryQueryScope
+	19, // 6: argus.telemetry.v1.QueryOverviewRequest.from:type_name -> google.protobuf.Timestamp
+	19, // 7: argus.telemetry.v1.QueryOverviewRequest.to:type_name -> google.protobuf.Timestamp
+	6,  // 8: argus.telemetry.v1.QueryOverviewResponse.result:type_name -> argus.telemetry.v1.TelemetryQueryResponse
+	4,  // 9: argus.telemetry.v1.ExecuteQueryV2Request.scope:type_name -> argus.telemetry.v1.TelemetryQueryScope
+	13, // 10: argus.telemetry.v1.ExecuteQueryV2Request.budget:type_name -> argus.telemetry.v1.QueryBudget
+	14, // 11: argus.telemetry.v1.ExecuteQueryV2Request.promql:type_name -> argus.telemetry.v1.PromQLQuery
+	15, // 12: argus.telemetry.v1.ExecuteQueryV2Request.kql:type_name -> argus.telemetry.v1.KQLQuery
+	16, // 13: argus.telemetry.v1.ExecuteQueryV2Request.trace_graphql:type_name -> argus.telemetry.v1.TraceGraphQLQuery
+	19, // 14: argus.telemetry.v1.PromQLQuery.start:type_name -> google.protobuf.Timestamp
+	19, // 15: argus.telemetry.v1.PromQLQuery.end:type_name -> google.protobuf.Timestamp
+	19, // 16: argus.telemetry.v1.KQLQuery.start:type_name -> google.protobuf.Timestamp
+	19, // 17: argus.telemetry.v1.KQLQuery.end:type_name -> google.protobuf.Timestamp
+	21, // 18: argus.telemetry.v1.TraceGraphQLQuery.variables:type_name -> google.protobuf.Struct
+	19, // 19: argus.telemetry.v1.TraceGraphQLQuery.start:type_name -> google.protobuf.Timestamp
+	19, // 20: argus.telemetry.v1.TraceGraphQLQuery.end:type_name -> google.protobuf.Timestamp
+	18, // 21: argus.telemetry.v1.ExecuteQueryV2Response.meta:type_name -> argus.telemetry.v1.QueryMeta
+	0,  // 22: argus.telemetry.v1.TelemetryIdentityService.ResolveCollector:input_type -> argus.telemetry.v1.ResolveCollectorRequest
+	12, // 23: argus.telemetry.v1.TelemetryQueryService.ExecuteQueryV2:input_type -> argus.telemetry.v1.ExecuteQueryV2Request
+	5,  // 24: argus.telemetry.v1.TelemetryQueryService.QueryOverview:input_type -> argus.telemetry.v1.QueryOverviewRequest
+	8,  // 25: argus.telemetry.v1.TelemetryQueryService.EnsureTenantSchema:input_type -> argus.telemetry.v1.EnsureTenantSchemaRequest
+	9,  // 26: argus.telemetry.v1.TelemetryQueryService.DropTenantSchema:input_type -> argus.telemetry.v1.DropTenantSchemaRequest
+	1,  // 27: argus.telemetry.v1.TelemetryIdentityService.ResolveCollector:output_type -> argus.telemetry.v1.ResolveCollectorResponse
+	17, // 28: argus.telemetry.v1.TelemetryQueryService.ExecuteQueryV2:output_type -> argus.telemetry.v1.ExecuteQueryV2Response
+	7,  // 29: argus.telemetry.v1.TelemetryQueryService.QueryOverview:output_type -> argus.telemetry.v1.QueryOverviewResponse
+	10, // 30: argus.telemetry.v1.TelemetryQueryService.EnsureTenantSchema:output_type -> argus.telemetry.v1.EnsureTenantSchemaResponse
+	11, // 31: argus.telemetry.v1.TelemetryQueryService.DropTenantSchema:output_type -> argus.telemetry.v1.DropTenantSchemaResponse
+	27, // [27:32] is the sub-list for method output_type
+	22, // [22:27] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_argus_telemetry_v1_telemetry_proto_init() }
@@ -1047,13 +1616,18 @@ func file_argus_telemetry_v1_telemetry_proto_init() {
 	if File_argus_telemetry_v1_telemetry_proto != nil {
 		return
 	}
+	file_argus_telemetry_v1_telemetry_proto_msgTypes[12].OneofWrappers = []any{
+		(*ExecuteQueryV2Request_Promql)(nil),
+		(*ExecuteQueryV2Request_Kql)(nil),
+		(*ExecuteQueryV2Request_TraceGraphql)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_argus_telemetry_v1_telemetry_proto_rawDesc), len(file_argus_telemetry_v1_telemetry_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

@@ -16,7 +16,8 @@ func (a *App) tunnel(ctx context.Context, cfg *InstallConfig) error {
 	_, _ = fmt.Fprintln(a.stdout, "Enterprise http://127.0.0.1:4173")
 	_, _ = fmt.Fprintln(a.stdout, "Platform   http://127.0.0.1:4174")
 	_, _ = fmt.Fprintln(a.stdout, "Setup      http://127.0.0.1:4175")
-	_, err := a.runner.run(ctx, nil, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.System, "port-forward", "service/argus-web", "4173:8080", "4174:8081", "4175:8082")
+	_, _ = fmt.Fprintln(a.stdout, "Cards      http://127.0.0.1:4176")
+	_, err := a.runner.run(ctx, nil, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.System, "port-forward", "service/argus-web", "4173:8080", "4174:8081", "4175:8082", "4176:8083")
 	return err
 }
 

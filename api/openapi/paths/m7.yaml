@@ -74,30 +74,37 @@ usage_item:
     operationId: getTelemetryUsage
     summary: Get authorized Telemetry usage.
     responses: {'200': {description: Usage., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TelemetryUsage'}}}, headers: {X-Retention-Metrics-Days: {schema: {type: integer}}, X-Retention-Logs-Days: {schema: {type: integer}}, X-Retention-Traces-Days: {schema: {type: integer}}}}, default: {$ref: '#/components/responses/Error'}}
-metrics_query:
-  post:
-    operationId: queryTelemetryMetrics
-    summary: Query authorized Metrics.
-    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/MetricsQuery'}}}}
-    responses: {'200': {description: Metrics., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/MetricsResult'}}}}, default: {$ref: '#/components/responses/Error'}}
-logs_query:
-  post:
-    operationId: queryTelemetryLogs
-    summary: Query authorized Logs.
-    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/LogsQuery'}}}}
-    responses: {'200': {description: Logs., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/LogsResult'}}}}, default: {$ref: '#/components/responses/Error'}}
-traces_query:
-  post:
-    operationId: queryTelemetryTraces
-    summary: Query authorized Traces.
-    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TracesQuery'}}}}
-    responses: {'200': {description: Traces., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TracesResult'}}}}, default: {$ref: '#/components/responses/Error'}}
 overview_query:
   post:
     operationId: queryTelemetryOverview
     summary: Query the Card-safe Telemetry overview.
     requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TelemetryOverviewQuery'}}}}
     responses: {'200': {description: Overview., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/TelemetryOverview'}}}}, default: {$ref: '#/components/responses/Error'}}
+
+metrics_query:
+  post:
+    operationId: queryMetricsInstant
+    summary: Execute a PromQL instant query.
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/PromQLInstantQuery'}}}}
+    responses: {'200': {description: Prometheus-compatible PromQL result., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/PrometheusQueryResponse'}}}}, default: {$ref: '#/components/responses/Error'}}
+metrics_query_range:
+  post:
+    operationId: queryMetricsRange
+    summary: Execute a PromQL range query.
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/PromQLRangeQuery'}}}}
+    responses: {'200': {description: Prometheus-compatible PromQL range result., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/PrometheusQueryResponse'}}}}, default: {$ref: '#/components/responses/Error'}}
+logs_query:
+  post:
+    operationId: queryLogsKQL
+    summary: Execute a KQL log query.
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/KQLQuery'}}}}
+    responses: {'200': {description: KQL log result., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/KQLQueryResponse'}}}}, default: {$ref: '#/components/responses/Error'}}
+traces_graphql:
+  post:
+    operationId: queryTracesGraphQL
+    summary: Execute a read-only SkyWalking GraphQL trace query.
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/SkyWalkingTraceGraphQLQuery'}}}}
+    responses: {'200': {description: SkyWalking GraphQL trace result., content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/SkyWalkingGraphQLResponse'}}}}, default: {$ref: '#/components/responses/Error'}}
 host_collector_item:
   parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
   get:

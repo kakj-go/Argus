@@ -56,3 +56,17 @@ spec:
           resources:
             requests: {cpu: 50m, memory: 64Mi}
             limits: {cpu: 500m, memory: 256Mi}
+          {{- if ne .Values.profile "production" }}
+          volumeMounts:
+            - name: setup-token
+              mountPath: /var/run/secrets/argus/setup
+              readOnly: true
+          {{- end }}
+      {{- if ne .Values.profile "production" }}
+      volumes:
+        - name: setup-token
+          secret:
+            secretName: {{ .Values.setupTokenSecretName }}
+            items:
+              - {key: setup-token, path: token}
+      {{- end }}

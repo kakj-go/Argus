@@ -210,6 +210,61 @@
   font-weight: 650;
   color: var(--text-primary);
 }
+.argus-telemetry-query-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.argus-telemetry-query-head .argus-tabs__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+}
+.argus-telemetry-builder-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+}
+.argus-telemetry-execution-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(4, minmax(130px, 1fr)) auto;
+  align-items: end;
+}
+.argus-telemetry-run-action {
+  display: flex;
+  align-items: center;
+}
+.argus-telemetry-run-action .argus-button {
+  width: 100%;
+}
+.argus-telemetry-inline-filter {
+  display: grid;
+  grid-template-columns: minmax(82px, auto) minmax(0, 1fr);
+  gap: var(--space-2);
+}
+.argus-telemetry-query-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-size-12);
+}
+.argus-telemetry-query-meta b,
+.argus-telemetry-query-meta code {
+  color: var(--text-primary);
+}
+@media (max-width: 720px) {
+  .argus-telemetry-builder-grid,
+  .argus-telemetry-execution-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* ---- 会话确认卡 / 表单行 ---- */
 .argus-session-confirm {

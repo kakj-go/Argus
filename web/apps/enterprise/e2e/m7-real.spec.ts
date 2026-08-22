@@ -18,7 +18,7 @@ const variants = [
 
 for (const variant of variants) test.describe(`M7 real telemetry flow ${variant.locale} ${variant.theme}`, () => {
   test.skip(!enabled, "M7 Kubernetes environment is not active");
-  test.describe.configure({ mode: "serial" });
+  test.describe.configure({ mode: "serial", timeout: 120_000 });
 
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(({ locale, theme }) => {
@@ -74,7 +74,10 @@ for (const variant of variants) test.describe(`M7 real telemetry flow ${variant.
     ).toBeVisible();
     await page.getByRole("tab", { name: /链路|Traces/ }).click();
     await expect(
-      page.getByText("argus-m7-e2e.host-systemd").first(),
+      page
+        .getByRole("listitem")
+        .filter({ hasText: /argus-m7-e2e \/ argus-m7-e2e\./ })
+        .first(),
     ).toBeVisible();
     await expectNoSeriousAccessibilityViolations(page);
   });

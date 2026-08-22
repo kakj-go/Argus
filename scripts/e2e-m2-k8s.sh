@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 PHASE=${ARGUS_E2E_PHASE:-m2}
@@ -45,12 +45,23 @@ NAMESPACES_CREATED=false
 E2E_COMPLETED=false
 RESPONSE_FILE=""
 LAST_REQUEST_NAME="none"
+FAILED_COMMAND=""
+FAILED_LOCATION=""
 M7_HELM_ARGS=()
 
 mkdir -p "$ARTIFACT_DIR"
 
 log() { printf '[%s-e2e] %s\n' "$PHASE" "$*"; }
 fail() { printf '[%s-e2e] ERROR: %s\n' "$PHASE" "$*" >&2; exit 1; }
+
+capture_error() {
+  local status=$1 command=$2 source=$3 line=$4
+  if [[ -z "$FAILED_COMMAND" ]]; then
+    FAILED_COMMAND=$command
+    FAILED_LOCATION="${source}:${line}"
+  fi
+  return "$status"
+}
 
 retry() {
   attempts=$1
@@ -82,7 +93,7 @@ diagnostics() {
   } 2>&1 | redact >"${ARTIFACT_DIR}/cluster.txt"
   k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus --all-containers=true --prefix=true --tail=1000 2>&1 \
     | redact >"${ARTIFACT_DIR}/argus.log" || true
-  if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" ]]; then
+  if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then
     k -n "$SYSTEM_NS" logs -l app.kubernetes.io/part-of=argus-m3-e2e --all-containers=true --prefix=true --tail=1000 2>&1 \
       | redact >"${ARTIFACT_DIR}/m3-workloads.log" || true
   fi
@@ -161,10 +172,12 @@ cleanup() {
   docker image rm "$BACKEND_IMAGE" "$WEB_IMAGE" "$OTELCOL_IMAGE" >/dev/null 2>&1 || true
   rm -rf "$WORK_DIR"
   if [[ $status -ne 0 ]]; then
-    printf '[%s-e2e] failed after request %s; redacted diagnostics: %s\n' "$PHASE" "$LAST_REQUEST_NAME" "$ARTIFACT_DIR" >&2
+    printf '[%s-e2e] failed at %s while running %q after request %s; redacted diagnostics: %s\n' \
+      "$PHASE" "${FAILED_LOCATION:-unknown}" "${FAILED_COMMAND:-unknown}" "$LAST_REQUEST_NAME" "$ARTIFACT_DIR" >&2
   fi
   exit "$status"
 }
+trap 'capture_error "$?" "$BASH_COMMAND" "${BASH_SOURCE[0]}" "$LINENO"' ERR
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
@@ -210,7 +223,7 @@ create_namespaces() {
 build_images() {
   log "building backend image ${BACKEND_IMAGE}"
   backend_args=(--build-arg GO_BUILD_TAGS=)
-  if [[ "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m7" ]]; then
+  if [[ "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then
     backend_args=(--build-arg GO_BUILD_TAGS=m4e2e)
   fi
   retry 3 docker build --quiet -f deploy/docker/backend.Dockerfile -t "$BACKEND_IMAGE" "${backend_args[@]}" . >/dev/null
@@ -221,14 +234,14 @@ build_images() {
     --build-arg "VITE_CARD_ORIGIN=http://127.0.0.1:${CARD_PORT}" \
     --build-arg "VITE_PLATFORM_URL=http://127.0.0.1:${PLATFORM_PORT}/login" \
     --build-arg "VITE_DIRECT_EGRESS_ADDRESSES=${ARGUS_E2E_DIRECT_EGRESS_DISPLAY:-127.0.0.1}" . >/dev/null
-  if [[ "$PHASE" == "m7" ]]; then
+  if [[ "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then
     log "building locked Linux arm64 Collector distribution and image ${OTELCOL_IMAGE}"
     make otelcol-linux-arm64 >/dev/null
     retry 3 docker build --quiet --platform linux/arm64 -f deploy/docker/otelcol.Dockerfile -t "$OTELCOL_IMAGE" \
       --build-arg TARGETOS=linux --build-arg TARGETARCH=arm64 . >/dev/null
   fi
   images=("$BACKEND_IMAGE" "$WEB_IMAGE")
-  if [[ "$PHASE" == "m7" ]]; then images+=("$OTELCOL_IMAGE"); fi
+  if [[ "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then images+=("$OTELCOL_IMAGE"); fi
   case "$KUBE_CONTEXT" in
     kind-*) kind load docker-image --name "${KUBE_CONTEXT#kind-}" "${images[@]}" ;;
     minikube) minikube image load "${images[@]}" ;;
@@ -389,7 +402,7 @@ EOF
 install_argus() {
 	local kubernetes_api_ip kubernetes_api_endpoint kubernetes_api_cidr kubernetes_api_endpoint_cidr telemetry_catalog_enabled
 	telemetry_catalog_enabled=false
-	if [[ "$PHASE" == "m7" ]]; then telemetry_catalog_enabled=true; fi
+  if [[ "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then telemetry_catalog_enabled=true; fi
   kubernetes_api_ip=$(k -n default get service kubernetes -o jsonpath='{.spec.clusterIP}')
   kubernetes_api_endpoint=$(k -n default get endpoints kubernetes -o jsonpath='{.subsets[0].addresses[0].ip}')
   if [[ "$kubernetes_api_ip" == *:* ]]; then kubernetes_api_cidr="${kubernetes_api_ip}/128"; else kubernetes_api_cidr="${kubernetes_api_ip}/32"; fi
@@ -439,6 +452,31 @@ start_port_forwards() {
     done
     curl --noproxy '*' --silent --fail --max-time 3 "$url" >/dev/null || fail "endpoint did not become ready: ${url}"
   done
+	wait_for_stable_api
+}
+
+wait_for_stable_api() {
+	local restart_count previous_restart_count="" stable_checks=0
+	for _ in $(seq 1 180); do
+		restart_count=$(k -n "$SYSTEM_NS" get pods -l app.kubernetes.io/name=argus-server \
+			-o jsonpath='{.items[0].status.containerStatuses[0].restartCount}' 2>/dev/null || true)
+		if [[ -n "$restart_count" ]] && curl --noproxy '*' --silent --fail --max-time 3 "http://127.0.0.1:${API_PORT}/readyz" >/dev/null 2>&1; then
+			if [[ "$restart_count" == "$previous_restart_count" ]]; then
+				stable_checks=$((stable_checks + 1))
+			else
+				previous_restart_count=$restart_count
+				stable_checks=1
+			fi
+			if [[ "$stable_checks" -ge 40 ]]; then
+				return
+			fi
+		else
+			previous_restart_count=$restart_count
+			stable_checks=0
+		fi
+		sleep 1
+	done
+	fail "argus-server did not remain ready with a stable restart count"
 }
 
 start_remote_port_forward() {
@@ -562,6 +600,30 @@ next_totp_proof() {
   fi
 }
 
+mark_current_totp_used() {
+  local audience=$1 file code
+  case "$audience" in
+    platform)
+      file=$PLATFORM_TOTP_FILE
+      ;;
+    enterprise)
+      file=$ENTERPRISE_TOTP_FILE
+      ;;
+    *)
+      fail "unsupported TOTP audience: ${audience}"
+      ;;
+  esac
+  [[ -f "$file" ]] || fail "${audience} TOTP secret is unavailable"
+  code=$(node scripts/totp-code.mjs <"$file")
+  if [[ "$audience" == "platform" ]]; then
+    PLATFORM_LAST_TOTP_CODE=$code
+    export ARGUS_E2E_PLATFORM_TOTP_LAST_CODE=$code
+  else
+    ENTERPRISE_LAST_TOTP_CODE=$code
+    export ARGUS_E2E_ENTERPRISE_TOTP_LAST_CODE=$code
+  fi
+}
+
 step_up_enterprise_session() {
   local code
   next_totp_proof enterprise
@@ -632,6 +694,8 @@ run_api_flow() {
     enroll_mfa platform "$PLATFORM_JAR" "$PLATFORM_CSRF" "$PLATFORM_ORIGIN"
     request platform-session-mfa-enabled 200 GET /platform/auth/session "$PLATFORM_JAR" - --header "Origin: ${PLATFORM_ORIGIN}"
     jq -e '.mfa_state == "enabled"' "$RESPONSE_FILE" >/dev/null
+  else
+    jq -e '.mfa_state == "disabled"' "$RESPONSE_FILE" >/dev/null
   fi
   request wrong-enterprise-audience 401 GET /enterprise/auth/session "$PLATFORM_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
 
@@ -646,6 +710,9 @@ run_api_flow() {
     --header "Origin: ${PLATFORM_ORIGIN}" --header "X-CSRF-Token: ${PLATFORM_CSRF}" --header "Idempotency-Key: admin-${RUN_ID}"
   TEMPORARY_PASSWORD=$(jq -er '.temporary_password' "$RESPONSE_FILE")
   ADMIN_USER_ID=$(jq -er '.user.id' "$RESPONSE_FILE")
+  if [[ ! -f "$PLATFORM_TOTP_FILE" ]]; then
+    enroll_mfa platform "$PLATFORM_JAR" "$PLATFORM_CSRF" "$PLATFORM_ORIGIN"
+  fi
 
   request enterprise-temp-login 200 POST /enterprise/auth/login "$ENTERPRISE_JAR" \
     "$(jq -nc --arg username "$ENTERPRISE_USERNAME" --arg password "$TEMPORARY_PASSWORD" '{username:$username,password:$password}')" \
@@ -862,19 +929,20 @@ main() {
   E2E_COMPLETED=true
 }
 
-if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" ]]; then
+if [[ "$PHASE" == "m3" || "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then
   source "${ROOT_DIR}/scripts/e2e-cert-manager.sh"
 fi
-if [[ "$PHASE" == "m3" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" ]]; then
+if [[ "$PHASE" == "m3" || "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then
   source "${ROOT_DIR}/scripts/e2e-m3-flow.sh"
 fi
-if [[ "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m7" ]]; then
+if [[ "$PHASE" == "m4" || "$PHASE" == "m5" || "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then
   source "${ROOT_DIR}/scripts/e2e-m4-flow.sh"
 fi
-if [[ "$PHASE" == "m5" || "$PHASE" == "m7" ]]; then
+if [[ "$PHASE" == "m5" || "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then
   source "${ROOT_DIR}/scripts/e2e-m5-flow.sh"
 fi
 if [[ "$PHASE" == "m6" ]]; then source "${ROOT_DIR}/scripts/e2e-m6-flow.sh"; fi
-if [[ "$PHASE" == "m7" ]]; then source "${ROOT_DIR}/scripts/e2e-m7-flow.sh"; fi
+if [[ "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then source "${ROOT_DIR}/scripts/e2e-m7-flow.sh"; fi
+if [[ "$PHASE" == "m10-query" ]]; then source "${ROOT_DIR}/scripts/e2e-m10-flow.sh"; fi
 
 main "$@"

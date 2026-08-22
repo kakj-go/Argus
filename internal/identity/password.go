@@ -31,6 +31,16 @@ func ValidatePassword(password, username, email string) error {
 	if len(password) < 12 || len(password) > 1024 {
 		return ErrWeakPassword
 	}
+	hasLetter := false
+	hasDigit := false
+	for index := 0; index < len(password); index++ {
+		character := password[index]
+		hasLetter = hasLetter || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
+		hasDigit = hasDigit || character >= '0' && character <= '9'
+	}
+	if !hasLetter || !hasDigit {
+		return ErrWeakPassword
+	}
 	normalized := strings.ToLower(password)
 	if _, weak := weakPasswords[normalized]; weak {
 		return ErrWeakPassword

@@ -1,5 +1,11 @@
 # 服务组件与 Kubernetes 一键部署
 
+## Schema Version 3 查询门禁
+
+`argus-telemetry query` 只在 ClickHouse Schema Version 3 就绪后启动。Schema v3 包含 metric series/samples、logs、traces、trace summary 和 span edges；部署按一次性替换处理，不保留旧 M7 查询表和协议。
+
+`make e2e-m10-query-k8s` 默认运行临时 Namespace 的真实 Collector → Kafka → Writer → ClickHouse → 单进程 Query 流程，并以 PromQL、KQL、SkyWalking GraphQL 验证查询、安全投影、租户表隔离、故障恢复和清理。`ARGUS_E2E_M10_UNIT_ONLY=1` 只用于开发机快速门禁检查，不构成发布证据。
+
 > 本文描述第一版目标部署架构。仓库已经具备可安装、可验证和可清理的 Evaluation 基座；M2-M7 的身份、资源/Connector、Agent、Card、Remote Access 和 Telemetry 均已接入 real API。实际完成度见[当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)，PostgreSQL 环境决策见[PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)。
 
 ## 1. 目标
@@ -126,7 +132,8 @@ flowchart TB
 - 录像按 asciicast v2 NDJSON 加密分片写 Artifact Store，不能依赖 Gateway Pod 本地磁盘；ObjectStore 连续不可用超过 30 秒时会话 fail closed。
 - Collector 仅连接 `argus-telemetry-ingest`，不接收远程控制命令。
 - Kubernetes Agent 与 Gateway 使用独立 Collector mTLS 身份；Gateway 下游 receiver 校验证书，Gateway 向 Ingest 转发自身数据时还必须匹配 Collector ID 与证书序列。Kubelet 采集只读挂载宿主证书链，并以最小 `nodes/stats` RBAC访问 Stats API。
-- `argus-telemetry-query` 只持有 ClickHouse 只读账号。
+- `argus-telemetry-query` 的三种查询 Engine 只使用 ClickHouse 只读账号；同一 Pod 内隔离的 `TenantSchemaManager` 使用独立 migration 身份执行受信租户表 DDL。Query 的 PostgreSQL 账号只读取 Enterprise 状态、维护 `enterprise_telemetry_tables` readiness，并向既有 tamper-evident audit chain 追加查询审计；不具有企业业务数据写权限。
+- `argus-server` 在企业创建/启用/禁用事务提交后，只能通过内部 mTLS `EnsureTenantSchema`/`DropTenantSchema` RPC 驱动租户表 lifecycle，不持有 ClickHouse DDL 凭证。
 - `argus-telemetry writer` 只持有 Kafka Consumer 和 ClickHouse Insert 权限。
 - 控制面不能绕过 Query Service 向企业用户暴露 ClickHouse。
 - 各链路使用独立域名、端口、证书、限流、HPA 和告警。
@@ -184,6 +191,8 @@ flowchart LR
     B --> V
 ```
 
+`port-forward` 暴露模式安装完成后使用 `argusctl tunnel --config <profile>` 启动本地入口：Enterprise `4173`、Platform `4174`、Setup `4175`、Card Runtime `4176`。浏览器可以使用 `localhost` 或 `127.0.0.1` 访问这四个入口，两组 loopback Origin 都必须进入本地 Profile 的精确允许列表。Web 容器以当前页面同源访问 `/api/v1/`，由 Nginx 代理到集群内 `argus-server`；本地部署不得把前端编译到占位 API 域名，也不依赖浏览器 mock 数据。
+
 每一步写入 `ArgusInstallation` 状态或安装状态 ConfigMap。再次执行相同命令时，从未完成阶段继续，并对配置变更生成计划。自动化/GitOps 环境也可以直接使用对应 Helm Release 和 CR，不强制使用 `argusctl`。
 
 ## 6. 安装配置
@@ -199,6 +208,9 @@ spec:
   profile: production
   domain: argus.example.com
   storageClass: fast-ssd
+
+  security:
+    platformMfaRequired: false
 
   images:
     registry: registry.example.com/argus
@@ -306,6 +318,7 @@ Kafka 第一版统一使用 Strimzi Kafka Operator 和 KRaft；Evaluation Profil
 - PostgreSQL 主实例可写且 Migration 账号可连接。
 - Redis 可用；清空 Redis 不会丢失唯一业务状态。
 - Artifact Store Bucket、生命周期和加密策略已创建。
+- `argus-data` 通过幂等 `argus-minio-bucket-init` Job 创建 `argus-remote-recordings`，安装器必须等待该 Job 完成后才能启动依赖 Object Store 的 Server 和 Connector Gateway。
 - Kafka Controller/Broker 就绪，Topic 和 ACL 已配置。
 - ClickHouseInstallation 所有 Shard/Replica 就绪，Keeper 达到法定数量。
 
@@ -334,7 +347,7 @@ Production Profile 必须在同一 Kubernetes 集群内选择强化隔离，例�
 - `argus-telemetry writer` 依赖 Kafka 可读和 ClickHouse Schema 就绪。
 - `argus-telemetry-query` 依赖 ClickHouse Schema 版本兼容。
 
-PostgreSQL Migration 和 ClickHouse Migration 是独立 Job 和独立版本。Telemetry Ingest 依赖 Collector 身份控制数据、Redis 配额和 Kafka 可写，但不依赖 ClickHouse，因此可以在 ClickHouse Migration/Writer 尚未就绪时先接收并由 Kafka 缓冲数据；安装验证只有在 Writer 和 Query 全链路成功后才通过。`local-hardening` 为 Ingest/Writer 使用独立表级最小权限 PostgreSQL Login。
+PostgreSQL Migration 和 ClickHouse Migration 是独立 Job 和独立版本。Telemetry Ingest 依赖 Collector 身份控制数据、Redis 配额和 Kafka 可写，但不依赖 ClickHouse，因此可以在 ClickHouse Migration/Writer 尚未就绪时先接收并由 Kafka 缓冲数据；安装验证只有在 Writer 和 Query 全链路成功后才通过。`local-hardening` 为 Ingest、Writer、Query 使用独立表级最小权限 PostgreSQL Login。
 
 M7 Evaluation 已验证 Ingest/Writer/Query Pod 删除、Redis 清空、Kafka backlog、DLQ replay 和 Collector 持久队列恢复。M8 本地范围增加 OpenBao、加密备份恢复和供应链证据；Production 多副本容量、跨节点故障和 Telemetry PKI 长周期轮换继续由 Production Validation 阻断。
 
@@ -348,16 +361,16 @@ Altinity ClickHouse Operator 负责：
 - 配置变更与滚动维护。
 - 节点故障后的期望状态恢复。
 
-Argus 不把建表职责交给 Operator 或 ClickHouse Exporter。独立 `argus-schema-migration` Job 负责：
+Argus 不把建表职责交给 Operator 或 ClickHouse Exporter。独立 `argus-schema-migration` Job 只负责数据库级基线和一次性移除旧共享表；Query Pod 内使用独立 migration 身份的 `TenantSchemaManager` 负责：
 
-- `argus_metrics`、`argus_logs`、`argus_traces` 三个逻辑数据集及必要的 Projection、物化视图和共享索引表。
-- 可信 `EnterpriseId`、`ResourceId`、`CollectorId` 公共列，以及 Enterprise/Resource 授权查询所需的排序键和 Projection。
-- Replicated Local/Distributed Table、时间分区、排序键、Sharding Key、TTL 和 Schema Version。
-- 兼容性检查、前向迁移和必要的数据回填任务。
+- 每个 Enterprise 的六张 Metrics/Logs/Traces 租户物理表及必要 Projection、Summary 和 Edge 派生表。
+- 只保留租户内可信 `ResourceId`、`CollectorId` 等列；`EnterpriseId` 只用于可信表路由，不写入租户事实表。
+- 统一的 MergeTree 引擎、时间分区、排序键、TTL 和 Schema Version。
+- 企业创建/启用后的同步创建与严格校验、禁用后的同步删除，以及启动和周期对账恢复。
 
-三个逻辑数据集由所有企业共享，禁止按企业或资源标签创建表或 Partition。即使第一版只有一个 Shard，也必须保留 Local/Distributed 两层，使新增 Shard 时不改变 Query API 和表名。严格三张物理表是否可行取决于统一 Metrics 稀疏列 Benchmark 和 Writer Gate；物理层允许按 Metric Type 拆表，但产品层始终只暴露 Metrics、Logs、Traces 三类查询协议。
+M10 采用按 Enterprise 的物理表隔离，表名只能由可信 UUID 生成；产品层只暴露 PromQL、Argus KQL 和固定只读 SkyWalking Trace GraphQL。跨企业查询在 Query Coordinator 和 mTLS Scope 层 fail closed。
 
-`argus-telemetry writer` 必须设置 `create_schema: false`。升级顺序通常为“兼容 Schema → Writer → Query → 清理旧 Schema”，不能先删除旧列再升级读取方。
+`argus-telemetry writer` 必须设置 `create_schema: false`，也不持有 DDL 权限。本阶段明确不保留历史表和旧 Query 协议，部署按“停止旧链路 → 删除旧共享表 → 发布 Schema v3/新 Writer/新 Query”一次性切换。
 
 第一版不提供绕过 Altinity Operator 的外部 ClickHouse 模式。所有 ClickHouse Schema Migration 必须面向安装器创建的 ClickHouseInstallation，并使用 `ON CLUSTER`、Replicated Local Table 和 Distributed Table 兼容未来扩分片。
 
@@ -437,7 +450,7 @@ Token 过期时间
 ### 12.2 Local Hardening
 
 - 保持单节点、单副本规模，只面向 arm64 Docker Desktop；普通 Worker 仍使用五个拆分 Deployment，不沿用 Evaluation 的合并拓扑。
-- 强制使用单节点 OpenBao Transit、独立 PostgreSQL Login、TOTP/Step-up 和本地加密备份恢复。
+- 强制使用单节点 OpenBao Transit、独立 PostgreSQL Login 和本地加密备份恢复，并提供 TOTP/Step-up 能力；平台超级管理员 MFA 强制开关默认关闭。
 - 允许共享容器 Sandbox Runtime，但明确输出安全降级。
 - 完成状态为 `local_hardening_complete`，不产生生产 SLO、RPO 或 RTO。
 
@@ -484,6 +497,8 @@ Token 过期时间
 ## 14. 安装后验证
 
 `argusctl verify` 执行：
+
+基础设施探测必须使用当前部署的真实安全边界：Kafka 通过专用 `argus-installation-check` Topic、SCRAM 用户和隔离 Consumer Group 验证；PostgreSQL 使用事务内临时表；ClickHouse 使用临时验证表并在结束时删除；Telemetry Ingest/Query 的健康检查在 observability Namespace 内执行。验证器不得依赖旧数据库、旧表或匿名 Kafka 权限。
 
 1. Web、API 和首次初始化状态检查。
 2. PostgreSQL/Redis/Artifact Store 读写探测。

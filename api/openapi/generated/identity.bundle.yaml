@@ -33,7 +33,9 @@ components:
           maxLength: 128
         code:
           type: string
-          pattern: ^[a-z][a-z0-9-]{1,62}$
+          minLength: 1
+          maxLength: 63
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
         status:
           type: string
           enum:

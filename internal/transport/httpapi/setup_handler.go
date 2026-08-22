@@ -113,7 +113,7 @@ func (handler SetupHandler) Login(ctx context.Context, request setupapi.LoginReq
 		return setupapi.Login200JSONResponse(response), nil
 	}
 	setSessionCookies(metadata.Writer, string(request.Audience), *result.Session, handler.Config)
-	authenticated := toAuthenticatedSession(*result.Session)
+	authenticated := toAuthenticatedSession(*result.Session, handler.Config.PlatformMFARequired)
 	_ = response.FromLoginResult0(setupapi.LoginResult0{Status: setupapi.Authenticated, AuthenticatedSession: authenticated})
 	return setupapi.Login200JSONResponse(response), nil
 }
@@ -135,7 +135,7 @@ func (handler SetupHandler) CompletePasswordChange(ctx context.Context, request 
 		return setupapi.CompletePasswordChangedefaultJSONResponse{Body: setupError(ctx, err), StatusCode: status}, nil
 	}
 	setSessionCookies(metadata.Writer, string(request.Audience), issued, handler.Config)
-	return setupapi.CompletePasswordChange200JSONResponse(toAuthenticatedSession(issued)), nil
+	return setupapi.CompletePasswordChange200JSONResponse(toAuthenticatedSession(issued, handler.Config.PlatformMFARequired)), nil
 }
 
 func (handler SetupHandler) GetAuthenticatedSession(ctx context.Context, request setupapi.GetAuthenticatedSessionRequestObject) (setupapi.GetAuthenticatedSessionResponseObject, error) {
@@ -152,7 +152,7 @@ func (handler SetupHandler) GetAuthenticatedSession(ctx context.Context, request
 	if err != nil || handler.Identity.ValidateCSRF(principal, csrfCookie.Value) != nil {
 		return setupapi.GetAuthenticatedSessiondefaultJSONResponse{Body: setupError(ctx, identity.ErrCSRFInvalid), StatusCode: http.StatusForbidden}, nil
 	}
-	return setupapi.GetAuthenticatedSession200JSONResponse(toAuthenticatedSession(identity.IssuedSession{Principal: principal, CSRFToken: csrfCookie.Value})), nil
+	return setupapi.GetAuthenticatedSession200JSONResponse(toAuthenticatedSession(identity.IssuedSession{Principal: principal, CSRFToken: csrfCookie.Value}, handler.Config.PlatformMFARequired)), nil
 }
 
 func (handler SetupHandler) Logout(ctx context.Context, request setupapi.LogoutRequestObject) (setupapi.LogoutResponseObject, error) {
@@ -207,12 +207,8 @@ func (handler SetupHandler) authenticate(ctx context.Context, audience string, m
 	if err != nil {
 		return identity.Principal{}, err
 	}
-	if principal.PlatformUser != nil && !principal.PlatformUser.MfaEnabled {
-		path := metadata.Request.URL.Path
-		allowed := strings.Contains(path, "/account/mfa/totp/") || strings.HasSuffix(path, "/auth/session")
-		if !allowed {
-			return identity.Principal{}, identity.ErrMFAEnrollment
-		}
+	if requiresMFAEnrollment(principal, metadata.Request.URL.Path, handler.Config.PlatformMFARequired) {
+		return identity.Principal{}, identity.ErrMFAEnrollment
 	}
 	if !mutation {
 		return principal, nil
@@ -230,7 +226,14 @@ func (handler SetupHandler) authenticate(ctx context.Context, audience string, m
 	return principal, nil
 }
 
-func toAuthenticatedSession(issued identity.IssuedSession) setupapi.AuthenticatedSession {
+func requiresMFAEnrollment(principal identity.Principal, path string, platformMFARequired bool) bool {
+	if !platformMFARequired || principal.PlatformUser == nil || principal.PlatformUser.MfaEnabled {
+		return false
+	}
+	return !strings.Contains(path, "/account/mfa/totp/") && !strings.HasSuffix(path, "/auth/session")
+}
+
+func toAuthenticatedSession(issued identity.IssuedSession, platformMFARequired bool) setupapi.AuthenticatedSession {
 	principal := issued.Principal
 	session := setupapi.Session{
 		Id: principal.Session.ID.String(), Audience: setupapi.SessionAudience(principal.Session.Audience),
@@ -258,22 +261,28 @@ func toAuthenticatedSession(issued identity.IssuedSession) setupapi.Authenticate
 	for index, method := range principal.Session.Amr {
 		amr[index] = setupapi.AuthenticationMethod(method)
 	}
-	mfaState := setupapi.MfaStateDisabled
-	if principal.PlatformUser != nil {
-		if principal.PlatformUser.MfaEnabled {
-			mfaState = setupapi.MfaStateEnabled
-		} else {
-			mfaState = setupapi.MfaStateEnrollmentRequired
-		}
-	} else if principal.EnterpriseUser != nil && principal.EnterpriseUser.MfaEnabled {
-		mfaState = setupapi.MfaStateEnabled
-	}
+	mfaState := authenticatedMFAState(principal, platformMFARequired)
 	result := setupapi.AuthenticatedSession{Session: session, User: userUnion, Permissions: permissions, CsrfToken: &csrf,
 		Amr: amr, MfaState: mfaState, AuthenticatedAt: principal.Session.AuthenticatedAt.Time}
 	if principal.Session.StepUpExpiresAt.Valid {
 		result.StepUpExpiresAt = &principal.Session.StepUpExpiresAt.Time
 	}
 	return result
+}
+
+func authenticatedMFAState(principal identity.Principal, platformMFARequired bool) setupapi.MfaState {
+	if principal.PlatformUser != nil {
+		if principal.PlatformUser.MfaEnabled {
+			return setupapi.MfaStateEnabled
+		}
+		if platformMFARequired {
+			return setupapi.MfaStateEnrollmentRequired
+		}
+	}
+	if principal.EnterpriseUser != nil && principal.EnterpriseUser.MfaEnabled {
+		return setupapi.MfaStateEnabled
+	}
+	return setupapi.MfaStateDisabled
 }
 
 func toPlatformUser(user db.PlatformUser) setupapi.PlatformUser {
@@ -353,6 +362,8 @@ func setupError(ctx context.Context, err error) setupapi.ApiError {
 		code, key = "CSRF_TOKEN_INVALID", "errors.auth.csrf_token_invalid"
 	case errors.Is(err, identity.ErrVersionConflict):
 		code, key, retryable = "VERSION_CONFLICT", "errors.common.version_conflict", true
+	case errors.Is(err, platform.ErrEnterpriseCodeInvalid):
+		code, key = "INVALID_ARGUMENT", "errors.common.invalid_argument"
 	case errors.Is(err, postgres.ErrIdempotencyConflict):
 		code, key = "IDEMPOTENCY_CONFLICT", "errors.common.idempotency_conflict"
 	case errors.Is(err, postgres.ErrIdempotencyExpired):

@@ -115,7 +115,7 @@ components:
       required: [name, code, timezone]
       properties:
         name: {type: string, minLength: 1, maxLength: 128}
-        code: {type: string, pattern: "^[a-z][a-z0-9-]{1,62}$"}
+        code: {type: string, minLength: 1, maxLength: 63, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
         timezone: {type: string, minLength: 1, maxLength: 128}
         default_locale: {$ref: "./common.yaml#/components/schemas/Locale"}
         remark: {type: string, maxLength: 2048}

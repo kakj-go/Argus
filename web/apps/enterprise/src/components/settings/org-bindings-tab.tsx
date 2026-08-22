@@ -360,7 +360,7 @@ function BindingDrawer({
             {t("settings.org.bindingsTab.immutableHint")}
           </p>
         )}
-        <Field label={t("settings.org.bindingsTab.subject_type")}>
+        <Field label={t("settings.org.bindingsTab.subjectType")}>
           <Controller
             control={control}
             name="subject_type"
@@ -447,7 +447,7 @@ function BindingDrawer({
             )}
           />
         </Field>
-        <Field label={t("settings.org.bindingsTab.valid_from")}>
+        <Field label={t("settings.org.bindingsTab.validFrom")}>
           <Controller
             control={control}
             name="valid_from"
@@ -456,7 +456,7 @@ function BindingDrawer({
         </Field>
         <Field
           error={errors.valid_until?.message}
-          label={t("settings.org.bindingsTab.valid_until")}
+          label={t("settings.org.bindingsTab.validUntil")}
         >
           <Controller
             control={control}

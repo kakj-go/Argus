@@ -136,11 +136,12 @@ Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector 
 - NodeBinding 保留完整 IP 证据用于匹配，但人工确认哈希只绑定 Node UID/Name、Provider ID、Machine ID 和 System UUID；IP 波动不误失效，强身份漂移会撤销 Binding。Kubernetes Gateway 同 Collector 转发还需匹配可信 Collector ID 与证书序列，kubelet 采集保持证书校验并使用最小 `nodes/stats` RBAC。
 - Enterprise Host/Kubernetes Collector 与 Metrics/Logs/Traces 页面、Telemetry 保留期/用量/Catalog 页面已接 real API；ECharts 图表包含表格替代、键盘和读屏语义。
 - `make e2e-m7-k8s`：Linux arm64 Collector 构建/安装、Kubernetes Agent/Gateway mTLS、NodeBinding 保持/漂移、Direct 与 Bastion Gateway 的真实三信号、Kafka backlog、DLQ replay、Redis outage 持久队列、Pod 删除恢复、Query 跨企业/DataScope/预算/脱敏/授权版本矩阵、Telemetry Card 激活、M2-M5 与 M7 real Playwright。2026-08-19 的最终成功运行号为 `20260819140437-21054`，脱敏诊断位于 `artifacts/m7-e2e/20260819140437-21054`，三个 Namespace、运行相关 PVC 和 Lease 零残留。
+- `make e2e-m10-query-k8s`：单进程 PromQL/KQL/SkyWalking GraphQL、企业同步租户 Schema lifecycle、每企业六张 ClickHouse 物理表、Native Histogram/Summary、Trace spans/edges、Query Audit、`MaxSamples/MaxSeries` 预算、权限/脱敏、Kafka backlog/DLQ、Redis/PostgreSQL 恢复和 M2-M5/M7 real Playwright。2026-08-22 的最终成功运行号为 `20260822063330-17805`，已验证 Metrics/KQL/GraphQL 三种独立 wire format、固定 SkyWalking SDL 和稳定启动门禁；诊断位于 `artifacts/m10-query-e2e/20260822063330-17805`，三个临时 Namespace、相关 PVC 和 E2E Lease 零残留。
 
 仍未完成且不能由部署基座替代：
 
 - SBOM、镜像签名、漏洞门禁、备份恢复和独立 Upgrade 工作流。
-- Production PostgreSQL/Kafka/ClickHouse HA、外部 KMS/HSM、Connector/Telemetry CA 根轮换及重启恢复演练、固定出口生产验证、Remote Access 录像不可变保留/恢复、Linux amd64 与真实 Windows 兼容矩阵、OpenSandbox 强化 Runtime ADR 和平台超级管理员 MFA/恢复/Step-up；这些未完成前 Production 安装保持硬阻断。
+- Production PostgreSQL/Kafka/ClickHouse HA、外部 KMS/HSM、Connector/Telemetry CA 根轮换及重启恢复演练、固定出口生产验证、Remote Access 录像不可变保留/恢复、Linux amd64 与真实 Windows 兼容矩阵、OpenSandbox 强化 Runtime ADR，以及平台超级管理员 MFA/恢复/Step-up 的生产验证；这些未完成前 Production 安装保持硬阻断。MFA 能力已存在，但 `spec.security.platformMfaRequired` 在所有 Profile 中默认关闭，需要部署者显式开启。
 
 ## 4. Kubernetes 目标拓扑
 

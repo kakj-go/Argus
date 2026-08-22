@@ -21,7 +21,6 @@ import {
   StatCard,
   StatusBadge,
 } from "@argus/ui";
-import "../i18n/governance";
 import "../styles/governance.css";
 import { TaskDetailDrawer } from "../components/governance/task-detail-drawer";
 import {
@@ -54,7 +53,6 @@ const realMode = import.meta.env.VITE_API_MODE === "real";
 export function TasksPage() {
   return realMode ? <ExecutionsPage /> : <LegacyTasksPage />;
 }
-
 function ExecutionsPage() {
   const { t, i18n } = useTranslation();
   const api = useApi();

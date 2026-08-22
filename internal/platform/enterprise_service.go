@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,12 @@ import (
 type EnterpriseService struct {
 	Store       *postgres.Store
 	Idempotency postgres.Idempotency
+	Telemetry   EnterpriseTelemetryLifecycle
+}
+
+type EnterpriseTelemetryLifecycle interface {
+	EnsureTenantSchema(context.Context, uuid.UUID) error
+	DropTenantSchema(context.Context, uuid.UUID) error
 }
 
 type CreateEnterpriseInput struct {
@@ -40,7 +47,10 @@ type UpdateEnterpriseInput struct {
 }
 
 func (service EnterpriseService) CreateEnterprise(ctx context.Context, actorID string, input CreateEnterpriseInput, idempotencyKey string) (db.Enterprise, error) {
-	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "platform", actorID, "enterprise.create", idempotencyKey, input, 201, func(queries *db.Queries) (db.Enterprise, error) {
+	if !validEnterpriseCode(input.Code) {
+		return db.Enterprise{}, ErrEnterpriseCodeInvalid
+	}
+	enterprise, err := postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "platform", actorID, "enterprise.create", idempotencyKey, input, 201, func(queries *db.Queries) (db.Enterprise, error) {
 		enterpriseID := newUUID()
 		departmentID := newUUID()
 		scopeID := newUUID()
@@ -98,6 +108,13 @@ func (service EnterpriseService) CreateEnterprise(ctx context.Context, actorID s
 		}
 		return enterprise, nil
 	})
+	if err != nil || service.Telemetry == nil {
+		return enterprise, err
+	}
+	if err := service.Telemetry.EnsureTenantSchema(ctx, enterprise.ID); err != nil {
+		return db.Enterprise{}, fmt.Errorf("initialize enterprise telemetry schema: %w", err)
+	}
+	return enterprise, nil
 }
 
 func (service EnterpriseService) ListEnterprises(ctx context.Context) ([]db.Enterprise, error) {
@@ -170,7 +187,20 @@ func (service EnterpriseService) ChangeStatus(ctx context.Context, actorID strin
 			Action: "enterprise." + status, ResourceType: "enterprise", ResourceID: enterpriseID.String(), Result: "success", Details: map[string]any{"status": status}})
 		return err
 	})
-	return enterprise, err
+	if err != nil || service.Telemetry == nil {
+		return enterprise, err
+	}
+	switch status {
+	case "active":
+		if err := service.Telemetry.EnsureTenantSchema(ctx, enterpriseID); err != nil {
+			return db.Enterprise{}, fmt.Errorf("initialize enterprise telemetry schema: %w", err)
+		}
+	case "disabled":
+		if err := service.Telemetry.DropTenantSchema(ctx, enterpriseID); err != nil {
+			return db.Enterprise{}, fmt.Errorf("drop enterprise telemetry schema: %w", err)
+		}
+	}
+	return enterprise, nil
 }
 
 func (service EnterpriseService) CreateAdmin(ctx context.Context, actorID string, enterpriseID uuid.UUID, username, displayName, email, idempotencyKey string) (CreatedCredential, error) {
@@ -288,6 +318,13 @@ func (service EnterpriseService) defaultScope(ctx context.Context, queries *db.Q
 
 var ErrEnterpriseUnavailable = errors.New("enterprise unavailable")
 var ErrVersionConflict = errors.New("enterprise state conflict")
+var ErrEnterpriseCodeInvalid = errors.New("enterprise code invalid")
+
+var enterpriseCodePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
+func validEnterpriseCode(code string) bool {
+	return len(code) >= 1 && len(code) <= 63 && enterpriseCodePattern.MatchString(code)
+}
 
 func newUUID() uuid.UUID {
 	id, err := uuid.NewV7()

@@ -114,6 +114,7 @@ func telemetryTransportCredentials(caPath, certificatePath, keyPath, serverName 
 }
 
 func metricsRequest(resource *resourcepb.Resource, now uint64, suffix string) *collectmetrics.ExportMetricsServiceRequest {
+	histogramSum := 7.0
 	return &collectmetrics.ExportMetricsServiceRequest{
 		ResourceMetrics: []*metricspb.ResourceMetrics{{
 			Resource: resource,
@@ -125,6 +126,14 @@ func metricsRequest(resource *resourcepb.Resource, now uint64, suffix string) *c
 					{Name: "argus.m7.e2e.gauge" + suffix, Data: &metricspb.Metric_Gauge{Gauge: &metricspb.Gauge{
 						DataPoints: []*metricspb.NumberDataPoint{{TimeUnixNano: now, Value: &metricspb.NumberDataPoint_AsDouble{AsDouble: 7}}},
 					}}},
+					{Name: "argus.m7.e2e.native.histogram" + suffix, Data: &metricspb.Metric_ExponentialHistogram{ExponentialHistogram: &metricspb.ExponentialHistogram{
+						AggregationTemporality: metricspb.AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE,
+						DataPoints: []*metricspb.ExponentialHistogramDataPoint{{TimeUnixNano: now, Count: 3, Sum: &histogramSum, Scale: 1, ZeroCount: 1,
+							Positive: &metricspb.ExponentialHistogramDataPoint_Buckets{Offset: 0, BucketCounts: []uint64{1, 1}}}},
+					}}},
+					{Name: "argus.m7.e2e.summary" + suffix, Data: &metricspb.Metric_Summary{Summary: &metricspb.Summary{DataPoints: []*metricspb.SummaryDataPoint{{
+						TimeUnixNano: now, Count: 2, Sum: 7, QuantileValues: []*metricspb.SummaryDataPoint_ValueAtQuantile{{Quantile: 0.5, Value: 3}, {Quantile: 0.9, Value: 4}},
+					}}}}},
 				},
 			}},
 		}},

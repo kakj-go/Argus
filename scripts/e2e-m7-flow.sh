@@ -1,5 +1,122 @@
 #!/usr/bin/env bash
 
+eval "$(declare -f request | sed '1s/^request /request_m7_base /')"
+
+m7_query_payload() {
+  local signal=$1 language=$2 query=$3 from=$4 to=$5 limit=$6 first_id=$7 second_id=${8:-}
+	jq -nc --arg signal "$signal" --arg query "$query" --arg from "$from" --arg to "$to" \
+    --arg first "$first_id" --arg second "$second_id" --argjson limit "$limit" \
+		'{query_signal:$signal,query:$query,resource_ids:([$first,$second] | map(select(length > 0))),
+			time_range:{from:$from,to:$to},step_seconds:60,
+			budget:{max_scan_bytes:268435456,max_rows:$limit,max_samples:5000000,max_series:100000,timeout_ms:10000,max_result_bytes:8388608}}'
+}
+
+m7_metric_query() {
+  printf '%s' "$1" | tr -c '[:alnum:]_:' '_'
+}
+
+m7_log_query() {
+	local value=$1
+	value=${value//\"/\\\"}
+	printf 'service_name = argus-m7-e2e AND body : "%s"' "$value"
+}
+
+m7_log_stream_query() {
+	printf 'service_name = argus-m7-e2e'
+}
+
+m7_trace_query() {
+	local value=$1
+	value=${value//\\/\\\\}
+	value=${value//\"/\\\"}
+	printf 'query { queryBasicTracesByName(serviceName: "argus-m7-e2e", operationName: "%s", pageSize: 100) { total traces { traceId rootService rootOperation spans { spanId operationName } } } }' "$value"
+}
+
+request() {
+	local name=$1 expected=$2 method=$3 path=$4 jar=$5 body=$6
+	shift 6
+	if [[ "$path" != "/enterprise/telemetry/query" ]]; then
+		request_m7_base "$name" "$expected" "$method" "$path" "$jar" "$body" "$@"
+		return
+	fi
+	local signal new_path new_body step
+	signal=$(jq -r '.query_signal // empty' <<<"$body")
+	step=$(jq -r '.step_seconds // 0' <<<"$body")
+	case "$signal" in
+		metrics)
+			if [[ "$step" -gt 0 ]]; then
+				new_path=/enterprise/metrics/query_range
+				new_body=$(jq '{query,resource_ids,time_range,step_seconds,budget}' <<<"$body")
+			else
+				new_path=/enterprise/metrics/query
+				new_body=$(jq '{query,resource_ids,time_range,budget}' <<<"$body")
+			fi
+			;;
+		logs)
+			new_path=/enterprise/logs/query
+			new_body=$(jq '{query,pipeline,resource_ids,time_range,budget}' <<<"$body")
+			;;
+		traces)
+			new_path=/enterprise/traces/graphql
+			new_body=$(jq '{query,operation_name,variables,resource_ids,time_range,budget}' <<<"$body")
+			;;
+		*) fail "unknown telemetry query signal ${signal}" ;;
+	esac
+	request_m7_base "$name" "$expected" "$method" "$new_path" "$jar" "$new_body" "$@"
+}
+
+m7_assert_query_v2() {
+	local language=$1 result_type=$2
+	case "$language" in
+		promql)
+			jq -e --arg result_type "$result_type" \
+				'.status == "success" and
+				 (if $result_type == "vector" then (.data.resultType == "vector" or .data.resultType == "matrix") else .data.resultType == $result_type end) and
+				 (.data.result | type == "array") and (.warnings | type == "array") and
+				 (.argus_meta.partial | type == "boolean") and
+				 (.argus_meta.scanned_bytes | type == "number") and (.argus_meta.elapsed_ms | type == "number") and
+				 (.argus_meta.plan_hash | type == "string" and length == 64)' "$RESPONSE_FILE" >/dev/null
+			;;
+		logql|kql)
+			jq -e --arg result_type "$result_type" \
+				'.schema_version == "argus.kql_result/v1" and .result_type == $result_type and
+				 (.data | type == "array") and (.warnings | type == "array") and (.partial | type == "boolean") and
+				 (.meta.scanned_bytes | type == "number") and (.meta.elapsed_ms | type == "number") and
+				 (.meta.plan_hash | type == "string" and length == 64)' "$RESPONSE_FILE" >/dev/null
+			;;
+		traceql|skywalking_graphql)
+			jq -e '(.data | type == "object") and
+				(.extensions.argus.partial | type == "boolean") and
+				(.extensions.argus.scanned_bytes | type == "number") and (.extensions.argus.elapsed_ms | type == "number") and
+				(.extensions.argus.plan_hash | type == "string" and length == 64)' "$RESPONSE_FILE" >/dev/null
+			;;
+		*) fail "unsupported telemetry query assertion language ${language}" ;;
+	esac
+}
+
+m7_assert_metric_result() {
+	local metric_name
+	metric_name=$(m7_metric_query "$1")
+	m7_assert_query_v2 promql vector
+	jq -e --arg metric "$metric_name" 'any(.data.result[]; .metric["__name__"] == $metric and ((.values // [.value]) | length > 0))' "$RESPONSE_FILE" >/dev/null
+}
+
+m7_assert_log_result() {
+	local body=$1
+	m7_assert_query_v2 logql log_entries
+	jq -e --arg body "$body" 'any(.data[]; .body == $body)' "$RESPONSE_FILE" >/dev/null
+}
+
+m7_assert_trace_result() {
+	local operation=$1
+	m7_assert_query_v2 skywalking_graphql traces
+	jq -e --arg operation "$operation" 'any(.data.queryBasicTracesByName.traces[]; any(.spans[]; .operationName == $operation))' "$RESPONSE_FILE" >/dev/null
+}
+
+m7_assert_not_partial() {
+	jq -e '(.partial == false) or (.argus_meta.partial == false) or (.extensions.argus.partial == false)' "$RESPONSE_FILE" >/dev/null
+}
+
 prepare_m7_dependencies() {
   M7_STRIMZI_RELEASE="m7s-${RUN_ID##*-}"
   M7_ALTINITY_RELEASE="m7a-${RUN_ID##*-}"
@@ -196,6 +313,7 @@ run_m7_playwright() {
 		ARGUS_M7_HOST_ID="$M7_HOST_ID" \
     ARGUS_E2E_ARTIFACTS="$ARTIFACT_DIR/playwright-m7" \
     pnpm --filter @argus/enterprise exec playwright test e2e/m7-real.spec.ts --workers=1
+	mark_current_totp_used enterprise
 }
 
 m7_wait_host_collector() {
@@ -237,28 +355,26 @@ m7_query_host_signals() {
 	k -n "$SYSTEM_NS" exec deployment/argus-direct-executor -c argus-direct-executor -- \
 		/usr/local/bin/argus-telemetry-e2e --endpoint=127.0.0.1:4317 --resource-id="$M7_HOST_ID" --marker="$marker"
 	m7_wait_metric_for_resource() {
-		local metric_name=$1 resource_id=$2
+		local metric_name=$1 resource_id=$2 metric_dsl
+		metric_dsl=$(m7_metric_query "$metric_name")
 		for _ in $(seq 1 120); do
-			request "m7-host-metric" 200 POST /enterprise/telemetry/query/metrics "$ENTERPRISE_JAR" \
-				"$(jq -nc --arg id "$resource_id" --arg from "$from" --arg to "$to" --arg metric "$metric_name" \
-					'{resource_ids:[$id],from:$from,to:$to,metric_name:$metric,aggregation:"avg",step_seconds:60,limit:100}')" \
+			request "m7-host-metric" 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+				"$(m7_query_payload metrics promql "$metric_dsl" "$from" "$to" 100 "$resource_id")" \
 				--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-			jq -e --arg metric "$metric_name" 'any(.series[]; .metric_name == $metric and (.points | length > 0))' "$RESPONSE_FILE" >/dev/null 2>&1 && return
+			m7_assert_metric_result "$metric_name" >/dev/null 2>&1 && return
 			sleep 2
 		done
 		fail "M7 Host metric ${metric_name} did not converge"
 	}
 	m7_wait_metric_for_resource "argus.m7.e2e.gauge.${marker}" "$M7_HOST_ID"
-	request m7-host-logs-real 200 POST /enterprise/telemetry/query/logs "$ENTERPRISE_JAR" \
-		"$(jq -nc --arg id "$M7_HOST_ID" --arg from "$from" --arg to "$to" --arg text "argus m7 e2e log.${marker}" \
-			'{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",text:$text,limit:100}')" \
+	request m7-host-logs-real 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload logs logql "$(m7_log_query "argus m7 e2e log.${marker}")" "$from" "$to" 100 "$M7_HOST_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-	jq -e --arg body "argus m7 e2e log.${marker}" 'any(.records[]; .body == $body)' "$RESPONSE_FILE" >/dev/null
-	request m7-host-traces-real 200 POST /enterprise/telemetry/query/traces "$ENTERPRISE_JAR" \
-		"$(jq -nc --arg id "$M7_HOST_ID" --arg from "$from" --arg to "$to" --arg operation "argus-m7-e2e.${marker}" \
-			'{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",operation:$operation,limit:100}')" \
+	m7_assert_log_result "argus m7 e2e log.${marker}"
+	request m7-host-traces-real 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload traces traceql "$(m7_trace_query "argus-m7-e2e.${marker}")" "$from" "$to" 100 "$M7_HOST_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-	jq -e --arg operation "argus-m7-e2e.${marker}" 'any(.traces[]; .root_span_name == $operation)' "$RESPONSE_FILE" >/dev/null
+	m7_assert_trace_result "argus-m7-e2e.${marker}"
 }
 
 m7_run_generator() {
@@ -361,31 +477,31 @@ EOF
 	from=$(date -u -v-10M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '-10 minutes' +%Y-%m-%dT%H:%M:%SZ)
 	to=$(date -u -v+1M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)
 	for _ in $(seq 1 120); do
-		request m7-bastion-metrics 200 POST /enterprise/telemetry/query/metrics "$ENTERPRISE_JAR" \
-			"$(jq -nc --arg id "$M3_BASTION_CLUSTER_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,metric_name:"argus.m7.e2e.gauge.bastion-gateway",aggregation:"avg",step_seconds:60,limit:100}')" \
+		request m7-bastion-metrics 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+			"$(m7_query_payload metrics promql "$(m7_metric_query "argus.m7.e2e.gauge.bastion-gateway")" "$from" "$to" 100 "$M3_BASTION_CLUSTER_ID")" \
 			--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-		jq -e 'any(.series[]; .metric_name == "argus.m7.e2e.gauge.bastion-gateway")' "$RESPONSE_FILE" >/dev/null 2>&1 && break
+		m7_assert_metric_result "argus.m7.e2e.gauge.bastion-gateway" >/dev/null 2>&1 && break
 		sleep 2
 	done
-	jq -e 'any(.series[]; .metric_name == "argus.m7.e2e.gauge.bastion-gateway") and .meta.partial == false' "$RESPONSE_FILE" >/dev/null \
+	m7_assert_metric_result "argus.m7.e2e.gauge.bastion-gateway" && m7_assert_not_partial \
 		|| fail "bastion_gateway Metric did not reach the authorized downstream resource"
 	for _ in $(seq 1 120); do
-		request m7-bastion-logs 200 POST /enterprise/telemetry/query/logs "$ENTERPRISE_JAR" \
-			"$(jq -nc --arg id "$M3_BASTION_CLUSTER_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",text:"argus m7 e2e log.bastion-gateway",limit:100}')" \
+		request m7-bastion-logs 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+			"$(m7_query_payload logs logql "$(m7_log_query "argus m7 e2e log.bastion-gateway")" "$from" "$to" 100 "$M3_BASTION_CLUSTER_ID")" \
 			--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-		jq -e 'any(.records[]; .body == "argus m7 e2e log.bastion-gateway")' "$RESPONSE_FILE" >/dev/null 2>&1 && break
+		m7_assert_log_result "argus m7 e2e log.bastion-gateway" >/dev/null 2>&1 && break
 		sleep 2
 	done
-	jq -e 'any(.records[]; .body == "argus m7 e2e log.bastion-gateway") and .meta.partial == false' "$RESPONSE_FILE" >/dev/null \
+	m7_assert_log_result "argus m7 e2e log.bastion-gateway" && m7_assert_not_partial \
 		|| fail "bastion_gateway Log did not reach the authorized downstream resource"
 	for _ in $(seq 1 120); do
-		request m7-bastion-traces 200 POST /enterprise/telemetry/query/traces "$ENTERPRISE_JAR" \
-			"$(jq -nc --arg id "$M3_BASTION_CLUSTER_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",operation:"argus-m7-e2e.bastion-gateway",limit:100}')" \
+		request m7-bastion-traces 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+			"$(m7_query_payload traces traceql "$(m7_trace_query "argus-m7-e2e.bastion-gateway")" "$from" "$to" 100 "$M3_BASTION_CLUSTER_ID")" \
 			--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-		jq -e 'any(.traces[]; .root_span_name == "argus-m7-e2e.bastion-gateway")' "$RESPONSE_FILE" >/dev/null 2>&1 && break
+		m7_assert_trace_result "argus-m7-e2e.bastion-gateway" >/dev/null 2>&1 && break
 		sleep 2
 	done
-	jq -e 'any(.traces[]; .root_span_name == "argus-m7-e2e.bastion-gateway") and .meta.partial == false' "$RESPONSE_FILE" >/dev/null \
+	m7_assert_trace_result "argus-m7-e2e.bastion-gateway" && m7_assert_not_partial \
 		|| fail "bastion_gateway Trace did not reach the authorized downstream resource"
 
 	m3_psql "
@@ -395,53 +511,67 @@ EOF
 }
 
 m7_verify_query_security() {
-	local from to sensitive_body='Authorization: Bearer m7-redaction-fixture'
+	local from to metric_dsl sensitive_body='Authorization: Bearer m7-redaction-fixture'
 	from=$(date -u -v-15M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '-15 minutes' +%Y-%m-%dT%H:%M:%SZ)
 	to=$(date -u -v+1M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)
+	metric_dsl=$(m7_metric_query "system.cpu.utilization")
 
-	request m7-query-cross-enterprise 403 POST /enterprise/telemetry/query/metrics "$OTHER_ENTERPRISE_JAR" \
-		"$(jq -nc --arg id "$M7_HOST_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,metric_name:"system.cpu.utilization",aggregation:"avg",step_seconds:60,limit:100}')" \
+	request m7-query-cross-enterprise 403 POST /enterprise/telemetry/query "$OTHER_ENTERPRISE_JAR" \
+		"$(m7_query_payload metrics promql "$metric_dsl" "$from" "$to" 100 "$M7_HOST_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}"
 
-	request m7-query-partial 200 POST /enterprise/telemetry/query/metrics "$ENTERPRISE_JAR" \
-		"$(jq -nc --arg allowed "$M7_HOST_ID" --arg denied "$M3_BASTION_HOST_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$allowed,$denied],from:$from,to:$to,metric_name:"system.cpu.utilization",aggregation:"avg",step_seconds:60,limit:100}')" \
+	# M10 binds the complete authorized resource scope before execution. Any
+	# unauthorized resource in the request is rejected instead of silently
+	# returning a partial result.
+	request m7-query-scope-denied 403 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload metrics promql "$metric_dsl" "$from" "$to" 100 "$M7_HOST_ID" "$M3_BASTION_HOST_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-	jq -e --arg allowed "$M7_HOST_ID" --arg denied "$M3_BASTION_HOST_ID" \
-		'.meta.partial == true and (.meta.partial_reasons | index("unauthorized_resources")) != null and all(.series[]; .resource_id == $allowed and .resource_id != $denied)' \
-		"$RESPONSE_FILE" >/dev/null || fail "Telemetry Query did not safely report DataScope partial results"
+	jq -e '.code == "QUERY_SCOPE_DENIED"' "$RESPONSE_FILE" >/dev/null \
+		|| fail "Telemetry Query did not fail closed for an unauthorized resource"
 
 	k -n "$SYSTEM_NS" exec deployment/argus-direct-executor -c argus-direct-executor -- \
 		/usr/local/bin/argus-telemetry-e2e --endpoint=127.0.0.1:4317 --resource-id="$M7_HOST_ID" --marker=limit-a
 	k -n "$SYSTEM_NS" exec deployment/argus-direct-executor -c argus-direct-executor -- \
 		/usr/local/bin/argus-telemetry-e2e --endpoint=127.0.0.1:4317 --resource-id="$M7_HOST_ID" --marker=limit-b --log-body="$sensitive_body"
 	for _ in $(seq 1 120); do
-		request m7-query-sensitive-raw 200 POST /enterprise/telemetry/query/logs "$ENTERPRISE_JAR" \
-			"$(jq -nc --arg id "$M7_HOST_ID" --arg from "$from" --arg to "$to" --arg body "$sensitive_body" '{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",text:$body,limit:10}')" \
+		request m7-query-sensitive-raw 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+			"$(m7_query_payload logs logql "$(m7_log_query "$sensitive_body")" "$from" "$to" 10 "$M7_HOST_ID")" \
 			--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-		jq -e --arg body "$sensitive_body" 'any(.records[]; .body == $body)' "$RESPONSE_FILE" >/dev/null 2>&1 && break
+		m7_assert_log_result "$sensitive_body" >/dev/null 2>&1 && break
 		sleep 2
 	done
-	jq -e --arg body "$sensitive_body" 'any(.records[]; .body == $body)' "$RESPONSE_FILE" >/dev/null \
+	m7_assert_log_result "$sensitive_body" \
 		|| fail "sensitive telemetry fixture did not reach Query"
-	request m7-query-limit 200 POST /enterprise/telemetry/query/logs "$ENTERPRISE_JAR" \
-		"$(jq -nc --arg id "$M7_HOST_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",text:"",limit:1}')" \
+	request m7-query-limit 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload logs logql "$(m7_log_stream_query)" "$from" "$to" 1 "$M7_HOST_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-	jq -e '.records | length == 1' "$RESPONSE_FILE" >/dev/null || fail "Telemetry Query did not enforce its result-row limit"
+	m7_assert_query_v2 logql log_entries
+	jq -e '.data | length == 1' "$RESPONSE_FILE" >/dev/null || fail "Telemetry Query did not enforce its result-row limit"
+	request m7-query-budget 413 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload logs logql "$(m7_log_stream_query)" "$from" "$to" 100 "$M7_HOST_ID" | jq -c '.budget.max_scan_bytes = 1')" \
+		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
+	jq -e '.code == "QUERY_BUDGET_EXCEEDED"' "$RESPONSE_FILE" >/dev/null || fail "Telemetry Query did not reject a limit above the server budget"
 
 	m3_psql "
 		DELETE FROM role_permissions WHERE permission_id='telemetry.sensitive_fields.read' AND role_id=(SELECT id FROM roles WHERE enterprise_id='${ENTERPRISE_ID}' AND identity_key='enterprise_admin');
 		UPDATE enterprise_users SET authorization_version=authorization_version+1,updated_at=now() WHERE id='${ADMIN_USER_ID}' AND enterprise_id='${ENTERPRISE_ID}';" >/dev/null
-	request m7-query-stale-session 409 POST /enterprise/telemetry/query/logs "$ENTERPRISE_JAR" \
-		"$(jq -nc --arg id "$M7_HOST_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",text:"",limit:10}')" \
+	request m7-query-stale-session 409 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload logs logql "$(m7_log_stream_query)" "$from" "$to" 10 "$M7_HOST_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
 	jq -e '.code == "AUTHORIZATION_VERSION_STALE"' "$RESPONSE_FILE" >/dev/null
 	rm -f "$ENTERPRISE_JAR"
 	enterprise_login
-	request m7-query-sensitive-redacted 200 POST /enterprise/telemetry/query/logs "$ENTERPRISE_JAR" \
-		"$(jq -nc --arg id "$M7_HOST_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",text:"",limit:100}')" \
+	request m7-query-sensitive-redacted 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload logs logql "$(m7_log_stream_query)" "$from" "$to" 100 "$M7_HOST_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-	jq -e --arg body "$sensitive_body" 'all(.records[]; .body != $body) and any(.records[]; .body == "[redacted by telemetry field policy]")' "$RESPONSE_FILE" >/dev/null \
-		|| fail "telemetry.sensitive_fields.read removal did not redact governed log bodies"
+	m7_assert_query_v2 logql log_entries
+	if declare -F m7_assert_sensitive_log_redacted >/dev/null; then
+		m7_assert_sensitive_log_redacted "$sensitive_body" \
+			|| fail "telemetry.sensitive_fields.read removal did not redact governed log bodies"
+	else
+		jq -e --arg body "$sensitive_body" 'all(.data[]; .body != $body) and any(.data[]; .body == "[redacted by telemetry field policy]")' "$RESPONSE_FILE" >/dev/null \
+			|| fail "telemetry.sensitive_fields.read removal did not redact governed log bodies"
+	fi
 
 	m3_psql "
 		INSERT INTO role_permissions (role_id,permission_id) SELECT id,'telemetry.sensitive_fields.read' FROM roles WHERE enterprise_id='${ENTERPRISE_ID}' AND identity_key='enterprise_admin' ON CONFLICT DO NOTHING;
@@ -451,14 +581,15 @@ m7_verify_query_security() {
 }
 
 m7_wait_metric() {
-	local metric_name=$1 from to
+	local metric_name=$1 from to metric_dsl
 	from=$(date -u -v-15M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '-15 minutes' +%Y-%m-%dT%H:%M:%SZ)
 	to=$(date -u -v+1M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)
+	metric_dsl=$(m7_metric_query "$metric_name")
 	for _ in $(seq 1 120); do
-		request "m7-metric-${metric_name//./-}" 200 POST /enterprise/telemetry/query/metrics "$ENTERPRISE_JAR" \
-			"$(jq -nc --arg id "$M3_CLUSTER_ID" --arg from "$from" --arg to "$to" --arg metric "$metric_name" '{resource_ids:[$id],from:$from,to:$to,metric_name:$metric,aggregation:"avg",step_seconds:60,limit:100}')" \
+		request "m7-metric-${metric_name//./-}" 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+			"$(m7_query_payload metrics promql "$metric_dsl" "$from" "$to" 100 "$M3_CLUSTER_ID")" \
 			--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-		if jq -e --arg metric "$metric_name" 'any(.series[]; .metric_name == $metric and (.points | length > 0))' "$RESPONSE_FILE" >/dev/null 2>&1; then
+		if m7_assert_metric_result "$metric_name" >/dev/null 2>&1; then
 			return
 		fi
 		sleep 2
@@ -514,13 +645,22 @@ spec:
           args: [--record-id=${record_id}]
           env:
             - name: ARGUS_DATABASE_URL
-              valueFrom: {secretKeyRef: {name: argus-telemetry-runtime, key: database-url}}
+              valueFrom: {secretKeyRef: {name: argus-telemetry-runtime, key: writer-database-url}}
             - {name: ARGUS_KAFKA_BROKERS, value: "argus-kafka-kafka-bootstrap.${OBSERVABILITY_NS}.svc:9093"}
             - {name: ARGUS_KAFKA_USERNAME, value: argus-telemetry}
             - name: ARGUS_KAFKA_PASSWORD
               valueFrom: {secretKeyRef: {name: argus-telemetry, key: password}}
 EOF
-	k -n "$OBSERVABILITY_NS" wait --for=condition=complete "job/${job_name}" --timeout=2m >/dev/null
+	if ! k -n "$OBSERVABILITY_NS" wait --for=condition=complete "job/${job_name}" --timeout=3m >/dev/null; then
+		{
+			k -n "$OBSERVABILITY_NS" describe "job/${job_name}" || true
+			k -n "$OBSERVABILITY_NS" get pods -l "job-name=${job_name}" -o wide || true
+			k -n "$OBSERVABILITY_NS" describe pods -l "job-name=${job_name}" || true
+		} >"${ARTIFACT_DIR}/m7-dlq-replay-describe.txt" 2>&1
+		k -n "$OBSERVABILITY_NS" logs "job/${job_name}" --all-containers=true --prefix=true \
+			>"${ARTIFACT_DIR}/m7-dlq-replay.log" 2>&1 || true
+		fail "M7 DLQ replay Job did not complete; diagnostics saved under ${ARTIFACT_DIR}"
+	fi
 }
 
 m7_restart_deployment() {
@@ -680,30 +820,30 @@ run_m7_api_flow() {
   local from to
   from=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '-1 hour' +%Y-%m-%dT%H:%M:%SZ)
   to=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  request m7-metrics-empty 200 POST /enterprise/telemetry/query/metrics "$ENTERPRISE_JAR" \
-    "$(jq -nc --arg id "$M3_DIRECT_HOST_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,metric_name:"system.cpu.utilization",aggregation:"avg",step_seconds:60,limit:100}')" \
-    --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-  jq -e '.meta.schema_version == "argus.telemetry_result/v1" and (.series | type == "array")' "$RESPONSE_FILE" >/dev/null
+	  request m7-metrics-empty 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+	    "$(m7_query_payload metrics promql "$(m7_metric_query "system.cpu.utilization")" "$from" "$to" 100 "$M3_DIRECT_HOST_ID")" \
+	    --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
+	  m7_assert_query_v2 promql vector
 
 	from=$(date -u -v-10M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '-10 minutes' +%Y-%m-%dT%H:%M:%SZ)
 	to=$(date -u -v+1M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)
 	local signal_found=false
 	for _ in $(seq 1 120); do
-		request m7-metrics-real 200 POST /enterprise/telemetry/query/metrics "$ENTERPRISE_JAR" \
-			"$(jq -nc --arg id "$M3_CLUSTER_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,metric_name:"argus.m7.e2e.gauge",aggregation:"avg",step_seconds:60,limit:100}')" \
+		request m7-metrics-real 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+			"$(m7_query_payload metrics promql "$(m7_metric_query "argus.m7.e2e.gauge")" "$from" "$to" 100 "$M3_CLUSTER_ID")" \
 			--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-		if jq -e 'any(.series[]; .metric_name == "argus.m7.e2e.gauge" and (.points | length > 0))' "$RESPONSE_FILE" >/dev/null 2>&1; then signal_found=true; break; fi
+		if m7_assert_metric_result "argus.m7.e2e.gauge" >/dev/null 2>&1; then signal_found=true; break; fi
 		sleep 2
 	done
 	[[ "$signal_found" == true ]] || fail "M7 metric did not traverse Collector, Kafka, Writer, ClickHouse, and Query"
-	request m7-logs-real 200 POST /enterprise/telemetry/query/logs "$ENTERPRISE_JAR" \
-		"$(jq -nc --arg id "$M3_CLUSTER_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",text:"argus m7 e2e log",limit:100}')" \
+	request m7-logs-real 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload logs logql "$(m7_log_query "argus m7 e2e log")" "$from" "$to" 100 "$M3_CLUSTER_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-	jq -e 'any(.records[]; .body == "argus m7 e2e log")' "$RESPONSE_FILE" >/dev/null
-	request m7-traces-real 200 POST /enterprise/telemetry/query/traces "$ENTERPRISE_JAR" \
-		"$(jq -nc --arg id "$M3_CLUSTER_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,service_name:"argus-m7-e2e",operation:"argus-m7-e2e",limit:100}')" \
+	m7_assert_log_result "argus m7 e2e log"
+	request m7-traces-real 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload traces traceql "$(m7_trace_query "argus-m7-e2e")" "$from" "$to" 100 "$M3_CLUSTER_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-	jq -e 'any(.traces[]; .root_span_name == "argus-m7-e2e")' "$RESPONSE_FILE" >/dev/null
+	m7_assert_trace_result "argus-m7-e2e"
 
 	log "verifying Leaf Collector traffic through the Bastion Edge Gateway"
 	m7_verify_bastion_gateway_path
@@ -713,10 +853,11 @@ run_m7_api_flow() {
 	k -n "$OBSERVABILITY_NS" wait --for=delete pod -l app.kubernetes.io/name=argus-telemetry-writer --timeout=180s >/dev/null
 	m7_run_generator backlog
 	sleep 5
-	request m7-backlog-pending 200 POST /enterprise/telemetry/query/metrics "$ENTERPRISE_JAR" \
-		"$(jq -nc --arg id "$M3_CLUSTER_ID" --arg from "$from" --arg to "$to" '{resource_ids:[$id],from:$from,to:$to,metric_name:"argus.m7.e2e.gauge.backlog",aggregation:"avg",step_seconds:60,limit:100}')" \
+	request m7-backlog-pending 200 POST /enterprise/telemetry/query "$ENTERPRISE_JAR" \
+		"$(m7_query_payload metrics promql "$(m7_metric_query "argus.m7.e2e.gauge.backlog")" "$from" "$to" 100 "$M3_CLUSTER_ID")" \
 		--header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
-	jq -e '.series | length == 0' "$RESPONSE_FILE" >/dev/null
+	m7_assert_query_v2 promql vector
+	jq -e '(.data.result // .data) | length == 0' "$RESPONSE_FILE" >/dev/null
 	k -n "$OBSERVABILITY_NS" scale deployment/argus-telemetry-writer --replicas=1 >/dev/null
 	k -n "$OBSERVABILITY_NS" rollout status deployment/argus-telemetry-writer --timeout=300s >/dev/null
 	m7_wait_metric argus.m7.e2e.gauge.backlog
@@ -742,7 +883,7 @@ run_m7_api_flow() {
 	k -n "$SYSTEM_NS" scale statefulset/argus-redis --replicas=1 >/dev/null
 	k -n "$SYSTEM_NS" rollout status statefulset/argus-redis --timeout=300s >/dev/null
 	m7_wait_metric argus.m7.e2e.gauge.redis-recovery
-	log "verifying Query enterprise isolation, DataScope partials, budgets, redaction, and authorization-version invalidation"
+	log "verifying Query enterprise isolation, scope denial, budgets, redaction, and authorization-version invalidation"
 	m7_verify_query_security
 	run_m7_playwright
 	m7_apply_host_collector_action uninstall "$distribution_id" "$host_profile_ids"

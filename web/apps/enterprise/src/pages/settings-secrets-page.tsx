@@ -19,7 +19,6 @@ import {
   Spinner,
   Textarea,
 } from "@argus/ui";
-import "../i18n/settings";
 import "../styles/settings.css";
 import { formatDateTime } from "../components/settings/shared";
 import { ManagedAccountsSection } from "../components/settings/managed-accounts-section";
@@ -380,7 +379,6 @@ export function SettingsSecretsPage() {
     </PageShell>
   );
 }
-
 function CredentialDrawer({
   open,
   onOpenChange,

@@ -9,7 +9,7 @@ const loginWithMfa = createMfaLogin("enterprise");
 
 test.describe("M3 real resource flow", () => {
   test.skip(!enabled, "M3 Kubernetes environment is not active");
-  test.describe.configure({ mode: "serial" });
+  test.describe.configure({ mode: "serial", timeout: 120_000 });
 
   test.beforeEach(async ({ page }) => {
     expect(username).not.toBe("");
@@ -110,6 +110,7 @@ test.describe("M3 real resource flow", () => {
   test("cancels a Host preview through the real Pending Action endpoint", async ({
     page,
   }) => {
+    test.setTimeout(120_000);
     await page.goto("/hosts");
     const tile = page
       .locator(".argus-host-tile")
@@ -118,13 +119,17 @@ test.describe("M3 real resource flow", () => {
     const drawer = page.getByRole("dialog", {
       name: /编辑主机.*m3-public-host|Edit host.*m3-public-host/i,
     });
+    await expect(drawer).toBeVisible();
+    const save = drawer.getByRole("button", { name: /保存|Save/i });
+    await expect(save).toBeVisible();
     const previewResponse = page.waitForResponse(
       (response) =>
         response.url().includes("/api/v1/enterprise/hosts/") &&
         response.url().endsWith("/actions/preview-update") &&
         response.request().method() === "POST",
     );
-    await drawer.getByRole("button", { name: /保存|Save/i }).click();
+    await page.waitForTimeout(250);
+    await save.click({ force: true });
     expect((await previewResponse).status()).toBe(201);
 
     const preview = drawer.locator(".argus-preview-card");

@@ -53,7 +53,7 @@ export function QuotaEditor({ enterpriseId }: { enterpriseId: string }) {
           "该企业尚未配置 Sandbox 配额，种子数据外的企业需先由平台初始化。",
           "No sandbox quota configured for this enterprise yet.",
         )}
-        title={t("enterprises.quota.title")}
+        title={t("sandbox.quotas.edit")}
         tone="warning"
       />
     );
@@ -84,7 +84,7 @@ export function QuotaEditor({ enterpriseId }: { enterpriseId: string }) {
 
   return (
     <div className="argus-quota-editor">
-      <Field label={t("enterprises.quota.allowedProfiles")}>
+      <Field label={t("sandbox.quotas.table.allowedProfiles")}>
         <div className="argus-quota-editor__profiles">
           {(profiles.data ?? []).map((profile) => (
             <label className="argus-quota-editor__profile" key={profile.id}>
@@ -102,23 +102,23 @@ export function QuotaEditor({ enterpriseId }: { enterpriseId: string }) {
       </Field>
       <div className="argus-form-grid">
         {numberField(
-          t("enterprises.quota.maxConcurrentSessions"),
+          t("sandbox.quotas.table.concurrent"),
           "maxConcurrentSessions",
         )}
         {numberField(
-          t("enterprises.quota.maxDailySessionMinutes"),
+          t("sandbox.quotas.table.dailyMinutes"),
           "maxDailySessionMinutes",
         )}
         {numberField(
-          t("enterprises.quota.maxDailyCpuMinutes"),
+          t("sandbox.quotas.table.dailyCpu"),
           "maxDailyCpuMinutes",
         )}
         {numberField(
-          t("enterprises.quota.maxArtifactStorageMb"),
+          t("sandbox.quotas.table.storage"),
           "maxArtifactStorageMb",
         )}
         {numberField(
-          t("enterprises.quota.artifactRetentionDays"),
+          t("sandbox.quotas.table.retention"),
           "artifactRetentionDays",
         )}
       </div>

@@ -146,7 +146,7 @@ codes:
   TELEMETRY_INGEST_LIMIT_EXCEEDED: {http_status: 429, message_key: errors.telemetry.ingest_limit_exceeded, retryable: true}
   TELEMETRY_SCHEMA_UNSUPPORTED: {http_status: 422, message_key: errors.telemetry.schema_unsupported, retryable: false}
   TELEMETRY_BACKPRESSURE: {http_status: 503, message_key: errors.telemetry.backpressure, retryable: true}
-  TELEMETRY_QUERY_BUDGET_EXCEEDED: {http_status: 422, message_key: errors.telemetry.query_budget_exceeded, retryable: false}
+  QUERY_BUDGET_EXCEEDED: {http_status: 413, message_key: errors.telemetry.query_budget_exceeded, retryable: false}
   TELEMETRY_SIGNAL_FORBIDDEN: {http_status: 403, message_key: errors.telemetry.signal_forbidden, retryable: false}
   TELEMETRY_FIELD_FORBIDDEN: {http_status: 403, message_key: errors.telemetry.field_forbidden, retryable: false}
   TELEMETRY_DEPENDENCY_UNAVAILABLE: {http_status: 503, message_key: errors.telemetry.dependency_unavailable, retryable: true}

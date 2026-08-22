@@ -50,6 +50,7 @@ M1 于 2026-08-16 完成。当前门禁命令为：
 - `make contract-check`、`make contract-breaking`、`go test ./...`、`go vet ./...`
 - `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build`、`pnpm check:bundle`、`pnpm e2e`
 - `pnpm check:real-build`：real 构建中不得出现 mock seed 标记。
+- `pnpm check:i18n`：校验三个门户的语言包均已集中注册，并扫描静态 `t(...)` 调用，阻止缺失 key 或直接回显 key。
 - `pnpm smoke:web`：实际构建 Web 镜像，验证 Nginx 四端口/SPA 深链和 Helm cards Host/Service。
 - `pnpm e2e`：Enterprise、Platform、Setup 和 Card Runtime 四个 Origin 覆盖 32 条浏览器场景；2026-08-16 全量结果为 `32/32` 通过，包括产品流程、四种语言/主题组合、Card Bridge/CSP 与 Setup 跳转。
 

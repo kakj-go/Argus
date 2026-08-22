@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PageShell, Tabs, TabsContent, TabsList, TabsTrigger } from "@argus/ui";
-import "../i18n/settings";
 import "../styles/settings.css";
 import { OrgAccessTab } from "../components/settings/org-access-tab";
 import { OrgBindingsTab } from "../components/settings/org-bindings-tab";

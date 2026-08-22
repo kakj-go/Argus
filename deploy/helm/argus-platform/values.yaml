@@ -22,6 +22,7 @@ runtime:
   openBaoToken: ""
   openBaoTransitKey: argus-local-hardening
   breakGlassEnabled: false
+  platformMfaRequired: false
   databaseRolesEnabled: false
   serverDatabasePassword: ""
   workerDatabasePassword: ""
@@ -30,6 +31,7 @@ runtime:
   migrationDatabasePassword: ""
   telemetryIngestDatabasePassword: ""
   telemetryWriterDatabasePassword: ""
+  telemetryQueryDatabasePassword: ""
   connectorEnrollmentURL: http://localhost:8080
   connectorGatewayAddress: grpcs://localhost:9443
   connectorIssuerName: argus-connector-ca
@@ -45,12 +47,17 @@ runtime:
     - http://localhost:4173
     - http://localhost:4174
     - http://localhost:4175
+    - http://localhost:4176
+    - http://127.0.0.1:4173
+    - http://127.0.0.1:4174
+    - http://127.0.0.1:4175
+    - http://127.0.0.1:4176
   secureCookies: false
   cardPresentationTtl: 10m
   cardValidationTtl: 30m
   cardRuntimeVersion: argus-card-runtime/v1
   cardMaxPresentationBytes: 1048576
-  remoteOrigin: ws://localhost:9445
+  remoteOrigin: http://localhost:9445
   remoteUserLimit: 3
   remoteHostLimit: 5
   remoteEnterpriseLimit: 50

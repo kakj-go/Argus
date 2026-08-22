@@ -259,15 +259,15 @@ export function ClusterFormDrawer({
               value={name}
             />
           </Field>
-          <Field label={t("kubernetes.form.api_server")}>
+          <Field label={t("kubernetes.form.apiServer")}>
             <Input
               disabled={editing !== null}
               onChange={(event) => setApiServer(event.target.value)}
-              placeholder={t("kubernetes.form.api_serverPlaceholder")}
+              placeholder={t("kubernetes.form.apiServerPlaceholder")}
               value={apiServer}
             />
           </Field>
-          <Field label={t("kubernetes.form.connection_mode")}>
+          <Field label={t("kubernetes.form.connectionMode")}>
             <Select
               disabled={editing !== null}
               onValueChange={(value) =>

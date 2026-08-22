@@ -1,4 +1,4 @@
-.PHONY: fmt test vet run-server contract-lint contract-generate contract-check contract-breaking check-production-artifacts migrate sqlc otelcol-linux-arm64 otelcol-windows-amd64 otelcol-distributions e2e-m2-k8s e2e-m3-k8s e2e-m4-k8s e2e-m5-k8s e2e-m6-k8s e2e-m7-k8s e2e-m8-k8s release-local
+.PHONY: fmt test vet run-server contract-lint contract-generate contract-check contract-breaking query-parser-check query-promql-conformance query-kql-check query-skywalking-graphql-check query-tenant-schema-check check-production-artifacts migrate sqlc otelcol-linux-arm64 otelcol-windows-amd64 otelcol-distributions e2e-m2-k8s e2e-m3-k8s e2e-m4-k8s e2e-m5-k8s e2e-m6-k8s e2e-m7-k8s e2e-m8-k8s e2e-m10-query-k8s release-local
 
 fmt:
 	rg --files cmd internal -g '*.go' | xargs gofmt -w
@@ -7,7 +7,9 @@ test:
 	go test ./...
 
 vet:
-	go vet ./...
+	# Prometheus chunkenc.Iterator intentionally defines Seek(int64) ValueType;
+	# disable stdmethods' io.Seeker signature heuristic for this interface.
+	go vet -stdmethods=false ./...
 
 run-server:
 	go run ./cmd/argus-server
@@ -23,7 +25,7 @@ contract-generate:
 	mkdir -p api/openapi/generated internal/gen/openapi web/packages/api-client/src/generated
 	pnpm exec redocly bundle api/openapi/argus.yaml --output api/openapi/generated/argus.bundle.json --ext json
 	node scripts/minify-json.mjs api/openapi/generated/argus.bundle.json
-	@set -e; for domain in common identity authorization labels action card agent stream telemetry setup m8api platform enterpriseidentity enterpriseauthz machine audit secretapi hostapi kubernetesapi connectionapi actionapi connectorapi conversationapi modelapi workflowapi automationapi sandboxapi cardapi remoteaccessapi telemetryapi; do \
+	@set -e; for domain in common identity authorization labels action card agent stream setup m8api platform enterpriseidentity enterpriseauthz machine audit secretapi hostapi kubernetesapi connectionapi actionapi connectorapi conversationapi modelapi workflowapi automationapi sandboxapi cardapi remoteaccessapi telemetryapi; do \
 		pnpm exec redocly bundle api/openapi/generation/$$domain.yaml --output api/openapi/generated/$$domain.bundle.yaml --ext yaml; \
 		mkdir -p internal/gen/openapi/$$domain; \
 		go tool oapi-codegen -generate types,skip-prune -package $$domain -o internal/gen/openapi/$$domain/types.gen.go api/openapi/generated/$$domain.bundle.yaml; \
@@ -35,7 +37,7 @@ contract-generate:
 	@set -e; for domain in enterpriseauthz secretapi hostapi kubernetesapi connectionapi actionapi connectorapi sandboxapi cardapi remoteaccessapi telemetryapi; do \
 		node scripts/split-generated-go-server.mjs internal/gen/openapi/$$domain/server.gen.go; \
 	done
-	node scripts/generate-contract-index.mjs web/packages/api-client/src/generated/contracts.ts common identity authorization labels action card agent stream telemetry setup m8api platform enterpriseidentity enterpriseauthz machine audit secretapi hostapi kubernetesapi connectionapi actionapi connectorapi conversationapi modelapi workflowapi automationapi sandboxapi cardapi remoteaccessapi telemetryapi
+	node scripts/generate-contract-index.mjs web/packages/api-client/src/generated/contracts.ts common identity authorization labels action card agent stream setup m8api platform enterpriseidentity enterpriseauthz machine audit secretapi hostapi kubernetesapi connectionapi actionapi connectorapi conversationapi modelapi workflowapi automationapi sandboxapi cardapi remoteaccessapi telemetryapi
 	go tool buf generate api/proto --template api/proto/buf.gen.yaml
 
 sqlc:
@@ -81,6 +83,9 @@ e2e-m7-k8s:
 e2e-m8-k8s:
 	./scripts/e2e-m8-k8s.sh
 
+e2e-m10-query-k8s:
+	./scripts/e2e-m10-query-k8s.sh
+
 release-local:
 	./scripts/release-local.sh
 
@@ -94,6 +99,22 @@ contract-breaking:
 	else \
 		echo 'origin/main has no protobuf baseline; this merge establishes it'; \
 	fi
+
+query-parser-check:
+	./scripts/check-query-parser-lock.sh
+
+query-promql-conformance:
+	go test ./internal/telemetry/queryengine/promql -count=1
+	go test ./internal/telemetry -run 'TestPromQLClickHouse' -count=1
+
+query-kql-check:
+	go test ./internal/telemetry/queryengine/kql -count=1
+
+query-skywalking-graphql-check:
+	go test ./internal/telemetry/queryengine/skywalking -count=1
+
+query-tenant-schema-check:
+	go test ./internal/telemetry -run 'TestTenant|TestTelemetrySchemaV3' -count=1
 
 check-production-artifacts:
 	./scripts/check-production-artifacts.sh

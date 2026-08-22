@@ -33,7 +33,7 @@ umask 077
 mkdir -p "$OUT/bin" "$OUT/charts" "$OUT/images" "$OUT/sbom" "$OUT/signatures"
 
 echo "running local release gates"
-make contract-check contract-breaking
+make contract-check contract-breaking query-parser-check
 go test ./...
 go vet ./...
 pnpm typecheck

@@ -44,6 +44,9 @@ const (
 	maxAttributeKey      = 256
 	maxAttributeValue    = 4 << 10
 	maxLogBody           = 256 << 10
+	maxTraceEvents       = 128
+	maxTraceLinks        = 128
+	maxTraceDetails      = 256 << 10
 )
 
 var errIngestRejected = errors.New("telemetry ingest rejected")
@@ -520,6 +523,9 @@ func validateMetrics(value *collectmetrics.ExportMetricsServiceRequest) error {
 			return errIngestRejected
 		}
 		for _, scope := range resource.ScopeMetrics {
+			if scope.Scope != nil && validateAttributes(scope.Scope.Attributes) != nil {
+				return errIngestRejected
+			}
 			for _, metric := range scope.Metrics {
 				switch data := metric.Data.(type) {
 				case *metricspb.Metric_Gauge:
@@ -566,6 +572,9 @@ func validateLogs(value *collectlogs.ExportLogsServiceRequest) error {
 			return errIngestRejected
 		}
 		for _, scope := range resource.ScopeLogs {
+			if scope.Scope != nil && validateAttributes(scope.Scope.Attributes) != nil {
+				return errIngestRejected
+			}
 			for _, record := range scope.LogRecords {
 				if validateAttributes(record.Attributes) != nil || anyValueSize(record.Body) > maxLogBody {
 					return errIngestRejected
@@ -581,8 +590,27 @@ func validateTraces(value *collecttraces.ExportTraceServiceRequest) error {
 			return errIngestRejected
 		}
 		for _, scope := range resource.ScopeSpans {
+			if scope.Scope != nil && validateAttributes(scope.Scope.Attributes) != nil {
+				return errIngestRejected
+			}
 			for _, span := range scope.Spans {
-				if validateAttributes(span.Attributes) != nil {
+				if validateAttributes(span.Attributes) != nil || len(span.Events) > maxTraceEvents || len(span.Links) > maxTraceLinks {
+					return errIngestRejected
+				}
+				detailBytes := 0
+				for _, event := range span.Events {
+					if event == nil || validateAttributes(event.Attributes) != nil {
+						return errIngestRejected
+					}
+					detailBytes += proto.Size(event)
+				}
+				for _, link := range span.Links {
+					if link == nil || validateAttributes(link.Attributes) != nil {
+						return errIngestRejected
+					}
+					detailBytes += proto.Size(link)
+				}
+				if detailBytes > maxTraceDetails {
 					return errIngestRejected
 				}
 			}

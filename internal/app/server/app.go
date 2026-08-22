@@ -89,7 +89,7 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 	var wrapping keywrap.Provider = keywrap.Local{Key: a.config.IdempotencyEncryptionKey, KeyID: "argus-evaluation"}
-	if a.config.KeyWrappingMode == "openbao_transit" {
+	if a.config.KeyWrappingMode == keywrap.ProviderOpenBaoTransit {
 		wrapping = keywrap.OpenBao{Address: a.config.OpenBaoAddress, Token: a.config.OpenBaoToken, KeyID: a.config.OpenBaoTransitKey}
 	}
 	idempotency := postgres.Idempotency{Key: a.config.IdempotencyEncryptionKey, Provider: wrapping}
@@ -167,13 +167,14 @@ func (a *App) Run(ctx context.Context) error {
 		if telemetryErr != nil {
 			return telemetryErr
 		}
-		telemetryQuery, telemetryErr := telemetryservice.NewGRPCQueryBackend(a.config.TelemetryQueryEndpoint, telemetryTLS)
+		telemetryQuery, telemetryErr := telemetryservice.NewGRPCQueryBackend(a.config.TelemetryQueryEndpoint, telemetryTLS, a.logger)
 		if telemetryErr != nil {
 			return telemetryErr
 		}
 		defer telemetryQuery.Close()
+		platformHandler.Enterprise.Telemetry = telemetryQuery
 		telemetryDomain := telemetryservice.Service{Store: postgresStore, Access: resource.AccessService{Store: postgresStore}, Actions: actionDomain,
-			Query: telemetryQuery, OtelcolKubernetesImage: a.config.OtelcolKubernetesImage}
+			Query: telemetryQuery, Engine: telemetryQuery, OtelcolKubernetesImage: a.config.OtelcolKubernetesImage}
 		telemetryIdentity := telemetryservice.IdentityService{Store: postgresStore, Issuer: connectorservice.CertManagerIssuer{
 			Client: kubernetesClient, Namespace: a.config.SystemNamespace, IssuerName: a.config.TelemetryIssuerName, IssuerKind: "ClusterIssuer",
 			RequestPrefix: "argus-telemetry-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: a.config.TelemetryIssuerGeneration,

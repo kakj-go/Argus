@@ -745,6 +745,38 @@ test("telemetry views expose accessible Metrics, Logs, Traces, usage, and partia
   await expectNoSeriousAccessibilityViolations(page);
 });
 
+test("telemetry query builder and DSL editor execute all three language models", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/kubernetes/k8s-prod-east");
+
+  await page.getByRole("tab", { name: "指标", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "查询构建器" })).toHaveAttribute("data-state", "active");
+  await page.getByLabel("指标名").fill("http_requests_total");
+  await expect(page.locator(".argus-telemetry-query-head textarea[readonly]")).toHaveValue(/http_requests_total/);
+  await page.getByRole("button", { name: "执行查询" }).click();
+  await expect(page.locator(".argus-telemetry-query-meta")).toContainText("matrix");
+
+  await page.getByRole("tab", { name: "DSL 编辑器" }).click();
+  await page.getByLabel("PROMQL DSL").fill('sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))');
+  await page.getByRole("button", { name: "执行查询" }).click();
+  await expect(page.locator(".argus-telemetry-query-meta")).toContainText("aaaaaaaaaaaa");
+
+  await page.getByRole("tab", { name: "日志", exact: true }).click();
+  await page.getByRole("tab", { name: "DSL 编辑器" }).click();
+  await page.getByLabel("LOGQL DSL").fill('{service_name="argus-demo"} |= "error" | json');
+  await page.getByRole("button", { name: "执行查询" }).click();
+  await expect(page.locator(".argus-telemetry-query-meta")).toContainText("log_entries");
+
+  await page.getByRole("tab", { name: "链路", exact: true }).click();
+  await page.getByRole("tab", { name: "DSL 编辑器" }).click();
+  await page.getByLabel("TRACEQL DSL").fill('{service.name="argus-demo"} > {service.name="database"}');
+  await page.getByRole("button", { name: "执行查询" }).click();
+  await expect(page.locator(".argus-telemetry-query-meta")).toContainText("spansets");
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
 test("chat administrator can create a disabled interactive card", async ({
   page,
 }) => {

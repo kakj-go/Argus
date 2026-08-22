@@ -12,6 +12,7 @@ import (
 
 	"github.com/kakj-go/Argus/internal/mcp"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
+	"github.com/kakj-go/Argus/internal/telemetry/queryengine"
 )
 
 type Tools struct{ Service Service }
@@ -23,9 +24,15 @@ func (tools Tools) Register(registry *mcp.Registry) error {
 	registrations := []mcp.Metadata{
 		tools.metadata("telemetry.collector.list", "telemetry.collector.read", collectorListInputSchema(), collectorListOutputSchema(), tools.collectors),
 		tools.metadata("telemetry.collector.get", "telemetry.collector.read", idInputSchema("collector_id"), collectorOutputSchema(), tools.collector),
-		tools.metadata("telemetry.metrics.query", "telemetry.query.metrics", telemetryQueryInputSchema("metrics"), metricOutputSchema(), tools.metrics),
-		tools.metadata("telemetry.logs.query", "telemetry.query.logs", telemetryQueryInputSchema("logs"), logsOutputSchema(), tools.logs),
-		tools.metadata("telemetry.traces.query", "telemetry.query.traces", telemetryQueryInputSchema("traces"), tracesOutputSchema(), tools.traces),
+		tools.metadata("telemetry.promql.query", "telemetry.query.metrics", dslQueryInputSchema("promql", "metrics"), promQLOutputSchema(), func(ctx context.Context, call mcp.Call) (mcp.Result, error) {
+			return tools.dslQuery(ctx, call, queryengine.LanguagePromQL)
+		}),
+		tools.metadata("telemetry.kql.query", "telemetry.query.logs", dslQueryInputSchema("kql", "logs"), kqlOutputSchema(), func(ctx context.Context, call mcp.Call) (mcp.Result, error) {
+			return tools.dslQuery(ctx, call, queryengine.LanguageKQL)
+		}),
+		tools.metadata("telemetry.skywalking.trace", "telemetry.query.traces", dslQueryInputSchema("skywalking_graphql", "traces"), traceGraphQLOutputSchema(), func(ctx context.Context, call mcp.Call) (mcp.Result, error) {
+			return tools.dslQuery(ctx, call, queryengine.LanguageTrace)
+		}),
 		tools.metadata("telemetry.overview", "telemetry.query.metrics", overviewInputSchema(), overviewOutputSchema(), tools.overview),
 	}
 	for _, metadata := range registrations {
@@ -128,8 +135,8 @@ func (tools Tools) collector(ctx context.Context, call mcp.Call) (mcp.Result, er
 	item, err := tools.Service.GetCollector(ctx, actor, id)
 	return mcp.Result{Structured: map[string]any{"collector": item}}, err
 }
-func (tools Tools) metrics(ctx context.Context, call mcp.Call) (mcp.Result, error) {
-	actor, _, err := tools.actor(ctx, call)
+func (tools Tools) dslQuery(ctx context.Context, call mcp.Call, language queryengine.Language) (mcp.Result, error) {
+	actor, permissions, err := tools.actor(ctx, call)
 	if err != nil {
 		return mcp.Result{}, err
 	}
@@ -137,34 +144,56 @@ func (tools Tools) metrics(ctx context.Context, call mcp.Call) (mcp.Result, erro
 	if err != nil {
 		return mcp.Result{}, err
 	}
-	metric := fmt.Sprint(call.Input["metric_name"])
-	aggregation := fmt.Sprint(call.Input["aggregation"])
-	items, meta, err := tools.Service.QueryMetrics(ctx, actor, ids, from, to, limit, "", metric, aggregation, 60, false)
-	return mcp.Result{Structured: map[string]any{"series": items, "meta": meta}, Partial: meta.Partial}, err
-}
-func (tools Tools) logs(ctx context.Context, call mcp.Call) (mcp.Result, error) {
-	actor, _, err := tools.actor(ctx, call)
+	ids, partial, err := tools.Service.AuthorizedResources(ctx, actor, ids)
 	if err != nil {
 		return mcp.Result{}, err
 	}
-	ids, from, to, limit, err := toolQueryCommon(call.Input)
+	if partial {
+		return mcp.Result{}, ErrQueryScope
+	}
+	maxScanBytes := int64(DefaultMaxScanBytes)
+	if value, ok := call.Input["max_scan_bytes"].(float64); ok && value > 0 {
+		maxScanBytes = int64(value)
+	}
+	maxResultBytes := int64(8 << 20)
+	if value, ok := call.Input["max_result_bytes"].(float64); ok && value > 0 {
+		maxResultBytes = int64(value)
+	}
+	timeout := DefaultTimeout
+	if value, ok := call.Input["timeout_ms"].(float64); ok && value > 0 {
+		timeout = time.Duration(value) * time.Millisecond
+	}
+	maxSamples := DefaultMaxSamples
+	if value, ok := call.Input["max_samples"].(float64); ok && value > 0 {
+		maxSamples = int(value)
+	}
+	maxSeries := DefaultMaxSeries
+	if value, ok := call.Input["max_series"].(float64); ok && value > 0 {
+		maxSeries = int(value)
+	}
+	step := time.Duration(0)
+	if value, ok := call.Input["step_seconds"].(float64); ok && value > 0 {
+		step = time.Duration(value) * time.Second
+	}
+	if tools.Service.Engine == nil {
+		return mcp.Result{}, ErrQueryBackend
+	}
+	pipeline := ""
+	if value, ok := call.Input["pipeline"].(string); ok {
+		pipeline = value
+	}
+	expression := fmt.Sprint(call.Input["query"])
+	if language == queryengine.LanguageTrace {
+		expression = fmt.Sprint(call.Input["document"])
+	}
+	sensitive := slices.Contains(permissions, "*") || slices.Contains(permissions, "telemetry.sensitive_fields.read")
+	result, err := tools.Service.Engine.ExecuteEngineQuery(ctx, queryengine.Request{Language: language, Expression: expression, Pipeline: pipeline, Instant: language == queryengine.LanguagePromQL && step <= 0, Start: from, End: to, Step: step,
+		Scope: queryengine.Scope{EnterpriseID: actor.EnterpriseID, ResourceIDs: ids, AuthorizationVersion: actor.AuthorizationVersion, SensitiveFields: sensitive}, Budget: queryengine.Budget{MaxRows: limit, MaxSamples: maxSamples, MaxSeries: maxSeries, MaxScanBytes: maxScanBytes, MaxResultBytes: maxResultBytes, Timeout: timeout}})
 	if err != nil {
 		return mcp.Result{}, err
 	}
-	items, meta, err := tools.Service.QueryLogs(ctx, actor, ids, from, to, limit, "", map[string]any{"service_name": fmt.Sprint(call.Input["service_name"]), "text": fmt.Sprint(call.Input["text"])}, false)
-	return mcp.Result{Structured: map[string]any{"records": items, "meta": meta}, Partial: meta.Partial}, err
-}
-func (tools Tools) traces(ctx context.Context, call mcp.Call) (mcp.Result, error) {
-	actor, _, err := tools.actor(ctx, call)
-	if err != nil {
-		return mcp.Result{}, err
-	}
-	ids, from, to, limit, err := toolQueryCommon(call.Input)
-	if err != nil {
-		return mcp.Result{}, err
-	}
-	items, meta, err := tools.Service.QueryTraces(ctx, actor, ids, from, to, limit, "", map[string]any{"service_name": fmt.Sprint(call.Input["service_name"]), "operation": fmt.Sprint(call.Input["operation"])}, false)
-	return mcp.Result{Structured: map[string]any{"traces": items, "meta": meta}, Partial: meta.Partial}, err
+	output := protocolQueryOutput(result)
+	return mcp.Result{Structured: output, Partial: result.Meta.Partial}, nil
 }
 func (tools Tools) overview(ctx context.Context, call mcp.Call) (mcp.Result, error) {
 	actor, _, err := tools.actor(ctx, call)
@@ -225,22 +254,58 @@ func inputUUIDs(value any) ([]uuid.UUID, error) {
 	return result, nil
 }
 
-func telemetryQueryInputSchema(kind string) map[string]any {
-	properties := map[string]any{"resource_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string", "format": "uuid"}, "minItems": 1, "maxItems": 1000}, "from": map[string]any{"type": "string", "format": "date-time"}, "to": map[string]any{"type": "string", "format": "date-time"}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 100000}}
-	required := []string{"resource_ids", "from", "to"}
-	if kind == "metrics" {
-		properties["metric_name"] = map[string]any{"type": "string"}
-		properties["aggregation"] = map[string]any{"type": "string", "enum": []string{"avg", "min", "max", "sum", "count", "p50", "p95", "p99"}}
-		required = append(required, "metric_name", "aggregation")
-	} else {
-		properties["service_name"] = map[string]any{"type": "string"}
-		if kind == "logs" {
-			properties["text"] = map[string]any{"type": "string"}
-		} else {
-			properties["operation"] = map[string]any{"type": "string"}
-		}
+func dslQueryInputSchema(language, signal string) map[string]any {
+	queryField := "query"
+	if language == "skywalking_graphql" {
+		queryField = "document"
 	}
-	return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
+	properties := map[string]any{
+		queryField:     map[string]any{"type": "string", "minLength": 1, "maxLength": 65536},
+		"pipeline":     map[string]any{"type": "string", "maxLength": 16384},
+		"resource_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string", "format": "uuid"}, "minItems": 1, "maxItems": 1000},
+		"from":         map[string]any{"type": "string", "format": "date-time"}, "to": map[string]any{"type": "string", "format": "date-time"},
+		"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 100000}, "step_seconds": map[string]any{"type": "integer", "minimum": 0, "maximum": 86400},
+		"max_scan_bytes": map[string]any{"type": "integer", "minimum": 1, "maximum": HardMaxScanBytes}, "timeout_ms": map[string]any{"type": "integer", "minimum": 100, "maximum": int(HardTimeout / time.Millisecond)},
+		"max_result_bytes": map[string]any{"type": "integer", "minimum": 1, "maximum": HardMaxResultBytes},
+		"language":         map[string]any{"const": language}, "signal": map[string]any{"const": signal},
+	}
+	if language == "promql" {
+		properties["max_samples"] = map[string]any{"type": "integer", "minimum": 1, "maximum": HardMaxSamples}
+		properties["max_series"] = map[string]any{"type": "integer", "minimum": 1, "maximum": HardMaxSeries}
+	}
+	return map[string]any{"type": "object", "properties": properties, "required": []string{queryField, "resource_ids", "from", "to"}, "additionalProperties": false}
+}
+
+func promQLOutputSchema() map[string]any {
+	return map[string]any{"type": "object", "properties": map[string]any{"status": map[string]any{"const": "success"}, "data": map[string]any{"type": "object"}, "warnings": map[string]any{"type": "array"}, "argus_meta": map[string]any{"type": "object"}}, "required": []string{"status", "data", "warnings", "argus_meta"}}
+}
+
+func kqlOutputSchema() map[string]any {
+	return map[string]any{"type": "object", "properties": map[string]any{"schema_version": map[string]any{"const": "argus.kql_result/v1"}, "result_type": map[string]any{"type": "string"}, "data": map[string]any{}, "warnings": map[string]any{"type": "array"}, "partial": map[string]any{"type": "boolean"}, "meta": map[string]any{"type": "object"}}, "required": []string{"schema_version", "result_type", "data", "warnings", "partial", "meta"}}
+}
+
+func traceGraphQLOutputSchema() map[string]any {
+	return map[string]any{"type": "object", "properties": map[string]any{"data": map[string]any{"type": "object"}, "errors": map[string]any{"type": "array"}, "extensions": map[string]any{"type": "object"}}, "required": []string{"data", "extensions"}}
+}
+
+func protocolQueryOutput(result queryengine.Result) map[string]any {
+	meta := map[string]any{
+		"plan_hash": result.Meta.PlanHash, "engine": result.Meta.Engine, "engine_version": result.Meta.EngineVersion,
+		"scanned_bytes": result.Meta.ScannedBytes, "scanned_rows": result.Meta.ScannedRows, "returned_rows": result.Meta.ReturnedRows,
+		"loaded_samples": result.Meta.LoadedSamples, "elapsed_ms": result.Meta.ElapsedMillis, "partial": result.Meta.Partial,
+	}
+	warnings := result.Meta.Warnings
+	if warnings == nil {
+		warnings = []string{}
+	}
+	switch result.Language {
+	case queryengine.LanguagePromQL:
+		return map[string]any{"status": "success", "data": map[string]any{"resultType": result.ResultType, "result": result.Data}, "warnings": warnings, "argus_meta": meta}
+	case queryengine.LanguageTrace:
+		return map[string]any{"data": result.Data, "extensions": map[string]any{"argus": meta}}
+	default:
+		return map[string]any{"schema_version": "argus.kql_result/v1", "result_type": result.ResultType, "data": result.Data, "warnings": warnings, "partial": result.Meta.Partial, "meta": meta}
+	}
 }
 func overviewInputSchema() map[string]any {
 	return map[string]any{"type": "object", "properties": map[string]any{"resource_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string", "format": "uuid"}, "minItems": 1, "maxItems": 1000}, "lookback_seconds": map[string]any{"type": "integer", "minimum": 300, "maximum": 604800}}, "required": []string{"resource_ids"}, "additionalProperties": false}
@@ -256,15 +321,6 @@ func collectorListOutputSchema() map[string]any {
 }
 func collectorOutputSchema() map[string]any {
 	return map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "resource_id": map[string]any{"type": "string"}, "status": map[string]any{"type": "string"}}, "required": []string{"id", "resource_id", "status"}}
-}
-func metricOutputSchema() map[string]any {
-	return map[string]any{"type": "object", "properties": map[string]any{"series": map[string]any{"type": "array"}, "meta": map[string]any{"type": "object"}}, "required": []string{"series", "meta"}}
-}
-func logsOutputSchema() map[string]any {
-	return map[string]any{"type": "object", "properties": map[string]any{"records": map[string]any{"type": "array"}, "meta": map[string]any{"type": "object"}}, "required": []string{"records", "meta"}}
-}
-func tracesOutputSchema() map[string]any {
-	return map[string]any{"type": "object", "properties": map[string]any{"traces": map[string]any{"type": "array"}, "meta": map[string]any{"type": "object"}}, "required": []string{"traces", "meta"}}
 }
 func overviewOutputSchema() map[string]any {
 	return map[string]any{"type": "object", "properties": map[string]any{"resource_count": map[string]any{"type": "integer"}, "healthy_collectors": map[string]any{"type": "integer"}, "degraded_collectors": map[string]any{"type": "integer"}, "metric_points": map[string]any{"type": "integer"}, "log_records": map[string]any{"type": "integer"}, "spans": map[string]any{"type": "integer"}, "window_seconds": map[string]any{"type": "integer"}, "partial": map[string]any{"type": "boolean"}}, "required": []string{"resource_count", "healthy_collectors", "degraded_collectors", "metric_points", "log_records", "spans", "window_seconds", "partial"}}

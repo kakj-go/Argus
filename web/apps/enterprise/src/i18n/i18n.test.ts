@@ -2,14 +2,17 @@
 import { describe, expect, it } from "vitest";
 import { aiSettingsEn, aiSettingsZh } from "./ai-settings";
 import { accountEn, accountZh } from "./account";
+import { automationsEn, automationsZh } from "./automations";
 import { chatEn, chatZh } from "./chat";
 import { commonEn, commonZh } from "./common";
 import { governanceEn, governanceZh } from "./governance";
 import { hostsEn, hostsZh } from "./hosts";
 import { kubernetesEn, kubernetesZh } from "./kubernetes";
 import { loginEn, loginZh } from "./login";
+import { remoteAccessEn, remoteAccessZh } from "./remote-access";
 import { settingsEn, settingsZh } from "./settings";
 import { shellEn, shellZh } from "./shell";
+import { telemetryEn, telemetryZh } from "./telemetry";
 
 function keys(value: unknown, prefix = ""): string[] {
   if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -28,6 +31,9 @@ const modules = [
   ["hosts", hostsZh, hostsEn],
   ["kubernetes", kubernetesZh, kubernetesEn],
   ["ai-settings", aiSettingsZh, aiSettingsEn],
+  ["automations", automationsZh, automationsEn],
+  ["remote-access", remoteAccessZh, remoteAccessEn],
+  ["telemetry", telemetryZh, telemetryEn],
   ["settings", settingsZh, settingsEn],
   ["governance", governanceZh, governanceEn],
 ] as const;

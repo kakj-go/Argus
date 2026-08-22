@@ -14,6 +14,9 @@ func TestLocalRoundTripAndTamper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if ciphertext.Provider != ProviderLocalTest {
+		t.Fatalf("local provider = %q", ciphertext.Provider)
+	}
 	plaintext, err := provider.Decrypt(context.Background(), ciphertext)
 	if err != nil || string(plaintext) != "secret" {
 		t.Fatalf("round trip failed: %q %v", plaintext, err)
@@ -40,7 +43,7 @@ func TestOpenBaoRoundTripAndUnavailable(t *testing.T) {
 	defer server.Close()
 	provider := OpenBao{Address: server.URL, Token: "token", KeyID: "argus"}
 	ciphertext, err := provider.Encrypt(context.Background(), []byte("secret"))
-	if err != nil || ciphertext.KeyVersion != 3 {
+	if err != nil || ciphertext.Provider != ProviderOpenBaoTransit || ciphertext.KeyVersion != 3 {
 		t.Fatalf("encrypt: %#v %v", ciphertext, err)
 	}
 	plaintext, err := provider.Decrypt(context.Background(), ciphertext)

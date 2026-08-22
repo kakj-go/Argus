@@ -1,9 +1,6 @@
-import i18n from "./index";
-
 /**
  * 企业设置文案：组织与权限、Secret 和企业审计。
- * 模块清单在 i18n/index.ts 中维护；本模块由页面按需引入，
- * 因此这里通过 addResourceBundle 自注册，避免修改共享入口。
+ * 模块清单在 i18n/index.ts 中集中维护。
  */
 export const settingsZh = {
   settings: {
@@ -702,12 +699,3 @@ export const settingsEn = {
     },
   },
 };
-
-// 页面级模块自注册：index.ts 的模块清单由架构统一维护，
-// 这里在模块被页面引入时把资源注入已有 i18n 实例。
-for (const [lng, bundle] of [
-  ["zh-CN", settingsZh],
-  ["en-US", settingsEn],
-] as const) {
-  i18n.addResourceBundle(lng, "translation", bundle, true, true);
-}

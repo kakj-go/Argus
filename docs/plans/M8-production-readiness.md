@@ -14,7 +14,7 @@ M8 只在 arm64 Docker Desktop、本地临时 Kubernetes Namespace 和本地对�
 - [x] `M8-IDENTITY-01` TOTP Enrollment、登录 Challenge、十个单次 Recovery Code、五分钟 Step-up 和平台超级管理员强制 Enrollment。
 - [x] `M8-IDENTITY-02` MFA/密码变化撤销其他 Session、Step-up 和 Break Glass；TOTP counter 原子消费阻止重放。
 - [x] `M8-BREAKGLASS-01` 企业 Break Glass 要求 Step-up、原因、工单引用、十五分钟 TTL、显式开关和高优先级审计；不扩大 RBAC/DataScope。
-- [x] `M8-CRYPTO-01` 建立 `KeyWrappingProvider` 与 OpenBao Transit Adapter，Secret、模型凭证、MFA Secret、录像 DEK 和一次性结果使用版本化 Key Reference。
+- [x] `M8-CRYPTO-01` 建立 `KeyWrappingProvider` 与 OpenBao Transit Adapter，Secret、模型凭证、MFA Secret、录像 DEK 和一次性结果使用版本化 Key Reference；Envelope 持久化 provider 固定为 Evaluation 的 `local` 或 Local Hardening 的 `openbao_transit`，直接 `KeyWrappingProvider` 密文固定为 `local_test` 或 `openbao_transit`，数据库约束与解密路径使用同一套标识。
 - [x] `M8-DEPLOY-01` 增加 `local-hardening` Profile、单节点 OpenBao Raft、幂等 Bootstrap、受限 Transit Token 和最小 NetworkPolicy；静态 KEK 仅保留 Evaluation。
 - [x] `M8-DB-01` Server、Worker、Gateway、Direct Executor、Migration、Telemetry Ingest/Writer 使用独立 PostgreSQL Login；Telemetry 角色使用表级最小权限。
 - [x] `M8-BACKUP-01` 增加 `argusctl backup create|verify|list`，生成分块 AES-256-GCM 归档、组件 SHA-256 清单和 `0600` 恢复密钥。
@@ -43,7 +43,7 @@ M8 Kubernetes 验证：
 make e2e-m8-k8s
 ```
 
-该流程先复用 M2-M7 已完成的真实闭环证据，再安装 `local-hardening`，注入 Redis 清空、Server/Worker/Gateway/Writer/Query Pod 删除和 OpenBao 重启，随后创建加密备份、删除源 Namespace、恢复到唯一新 Namespace，并重新执行身份、授权、Card、录像和遥测验证。成功或失败都必须释放 Lease 并删除 Namespace/PVC。
+该流程先复用 M2-M7 已完成的真实闭环证据，再安装 `local-hardening`，通过 OpenBao Transit 创建 Secret 与 Credential，注入 Redis 清空、Server/Worker/Gateway/Writer/Query Pod 删除和 OpenBao 重启，随后创建加密备份、删除源 Namespace、恢复到唯一新 Namespace，并重新执行身份、授权、Secret/Credential、Card、录像和遥测验证。成功或失败都必须释放 Lease 并删除 Namespace/PVC。
 
 ## 完成规则
 

@@ -77,7 +77,7 @@ spec:
           args: [--record-id=%s]
           env:
             - name: ARGUS_DATABASE_URL
-              valueFrom: {secretKeyRef: {name: argus-telemetry-runtime, key: database-url}}
+              valueFrom: {secretKeyRef: {name: argus-telemetry-runtime, key: writer-database-url}}
             - {name: ARGUS_KAFKA_BROKERS, value: "argus-kafka-kafka-bootstrap:9093"}
             - {name: ARGUS_KAFKA_USERNAME, value: argus-telemetry}
             - name: ARGUS_KAFKA_PASSWORD

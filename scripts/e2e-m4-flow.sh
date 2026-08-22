@@ -6,7 +6,9 @@ APPROVER_JAR="${WORK_DIR}/approver.cookies"
 
 prepare_m4_dependencies() {
   log "building M4 Replay Model/OpenSandbox lifecycle image ${M4_REPLAY_IMAGE}"
-  retry 3 docker build --quiet -f deploy/docker/replay-model.Dockerfile -t "$M4_REPLAY_IMAGE" . >/dev/null
+  retry 3 docker build --progress=plain -f deploy/docker/replay-model.Dockerfile -t "$M4_REPLAY_IMAGE" . \
+    >"${ARTIFACT_DIR}/m4-replay-build.log" 2>&1
+  log "loading M4 Replay Model image into ${KUBE_CONTEXT}"
   case "$KUBE_CONTEXT" in
     kind-*) kind load docker-image --name "${KUBE_CONTEXT#kind-}" "$M4_REPLAY_IMAGE" ;;
     minikube) minikube image load "$M4_REPLAY_IMAGE" ;;
@@ -18,7 +20,7 @@ prepare_m4_dependencies() {
   esac
 
   openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-    -subj "/CN=${M4_REPLAY_HOST}" \
+    -subj "/CN=argus-replay-model" \
     -addext "subjectAltName=DNS:argus-replay-model,DNS:${M4_REPLAY_HOST}" \
     -keyout "${WORK_DIR}/m4-replay.key" -out "${WORK_DIR}/m4-replay.crt" >/dev/null 2>&1
   k -n "$SANDBOX_NS" create secret tls argus-replay-model-tls \
@@ -91,6 +93,7 @@ spec:
       ports: [{protocol: TCP, port: 8081}]
 EOF
   k -n "$SANDBOX_NS" rollout status deployment/argus-replay-model --timeout=180s >/dev/null
+  log "M4 Replay Model/OpenSandbox lifecycle endpoint is ready"
 }
 
 cleanup_m4() {
@@ -501,5 +504,7 @@ run_m4_api_flow() {
     ARGUS_M4_PLATFORM_USERNAME="$PLATFORM_USERNAME" ARGUS_M4_PLATFORM_PASSWORD="$PLATFORM_PASSWORD" \
     ARGUS_E2E_ARTIFACTS="$ARTIFACT_DIR/playwright-m4" \
     pnpm --filter @argus/enterprise exec playwright test e2e/m4-real.spec.ts --workers=1
+	mark_current_totp_used enterprise
+	mark_current_totp_used platform
 	unset M4_APPROVER_CSRF M4_APPROVER_NEW_PASSWORD
 }

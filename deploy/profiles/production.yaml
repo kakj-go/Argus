@@ -24,6 +24,8 @@ spec:
     platformHost: platform.argus.example.com
     setupHost: setup.argus.example.com
     connectorHost: connector.argus.example.com
+  security:
+    platformMfaRequired: false
   openSandbox:
     runtimeClassName: ""
     allowSharedRuntime: false

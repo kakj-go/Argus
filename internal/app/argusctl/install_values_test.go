@@ -60,6 +60,148 @@ func TestLocalHardeningInstallerValuesRenderCharts(t *testing.T) {
 	}
 }
 
+func TestInstallerProvidesRequiredObjectStoreBootstrapValues(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "evaluation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials := localHardeningTestCredentials()
+	data := dataValues(cfg, credentials)
+	images := data["images"].(map[string]any)
+	if got := images["minioClient"]; got != "minio/mc:RELEASE.2025-08-13T08-35-41Z" {
+		t.Fatalf("minioClient = %v", got)
+	}
+	platform := platformValues(cfg, credentials, "setup-secret", "idempotency", "cursor", "pending", "secret-kek")
+	runtimeValues := platform["runtime"].(map[string]any)
+	if got := runtimeValues["remoteOrigin"]; got != "http://localhost:9445" {
+		t.Fatalf("remoteOrigin = %v", got)
+	}
+}
+
+func TestPlatformMFARequirementIsExplicitAndDefaultsOff(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "evaluation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeValues := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek")["runtime"].(map[string]any)
+	if got := runtimeValues["platformMfaRequired"]; got != false {
+		t.Fatalf("platformMfaRequired = %v, want false", got)
+	}
+
+	cfg.Spec.Security.PlatformMFARequired = true
+	runtimeValues = platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek")["runtime"].(map[string]any)
+	if got := runtimeValues["platformMfaRequired"]; got != true {
+		t.Fatalf("platformMfaRequired = %v, want true", got)
+	}
+}
+
+func TestLocalProfilesAllowBothLoopbackHostnames(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []any{
+		"http://localhost:4173",
+		"http://localhost:4174",
+		"http://localhost:4175",
+		"http://localhost:4176",
+		"http://127.0.0.1:4173",
+		"http://127.0.0.1:4174",
+		"http://127.0.0.1:4175",
+		"http://127.0.0.1:4176",
+	}
+	for _, profile := range []string{"evaluation", "local-hardening"} {
+		t.Run(profile, func(t *testing.T) {
+			cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", profile+".yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek")
+			runtimeValues := values["runtime"].(map[string]any)
+			if got := runtimeValues["allowedOrigins"]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("allowedOrigins = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
+func TestLocalHardeningOpenBaoRunsAsNonRootWithoutConfigChown(t *testing.T) {
+	resources := renderDataResources(t, "local-hardening")
+	statefulSet := requireResource(t, resourcesByKind(resources, "StatefulSet"), "argus-openbao")
+	containers, found, err := unstructured.NestedSlice(statefulSet.Object, "spec", "template", "spec", "containers")
+	if err != nil || !found || len(containers) < 1 {
+		t.Fatalf("read OpenBao containers: found=%v err=%v", found, err)
+	}
+	container := containers[0].(map[string]any)
+	securityContext := container["securityContext"].(map[string]any)
+	if securityContext["runAsNonRoot"] != true || securityContext["runAsUser"] != int64(1000) || securityContext["runAsGroup"] != int64(1000) {
+		t.Fatalf("OpenBao security context = %#v", securityContext)
+	}
+	environment := container["env"].([]any)
+	if len(environment) != 1 || !reflect.DeepEqual(environment[0], map[string]any{"name": "SKIP_CHOWN", "value": "true"}) {
+		t.Fatalf("OpenBao environment = %#v", environment)
+	}
+}
+
+func TestLocalHardeningPostgreSQLRoleInitIsReadableAfterUserDrop(t *testing.T) {
+	resources := renderDataResources(t, "local-hardening")
+	statefulSet := requireResource(t, resourcesByKind(resources, "StatefulSet"), "argus-postgresql")
+	volumes, found, err := unstructured.NestedSlice(statefulSet.Object, "spec", "template", "spec", "volumes")
+	if err != nil || !found {
+		t.Fatalf("read PostgreSQL volumes: found=%v err=%v", found, err)
+	}
+	for _, rawVolume := range volumes {
+		volume := rawVolume.(map[string]any)
+		if volume["name"] != "role-init" {
+			continue
+		}
+		configMap := volume["configMap"].(map[string]any)
+		if configMap["defaultMode"] != int64(0o555) {
+			t.Fatalf("PostgreSQL role init defaultMode = %#v", configMap["defaultMode"])
+		}
+		return
+	}
+	t.Fatal("PostgreSQL role-init volume was not rendered")
+}
+
+func TestSetupTokenIsMountedIntoLocalWebOnly(t *testing.T) {
+	for _, test := range []struct {
+		profile string
+		want    bool
+	}{
+		{profile: "evaluation", want: true},
+		{profile: "local-hardening", want: true},
+		{profile: "production", want: false},
+	} {
+		t.Run(test.profile, func(t *testing.T) {
+			deployments := resourcesByKind(renderPlatformResources(t, test.profile), "Deployment")
+			web := requireResource(t, deployments, "argus-web")
+			volumes, _, err := unstructured.NestedSlice(web.Object, "spec", "template", "spec", "volumes")
+			if err != nil {
+				t.Fatal(err)
+			}
+			hasSetupToken := false
+			for _, rawVolume := range volumes {
+				volume := rawVolume.(map[string]any)
+				if volume["name"] == "setup-token" {
+					hasSetupToken = true
+				}
+			}
+			if hasSetupToken != test.want {
+				t.Fatalf("setup-token volume present = %v, want %v", hasSetupToken, test.want)
+			}
+		})
+	}
+}
+
 func TestPlatformChartAllowsTelemetryToBeDisabled(t *testing.T) {
 	root, err := findRepoRoot(".")
 	if err != nil {
@@ -264,6 +406,50 @@ func renderPlatformResources(t *testing.T, profile string) []*unstructured.Unstr
 	return resources
 }
 
+func renderDataResources(t *testing.T, profile string) []*unstructured.Unstructured {
+	t.Helper()
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", profile+".yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := loadLocalChart(root, "argus-data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := action.NewConfiguration(action.ConfigurationSetLogger(slog.NewTextHandler(io.Discard, nil)))
+	install := action.NewInstall(configuration)
+	install.ReleaseName = "argus-" + profile + "-data-render"
+	install.Namespace = cfg.Spec.Namespaces.System
+	install.DryRunStrategy = action.DryRunClient
+	rendered, err := install.Run(loaded, dataValues(cfg, localHardeningTestCredentials()))
+	if err != nil {
+		t.Fatalf("render data chart for %s: %v", profile, err)
+	}
+	accessor, err := release.NewAccessor(rendered)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewBufferString(accessor.Manifest()), 4096)
+	var resources []*unstructured.Unstructured
+	for {
+		resource := &unstructured.Unstructured{}
+		if err := decoder.Decode(resource); err == io.EOF {
+			break
+		} else if err != nil {
+			t.Fatalf("decode rendered data manifest for %s: %v", profile, err)
+		}
+		if resource.GetKind() != "" {
+			resources = append(resources, resource)
+		}
+	}
+	return resources
+}
+
 func resourcesByKind(resources []*unstructured.Unstructured, kind string) map[string]*unstructured.Unstructured {
 	result := make(map[string]*unstructured.Unstructured)
 	for _, resource := range resources {
@@ -378,5 +564,6 @@ func localHardeningTestCredentials() map[string]string {
 		"telemetry-clickhouse-query-password": "ch-query", "openbao-token": "openbao-token", "server-database-password": "server",
 		"worker-database-password": "worker", "gateway-database-password": "gateway", "direct-executor-database-password": "direct",
 		"migration-database-password": "migration", "telemetry-ingest-database-password": "ingest", "telemetry-writer-database-password": "writer",
+		"telemetry-query-database-password": "query",
 	}
 }

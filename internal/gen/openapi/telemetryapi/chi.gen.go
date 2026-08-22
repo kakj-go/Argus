@@ -29,6 +29,15 @@ type ServerInterface interface {
 	// PreviewKubernetesCollectorAction Preview a deterministic Kubernetes Collector action.
 	// (POST /enterprise/kubernetes-clusters/{id}/collector/actions/preview-{action})
 	PreviewKubernetesCollectorAction(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, action string, params PreviewKubernetesCollectorActionParams)
+	// QueryLogsKQL Execute a KQL log query.
+	// (POST /enterprise/logs/query)
+	QueryLogsKQL(w http.ResponseWriter, r *http.Request)
+	// QueryMetricsInstant Execute a PromQL instant query.
+	// (POST /enterprise/metrics/query)
+	QueryMetricsInstant(w http.ResponseWriter, r *http.Request)
+	// QueryMetricsRange Execute a PromQL range query.
+	// (POST /enterprise/metrics/query_range)
+	QueryMetricsRange(w http.ResponseWriter, r *http.Request)
 	// ListCollectionClaims List authorized Collection Claims.
 	// (GET /enterprise/telemetry/collection-claims)
 	ListCollectionClaims(w http.ResponseWriter, r *http.Request, params ListCollectionClaimsParams)
@@ -50,18 +59,9 @@ type ServerInterface interface {
 	// ListCollectionProfiles List versioned Collection Profiles.
 	// (GET /enterprise/telemetry/profiles)
 	ListCollectionProfiles(w http.ResponseWriter, r *http.Request)
-	// QueryTelemetryLogs Query authorized Logs.
-	// (POST /enterprise/telemetry/query/logs)
-	QueryTelemetryLogs(w http.ResponseWriter, r *http.Request)
-	// QueryTelemetryMetrics Query authorized Metrics.
-	// (POST /enterprise/telemetry/query/metrics)
-	QueryTelemetryMetrics(w http.ResponseWriter, r *http.Request)
 	// QueryTelemetryOverview Query the Card-safe Telemetry overview.
 	// (POST /enterprise/telemetry/query/overview)
 	QueryTelemetryOverview(w http.ResponseWriter, r *http.Request)
-	// QueryTelemetryTraces Query authorized Traces.
-	// (POST /enterprise/telemetry/query/traces)
-	QueryTelemetryTraces(w http.ResponseWriter, r *http.Request)
 	// ListTelemetryRoutes List authorized Telemetry routes.
 	// (GET /enterprise/telemetry/routes)
 	ListTelemetryRoutes(w http.ResponseWriter, r *http.Request)
@@ -71,6 +71,9 @@ type ServerInterface interface {
 	// GetTelemetryUsage Get authorized Telemetry usage.
 	// (GET /enterprise/telemetry/usage)
 	GetTelemetryUsage(w http.ResponseWriter, r *http.Request)
+	// QueryTracesGraphQL Execute a read-only SkyWalking GraphQL trace query.
+	// (POST /enterprise/traces/graphql)
+	QueryTracesGraphQL(w http.ResponseWriter, r *http.Request)
 	// EnrollTelemetryCollector Exchange a one-time Collector Enrollment Token and CSR for a Telemetry client certificate.
 	// (POST /telemetry/collectors/enroll)
 	EnrollTelemetryCollector(w http.ResponseWriter, r *http.Request, params EnrollTelemetryCollectorParams)
@@ -101,6 +104,24 @@ func (_ Unimplemented) GetKubernetesCollector(w http.ResponseWriter, r *http.Req
 // PreviewKubernetesCollectorAction Preview a deterministic Kubernetes Collector action.
 // (POST /enterprise/kubernetes-clusters/{id}/collector/actions/preview-{action})
 func (_ Unimplemented) PreviewKubernetesCollectorAction(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, action string, params PreviewKubernetesCollectorActionParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// QueryLogsKQL Execute a KQL log query.
+// (POST /enterprise/logs/query)
+func (_ Unimplemented) QueryLogsKQL(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// QueryMetricsInstant Execute a PromQL instant query.
+// (POST /enterprise/metrics/query)
+func (_ Unimplemented) QueryMetricsInstant(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// QueryMetricsRange Execute a PromQL range query.
+// (POST /enterprise/metrics/query_range)
+func (_ Unimplemented) QueryMetricsRange(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -146,27 +167,9 @@ func (_ Unimplemented) ListCollectionProfiles(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// QueryTelemetryLogs Query authorized Logs.
-// (POST /enterprise/telemetry/query/logs)
-func (_ Unimplemented) QueryTelemetryLogs(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// QueryTelemetryMetrics Query authorized Metrics.
-// (POST /enterprise/telemetry/query/metrics)
-func (_ Unimplemented) QueryTelemetryMetrics(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // QueryTelemetryOverview Query the Card-safe Telemetry overview.
 // (POST /enterprise/telemetry/query/overview)
 func (_ Unimplemented) QueryTelemetryOverview(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// QueryTelemetryTraces Query authorized Traces.
-// (POST /enterprise/telemetry/query/traces)
-func (_ Unimplemented) QueryTelemetryTraces(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -185,6 +188,12 @@ func (_ Unimplemented) CreateTelemetryRouteTest(w http.ResponseWriter, r *http.R
 // GetTelemetryUsage Get authorized Telemetry usage.
 // (GET /enterprise/telemetry/usage)
 func (_ Unimplemented) GetTelemetryUsage(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// QueryTracesGraphQL Execute a read-only SkyWalking GraphQL trace query.
+// (POST /enterprise/traces/graphql)
+func (_ Unimplemented) QueryTracesGraphQL(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -418,6 +427,48 @@ func (siw *ServerInterfaceWrapper) PreviewKubernetesCollectorAction(w http.Respo
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PreviewKubernetesCollectorAction(w, r, id, action, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// QueryLogsKQL operation middleware
+func (siw *ServerInterfaceWrapper) QueryLogsKQL(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.QueryLogsKQL(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// QueryMetricsInstant operation middleware
+func (siw *ServerInterfaceWrapper) QueryMetricsInstant(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.QueryMetricsInstant(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// QueryMetricsRange operation middleware
+func (siw *ServerInterfaceWrapper) QueryMetricsRange(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.QueryMetricsRange(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -696,53 +747,11 @@ func (siw *ServerInterfaceWrapper) ListCollectionProfiles(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
-// QueryTelemetryLogs operation middleware
-func (siw *ServerInterfaceWrapper) QueryTelemetryLogs(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.QueryTelemetryLogs(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// QueryTelemetryMetrics operation middleware
-func (siw *ServerInterfaceWrapper) QueryTelemetryMetrics(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.QueryTelemetryMetrics(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // QueryTelemetryOverview operation middleware
 func (siw *ServerInterfaceWrapper) QueryTelemetryOverview(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.QueryTelemetryOverview(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// QueryTelemetryTraces operation middleware
-func (siw *ServerInterfaceWrapper) QueryTelemetryTraces(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.QueryTelemetryTraces(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -839,6 +848,20 @@ func (siw *ServerInterfaceWrapper) GetTelemetryUsage(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetTelemetryUsage(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// QueryTracesGraphQL operation middleware
+func (siw *ServerInterfaceWrapper) QueryTracesGraphQL(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.QueryTracesGraphQL(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1040,16 +1063,19 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/enterprise/telemetry/usage", wrapper.GetTelemetryUsage)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/telemetry/query/metrics", wrapper.QueryTelemetryMetrics)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/telemetry/query/logs", wrapper.QueryTelemetryLogs)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/telemetry/query/traces", wrapper.QueryTelemetryTraces)
-	})
-	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/enterprise/telemetry/query/overview", wrapper.QueryTelemetryOverview)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/enterprise/metrics/query", wrapper.QueryMetricsInstant)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/enterprise/metrics/query_range", wrapper.QueryMetricsRange)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/enterprise/logs/query", wrapper.QueryLogsKQL)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/enterprise/traces/graphql", wrapper.QueryTracesGraphQL)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/enterprise/hosts/{id}/collector", wrapper.GetHostCollector)
@@ -1236,6 +1262,123 @@ type PreviewKubernetesCollectorActiondefaultJSONResponse struct {
 }
 
 func (response PreviewKubernetesCollectorActiondefaultJSONResponse) VisitPreviewKubernetesCollectorActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueryLogsKQLRequestObject struct {
+	Body *QueryLogsKQLJSONRequestBody
+}
+
+type QueryLogsKQLResponseObject interface {
+	VisitQueryLogsKQLResponse(w http.ResponseWriter) error
+}
+
+type QueryLogsKQL200JSONResponse KQLQueryResponse
+
+func (response QueryLogsKQL200JSONResponse) VisitQueryLogsKQLResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueryLogsKQLdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response QueryLogsKQLdefaultJSONResponse) VisitQueryLogsKQLResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueryMetricsInstantRequestObject struct {
+	Body *QueryMetricsInstantJSONRequestBody
+}
+
+type QueryMetricsInstantResponseObject interface {
+	VisitQueryMetricsInstantResponse(w http.ResponseWriter) error
+}
+
+type QueryMetricsInstant200JSONResponse PrometheusQueryResponse
+
+func (response QueryMetricsInstant200JSONResponse) VisitQueryMetricsInstantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueryMetricsInstantdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response QueryMetricsInstantdefaultJSONResponse) VisitQueryMetricsInstantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueryMetricsRangeRequestObject struct {
+	Body *QueryMetricsRangeJSONRequestBody
+}
+
+type QueryMetricsRangeResponseObject interface {
+	VisitQueryMetricsRangeResponse(w http.ResponseWriter) error
+}
+
+type QueryMetricsRange200JSONResponse PrometheusQueryResponse
+
+func (response QueryMetricsRange200JSONResponse) VisitQueryMetricsRangeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueryMetricsRangedefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response QueryMetricsRangedefaultJSONResponse) VisitQueryMetricsRangeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -1520,84 +1663,6 @@ func (response ListCollectionProfilesdefaultJSONResponse) VisitListCollectionPro
 	return err
 }
 
-type QueryTelemetryLogsRequestObject struct {
-	Body *QueryTelemetryLogsJSONRequestBody
-}
-
-type QueryTelemetryLogsResponseObject interface {
-	VisitQueryTelemetryLogsResponse(w http.ResponseWriter) error
-}
-
-type QueryTelemetryLogs200JSONResponse LogsResult
-
-func (response QueryTelemetryLogs200JSONResponse) VisitQueryTelemetryLogsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type QueryTelemetryLogsdefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response QueryTelemetryLogsdefaultJSONResponse) VisitQueryTelemetryLogsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type QueryTelemetryMetricsRequestObject struct {
-	Body *QueryTelemetryMetricsJSONRequestBody
-}
-
-type QueryTelemetryMetricsResponseObject interface {
-	VisitQueryTelemetryMetricsResponse(w http.ResponseWriter) error
-}
-
-type QueryTelemetryMetrics200JSONResponse MetricsResult
-
-func (response QueryTelemetryMetrics200JSONResponse) VisitQueryTelemetryMetricsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type QueryTelemetryMetricsdefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response QueryTelemetryMetricsdefaultJSONResponse) VisitQueryTelemetryMetricsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 type QueryTelemetryOverviewRequestObject struct {
 	Body *QueryTelemetryOverviewJSONRequestBody
 }
@@ -1626,45 +1691,6 @@ type QueryTelemetryOverviewdefaultJSONResponse struct {
 }
 
 func (response QueryTelemetryOverviewdefaultJSONResponse) VisitQueryTelemetryOverviewResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type QueryTelemetryTracesRequestObject struct {
-	Body *QueryTelemetryTracesJSONRequestBody
-}
-
-type QueryTelemetryTracesResponseObject interface {
-	VisitQueryTelemetryTracesResponse(w http.ResponseWriter) error
-}
-
-type QueryTelemetryTraces200JSONResponse TracesResult
-
-func (response QueryTelemetryTraces200JSONResponse) VisitQueryTelemetryTracesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type QueryTelemetryTracesdefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response QueryTelemetryTracesdefaultJSONResponse) VisitQueryTelemetryTracesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -1799,6 +1825,45 @@ type GetTelemetryUsagedefaultJSONResponse struct {
 }
 
 func (response GetTelemetryUsagedefaultJSONResponse) VisitGetTelemetryUsageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueryTracesGraphQLRequestObject struct {
+	Body *QueryTracesGraphQLJSONRequestBody
+}
+
+type QueryTracesGraphQLResponseObject interface {
+	VisitQueryTracesGraphQLResponse(w http.ResponseWriter) error
+}
+
+type QueryTracesGraphQL200JSONResponse SkyWalkingGraphQLResponse
+
+func (response QueryTracesGraphQL200JSONResponse) VisitQueryTracesGraphQLResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueryTracesGraphQLdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response QueryTracesGraphQLdefaultJSONResponse) VisitQueryTracesGraphQLResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {

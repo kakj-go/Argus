@@ -10,7 +10,8 @@ func TestTelemetryValidateModeDependencies(t *testing.T) {
 		{
 			name: "query needs Redis ClickHouse and mTLS",
 			config: Telemetry{
-				Mode: ModeQueryForTest, ClickHouseAddress: "clickhouse:9000", ClickHouseUsername: "query", ClickHousePassword: "secret",
+				Mode: ModeQueryForTest, DatabaseURL: "postgres://argus", ClickHouseAddress: "clickhouse:9000", ClickHouseUsername: "query", ClickHousePassword: "secret",
+				ClickHouseSchemaUsername: "schema", ClickHouseSchemaPassword: "schema-secret",
 				RedisURL: "redis://redis", QueryConcurrency: 4, QueryAddress: ":9447", TLSCertPath: "tls.crt", TLSKeyPath: "tls.key", ClientCAPath: "ca.crt",
 			},
 		},
@@ -44,6 +45,16 @@ func TestTelemetryQueryDoesNotAcceptMissingClickHouse(t *testing.T) {
 	config := Telemetry{Mode: ModeQueryForTest, QueryAddress: ":9447", TLSCertPath: "tls.crt", TLSKeyPath: "tls.key", ClientCAPath: "ca.crt"}
 	if err := config.Validate(); err == nil {
 		t.Fatal("query configuration without ClickHouse was accepted")
+	}
+}
+
+func TestTelemetryQueryRequiresDedicatedSchemaCredentials(t *testing.T) {
+	config := Telemetry{
+		Mode: ModeQueryForTest, DatabaseURL: "postgres://argus", ClickHouseAddress: "clickhouse:9000", ClickHouseUsername: "query", ClickHousePassword: "secret",
+		RedisURL: "redis://redis", QueryConcurrency: 4, QueryAddress: ":9447", TLSCertPath: "tls.crt", TLSKeyPath: "tls.key", ClientCAPath: "ca.crt",
+	}
+	if err := config.Validate(); err == nil {
+		t.Fatal("query configuration without dedicated schema credentials was accepted")
 	}
 }
 

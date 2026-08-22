@@ -307,14 +307,16 @@ paths:
     $ref: ./paths/m7.yaml#/binding_preview
   /enterprise/telemetry/usage:
     $ref: ./paths/m7.yaml#/usage_item
-  /enterprise/telemetry/query/metrics:
-    $ref: ./paths/m7.yaml#/metrics_query
-  /enterprise/telemetry/query/logs:
-    $ref: ./paths/m7.yaml#/logs_query
-  /enterprise/telemetry/query/traces:
-    $ref: ./paths/m7.yaml#/traces_query
   /enterprise/telemetry/query/overview:
     $ref: ./paths/m7.yaml#/overview_query
+  /enterprise/metrics/query:
+    $ref: ./paths/m7.yaml#/metrics_query
+  /enterprise/metrics/query_range:
+    $ref: ./paths/m7.yaml#/metrics_query_range
+  /enterprise/logs/query:
+    $ref: ./paths/m7.yaml#/logs_query
+  /enterprise/traces/graphql:
+    $ref: ./paths/m7.yaml#/traces_graphql
   /enterprise/hosts/{id}/collector:
     $ref: ./paths/m7.yaml#/host_collector_item
   /enterprise/hosts/{id}/collector/actions/preview-{action}:
@@ -471,12 +473,6 @@ components:
       $ref: ./components/m7.yaml#/components/schemas/CollectionClaim
     KubernetesNodeHostBinding:
       $ref: ./components/m7.yaml#/components/schemas/KubernetesNodeHostBinding
-    MetricsResult:
-      $ref: ./components/m7.yaml#/components/schemas/MetricsResult
-    LogsResult:
-      $ref: ./components/m7.yaml#/components/schemas/LogsResult
-    TracesResult:
-      $ref: ./components/m7.yaml#/components/schemas/TracesResult
     TelemetryOverview:
       $ref: ./components/m7.yaml#/components/schemas/TelemetryOverview
     ConversationEvent:
@@ -505,10 +501,6 @@ components:
       $ref: ../schemas/agent/agent.schema.json#/$defs/ModelCall
     StreamEventEnvelope:
       $ref: ../schemas/stream/stream.schema.json
-    TelemetryQuery:
-      $ref: ../schemas/telemetry/query.schema.json
-    TrustedTelemetryIdentity:
-      $ref: ../schemas/telemetry/query.schema.json#/$defs/TrustedTelemetryIdentity
     PlatformState:
       $ref: ./components/m2.yaml#/components/schemas/PlatformState
     SetupStatus:

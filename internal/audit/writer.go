@@ -18,6 +18,10 @@ var allowedDetailKeys = map[string]bool{
 	"summary": true, "reason": true, "before": true, "after": true,
 	"affected_count": true, "status": true, "username": true,
 	"enterprise_code": true, "authorization_version": true,
+	"language": true, "expression_hash": true, "plan_hash": true,
+	"resource_count": true, "elapsed_ms": true, "scanned_bytes": true,
+	"scanned_rows": true, "loaded_samples": true, "returned_rows": true,
+	"success": true, "error": true,
 }
 
 type Entry struct {

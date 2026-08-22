@@ -84,6 +84,10 @@ spec:
         resource: {type: group, name: argus-telemetry-writer-v1, patternType: literal}
       - operations: [Read]
         resource: {type: group, name: argus-telemetry-dlq-replay, patternType: literal}
+      - operations: [Read, Write, Describe]
+        resource: {type: topic, name: argus-installation-check, patternType: literal}
+      - operations: [Read]
+        resource: {type: group, name: argus-installation-check-, patternType: prefix}
       - operations: [IdempotentWrite]
         resource: {type: cluster, name: kafka-cluster, patternType: literal}
 ---
@@ -112,9 +116,11 @@ stringData:
   {{- if .Values.runtime.databaseRolesEnabled }}
   ingest-database-url: {{ printf "postgres://argus_telemetry_ingest:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryIngestDatabasePassword is required" .Values.runtime.telemetryIngestDatabasePassword) $system | quote }}
   writer-database-url: {{ printf "postgres://argus_telemetry_writer:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryWriterDatabasePassword is required" .Values.runtime.telemetryWriterDatabasePassword) $system | quote }}
+  query-database-url: {{ printf "postgres://argus_telemetry_query:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryQueryDatabasePassword is required" .Values.runtime.telemetryQueryDatabasePassword) $system | quote }}
   {{- else }}
   ingest-database-url: {{ printf "postgres://argus:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.postgresqlPassword is required" .Values.runtime.postgresqlPassword) $system | quote }}
   writer-database-url: {{ printf "postgres://argus:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.postgresqlPassword is required" .Values.runtime.postgresqlPassword) $system | quote }}
+  query-database-url: {{ printf "postgres://argus:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.postgresqlPassword is required" .Values.runtime.postgresqlPassword) $system | quote }}
   {{- end }}
 ---
 {{- range $mode := list "ingest" "writer" "query" }}
@@ -147,12 +153,14 @@ spec:
           args: [--mode={{ $mode }}]
           env:
             - {name: ARGUS_HEALTH_ADDRESS, value: ":8081"}
-            {{- if or (eq $mode "ingest") (eq $mode "writer") }}
+            {{- if or (eq $mode "ingest") (eq $mode "writer") (eq $mode "query") }}
             - name: ARGUS_DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: argus-telemetry-runtime
-                  key: {{ ternary "ingest-database-url" "writer-database-url" (eq $mode "ingest") }}
+                  key: {{ if eq $mode "ingest" }}ingest-database-url{{ else if eq $mode "writer" }}writer-database-url{{ else }}query-database-url{{ end }}
+            {{- end }}
+            {{- if or (eq $mode "ingest") (eq $mode "writer") }}
             - {name: ARGUS_KAFKA_BROKERS, value: {{ printf "argus-kafka-kafka-bootstrap.%s.svc:9093" $observability | quote }}}
             - {name: ARGUS_KAFKA_USERNAME, value: argus-telemetry}
             - name: ARGUS_KAFKA_PASSWORD
@@ -177,6 +185,11 @@ spec:
                 secretKeyRef:
                   name: argus-telemetry-clickhouse
                   key: {{ ternary "writer-password" "query-password" (eq $mode "writer") }}
+            {{- if eq $mode "query" }}
+            - {name: ARGUS_CLICKHOUSE_SCHEMA_USERNAME, value: argus_telemetry_migration}
+            - name: ARGUS_CLICKHOUSE_SCHEMA_PASSWORD
+              valueFrom: {secretKeyRef: {name: argus-telemetry-clickhouse, key: migration-password}}
+            {{- end }}
             {{- end }}
             {{- if or (eq $mode "ingest") (eq $mode "query") }}
             - {name: ARGUS_TELEMETRY_TLS_CERT_PATH, value: /var/run/secrets/argus/telemetry-server/tls.crt}
@@ -273,7 +286,7 @@ spec:
     {{- else }}
     - to:
         - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $system }}}}
-      ports: [{protocol: TCP, port: 6379}]
+      ports: [{protocol: TCP, port: 5432}, {protocol: TCP, port: 6379}]
     - to:
         - podSelector: {matchLabels: {clickhouse.altinity.com/chi: argus-clickhouse}}
       ports: [{protocol: TCP, port: 9000}]

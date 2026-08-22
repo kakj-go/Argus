@@ -1,5 +1,9 @@
 # 产品定位与总体架构
 
+## 遥测查询边界
+
+Argus 不暴露任意 SQL。PromQL、KQL 和 SkyWalking GraphQL 在一个 Query 进程内由独立 Engine 执行，统一经过权限、预算和结果投影后查询 ClickHouse；Web、Agent、Card 复用同一结果裁剪与脱敏链路。三种协议保留各自的外部响应模型，不再经过统一 Query Envelope。
+
 ## 1. 产品定位
 
 Argus 的目标是构建一个 AI 原生的 AIOps SaaS 控制平面，而不是在传统运维后台上增加一个聊天入口。

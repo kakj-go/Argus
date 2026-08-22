@@ -179,8 +179,12 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	}
 
 	setupSecret := cfg.Spec.ReleaseID + "-generated-secrets"
-	if err := ensureSetupToken(ctx, clients, cfg.Spec.Namespaces.System, setupSecret); err != nil {
+	setupToken, err := ensureSetupToken(ctx, clients, cfg.Spec.Namespaces.System, setupSecret)
+	if err != nil {
 		return err
+	}
+	if setupToken.Created {
+		printSetupToken(a.stdout, setupToken.Token, setupToken.ExpiresAt)
 	}
 	idempotencyKey, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, setupSecret, "idempotency-encryption-key", 32)
 	if err != nil {
@@ -244,7 +248,8 @@ func dataValues(cfg *InstallConfig, secrets map[string]string) map[string]any {
 		"images": map[string]any{
 			"registry": cfg.Spec.Images.Registry, "tag": cfg.Spec.Images.Tag, "pullPolicy": cfg.Spec.Images.PullPolicy,
 			"postgresql": "postgres:18.6-alpine", "redis": "redis:8.10.0-alpine", "minio": cfg.Image("minio"),
-			"clickhouse": "clickhouse/clickhouse-server:26.3.17.110-alpine",
+			"minioClient": "minio/mc:RELEASE.2025-08-13T08-35-41Z",
+			"clickhouse":  "clickhouse/clickhouse-server:26.3.17.110-alpine",
 		},
 		"openbao": map[string]any{
 			"enabled": cfg.Spec.Profile == "local-hardening", "token": secrets["openbao-token"],
@@ -255,6 +260,7 @@ func dataValues(cfg *InstallConfig, secrets map[string]string) map[string]any {
 			"workerPassword": secrets["worker-database-password"], "gatewayPassword": secrets["gateway-database-password"],
 			"directExecutorPassword": secrets["direct-executor-database-password"], "migrationPassword": secrets["migration-database-password"],
 			"telemetryIngestPassword": secrets["telemetry-ingest-database-password"], "telemetryWriterPassword": secrets["telemetry-writer-database-password"],
+			"telemetryQueryPassword": secrets["telemetry-query-database-password"],
 		},
 		"persistence": map[string]any{
 			"postgresql": cfg.Spec.Persistence.PostgreSQL, "redis": cfg.Spec.Persistence.Redis, "minio": cfg.Spec.Persistence.MinIO,
@@ -273,7 +279,16 @@ func dataValues(cfg *InstallConfig, secrets map[string]string) map[string]any {
 }
 
 func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK string) map[string]any {
-	allowedOrigins := []any{"http://localhost:4173", "http://localhost:4174", "http://localhost:4175"}
+	allowedOrigins := []any{
+		"http://localhost:4173",
+		"http://localhost:4174",
+		"http://localhost:4175",
+		"http://localhost:4176",
+		"http://127.0.0.1:4173",
+		"http://127.0.0.1:4174",
+		"http://127.0.0.1:4175",
+		"http://127.0.0.1:4176",
+	}
 	secureCookies := false
 	if cfg.Spec.Profile == "production" {
 		allowedOrigins = []any{
@@ -296,6 +311,7 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"connectorEnrollmentURL":     connectorEnrollmentURL,
 		"connectorGatewayAddress":    connectorGatewayAddress,
 		"objectStoreUrl":             "http://argus-minio:9000", "objectStoreBucket": "argus-remote-recordings",
+		"remoteOrigin":         "http://localhost:9445",
 		"objectStoreAccessKey": credentials["minio-root-user"], "objectStoreSecretKey": credentials["minio-root-password"],
 		"telemetryClickhouseMigrationPassword": credentials["telemetry-clickhouse-migration-password"],
 		"telemetryClickhouseWriterPassword":    credentials["telemetry-clickhouse-writer-password"],
@@ -309,7 +325,7 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"otelcolSigningKeyId": cfg.Spec.Telemetry.SigningKeyID, "otelcolSigningPublicKey": cfg.Spec.Telemetry.SigningPublicKey,
 		"otelcolKubernetesImage": cfg.Image("argus-otelcol"),
 		"allowedOrigins":         allowedOrigins, "secureCookies": secureCookies,
-		"keyWrappingMode": "local_test", "breakGlassEnabled": false, "databaseRolesEnabled": false,
+		"keyWrappingMode": "local_test", "breakGlassEnabled": false, "platformMfaRequired": cfg.Spec.Security.PlatformMFARequired, "databaseRolesEnabled": false,
 	}
 	if cfg.Spec.Profile == "local-hardening" {
 		runtimeValues["keyWrappingMode"] = "openbao_transit"
@@ -325,6 +341,7 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		runtimeValues["migrationDatabasePassword"] = credentials["migration-database-password"]
 		runtimeValues["telemetryIngestDatabasePassword"] = credentials["telemetry-ingest-database-password"]
 		runtimeValues["telemetryWriterDatabasePassword"] = credentials["telemetry-writer-database-password"]
+		runtimeValues["telemetryQueryDatabasePassword"] = credentials["telemetry-query-database-password"]
 	} else {
 		runtimeValues["secretKEKKeyring"] = map[string]any{"current_version": 1, "keys": map[string]any{"1": secretKEK}}
 	}
@@ -473,7 +490,7 @@ func ensureCredentials(ctx context.Context, clients *kubeClients, cfg *InstallCo
 		"telemetry-clickhouse-query-password": 24, "openbao-token": 32,
 		"server-database-password": 24, "worker-database-password": 24, "gateway-database-password": 24,
 		"direct-executor-database-password": 24, "migration-database-password": 24,
-		"telemetry-ingest-database-password": 24, "telemetry-writer-database-password": 24,
+		"telemetry-ingest-database-password": 24, "telemetry-writer-database-password": 24, "telemetry-query-database-password": 24,
 	} {
 		value, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, cfg.Spec.ReleaseID+"-generated-credentials", key, size)
 		if err != nil {
@@ -530,7 +547,13 @@ func setSecretValue(ctx context.Context, clients *kubeClients, namespace, name, 
 	return nil
 }
 
-func ensureSetupToken(ctx context.Context, clients *kubeClients, namespace, name string) error {
+type setupTokenResult struct {
+	Token     string
+	ExpiresAt time.Time
+	Created   bool
+}
+
+func ensureSetupToken(ctx context.Context, clients *kubeClients, namespace, name string) (setupTokenResult, error) {
 	secrets := clients.typed.CoreV1().Secrets(namespace)
 	secret, err := secrets.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
@@ -538,26 +561,27 @@ func ensureSetupToken(ctx context.Context, clients *kubeClients, namespace, name
 	}
 	expiresAt, parseErr := time.Parse(time.RFC3339, string(secret.Data["setup-token-expires-at"]))
 	if len(secret.Data["setup-token"]) > 0 && parseErr == nil && time.Now().UTC().Before(expiresAt) {
-		return nil
+		return setupTokenResult{ExpiresAt: expiresAt}, nil
 	}
 	token, err := randomSecret(32)
 	if err != nil {
-		return err
+		return setupTokenResult{}, err
 	}
+	expiresAt = time.Now().UTC().Add(24 * time.Hour)
 	if secret.Data == nil {
 		secret.Data = map[string][]byte{}
 	}
 	secret.Data["setup-token"] = []byte(token)
-	secret.Data["setup-token-expires-at"] = []byte(time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339))
+	secret.Data["setup-token-expires-at"] = []byte(expiresAt.Format(time.RFC3339))
 	if secret.ResourceVersion == "" {
 		_, err = secrets.Create(ctx, secret, metav1.CreateOptions{})
 	} else {
 		_, err = secrets.Update(ctx, secret, metav1.UpdateOptions{})
 	}
 	if err != nil {
-		return fmt.Errorf("persist setup token secret %s/%s: %w", namespace, name, err)
+		return setupTokenResult{}, fmt.Errorf("persist setup token secret %s/%s: %w", namespace, name, err)
 	}
-	return nil
+	return setupTokenResult{Token: token, ExpiresAt: expiresAt, Created: true}, nil
 }
 
 func randomSecret(size int) (string, error) {
@@ -576,6 +600,9 @@ func waitForData(ctx context.Context, clients *kubeClients, cfg *InstallConfig) 
 		if err := waitForStatefulSet(ctx, clients, item.namespace, item.name, 12*time.Minute); err != nil {
 			return err
 		}
+	}
+	if err := waitForJob(ctx, clients, cfg.Spec.Namespaces.System, "argus-minio-bucket-init", 10*time.Minute); err != nil {
+		return fmt.Errorf("initialize MinIO buckets: %w", err)
 	}
 	readyCondition := func(object map[string]any) bool {
 		status, _ := object["status"].(map[string]any)
@@ -645,7 +672,11 @@ func waitForDeployment(ctx context.Context, clients *kubeClients, namespace, nam
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		deployment, err := clients.typed.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err == nil && deployment.Status.ObservedGeneration >= deployment.Generation && deployment.Status.AvailableReplicas == *deployment.Spec.Replicas {
+		if err == nil && deployment.Spec.Replicas != nil &&
+			deployment.Status.ObservedGeneration >= deployment.Generation &&
+			deployment.Status.UpdatedReplicas == *deployment.Spec.Replicas &&
+			deployment.Status.AvailableReplicas == *deployment.Spec.Replicas &&
+			deployment.Status.UnavailableReplicas == 0 {
 			return nil
 		}
 		select {

@@ -34,6 +34,39 @@ func TestClaimAndNodeBindingSQLPreservesIsolationAndEvidenceState(t *testing.T) 
 	}
 }
 
+func TestTelemetrySchemaV3UsesTenantBootstrap(t *testing.T) {
+	_, current, _, _ := runtime.Caller(0)
+	root := filepath.Clean(filepath.Join(filepath.Dir(current), "..", ".."))
+	migration := readTestFile(t, filepath.Join(root, "migrations", "clickhouse", "00001_m7_telemetry.sql"))
+	for _, required := range []string{"Schema v3", "SELECT 3 WHERE NOT EXISTS", "schema_versions", "metric_series_local"} {
+		if !strings.Contains(migration, required) {
+			t.Fatalf("telemetry schema v3 is missing invariant %q", required)
+		}
+	}
+	chartMigration := readTestFile(t, filepath.Join(root, "deploy", "helm", "argus-telemetry-pipeline", "files", "00001_m7_telemetry.sql"))
+	if migration != chartMigration {
+		t.Fatal("ClickHouse migration and Helm schema copy differ")
+	}
+}
+
+func TestTelemetryQueryRoleHasOnlyRequiredTenantLifecycleWrites(t *testing.T) {
+	_, current, _, _ := runtime.Caller(0)
+	root := filepath.Clean(filepath.Join(filepath.Dir(current), "..", ".."))
+	migration := readTestFile(t, filepath.Join(root, "migrations", "postgresql", "00008_m10_telemetry_tenants.sql"))
+	for _, required := range []string{
+		"GRANT SELECT, INSERT, UPDATE ON enterprise_telemetry_tables TO argus_telemetry_query",
+		"GRANT SELECT, INSERT, UPDATE ON audit_chain_heads TO argus_telemetry_query",
+		"GRANT INSERT ON audit_events TO argus_telemetry_query",
+	} {
+		if !strings.Contains(migration, required) {
+			t.Fatalf("M10 query role migration is missing %q", required)
+		}
+	}
+	if strings.Contains(migration, "GRANT DELETE ON enterprise_telemetry_tables TO argus_telemetry_query") {
+		t.Fatal("M10 query role unexpectedly has tenant readiness delete permission")
+	}
+}
+
 func readTestFile(t *testing.T, path string) string {
 	t.Helper()
 	value, err := os.ReadFile(path)

@@ -60,6 +60,13 @@
             "connectorHost": {"type": "string"}
           }
         },
+        "security": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "platformMfaRequired": {"type": "boolean", "default": false}
+          }
+        },
         "openSandbox": {
           "type": "object",
           "additionalProperties": false,

@@ -71,6 +71,7 @@ type Server struct {
 	OpenBaoToken              string
 	OpenBaoTransitKey         string
 	BreakGlassEnabled         bool
+	PlatformMFARequired       bool
 }
 
 func LoadServer() Server {
@@ -81,6 +82,7 @@ func LoadServer() Server {
 
 	secureCookies, _ := strconv.ParseBool(os.Getenv("ARGUS_SECURE_COOKIES"))
 	breakGlassEnabled, _ := strconv.ParseBool(os.Getenv("ARGUS_BREAK_GLASS_ENABLED"))
+	platformMFARequired, _ := strconv.ParseBool(os.Getenv("ARGUS_PLATFORM_MFA_REQUIRED"))
 	key, _ := base64.RawURLEncoding.DecodeString(os.Getenv("ARGUS_IDEMPOTENCY_ENCRYPTION_KEY"))
 	cursorKey, _ := base64.RawURLEncoding.DecodeString(os.Getenv("ARGUS_CURSOR_SIGNING_KEY"))
 	pendingActionKey, _ := base64.RawURLEncoding.DecodeString(os.Getenv("ARGUS_PENDING_ACTION_ENCRYPTION_KEY"))
@@ -145,6 +147,7 @@ func LoadServer() Server {
 		OpenBaoToken:              os.Getenv("ARGUS_OPENBAO_TOKEN"),
 		OpenBaoTransitKey:         valueOrDefault("ARGUS_OPENBAO_TRANSIT_KEY", "argus-local-hardening"),
 		BreakGlassEnabled:         breakGlassEnabled,
+		PlatformMFARequired:       platformMFARequired,
 	}
 }
 

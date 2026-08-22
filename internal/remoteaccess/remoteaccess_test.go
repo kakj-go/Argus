@@ -2,12 +2,16 @@ package remoteaccess
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/kakj-go/Argus/internal/secret"
+	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
 func TestGrantCannotBeExpandedByRequest(t *testing.T) {
@@ -116,6 +120,22 @@ func TestRecordingChunkIsEncryptedAndChained(t *testing.T) {
 	}
 	if second.PreviousHash != first.Hash {
 		t.Fatal("hash chain did not link chunks")
+	}
+}
+
+func TestRecordingEnvelopeRejectsDivergentKeyReference(t *testing.T) {
+	envelope := secret.Envelope{Provider: secret.EnvelopeProviderLocal, KeyID: "recording-key", KeyVersion: 2}
+	wrapped, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := db.RemoteAccessRecording{KeyProvider: envelope.Provider, KeyID: envelope.KeyID, KeyVersion: int32(envelope.KeyVersion), WrappedDek: wrapped}
+	if _, err := recordingEnvelope(record); err != nil {
+		t.Fatalf("matching recording key reference was rejected: %v", err)
+	}
+	record.KeyVersion++
+	if _, err := recordingEnvelope(record); !errors.Is(err, ErrRecordingUnavailable) {
+		t.Fatalf("divergent recording key reference was accepted: %v", err)
 	}
 }
 

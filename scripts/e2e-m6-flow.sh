@@ -54,6 +54,7 @@ run_m6_playwright() {
     ARGUS_M6_WINRS_HOST_ID="$M6_WINRS_HOST_ID" ARGUS_M6_WINRS_ACCOUNT_ID="$M6_WINRS_ACCOUNT_ID" \
     ARGUS_E2E_ARTIFACTS="$ARTIFACT_DIR/playwright-m6" \
     pnpm --filter @argus/enterprise exec playwright test e2e/m6-real.spec.ts --workers=1
+  mark_current_totp_used enterprise
 }
 
 m6_cross_gateway_flow() {

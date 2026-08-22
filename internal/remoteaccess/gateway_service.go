@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -164,9 +163,9 @@ func (service GatewayService) OpenRecording(ctx context.Context, sessionID uuid.
 	if err != nil {
 		return GatewayRecording{}, err
 	}
-	var envelope secret.Envelope
-	if json.Unmarshal(record.WrappedDek, &envelope) != nil {
-		return GatewayRecording{}, ErrRecordingUnavailable
+	envelope, err := recordingEnvelope(record)
+	if err != nil {
+		return GatewayRecording{}, err
 	}
 	dek, err := service.Credentials.Keyring.DecryptContext(ctx, envelope, recordingKeyAAD(record.EnterpriseID, record.ID, record.SessionID))
 	if err != nil || len(dek) != 32 {

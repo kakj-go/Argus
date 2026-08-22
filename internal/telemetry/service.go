@@ -18,6 +18,7 @@ import (
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
+	"github.com/kakj-go/Argus/internal/telemetry/queryengine"
 )
 
 var (
@@ -27,6 +28,11 @@ var (
 	ErrDistributionPending = errors.New("collector distribution validation pending")
 	ErrQueryInvalid        = errors.New("telemetry query invalid")
 	ErrQueryBudget         = errors.New("telemetry query budget exceeded")
+	ErrQueryParse          = errors.New("telemetry query parse error")
+	ErrQueryType           = errors.New("telemetry query type error")
+	ErrQueryUnsupported    = errors.New("telemetry query feature unsupported")
+	ErrQueryComplexity     = errors.New("telemetry query complexity limit")
+	ErrQueryScope          = errors.New("telemetry query scope denied")
 )
 
 type Actor struct {
@@ -40,8 +46,13 @@ type Service struct {
 	Store                  *postgres.Store
 	Access                 resource.AccessService
 	Actions                resource.PendingActionService
-	Query                  QueryBackend
+	Query                  OverviewBackend
+	Engine                 EngineQueryBackend
 	OtelcolKubernetesImage string
+}
+
+type EngineQueryBackend interface {
+	ExecuteEngineQuery(context.Context, queryengine.Request) (queryengine.Result, error)
 }
 
 type CollectorPreviewInput struct {

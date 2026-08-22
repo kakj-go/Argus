@@ -68,7 +68,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		return err
 	}
 	var wrapping keywrap.Provider = keywrap.Local{Key: cfg.IdempotencyEncryptionKey, KeyID: "argus-evaluation"}
-	if cfg.KeyWrappingMode == "openbao_transit" {
+	if cfg.KeyWrappingMode == keywrap.ProviderOpenBaoTransit {
 		wrapping = keywrap.OpenBao{Address: cfg.OpenBaoAddress, Token: cfg.OpenBaoToken, KeyID: cfg.OpenBaoTransitKey}
 	}
 	idempotency := postgres.Idempotency{Key: cfg.IdempotencyEncryptionKey, Provider: wrapping}
@@ -122,7 +122,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		if tlsErr != nil {
 			return tlsErr
 		}
-		telemetryQuery, queryErr := telemetryservice.NewGRPCQueryBackend(cfg.TelemetryQueryEndpoint, telemetryTLS)
+		telemetryQuery, queryErr := telemetryservice.NewGRPCQueryBackend(cfg.TelemetryQueryEndpoint, telemetryTLS, logger)
 		if queryErr != nil {
 			return queryErr
 		}

@@ -1,8 +1,0 @@
-{
-  "schema_version": "argus.telemetry_query/v1",
-  "signal": "metrics",
-  "resource_ids": ["host_01"],
-  "time_range": {"from": "2026-08-15T00:00:00Z", "to": "2026-08-15T00:00:01Z"},
-  "field_projection": ["value"],
-  "budget": {"max_rows": 1, "max_scan_bytes": 1, "timeout_ms": 100}
-}

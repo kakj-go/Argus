@@ -76,7 +76,11 @@ func (handler PlatformHandler) CreateEnterprise(ctx context.Context, request pla
 		Name: request.Body.Name, Code: request.Body.Code, Timezone: request.Body.Timezone, DefaultLocale: locale, Remark: remark,
 	}, request.Params.IdempotencyKey)
 	if err != nil {
-		return platformapi.CreateEnterprisedefaultJSONResponse{Body: platformError(ctx, err), StatusCode: http.StatusConflict}, nil
+		status := http.StatusConflict
+		if errors.Is(err, platform.ErrEnterpriseCodeInvalid) {
+			status = http.StatusBadRequest
+		}
+		return platformapi.CreateEnterprisedefaultJSONResponse{Body: platformError(ctx, err), StatusCode: status}, nil
 	}
 	return platformapi.CreateEnterprise201JSONResponse(toPlatformEnterprise(value)), nil
 }

@@ -112,7 +112,7 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 - 前端固定 React + TypeScript + Vite；共享组件只进入 `@argus/ui`，样式使用 Design Token 与 `.argus-*` 类名，单文件不超过 2000 行。
 - 后端固定 Go；外部 API 使用 REST/OpenAPI，内部服务和 Connector 使用 gRPC/protobuf，单文件不超过 2000 行。
 - PostgreSQL Schema 由版本化 Migration 管理，普通服务启动不得隐式修改 Schema。
-- ClickHouse 对产品暴露 Metrics、Logs、Traces 三个共享逻辑数据集。物化行包含受信的 `EnterpriseId`、`ResourceId` 和 `CollectorId`，禁止按企业或标签创建独立表或分区。
+- ClickHouse 对产品暴露 Metrics、Logs、Traces 三个查询协议；M10 事实存储按 Enterprise UUID 创建租户物理表。表名只能由受信身份通过 `TenantTableRouter` 生成，物理表内仍保存 `ResourceId` 和 `CollectorId` 供企业内部授权裁剪。
 
 ## 8. 第一版开放问题
 

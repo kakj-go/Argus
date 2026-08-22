@@ -249,63 +249,6 @@ paths:
                 type: integer
         default:
           $ref: '#/components/responses/Error'
-  /enterprise/telemetry/query/metrics:
-    post:
-      operationId: queryTelemetryMetrics
-      summary: Query authorized Metrics.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MetricsQuery'
-      responses:
-        '200':
-          description: Metrics.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MetricsResult'
-        default:
-          $ref: '#/components/responses/Error'
-  /enterprise/telemetry/query/logs:
-    post:
-      operationId: queryTelemetryLogs
-      summary: Query authorized Logs.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LogsQuery'
-      responses:
-        '200':
-          description: Logs.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LogsResult'
-        default:
-          $ref: '#/components/responses/Error'
-  /enterprise/telemetry/query/traces:
-    post:
-      operationId: queryTelemetryTraces
-      summary: Query authorized Traces.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TracesQuery'
-      responses:
-        '200':
-          description: Traces.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TracesResult'
-        default:
-          $ref: '#/components/responses/Error'
   /enterprise/telemetry/query/overview:
     post:
       operationId: queryTelemetryOverview
@@ -323,6 +266,82 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TelemetryOverview'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/metrics/query:
+    post:
+      operationId: queryMetricsInstant
+      summary: Execute a PromQL instant query.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromQLInstantQuery'
+      responses:
+        '200':
+          description: Prometheus-compatible PromQL result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrometheusQueryResponse'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/metrics/query_range:
+    post:
+      operationId: queryMetricsRange
+      summary: Execute a PromQL range query.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromQLRangeQuery'
+      responses:
+        '200':
+          description: Prometheus-compatible PromQL range result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrometheusQueryResponse'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/logs/query:
+    post:
+      operationId: queryLogsKQL
+      summary: Execute a KQL log query.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KQLQuery'
+      responses:
+        '200':
+          description: KQL log result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KQLQueryResponse'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/traces/graphql:
+    post:
+      operationId: queryTracesGraphQL
+      summary: Execute a read-only SkyWalking GraphQL trace query.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkyWalkingTraceGraphQLQuery'
+      responses:
+        '200':
+          description: SkyWalking GraphQL trace result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkyWalkingGraphQLResponse'
         default:
           $ref: '#/components/responses/Error'
   /enterprise/hosts/{id}/collector:
@@ -1011,146 +1030,6 @@ components:
           type: integer
           format: int64
           minimum: 0
-    MetricsQuery:
-      type: object
-      additionalProperties: false
-      required:
-        - resource_ids
-        - from
-        - to
-        - metric_name
-        - aggregation
-      properties:
-        resource_ids:
-          type: array
-          minItems: 1
-          maxItems: 1000
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
-        from:
-          type: string
-          format: date-time
-        to:
-          type: string
-          format: date-time
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 100000
-          default: 50000
-        cursor:
-          type: string
-          maxLength: 4096
-        metric_name:
-          type: string
-          minLength: 1
-          maxLength: 256
-        aggregation:
-          type: string
-          enum:
-            - avg
-            - min
-            - max
-            - sum
-            - count
-            - rate
-            - p50
-            - p95
-            - p99
-        step_seconds:
-          type: integer
-          minimum: 10
-          maximum: 86400
-          default: 60
-    LogsQuery:
-      type: object
-      additionalProperties: false
-      required:
-        - resource_ids
-        - from
-        - to
-      properties:
-        resource_ids:
-          type: array
-          minItems: 1
-          maxItems: 1000
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
-        from:
-          type: string
-          format: date-time
-        to:
-          type: string
-          format: date-time
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 100000
-          default: 50000
-        cursor:
-          type: string
-          maxLength: 4096
-        service_name:
-          type: string
-          maxLength: 256
-        severity:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            maxLength: 32
-        text:
-          type: string
-          maxLength: 512
-    TracesQuery:
-      type: object
-      additionalProperties: false
-      required:
-        - resource_ids
-        - from
-        - to
-      properties:
-        resource_ids:
-          type: array
-          minItems: 1
-          maxItems: 1000
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
-        from:
-          type: string
-          format: date-time
-        to:
-          type: string
-          format: date-time
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 100000
-          default: 50000
-        cursor:
-          type: string
-          maxLength: 4096
-        service_name:
-          type: string
-          maxLength: 256
-        operation:
-          type: string
-          maxLength: 256
-        status:
-          type: string
-          enum:
-            - unset
-            - ok
-            - error
-        min_duration_ms:
-          type: integer
-          minimum: 0
     TelemetryOverviewQuery:
       type: object
       additionalProperties: false
@@ -1171,45 +1050,6 @@ components:
           minimum: 300
           maximum: 604800
           default: 3600
-    MetricsResult:
-      type: object
-      additionalProperties: false
-      required:
-        - series
-        - meta
-      properties:
-        series:
-          type: array
-          items:
-            $ref: '#/components/schemas/MetricSeries'
-        meta:
-          $ref: '#/components/schemas/TelemetryQueryMeta'
-    LogsResult:
-      type: object
-      additionalProperties: false
-      required:
-        - records
-        - meta
-      properties:
-        records:
-          type: array
-          items:
-            $ref: '#/components/schemas/LogRecord'
-        meta:
-          $ref: '#/components/schemas/TelemetryQueryMeta'
-    TracesResult:
-      type: object
-      additionalProperties: false
-      required:
-        - traces
-        - meta
-      properties:
-        traces:
-          type: array
-          items:
-            $ref: '#/components/schemas/TraceSummary'
-        meta:
-          $ref: '#/components/schemas/TelemetryQueryMeta'
     TelemetryOverview:
       type: object
       additionalProperties: false
@@ -1249,6 +1089,310 @@ components:
           minimum: 300
         partial:
           type: boolean
+    TelemetryQueryTimeRange:
+      type: object
+      additionalProperties: false
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+    TelemetryQueryBudget:
+      type: object
+      additionalProperties: false
+      properties:
+        max_scan_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1073741824
+          default: 268435456
+        max_rows:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          default: 50000
+        max_samples:
+          type: integer
+          minimum: 1
+          maximum: 10000000
+          default: 5000000
+        max_series:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          default: 100000
+        timeout_ms:
+          type: integer
+          minimum: 100
+          maximum: 30000
+          default: 10000
+        max_result_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 33554432
+          default: 8388608
+    PromQLInstantQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - query
+        - resource_ids
+        - time_range
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 65536
+        resource_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        time_range:
+          $ref: '#/components/schemas/TelemetryQueryTimeRange'
+        budget:
+          $ref: '#/components/schemas/TelemetryQueryBudget'
+    PromQLRangeQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - query
+        - resource_ids
+        - time_range
+        - step_seconds
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 65536
+        resource_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        time_range:
+          $ref: '#/components/schemas/TelemetryQueryTimeRange'
+        step_seconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+        budget:
+          $ref: '#/components/schemas/TelemetryQueryBudget'
+    KQLQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - query
+        - resource_ids
+        - time_range
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 65536
+        pipeline:
+          type: string
+          maxLength: 65536
+        resource_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        time_range:
+          $ref: '#/components/schemas/TelemetryQueryTimeRange'
+        budget:
+          $ref: '#/components/schemas/TelemetryQueryBudget'
+    SkyWalkingTraceGraphQLQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - query
+        - resource_ids
+        - time_range
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 65536
+        operation_name:
+          type: string
+          maxLength: 256
+        variables:
+          type: object
+          additionalProperties: true
+        resource_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        time_range:
+          $ref: '#/components/schemas/TelemetryQueryTimeRange'
+        budget:
+          $ref: '#/components/schemas/TelemetryQueryBudget'
+    TelemetryQueryMeta:
+      type: object
+      additionalProperties: false
+      required:
+        - scanned_bytes
+        - scanned_rows
+        - returned_rows
+        - loaded_samples
+        - elapsed_ms
+        - plan_hash
+        - engine
+        - engine_version
+        - partial
+      properties:
+        scanned_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        scanned_rows:
+          type: integer
+          format: int64
+          minimum: 0
+        returned_rows:
+          type: integer
+          format: int64
+          minimum: 0
+        loaded_samples:
+          type: integer
+          format: int64
+          minimum: 0
+        elapsed_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        plan_hash:
+          type: string
+          minLength: 64
+          maxLength: 64
+        engine:
+          type: string
+          minLength: 1
+          maxLength: 128
+        engine_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        partial:
+          type: boolean
+    PrometheusQueryData:
+      type: object
+      additionalProperties: false
+      required:
+        - resultType
+        - result
+      properties:
+        resultType:
+          type: string
+          enum:
+            - scalar
+            - string
+            - vector
+            - matrix
+        result: {}
+    PrometheusQueryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - data
+        - warnings
+        - argus_meta
+      properties:
+        status:
+          type: string
+          const: success
+        data:
+          $ref: '#/components/schemas/PrometheusQueryData'
+        warnings:
+          type: array
+          items:
+            type: string
+            maxLength: 512
+        argus_meta:
+          $ref: '#/components/schemas/TelemetryQueryMeta'
+    KQLQueryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - result_type
+        - data
+        - warnings
+        - partial
+        - meta
+      properties:
+        schema_version:
+          type: string
+          const: argus.kql_result/v1
+        result_type:
+          type: string
+          enum:
+            - log_entries
+            - log_streams
+        data: {}
+        warnings:
+          type: array
+          items:
+            type: string
+            maxLength: 512
+        partial:
+          type: boolean
+        meta:
+          $ref: '#/components/schemas/TelemetryQueryMeta'
+    SkyWalkingGraphQLError:
+      type: object
+      additionalProperties: false
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1024
+    SkyWalkingGraphQLResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - extensions
+      properties:
+        data:
+          type: object
+          additionalProperties: true
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkyWalkingGraphQLError'
+        extensions:
+          type: object
+          additionalProperties: false
+          required:
+            - argus
+          properties:
+            argus:
+              $ref: '#/components/schemas/TelemetryQueryMeta'
     CollectorPage:
       type: object
       additionalProperties: false
@@ -1600,145 +1744,6 @@ components:
         updated_at:
           type: string
           format: date-time
-    MetricPoint:
-      type: object
-      additionalProperties: false
-      required:
-        - timestamp
-        - value
-      properties:
-        timestamp:
-          type: string
-          format: date-time
-        value:
-          type: number
-    MetricSeries:
-      type: object
-      additionalProperties: false
-      required:
-        - resource_id
-        - metric_name
-        - points
-      properties:
-        resource_id:
-          type: string
-          format: uuid
-        metric_name:
-          type: string
-        unit:
-          type: string
-        points:
-          type: array
-          items:
-            $ref: '#/components/schemas/MetricPoint'
-    TelemetryQueryMeta:
-      type: object
-      additionalProperties: false
-      required:
-        - schema_version
-        - partial
-        - partial_reasons
-        - applied_resource_count
-        - scanned_bytes
-        - elapsed_ms
-      properties:
-        schema_version:
-          type: string
-          const: argus.telemetry_result/v1
-        partial:
-          type: boolean
-        partial_reasons:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            enum:
-              - unauthorized_resources
-              - row_limit
-              - scan_budget
-              - timeout
-              - data_lag
-        applied_resource_count:
-          type: integer
-          minimum: 0
-        scanned_bytes:
-          type: integer
-          format: int64
-          minimum: 0
-        elapsed_ms:
-          type: integer
-          format: int64
-          minimum: 0
-        next_cursor:
-          type: string
-          maxLength: 4096
-    LogRecord:
-      type: object
-      additionalProperties: false
-      required:
-        - timestamp
-        - resource_id
-        - severity
-        - body
-      properties:
-        timestamp:
-          type: string
-          format: date-time
-        resource_id:
-          type: string
-          format: uuid
-        service_name:
-          type: string
-        severity:
-          type: string
-        body:
-          type: string
-          maxLength: 262144
-        trace_id:
-          type: string
-          minLength: 32
-          maxLength: 32
-          pattern: ^[a-f0-9]{32}$
-    TraceSummary:
-      type: object
-      additionalProperties: false
-      required:
-        - trace_id
-        - resource_id
-        - service_name
-        - root_span_name
-        - started_at
-        - duration_ms
-        - span_count
-        - status
-      properties:
-        trace_id:
-          type: string
-          minLength: 32
-          maxLength: 32
-          pattern: ^[a-f0-9]{32}$
-        resource_id:
-          type: string
-          format: uuid
-        service_name:
-          type: string
-        root_span_name:
-          type: string
-        started_at:
-          type: string
-          format: date-time
-        duration_ms:
-          type: number
-          minimum: 0
-        span_count:
-          type: integer
-          minimum: 1
-        status:
-          type: string
-          enum:
-            - unset
-            - ok
-            - error
     ConfigRevisionStatus:
       type: string
       enum:

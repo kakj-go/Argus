@@ -13,6 +13,11 @@ import (
 
 var ErrUnavailable = errors.New("key wrapping provider unavailable")
 
+const (
+	ProviderLocalTest      = "local_test"
+	ProviderOpenBaoTransit = "openbao_transit"
+)
+
 type Ciphertext struct {
 	Provider   string
 	KeyID      string
@@ -45,11 +50,11 @@ func (provider Local) Encrypt(_ context.Context, plaintext []byte) (Ciphertext, 
 		return Ciphertext{}, err
 	}
 	value := append(nonce, gcm.Seal(nil, nonce, plaintext, []byte(provider.KeyID))...)
-	return Ciphertext{Provider: "local_test", KeyID: provider.KeyID, KeyVersion: 1, Value: value}, nil
+	return Ciphertext{Provider: ProviderLocalTest, KeyID: provider.KeyID, KeyVersion: 1, Value: value}, nil
 }
 
 func (provider Local) Decrypt(_ context.Context, ciphertext Ciphertext) ([]byte, error) {
-	if ciphertext.Provider != "local_test" || ciphertext.KeyID != provider.KeyID {
+	if ciphertext.Provider != ProviderLocalTest || ciphertext.KeyID != provider.KeyID {
 		return nil, errors.New("ciphertext key reference mismatch")
 	}
 	block, err := aes.NewCipher(provider.Key)

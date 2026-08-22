@@ -23,6 +23,7 @@ m5_run_browser_validation() {
     ARGUS_M5_CARD_NAME="$M5_CARD_NAME" ARGUS_M5_REVISION="$revision" \
     ARGUS_E2E_ARTIFACTS="$ARTIFACT_DIR/playwright-m5-r${revision}" \
     pnpm --filter @argus/enterprise exec playwright test e2e/m5-real.spec.ts --workers=1
+  mark_current_totp_used enterprise
 }
 
 m5_wait_card_instance() {
@@ -52,7 +53,7 @@ run_m5_api_flow() {
   [[ "$M5_CATALOG_BEFORE" == "$M5_CATALOG_AFTER" ]] || fail "M5 System Card catalog sync changed an already synchronized catalog"
 
   request m5-system-cards 200 GET /enterprise/interactive-cards "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
-  if [[ "$PHASE" == "m7" ]]; then
+  if [[ "$PHASE" == "m7" || "$PHASE" == "m10-query" ]]; then
     jq -e '([.items[] | select(.source == "system")] | length) == 5 and any(.items[]; .slug == "telemetry-overview" and .availability == "available" and .enabled == true)' "$RESPONSE_FILE" >/dev/null
   else
     jq -e '([.items[] | select(.source == "system")] | length) == 5 and any(.items[]; .slug == "telemetry-overview" and .availability == "dependency_pending" and .enabled == false)' "$RESPONSE_FILE" >/dev/null

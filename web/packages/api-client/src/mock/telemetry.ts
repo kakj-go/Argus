@@ -2,12 +2,16 @@ import type { ArgusApiClient } from "../client";
 import type {
   CollectionProfile,
   CollectorDistributionVersion,
-  LogsResult,
-  MetricsResult,
   TelemetryOverview,
   TelemetryRoute,
   TelemetryUsage,
-  TracesResult,
+  PromQLInstantQuery,
+  PromQLRangeQuery,
+  KQLQuery,
+  SkyWalkingTraceGraphQLQuery,
+  PrometheusQueryResponse,
+  KQLQueryResponse,
+  SkyWalkingGraphQLResponse,
 } from "../generated/contracts";
 import type { MockContext } from "./context";
 
@@ -163,52 +167,6 @@ export function createTelemetryDomain(ctx: MockContext): ArgusApiClient["telemet
         estimated_storage_bytes: 1_342_177_280,
       };
     },
-    async queryMetrics(input): Promise<MetricsResult> {
-      await ctx.pause();
-      const end = Date.parse(input.to);
-      return {
-        series: input.resource_ids.map((resourceId, resourceIndex) => ({
-          resource_id: resourceId,
-          metric_name: input.metric_name,
-          unit: "%",
-          points: Array.from({ length: 12 }, (_, index) => ({
-            timestamp: new Date(end - (11 - index) * input.step_seconds * 1000).toISOString(),
-            value: 35 + resourceIndex * 8 + ((index * 7) % 23),
-          })),
-        })),
-        meta: meta(input.resource_ids),
-      };
-    },
-    async queryLogs(input): Promise<LogsResult> {
-      await ctx.pause();
-      return {
-        records: input.resource_ids.slice(0, 3).map((resourceId, index) => ({
-          timestamp: new Date(Date.parse(input.to) - index * 45_000).toISOString(),
-          resource_id: resourceId,
-          service_name: input.service_name ?? "argus-demo",
-          severity: index === 0 ? "ERROR" : "INFO",
-          body: index === 0 ? "request failed: credential=[REDACTED]" : "request completed",
-          trace_id: String(index + 1).padStart(32, "0"),
-        })),
-        meta: meta(input.resource_ids),
-      };
-    },
-    async queryTraces(input): Promise<TracesResult> {
-      await ctx.pause();
-      return {
-        traces: input.resource_ids.slice(0, 4).map((resourceId, index) => ({
-          trace_id: String(index + 101).padStart(32, "0"),
-          resource_id: resourceId,
-          service_name: input.service_name ?? "checkout-api",
-          root_span_name: input.operation ?? "POST /checkout",
-          started_at: new Date(Date.parse(input.to) - index * 120_000).toISOString(),
-          duration_ms: 85 + index * 47,
-          span_count: 6 + index,
-          status: index === 0 ? "error" : "ok",
-        })),
-        meta: meta(input.resource_ids),
-      };
-    },
     async overview(input): Promise<TelemetryOverview> {
       await ctx.pause();
       const collectors = ctx.db.collectors.filter((item) =>
@@ -225,5 +183,45 @@ export function createTelemetryDomain(ctx: MockContext): ArgusApiClient["telemet
         partial: false,
       };
     },
+    async queryMetrics(input: PromQLInstantQuery): Promise<PrometheusQueryResponse> {
+      await ctx.pause();
+      const now = new Date(input.time_range.to).getTime();
+      const partial = input.resource_ids.includes("k8s-prod-east");
+      const result = input.resource_ids.map((resource_id, index) => ({ metric: { __name__: "system_cpu_utilization", resource_id }, values: [
+          [(now - 120_000) / 1000, String(38 + index)],
+          [(now - 60_000) / 1000, String(40 + index)],
+          [now / 1000, String(42 + index)],
+        ] }));
+      return { status: "success", data: { resultType: "matrix", result }, warnings: partial ? ["row_limit"] : [], argus_meta: queryMeta("a", partial) };
+    },
+    async queryMetricsRange(input: PromQLRangeQuery): Promise<PrometheusQueryResponse> {
+      return this.queryMetrics(input);
+    },
+    async queryLogs(input: KQLQuery): Promise<KQLQueryResponse> {
+      await ctx.pause();
+      const now = new Date(input.time_range.to).toISOString();
+      const data = input.resource_ids.slice(0, 3).map((resource_id, index) => ({ timestamp: now, resource_id, severity_text: index === 0 ? "ERROR" : "INFO", body: index === 0 ? "credential=[REDACTED]" : "request completed", trace_id: String(index + 1).padStart(32, "0"), service_name: "argus-demo" }));
+      return { schema_version: "argus.kql_result/v1", result_type: "log_entries", data, warnings: [], partial: false, meta: queryMeta("b", false) };
+    },
+    async queryTraces(input: SkyWalkingTraceGraphQLQuery): Promise<SkyWalkingGraphQLResponse> {
+      await ctx.pause();
+      const now = new Date(input.time_range.to).toISOString();
+      const traces = input.resource_ids.slice(0, 3).map((resource_id, index) => ({ traceId: String(index + 1).padStart(32, "0"), rootService: "argus-demo", rootOperation: "GET /", startTime: now, duration: 1, spanCount: 1, errorCount: 0, status: "ok", resource_id }));
+      return { data: { queryBasicTraces: { total: traces.length, traces } }, extensions: { argus: queryMeta("c", false) } };
+    },
+  };
+}
+
+function queryMeta(seed: string, partial: boolean) {
+  return {
+    scanned_bytes: 4096,
+    scanned_rows: 32,
+    returned_rows: 3,
+    loaded_samples: 12,
+    elapsed_ms: 4,
+    plan_hash: seed.repeat(64),
+    engine: "mock",
+    engine_version: "v1",
+    partial,
   };
 }

@@ -8,15 +8,19 @@ M3_GATEWAY_PORT=${ARGUS_E2E_CONNECTOR_GATEWAY_PORT:-4193}
 M3_SSH_PORT=${ARGUS_E2E_SSH_PORT:-4222}
 M3_DIRECT_SSH_PORT=2222
 
+m3_uses_m7_extensions() {
+  [[ "${PHASE:-}" == "m7" || "${PHASE:-}" == "m10-query" ]]
+}
+
 prepare_m3_dependencies() {
   log "building M3 SSH target image ${M3_TARGET_IMAGE}"
   retry 3 docker build --quiet -f deploy/docker/e2e-ssh.Dockerfile -t "$M3_TARGET_IMAGE" . >/dev/null
-  if [[ "${PHASE:-}" == "m7" ]]; then
+  if m3_uses_m7_extensions; then
     log "building Linux arm64 systemd Collector target ${M7_SYSTEMD_HOST_IMAGE}"
     retry 3 docker build --quiet --platform linux/arm64 -f deploy/docker/e2e-systemd-host.Dockerfile -t "$M7_SYSTEMD_HOST_IMAGE" . >/dev/null
   fi
   local target_images=("$M3_TARGET_IMAGE")
-  if [[ "${PHASE:-}" == "m7" ]]; then target_images+=("$M7_SYSTEMD_HOST_IMAGE"); fi
+  if m3_uses_m7_extensions; then target_images+=("$M7_SYSTEMD_HOST_IMAGE"); fi
   case "$KUBE_CONTEXT" in
     kind-*) kind load docker-image --name "${KUBE_CONTEXT#kind-}" "${target_images[@]}" ;;
     minikube) minikube image load "${target_images[@]}" ;;
@@ -24,7 +28,7 @@ prepare_m3_dependencies() {
       local node
       node=$(k get nodes -o jsonpath='{.items[0].metadata.name}')
       docker save "$M3_TARGET_IMAGE" | docker exec -i "$node" ctr -n k8s.io images import - >/dev/null
-      if [[ "${PHASE:-}" == "m7" ]]; then
+      if m3_uses_m7_extensions; then
         docker save "$M7_SYSTEMD_HOST_IMAGE" | docker exec -i "$node" ctr -n k8s.io images import - >/dev/null
       fi
       ;;
@@ -40,7 +44,7 @@ cleanup_m3() {
   docker image rm "$M3_TARGET_IMAGE" >/dev/null 2>&1 || true
 	docker image rm "$M7_SYSTEMD_HOST_IMAGE" >/dev/null 2>&1 || true
 	k delete clusterrole,clusterrolebinding "argus-m3-kubernetes-connector-${RUN_ID}" --ignore-not-found=true >/dev/null 2>&1 || true
-	if [[ "${PHASE:-}" == "m7" ]]; then
+	if m3_uses_m7_extensions; then
 		k delete clusterrole,clusterrolebinding "argus-m7-collector-manager-${RUN_ID}" --ignore-not-found=true >/dev/null 2>&1 || true
 	fi
 }
@@ -59,12 +63,12 @@ m3_confirm() {
   request "$name" 200 POST "/enterprise/pending-actions/${action_ref}/confirm" "$ENTERPRISE_JAR" - \
     --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}" \
     --header "Idempotency-Key: ${name}-${RUN_ID}"
-  if [[ "$PHASE" == "m5" || "$PHASE" == "m6" || "$PHASE" == "m7" ]]; then
+  if [[ "$PHASE" == "m5" || "$PHASE" == "m6" ]] || m3_uses_m7_extensions; then
     jq -e '.pending_action.status == "ready" and .execution.status == "pending"' "$RESPONSE_FILE" >/dev/null
 		local execution_id status resource_id enrollment_json result attempts
     execution_id=$(jq -er '.execution.execution_id' "$RESPONSE_FILE")
 		attempts=120
-		if [[ "$PHASE" == "m7" ]]; then attempts=300; fi
+		if m3_uses_m7_extensions; then attempts=300; fi
 		for _ in $(seq 1 "$attempts"); do
       status=$(m3_psql "SELECT status FROM executions WHERE id='${execution_id}';")
       [[ "$status" == "succeeded" ]] && break
@@ -157,7 +161,7 @@ metadata: {name: argus-m3-kubernetes-connector-${RUN_ID}}
 subjects: [{kind: ServiceAccount, name: argus-m3-kubernetes-connector, namespace: ${SYSTEM_NS}}]
 roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: argus-m3-kubernetes-connector-${RUN_ID}}
 EOF
-	if [[ "$PHASE" == "m7" ]]; then
+	if m3_uses_m7_extensions; then
 		cat <<EOF | k apply -f - >/dev/null
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -218,7 +222,7 @@ EOF
     resources:{requests:{cpu:"10m",memory:"16Mi"},limits:{cpu:"100m",memory:"64Mi"}}
   }]}}}}')
   k -n "$SYSTEM_NS" patch deployment argus-direct-executor --type=strategic --patch "$direct_patch" >/dev/null
-		if [[ "$PHASE" == "m7" ]]; then
+		if m3_uses_m7_extensions; then
 			local systemd_patch
 			systemd_patch=$(jq -nc --arg image "$M7_SYSTEMD_HOST_IMAGE" --arg artifact_image "$M7_ARTIFACT_IMAGE" '{spec:{template:{spec:{containers:[{
 				name:"argus-m7-systemd-host",image:$image,imagePullPolicy:"Never",securityContext:{privileged:true,runAsNonRoot:false,runAsUser:0},ports:[{name:"m7-systemd-ssh",containerPort:22}],
@@ -679,7 +683,7 @@ run_m3_api_flow() {
 
   request m3-old-bastion-before-uninstall 200 GET "/enterprise/bastion-scopes/${M3_BASTION_SCOPE_ID}" "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
   M3_BASTION_ROOT_HOST_ID=$(jq -er '.connector_host_id' "$RESPONSE_FILE")
-  if [[ "${PHASE:-}" != "m7" ]]; then
+  if ! m3_uses_m7_extensions; then
   request m3-old-connector-before-uninstall 200 GET "/enterprise/connectors/${M3_BASTION_CONNECTOR_ID}" "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
   M3_BASTION_CONNECTOR_VERSION=$(jq -er '.version' "$RESPONSE_FILE")
   request m3-connector-uninstall-preview 201 POST "/enterprise/connectors/${M3_BASTION_CONNECTOR_ID}/actions/preview-uninstall" "$ENTERPRISE_JAR" \
@@ -755,10 +759,11 @@ run_m3_api_flow() {
   fi
 
   ARGUS_E2E_EXTERNAL=1 ARGUS_M3_E2E=1 \
-    ARGUS_M3_PRESERVE_BASTION="$([[ "${PHASE:-}" == "m7" ]] && printf 1 || printf 0)" \
+    ARGUS_M3_PRESERVE_BASTION="$(m3_uses_m7_extensions && printf 1 || printf 0)" \
     ARGUS_M3_ENTERPRISE_USERNAME="$ENTERPRISE_USERNAME" ARGUS_M3_ENTERPRISE_PASSWORD="$ENTERPRISE_PASSWORD" \
     ARGUS_E2E_ARTIFACTS="$ARTIFACT_DIR/playwright-m3" \
     pnpm --filter @argus/enterprise exec playwright test e2e/m3-real.spec.ts --workers=1
+  mark_current_totp_used enterprise
 
   rm -f "$ENTERPRISE_JAR"
   enterprise_login

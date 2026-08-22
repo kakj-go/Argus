@@ -3,10 +3,11 @@ package telemetry
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"math"
-	"slices"
 	"testing"
 	"time"
 
@@ -15,12 +16,16 @@ import (
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 
 	commonv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/common/v1"
 	telemetryv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/telemetry/v1"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
+	"github.com/kakj-go/Argus/internal/telemetry/queryengine"
 )
 
 func TestValidateArtifactHash(t *testing.T) {
@@ -171,62 +176,130 @@ func TestValidateMetricsSupportsM7MetricKinds(t *testing.T) {
 
 func TestQueryRequestBindsScopeSignalAndBudget(t *testing.T) {
 	enterpriseID, resourceID := uuid.New(), uuid.New()
-	from, to := time.Now().Add(-time.Hour).UTC(), time.Now().UTC()
-	request := &telemetryv1.TelemetryQueryRequest{
-		SchemaVersion: querySchemaVersion,
-		Scope: &telemetryv1.TelemetryQueryScope{
-			EnterpriseId: enterpriseID.String(), AuthorizedResources: []*commonv1.ResourceRef{{ResourceType: "host", ResourceId: resourceID.String()}},
-			AllowedSignals: []string{"metrics"}, AuthorizationVersion: 7,
-		},
-		From: timestamppb.New(from), To: timestamppb.New(to), Limit: 100, FilterJson: []byte(`{"metric_name":"cpu"}`),
-		MaxScanBytes: uint64(DefaultMaxScanBytes), TimeoutMillis: uint32(DefaultTimeout / time.Millisecond),
+	scope := &telemetryv1.TelemetryQueryScope{
+		EnterpriseId: enterpriseID.String(), AuthorizedResources: []*commonv1.ResourceRef{{ResourceType: "host", ResourceId: resourceID.String()}},
+		AllowedSignals: []string{"metrics"}, AuthorizationVersion: 7,
 	}
-	request.Scope.ScopeHash = scopeHash(enterpriseID, []uuid.UUID{resourceID}, 7, "metrics")
-	if _, err := queryRequestFromProto("metrics", request); err != nil {
+	scope.ScopeHash = scopeHash(enterpriseID, []uuid.UUID{resourceID}, 7, "metrics", false)
+	if _, _, err := scopeFromProto(scope, "metrics"); err != nil {
 		t.Fatalf("valid query rejected: %v", err)
 	}
-	request.Scope.AllowedSignals = []string{"logs"}
-	if _, err := queryRequestFromProto("metrics", request); err == nil {
+	scope.AllowedSignals = []string{"logs"}
+	if _, _, err := scopeFromProto(scope, "metrics"); err == nil {
 		t.Fatal("cross-signal query accepted")
 	}
-	request.Scope.AllowedSignals = []string{"metrics"}
-	request.Scope.ScopeHash = scopeHash(enterpriseID, []uuid.UUID{uuid.New()}, 7, "metrics")
-	if _, err := queryRequestFromProto("metrics", request); err == nil {
+	scope.AllowedSignals = []string{"metrics"}
+	scope.ScopeHash = scopeHash(enterpriseID, []uuid.UUID{uuid.New()}, 7, "metrics", false)
+	if _, _, err := scopeFromProto(scope, "metrics"); err == nil {
 		t.Fatal("forged resource scope hash accepted")
 	}
-	request.Scope.ScopeHash = scopeHash(enterpriseID, []uuid.UUID{resourceID}, 7, "metrics")
-	request.Scope.AuthorizationVersion = 8
-	if _, err := queryRequestFromProto("metrics", request); err == nil {
+	scope.ScopeHash = scopeHash(enterpriseID, []uuid.UUID{resourceID}, 7, "metrics", false)
+	scope.AuthorizationVersion = 8
+	if _, _, err := scopeFromProto(scope, "metrics"); err == nil {
 		t.Fatal("stale AuthorizationVersion scope hash accepted")
 	}
 }
 
-func TestQueryBudgetAndPartialMetadataAreFailClosed(t *testing.T) {
-	request := QueryRequest{MaxScanBytes: 1024, TimeoutMS: 100}
-	for name, meta := range map[string]QueryMeta{
-		"scan":          {ScannedBytes: 1025},
-		"time":          {ElapsedMS: 101},
-		"negative scan": {ScannedBytes: -1},
-		"negative time": {ElapsedMS: -1},
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := validateBackendMeta(meta, request); !errors.Is(err, ErrQueryBudget) {
-				t.Fatalf("budget violation was accepted: %v", err)
-			}
-		})
+func TestQueryBudgetFromProtoBindsMaxSeriesAndDefaults(t *testing.T) {
+	budget, err := queryBudgetFromProto(&telemetryv1.QueryBudget{MaxSeries: 321, MaxSamples: 654})
+	if err != nil {
+		t.Fatal(err)
 	}
-	meta := mergePartial(QueryMeta{PartialReasons: []string{"backend_truncated", "unauthorized_resources"}}, true)
-	if !meta.Partial || !slices.Equal(meta.PartialReasons, []string{"backend_truncated", "unauthorized_resources"}) {
-		t.Fatalf("partial metadata is unstable: %#v", meta)
+	if budget.MaxSeries != 321 || budget.MaxSamples != 654 {
+		t.Fatalf("explicit PromQL budgets were not bound: %#v", budget)
+	}
+	if budget.MaxRows != DefaultMaxRows || budget.MaxScanBytes != DefaultMaxScanBytes || budget.Timeout != DefaultTimeout {
+		t.Fatalf("zero-valued budgets did not receive server defaults: %#v", budget)
+	}
+
+	for _, value := range []*telemetryv1.QueryBudget{
+		{MaxSeries: HardMaxSeries + 1},
+		{MaxSamples: HardMaxSamples + 1},
+		{MaxRows: HardMaxRows + 1},
+		{MaxScanBytes: uint64(HardMaxScanBytes + 1)},
+		{MaxResultBytes: uint64(HardMaxResultBytes + 1)},
+		{TimeoutMillis: uint32(HardTimeout/time.Millisecond) + 1},
+	} {
+		if _, err := queryBudgetFromProto(value); !errors.Is(err, ErrQueryBudget) {
+			t.Fatalf("over-limit budget %#v returned %v", value, err)
+		}
 	}
 }
 
-func TestMetricQueryPreservesAuthorizationErrors(t *testing.T) {
-	if !errors.Is(validateMetricQueryInput(ErrDenied, "system.cpu.utilization"), ErrDenied) {
-		t.Fatal("authorization denial was converted into an input validation error")
+func TestExecuteQuerySignalMatchesScopeHashBinding(t *testing.T) {
+	enterpriseID, resourceID := uuid.New(), uuid.New()
+	tests := []struct {
+		name, signal string
+		request      *telemetryv1.ExecuteQueryV2Request
+	}{
+		{name: "promql", signal: "metrics", request: &telemetryv1.ExecuteQueryV2Request{Query: &telemetryv1.ExecuteQueryV2Request_Promql{Promql: &telemetryv1.PromQLQuery{Expression: "up"}}}},
+		{name: "kql", signal: "logs", request: &telemetryv1.ExecuteQueryV2Request{Query: &telemetryv1.ExecuteQueryV2Request_Kql{Kql: &telemetryv1.KQLQuery{Expression: "body exists"}}}},
+		{name: "graphql", signal: "traces", request: &telemetryv1.ExecuteQueryV2Request{Query: &telemetryv1.ExecuteQueryV2Request_TraceGraphql{TraceGraphql: &telemetryv1.TraceGraphQLQuery{Document: "query { queryBasicTraces { total } }"}}}},
 	}
-	if !errors.Is(validateMetricQueryInput(nil, ""), ErrQueryInvalid) {
-		t.Fatal("missing metric name was not rejected")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := querySignal(test.request)
+			if err != nil || got != test.signal {
+				t.Fatalf("querySignal() = %q, %v; want %q", got, err, test.signal)
+			}
+			scope := &telemetryv1.TelemetryQueryScope{EnterpriseId: enterpriseID.String(), AuthorizedResources: []*commonv1.ResourceRef{{ResourceType: "host", ResourceId: resourceID.String()}}, AllowedSignals: []string{test.signal}, AuthorizationVersion: 7}
+			scope.ScopeHash = scopeHash(enterpriseID, []uuid.UUID{resourceID}, 7, test.signal, false)
+			if _, _, err := scopeFromProto(scope, got); err != nil {
+				t.Fatalf("scope binding rejected matching signal: %v", err)
+			}
+		})
+	}
+}
+
+func TestTenantSchemaRPCRequiresMTLSAndExactSchemaVersion(t *testing.T) {
+	lifecycle := &testTenantSchemaController{}
+	server := QueryRPCServer{Lifecycle: lifecycle}
+	enterpriseID := uuid.New()
+	request := &telemetryv1.EnsureTenantSchemaRequest{EnterpriseId: enterpriseID.String(), SchemaVersion: uint32(TelemetrySchemaVersion)}
+
+	if _, err := server.EnsureTenantSchema(context.Background(), request); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("untrusted tenant schema RPC returned %v", err)
+	}
+	ctx := peer.NewContext(context.Background(), &peer.Peer{AuthInfo: credentials.TLSInfo{State: tls.ConnectionState{PeerCertificates: []*x509.Certificate{{}}}}})
+	request.SchemaVersion++
+	if _, err := server.EnsureTenantSchema(ctx, request); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("wrong tenant schema version returned %v", err)
+	}
+	request.SchemaVersion = uint32(TelemetrySchemaVersion)
+	response, err := server.EnsureTenantSchema(ctx, request)
+	if err != nil || response.GetStatus() != "ready" || lifecycle.ensured != enterpriseID {
+		t.Fatalf("valid tenant ensure failed: response=%v ensured=%s err=%v", response, lifecycle.ensured, err)
+	}
+	dropResponse, err := server.DropTenantSchema(ctx, &telemetryv1.DropTenantSchemaRequest{EnterpriseId: enterpriseID.String(), SchemaVersion: uint32(TelemetrySchemaVersion)})
+	if err != nil || dropResponse.GetStatus() != "deleting" || lifecycle.dropped != enterpriseID {
+		t.Fatalf("valid tenant drop failed: response=%v dropped=%s err=%v", dropResponse, lifecycle.dropped, err)
+	}
+}
+
+type testTenantSchemaController struct {
+	ensured uuid.UUID
+	dropped uuid.UUID
+}
+
+func (controller *testTenantSchemaController) EnsureTenantSchema(_ context.Context, enterpriseID uuid.UUID) error {
+	controller.ensured = enterpriseID
+	return nil
+}
+
+func (controller *testTenantSchemaController) DropTenantSchema(_ context.Context, enterpriseID uuid.UUID) error {
+	controller.dropped = enterpriseID
+	return nil
+}
+
+func TestEngineRPCErrorPreservesQuerySemantics(t *testing.T) {
+	if !errors.Is(engineRPCError(status.Error(codes.InvalidArgument, "QUERY_BUDGET_EXCEEDED")), queryengine.ErrBudget) {
+		t.Fatal("budget RPC error was not preserved")
+	}
+	if !errors.Is(engineRPCError(status.Error(codes.InvalidArgument, "QUERY_INVALID")), ErrQueryInvalid) {
+		t.Fatal("invalid query RPC error was not preserved")
+	}
+	if !errors.Is(engineRPCError(status.Error(codes.Unavailable, "backend unavailable")), ErrQueryBackend) {
+		t.Fatal("transport RPC error should remain a backend failure")
 	}
 }
 
@@ -275,12 +348,6 @@ func TestIngestRegistersGZIPCompression(t *testing.T) {
 }
 
 func TestClickHouseUnsignedCountsUseCheckedConversions(t *testing.T) {
-	if got, err := checkedIntFromUInt64(7); err != nil || got != 7 {
-		t.Fatalf("valid trace count rejected: %d %v", got, err)
-	}
-	if _, err := checkedIntFromUInt64(uint64(math.MaxInt) + 1); err == nil {
-		t.Fatal("overflowing trace count accepted")
-	}
 	if got, err := checkedInt64FromUInt64(11); err != nil || got != 11 {
 		t.Fatalf("valid overview count rejected: %d %v", got, err)
 	}

@@ -15,7 +15,6 @@ import {
   Spinner,
   StatusBadge,
 } from "@argus/ui";
-import "../i18n/settings";
 import "../styles/settings.css";
 import { formatDateTime } from "../components/settings/shared";
 

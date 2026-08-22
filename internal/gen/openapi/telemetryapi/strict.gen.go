@@ -25,6 +25,15 @@ type StrictServerInterface interface {
 	// PreviewKubernetesCollectorAction Preview a deterministic Kubernetes Collector action.
 	// (POST /enterprise/kubernetes-clusters/{id}/collector/actions/preview-{action})
 	PreviewKubernetesCollectorAction(ctx context.Context, request PreviewKubernetesCollectorActionRequestObject) (PreviewKubernetesCollectorActionResponseObject, error)
+	// QueryLogsKQL Execute a KQL log query.
+	// (POST /enterprise/logs/query)
+	QueryLogsKQL(ctx context.Context, request QueryLogsKQLRequestObject) (QueryLogsKQLResponseObject, error)
+	// QueryMetricsInstant Execute a PromQL instant query.
+	// (POST /enterprise/metrics/query)
+	QueryMetricsInstant(ctx context.Context, request QueryMetricsInstantRequestObject) (QueryMetricsInstantResponseObject, error)
+	// QueryMetricsRange Execute a PromQL range query.
+	// (POST /enterprise/metrics/query_range)
+	QueryMetricsRange(ctx context.Context, request QueryMetricsRangeRequestObject) (QueryMetricsRangeResponseObject, error)
 	// ListCollectionClaims List authorized Collection Claims.
 	// (GET /enterprise/telemetry/collection-claims)
 	ListCollectionClaims(ctx context.Context, request ListCollectionClaimsRequestObject) (ListCollectionClaimsResponseObject, error)
@@ -46,18 +55,9 @@ type StrictServerInterface interface {
 	// ListCollectionProfiles List versioned Collection Profiles.
 	// (GET /enterprise/telemetry/profiles)
 	ListCollectionProfiles(ctx context.Context, request ListCollectionProfilesRequestObject) (ListCollectionProfilesResponseObject, error)
-	// QueryTelemetryLogs Query authorized Logs.
-	// (POST /enterprise/telemetry/query/logs)
-	QueryTelemetryLogs(ctx context.Context, request QueryTelemetryLogsRequestObject) (QueryTelemetryLogsResponseObject, error)
-	// QueryTelemetryMetrics Query authorized Metrics.
-	// (POST /enterprise/telemetry/query/metrics)
-	QueryTelemetryMetrics(ctx context.Context, request QueryTelemetryMetricsRequestObject) (QueryTelemetryMetricsResponseObject, error)
 	// QueryTelemetryOverview Query the Card-safe Telemetry overview.
 	// (POST /enterprise/telemetry/query/overview)
 	QueryTelemetryOverview(ctx context.Context, request QueryTelemetryOverviewRequestObject) (QueryTelemetryOverviewResponseObject, error)
-	// QueryTelemetryTraces Query authorized Traces.
-	// (POST /enterprise/telemetry/query/traces)
-	QueryTelemetryTraces(ctx context.Context, request QueryTelemetryTracesRequestObject) (QueryTelemetryTracesResponseObject, error)
 	// ListTelemetryRoutes List authorized Telemetry routes.
 	// (GET /enterprise/telemetry/routes)
 	ListTelemetryRoutes(ctx context.Context, request ListTelemetryRoutesRequestObject) (ListTelemetryRoutesResponseObject, error)
@@ -67,6 +67,9 @@ type StrictServerInterface interface {
 	// GetTelemetryUsage Get authorized Telemetry usage.
 	// (GET /enterprise/telemetry/usage)
 	GetTelemetryUsage(ctx context.Context, request GetTelemetryUsageRequestObject) (GetTelemetryUsageResponseObject, error)
+	// QueryTracesGraphQL Execute a read-only SkyWalking GraphQL trace query.
+	// (POST /enterprise/traces/graphql)
+	QueryTracesGraphQL(ctx context.Context, request QueryTracesGraphQLRequestObject) (QueryTracesGraphQLResponseObject, error)
 	// EnrollTelemetryCollector Exchange a one-time Collector Enrollment Token and CSR for a Telemetry client certificate.
 	// (POST /telemetry/collectors/enroll)
 	EnrollTelemetryCollector(ctx context.Context, request EnrollTelemetryCollectorRequestObject) (EnrollTelemetryCollectorResponseObject, error)
@@ -226,6 +229,99 @@ func (sh *strictHandler) PreviewKubernetesCollectorAction(w http.ResponseWriter,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PreviewKubernetesCollectorActionResponseObject); ok {
 		if err := validResponse.VisitPreviewKubernetesCollectorActionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// QueryLogsKQL operation middleware
+func (sh *strictHandler) QueryLogsKQL(w http.ResponseWriter, r *http.Request) {
+	var request QueryLogsKQLRequestObject
+
+	var body QueryLogsKQLJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.QueryLogsKQL(ctx, request.(QueryLogsKQLRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "QueryLogsKQL")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(QueryLogsKQLResponseObject); ok {
+		if err := validResponse.VisitQueryLogsKQLResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// QueryMetricsInstant operation middleware
+func (sh *strictHandler) QueryMetricsInstant(w http.ResponseWriter, r *http.Request) {
+	var request QueryMetricsInstantRequestObject
+
+	var body QueryMetricsInstantJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.QueryMetricsInstant(ctx, request.(QueryMetricsInstantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "QueryMetricsInstant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(QueryMetricsInstantResponseObject); ok {
+		if err := validResponse.VisitQueryMetricsInstantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// QueryMetricsRange operation middleware
+func (sh *strictHandler) QueryMetricsRange(w http.ResponseWriter, r *http.Request) {
+	var request QueryMetricsRangeRequestObject
+
+	var body QueryMetricsRangeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.QueryMetricsRange(ctx, request.(QueryMetricsRangeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "QueryMetricsRange")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(QueryMetricsRangeResponseObject); ok {
+		if err := validResponse.VisitQueryMetricsRangeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -419,68 +515,6 @@ func (sh *strictHandler) ListCollectionProfiles(w http.ResponseWriter, r *http.R
 	}
 }
 
-// QueryTelemetryLogs operation middleware
-func (sh *strictHandler) QueryTelemetryLogs(w http.ResponseWriter, r *http.Request) {
-	var request QueryTelemetryLogsRequestObject
-
-	var body QueryTelemetryLogsJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.QueryTelemetryLogs(ctx, request.(QueryTelemetryLogsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "QueryTelemetryLogs")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(QueryTelemetryLogsResponseObject); ok {
-		if err := validResponse.VisitQueryTelemetryLogsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// QueryTelemetryMetrics operation middleware
-func (sh *strictHandler) QueryTelemetryMetrics(w http.ResponseWriter, r *http.Request) {
-	var request QueryTelemetryMetricsRequestObject
-
-	var body QueryTelemetryMetricsJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.QueryTelemetryMetrics(ctx, request.(QueryTelemetryMetricsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "QueryTelemetryMetrics")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(QueryTelemetryMetricsResponseObject); ok {
-		if err := validResponse.VisitQueryTelemetryMetricsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // QueryTelemetryOverview operation middleware
 func (sh *strictHandler) QueryTelemetryOverview(w http.ResponseWriter, r *http.Request) {
 	var request QueryTelemetryOverviewRequestObject
@@ -505,37 +539,6 @@ func (sh *strictHandler) QueryTelemetryOverview(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(QueryTelemetryOverviewResponseObject); ok {
 		if err := validResponse.VisitQueryTelemetryOverviewResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// QueryTelemetryTraces operation middleware
-func (sh *strictHandler) QueryTelemetryTraces(w http.ResponseWriter, r *http.Request) {
-	var request QueryTelemetryTracesRequestObject
-
-	var body QueryTelemetryTracesJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.QueryTelemetryTraces(ctx, request.(QueryTelemetryTracesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "QueryTelemetryTraces")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(QueryTelemetryTracesResponseObject); ok {
-		if err := validResponse.VisitQueryTelemetryTracesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -617,6 +620,37 @@ func (sh *strictHandler) GetTelemetryUsage(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetTelemetryUsageResponseObject); ok {
 		if err := validResponse.VisitGetTelemetryUsageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// QueryTracesGraphQL operation middleware
+func (sh *strictHandler) QueryTracesGraphQL(w http.ResponseWriter, r *http.Request) {
+	var request QueryTracesGraphQLRequestObject
+
+	var body QueryTracesGraphQLJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.QueryTracesGraphQL(ctx, request.(QueryTracesGraphQLRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "QueryTracesGraphQL")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(QueryTracesGraphQLResponseObject); ok {
+		if err := validResponse.VisitQueryTracesGraphQLResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

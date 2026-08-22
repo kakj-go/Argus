@@ -9,6 +9,8 @@ import { hostsEn, hostsZh } from "./hosts";
 import { kubernetesEn, kubernetesZh } from "./kubernetes";
 import { loginEn, loginZh } from "./login";
 import { remoteAccessEn, remoteAccessZh } from "./remote-access";
+import { governanceEn, governanceZh } from "./governance";
+import { settingsEn, settingsZh } from "./settings";
 import { shellEn, shellZh } from "./shell";
 import { telemetryEn, telemetryZh } from "./telemetry";
 
@@ -32,6 +34,8 @@ const modulesZh = [
   automationsZh,
   remoteAccessZh,
   telemetryZh,
+  settingsZh,
+  governanceZh,
 ];
 const modulesEn = [
   commonEn,
@@ -45,6 +49,8 @@ const modulesEn = [
   automationsEn,
   remoteAccessEn,
   telemetryEn,
+  settingsEn,
+  governanceEn,
 ];
 
 const storedLocale = window.localStorage.getItem("argus.locale");

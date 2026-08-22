@@ -1,0 +1,8 @@
+{
+  "schema_version": "argus.telemetry_query_engines/v2",
+  "engines": [
+    {"language": "promql", "implementation": "upstream_go_module", "module": "github.com/prometheus/prometheus", "version": "v0.314.0", "commit": "d7598b7141418fa35be2b5ec5d0fefb634199610", "adapter": "internal/telemetry/queryengine/promql/engine.go", "license": "Apache-2.0", "notice": "THIRD_PARTY_NOTICES.md"},
+    {"language": "kql", "implementation": "argus_core_subset", "adapter": "internal/telemetry/queryengine/kql/kql.go", "license": "Proprietary"},
+    {"language": "skywalking_graphql", "implementation": "schema_first_graphql", "module": "github.com/graph-gophers/graphql-go", "version": "v1.10.2", "commit": "945316a96f2b309c04584a8f30f6b33422313669", "parser_module": "github.com/graphql-go/graphql", "parser_version": "v0.8.1", "schema": "internal/telemetry/queryengine/skywalking/schema/trace.graphql", "adapter": "internal/telemetry/queryengine/skywalking/engine.go", "license": "MIT", "notice": "THIRD_PARTY_NOTICES.md"}
+  ]
+}

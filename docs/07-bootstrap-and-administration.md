@@ -41,7 +41,11 @@ stateDiagram-v2
 
 如果初始化页面直接暴露在公网，第一个访问者可能抢占超级管理员。因此首次初始化需要一个部署侧生成的一次性 Setup Token。
 
-M2 固定由 `argusctl` 生成 32 字节随机 Token，保存到独立 Kubernetes Secret，并设置 24 小时过期时间。Server 通过只读 Secret Volume 每次重新读取 Token 与过期时间，因此未初始化期间可以轮换而无需重启 Pod。
+M2 固定由 `argusctl` 生成 32 字节随机 Token，保存到独立 Kubernetes Secret，并设置 24 小时过期时间。Server 通过只读 Secret Volume 每次重新读取 Token 与过期时间；为消除 Kubernetes Secret 投影的传播延迟，轮换流程会主动滚动重启 Server Pod。
+
+首次安装创建新 Token 时，`argusctl install` 必须在终端中明确提示部署者立即复制并安全保存，Token 只显示一次；重复安装不得重新显示仍有效的 Token。遗失时使用 `argusctl setup-token rotate` 生成新 Token。轮换命令更新 Secret 后必须滚动重启并等待 `argus-server` Ready，确认新 Pod 已挂载新值后才能向部署者显示 Token，避免用户拿到尚未生效的凭据。
+
+Evaluation 和 Local Hardening 的 Setup 入口只通过本机 `port-forward` 暴露。安装器生成的 Token 同时以只读 Secret Volume 挂载到 Setup Web，页面从仅存在于 Setup 端口的同源、`no-store` 本地交接地址读取并自动填入表单，提供复制按钮，不要求用户在终端与浏览器之间手工核对。Token 轮换必须同时重启 `argus-server` 和 `argus-web`，确保校验端与交接端读取同一 Secret 版本。Production 不挂载该 Secret，交接地址返回 404，仍要求部署者从受信终端手工输入一次性 Token；禁止在公网 Setup 页面提供无认证 Token 读取能力。
 
 Setup Token 应具有：
 
@@ -249,7 +253,7 @@ API Key 和 ServiceAccount 固定绑定一个 `enterprise_id`、允许 Tool 和 
 M2 提供本地账号认证，并预留 OIDC/SAML Adapter：
 
 - 密码使用 Argon2id，登录、修改密码和恢复流程统一限流。
-- M2 不实现 MFA，只达到 Evaluation 身份闭环；M8 本地加固已实现平台超级管理员 TOTP、恢复码和 Step-up，但 Production Profile 仍因 HA、出口、容量和灾备清单保持阻断。
+- M2 不实现 MFA，只达到 Evaluation 身份闭环；M8 本地加固已实现平台超级管理员 TOTP、恢复码和 Step-up。平台超级管理员是否必须先绑定 MFA 由安装配置 `spec.security.platformMfaRequired` 控制，Evaluation、Local Hardening 和 Production 默认均为 `false`；设置为 `true` 后，未绑定 MFA 的平台账号只允许访问 Session 与 TOTP 注册接口。Production Profile 仍因 HA、出口、容量和灾备清单保持阻断。
 - Session 使用 256 位随机 opaque Token，数据库只保存 SHA-256 Hash；空闲超时 30 分钟，绝对有效期 12 小时。
 - Platform 与 Enterprise 使用独立 Host-only Cookie；Production 使用 `Secure + HttpOnly + SameSite=Strict`。所有已认证变更同时执行 Session 绑定 CSRF Token 和 Origin 校验。
 - 用户禁用、密码重置、企业停用时在 PostgreSQL 写入撤销事实并递增相关 AuthorizationVersion；Redis 只传播快速失效通知。

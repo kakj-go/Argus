@@ -19,6 +19,8 @@ type IngestControlStore interface {
 
 // WriterControlStore exposes only retention, usage, and DLQ settlement facts.
 type WriterControlStore interface {
+	TelemetryWritable(context.Context, uuid.UUID) (bool, error)
+	TelemetryTenantReady(context.Context, uuid.UUID) (bool, error)
 	Retention(context.Context, uuid.UUID) (TelemetryRetention, error)
 	RecordDLQ(context.Context, TelemetryDLQRecord) error
 	IncrementUsage(context.Context, uuid.UUID, TelemetryUsageDelta) error
@@ -74,6 +76,22 @@ func (store PostgresIngestControl) ResolveDownstreamIdentity(ctx context.Context
 }
 
 type PostgresWriterControl struct{ Queries *db.Queries }
+
+func (store PostgresWriterControl) TelemetryWritable(ctx context.Context, enterpriseID uuid.UUID) (bool, error) {
+	enterprise, err := store.Queries.GetEnterprise(ctx, enterpriseID)
+	if err != nil {
+		return false, err
+	}
+	return enterprise.Status == "active", nil
+}
+
+func (store PostgresWriterControl) TelemetryTenantReady(ctx context.Context, enterpriseID uuid.UUID) (bool, error) {
+	row, err := store.Queries.GetEnterpriseTelemetryTables(ctx, enterpriseID)
+	if err != nil {
+		return false, err
+	}
+	return row.SchemaVersion == int32(TelemetrySchemaVersion) && row.Status == "ready", nil
+}
 
 func (store PostgresWriterControl) Retention(ctx context.Context, enterpriseID uuid.UUID) (TelemetryRetention, error) {
 	policy, err := store.Queries.EnsureTelemetryRetentionPolicy(ctx, enterpriseID)

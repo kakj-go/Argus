@@ -69,6 +69,8 @@ export function EnterprisesPage() {
         code: z
           .string()
           .trim()
+          .min(1, t("enterprises.form.required"))
+          .max(63, t("enterprises.form.codeInvalid"))
           .regex(
             /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
             t("enterprises.form.codeInvalid"),
@@ -281,7 +283,7 @@ export function EnterprisesPage() {
           error={errors.code?.message}
           label={t("enterprises.form.code")}
         >
-          <Input {...register("code")} required />
+          <Input {...register("code")} maxLength={63} required />
         </Field>
         <Field
           error={errors.timezone?.message}

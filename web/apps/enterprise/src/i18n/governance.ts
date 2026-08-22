@@ -1,9 +1,6 @@
-import i18n from "./index";
-
 /**
  * 执行治理（任务记录 + 待审批）文案。
- * 模块自注册：页面 import 本模块后资源即注入共享 i18next 实例，
- * 无需改动 `i18n/index.ts` 的模块清单（该文件由外壳统一维护）。
+ * 模块清单在 i18n/index.ts 中集中维护。
  */
 export const governanceZh = {
   governance: {
@@ -407,6 +404,3 @@ export const governanceEn = {
     },
   },
 };
-
-i18n.addResourceBundle("zh-CN", "translation", governanceZh, true, true);
-i18n.addResourceBundle("en-US", "translation", governanceEn, true, true);

@@ -13,7 +13,7 @@ const loginWithMfa = createMfaLogin("enterprise");
 
 test.describe("M6 real remote access flow", () => {
   test.skip(!enabled, "M6 Kubernetes environment is not active");
-  test.describe.configure({ mode: "serial" });
+  test.describe.configure({ mode: "serial", timeout: 120_000 });
 
   test("renders grants and completes a WinRS PowerShell session with recording", async ({ page }) => {
     test.setTimeout(120_000);

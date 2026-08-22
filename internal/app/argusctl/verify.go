@@ -84,8 +84,8 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 	}{
 		{cfg.Spec.Namespaces.System, "argus-server", 8080},
 		{cfg.Spec.Namespaces.System, "argus-connector-gateway", 8081},
-		{cfg.Spec.Namespaces.System, "argus-telemetry-ingest", 8081},
-		{cfg.Spec.Namespaces.System, "argus-telemetry-query", 8081},
+		{cfg.Spec.Namespaces.Observability, "argus-telemetry-ingest", 8081},
+		{cfg.Spec.Namespaces.Observability, "argus-telemetry-query", 8081},
 	} {
 		add("health/"+service.name, a.httpProbe(ctx, cfg, service.namespace, service.name, service.port))
 	}
@@ -94,7 +94,7 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 		add("health/"+deployment, a.podHealthProbe(ctx, cfg, clients, cfg.Spec.Namespaces.System, deployment, 8081))
 	}
 
-	postgresSQL := `set -eu; export PGPASSWORD="$POSTGRES_PASSWORD"; psql -U argus -d argus -v ON_ERROR_STOP=1 -Atc "BEGIN; INSERT INTO argus_installation_checks(id,value) VALUES ('argus-e2e','postgres-ok') ON CONFLICT (id) DO UPDATE SET value=EXCLUDED.value; COMMIT; SELECT value FROM argus_installation_checks WHERE id='argus-e2e'; DELETE FROM argus_installation_checks WHERE id='argus-e2e';" | grep postgres-ok`
+	postgresSQL := `set -eu; export PGPASSWORD="$POSTGRES_PASSWORD"; psql -U argus -d argus -v ON_ERROR_STOP=1 -Atc "BEGIN; CREATE TEMP TABLE argus_installation_checks(id text PRIMARY KEY, value text); INSERT INTO argus_installation_checks(id,value) VALUES ('argus-e2e','postgres-ok'); SELECT value FROM argus_installation_checks WHERE id='argus-e2e'; COMMIT;" | grep postgres-ok`
 	add("postgresql-write-read", a.execBySelector(ctx, cfg, clients, cfg.Spec.Namespaces.System, "app.kubernetes.io/name=argus-postgresql", "postgresql", postgresSQL))
 	redisCommand := `set -eu; redis-cli -a "$REDIS_PASSWORD" SET argus:e2e redis-ok >/dev/null; test "$(redis-cli -a "$REDIS_PASSWORD" GET argus:e2e)" = redis-ok; redis-cli -a "$REDIS_PASSWORD" DEL argus:e2e >/dev/null; test -z "$(redis-cli -a "$REDIS_PASSWORD" GET argus:e2e)"`
 	add("redis-write-read", a.execBySelector(ctx, cfg, clients, cfg.Spec.Namespaces.System, "app.kubernetes.io/name=argus-redis", "redis", redisCommand))
@@ -175,9 +175,34 @@ func (a *App) kafkaSmoke(ctx context.Context, cfg *InstallConfig, clients *kubeC
 	if err != nil || len(pods.Items) == 0 {
 		return fmt.Errorf("Kafka broker pod not found")
 	}
-	command := `set -eu; message="argus-e2e-$(date +%s)"; printf '%s\n' "$message" | bin/kafka-console-producer.sh --bootstrap-server argus-kafka-kafka-bootstrap:9092 --topic argus-installation-check; timeout 30 bin/kafka-console-consumer.sh --bootstrap-server argus-kafka-kafka-bootstrap:9092 --topic argus-installation-check --from-beginning --max-messages 20 | grep -q "$message"`
-	_, err = a.runner.quiet(ctx, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.Observability, "exec", pods.Items[0].Name, "--container", "kafka", "--", "sh", "-ec", command)
-	return err
+	image := ""
+	for _, container := range pods.Items[0].Spec.Containers {
+		if container.Name == "kafka" {
+			image = container.Image
+			break
+		}
+	}
+	if image == "" {
+		return fmt.Errorf("Kafka broker image not found")
+	}
+	name := kubernetesName("argus-kafka-smoke-" + cfg.Spec.ReleaseID)
+	env := []string{"          - name: KAFKA_PASSWORD\n            valueFrom: {secretKeyRef: {name: argus-telemetry, key: password}}"}
+	command := `set -eu
+cat >/tmp/client.properties <<EOF
+security.protocol=SASL_PLAINTEXT
+sasl.mechanism=SCRAM-SHA-512
+sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="argus-telemetry" password="$KAFKA_PASSWORD";
+EOF
+message="argus-e2e-$(date +%s%N)"
+group="argus-installation-check-$(date +%s%N)"
+printf '%s\n' "$message" | /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server argus-kafka-kafka-bootstrap:9093 --command-config /tmp/client.properties --topic argus-installation-check
+timeout 15 /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server argus-kafka-kafka-bootstrap:9093 --command-config /tmp/client.properties --topic argus-installation-check --from-beginning --group "$group" --max-messages 100 >/tmp/messages 2>/tmp/consumer.log || true
+if ! grep -Fqx "$message" /tmp/messages; then
+  cat /tmp/consumer.log >&2
+  cat /tmp/messages >&2
+  exit 1
+fi`
+	return a.runPodManifest(ctx, cfg, cfg.Spec.Namespaces.Observability, name, genericSmokePod(name, cfg.Spec.Namespaces.Observability, image, env, command))
 }
 
 func (a *App) openSandboxSmoke(ctx context.Context, cfg *InstallConfig, clients *kubeClients) error {
@@ -259,7 +284,7 @@ func minioSmokePod(cfg *InstallConfig) string {
 func clickHouseSmokePod(cfg *InstallConfig) string {
 	name := kubernetesName("argus-clickhouse-smoke-" + cfg.Spec.ReleaseID)
 	env := []string{"          - name: CLICKHOUSE_PASSWORD\n            valueFrom: {secretKeyRef: {name: argus-clickhouse-credentials, key: password}}"}
-	command := `clickhouse-client --host argus-clickhouse-client --user argus --password "$CLICKHOUSE_PASSWORD" --multiquery "CREATE TABLE IF NOT EXISTS argus.e2e_persistence (id String, value String) ENGINE=ReplacingMergeTree ORDER BY id; INSERT INTO argus.e2e_persistence VALUES ('argus-e2e','clickhouse-ok');"; clickhouse-client --host argus-clickhouse-client --user argus --password "$CLICKHOUSE_PASSWORD" --query "SELECT value FROM argus.e2e_persistence FINAL WHERE id='argus-e2e'" | grep -q clickhouse-ok`
+	command := `set -eu; trap 'clickhouse-client --host argus-clickhouse-client --user argus --password "$CLICKHOUSE_PASSWORD" --query "DROP TABLE IF EXISTS default.argus_e2e_persistence" >/dev/null 2>&1' EXIT; clickhouse-client --host argus-clickhouse-client --user argus --password "$CLICKHOUSE_PASSWORD" --multiquery "CREATE TABLE IF NOT EXISTS default.argus_e2e_persistence (id String, value String) ENGINE=ReplacingMergeTree ORDER BY id; INSERT INTO default.argus_e2e_persistence VALUES ('argus-e2e','clickhouse-ok');"; clickhouse-client --host argus-clickhouse-client --user argus --password "$CLICKHOUSE_PASSWORD" --query "SELECT value FROM default.argus_e2e_persistence FINAL WHERE id='argus-e2e'" | grep -q clickhouse-ok`
 	return genericSmokePod(name, cfg.Spec.Namespaces.Observability, "clickhouse/clickhouse-server:26.3.17.110-alpine", env, command)
 }
 

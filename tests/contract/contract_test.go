@@ -96,7 +96,6 @@ func TestSchemas(t *testing.T) {
 		{"tool-metadata", "https://argus.io/schemas/v1/agent/agent.schema.json", "/$defs/ToolMetadata"},
 		{"agent-event", "https://argus.io/schemas/v1/agent/agent.schema.json", "/$defs/AgentEvent"},
 		{"stream", "https://argus.io/schemas/v1/stream/stream.schema.json", ""},
-		{"telemetry-query", "https://argus.io/schemas/v1/telemetry/query.schema.json", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

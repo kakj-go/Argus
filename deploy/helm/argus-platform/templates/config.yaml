@@ -22,6 +22,7 @@ data:
   ARGUS_OPENBAO_ADDRESS: {{ .Values.runtime.openBaoAddress | quote }}
   ARGUS_OPENBAO_TRANSIT_KEY: {{ .Values.runtime.openBaoTransitKey | quote }}
   ARGUS_BREAK_GLASS_ENABLED: {{ .Values.runtime.breakGlassEnabled | quote }}
+  ARGUS_PLATFORM_MFA_REQUIRED: {{ .Values.runtime.platformMfaRequired | quote }}
   ARGUS_DIRECT_ADVERTISED_EGRESS: {{ join "," .Values.runtime.directAdvertisedEgress | quote }}
   ARGUS_DIRECT_VERIFICATION_URL: {{ .Values.runtime.directVerificationUrl | quote }}
   ARGUS_DIRECT_DENIED_CIDRS: {{ join "," .Values.runtime.directDeniedCidrs | quote }}
@@ -96,6 +97,7 @@ stringData:
   migration-url: {{ printf "postgres://argus_migration:%s@argus-postgresql:5432/argus?sslmode=disable" (required "runtime.migrationDatabasePassword is required" .Values.runtime.migrationDatabasePassword) | quote }}
   telemetry-ingest-url: {{ printf "postgres://argus_telemetry_ingest:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryIngestDatabasePassword is required" .Values.runtime.telemetryIngestDatabasePassword) .Values.namespaces.system | quote }}
   telemetry-writer-url: {{ printf "postgres://argus_telemetry_writer:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryWriterDatabasePassword is required" .Values.runtime.telemetryWriterDatabasePassword) .Values.namespaces.system | quote }}
+  telemetry-query-url: {{ printf "postgres://argus_telemetry_query:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryQueryDatabasePassword is required" .Values.runtime.telemetryQueryDatabasePassword) .Values.namespaces.system | quote }}
 {{- end }}
 ---
 {{- if eq .Values.runtime.keyWrappingMode "local_test" }}

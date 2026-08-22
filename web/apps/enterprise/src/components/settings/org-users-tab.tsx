@@ -296,7 +296,7 @@ export function OrgUsersTab() {
       <FormDrawer
         footer={
           <Button onClick={() => setCreated(null)} variant="primary">
-            {t("common.close")}
+            {t("settings.common.close")}
           </Button>
         }
         onOpenChange={(open) => {

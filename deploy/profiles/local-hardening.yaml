@@ -18,6 +18,8 @@ spec:
     pullPolicy: Never
   exposure:
     mode: port-forward
+  security:
+    platformMfaRequired: false
   openSandbox:
     runtimeClassName: ""
     allowSharedRuntime: true

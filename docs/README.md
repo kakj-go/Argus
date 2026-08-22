@@ -24,6 +24,9 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 16. [端到端实现计划](./15-end-to-end-implementation-plan.md)
 17. [Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)
 18. [分阶段任务文件](./plans/README.md)
+19. [M9 查询语言 ADR](./adr/telemetry-query-ir.md)
+20. [M9 ClickHouse 语义子集 ADR](./adr/clickhouse-semantic-subset.md)
+21. [M10 单进程 Telemetry Query Engine ADR](./adr/telemetry-query-engine.md)
 
 ## 关键术语
 
@@ -103,5 +106,5 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 - 第一版所有中间件随 Argus 安装到同一 Kubernetes 集群的隔离命名空间中；外部托管中间件接入延后。
 - 第一版主前端固定为 React + TypeScript + Vite，交互卡片保持框架无关的 HTML/CSS/JavaScript 沙箱运行时。
 - 第一版后端固定使用 Go；外部 API 使用 REST/OpenAPI，内部服务与 Connector 使用 gRPC/protobuf。
-- ClickHouse 按 Metrics、Logs、Traces 三个共享逻辑数据集组织，企业使用行级 `EnterpriseId` 隔离，不为每个企业创建独立表或分区。
+- ClickHouse 在 M10 按 Enterprise UUID 创建 Metrics、Logs、Traces 租户物理表；表名由 `TenantTableRouter` 生成，企业内部仍通过 `ResourceId` 和 DataScope 裁剪。
 - Telemetry Query 在 `EnterpriseId` 之外还必须执行授权 Resource ID/标签选择结果、Signal、字段脱敏、时间范围和预算约束；用户、AI 和 Card 复用同一裁剪结果。

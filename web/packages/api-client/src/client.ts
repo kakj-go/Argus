@@ -121,14 +121,15 @@ import type {
   NodeHostBindingPreview,
   TelemetryRoute,
   TelemetryUsage,
-  MetricsQuery,
-  MetricsResult,
-  LogsQuery,
-  LogsResult,
-  TracesQuery,
-  TracesResult,
   TelemetryOverviewQuery,
   TelemetryOverview,
+  PromQLInstantQuery,
+  PromQLRangeQuery,
+  KQLQuery,
+  SkyWalkingTraceGraphQLQuery,
+  PrometheusQueryResponse,
+  KQLQueryResponse,
+  SkyWalkingGraphQLResponse,
   RouteTestCreate,
   RouteTestResult,
   CardPresentationCreate,
@@ -401,10 +402,11 @@ export interface ArgusApiClient {
     listClaims(resourceId?: string): Promise<CollectionClaim[]>;
     testRoute(input: RouteTestCreate): Promise<RouteTestResult>;
     usage(): Promise<TelemetryUsage>;
-    queryMetrics(input: MetricsQuery): Promise<MetricsResult>;
-    queryLogs(input: LogsQuery): Promise<LogsResult>;
-    queryTraces(input: TracesQuery): Promise<TracesResult>;
     overview(input: TelemetryOverviewQuery): Promise<TelemetryOverview>;
+    queryMetrics(input: PromQLInstantQuery): Promise<PrometheusQueryResponse>;
+    queryMetricsRange(input: PromQLRangeQuery): Promise<PrometheusQueryResponse>;
+    queryLogs(input: KQLQuery): Promise<KQLQueryResponse>;
+    queryTraces(input: SkyWalkingTraceGraphQLQuery): Promise<SkyWalkingGraphQLResponse>;
   };
 
   /** Execution tasks with steps, logs and progress subscriptions. */

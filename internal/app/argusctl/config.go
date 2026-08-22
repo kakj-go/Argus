@@ -36,6 +36,7 @@ type InstallSpec struct {
 	StorageClass string     `json:"storageClass"`
 	Images       Images     `json:"images"`
 	Exposure     Exposure   `json:"exposure"`
+	Security     Security   `json:"security"`
 	OpenSandbox  struct {
 		RuntimeClassName   string `json:"runtimeClassName"`
 		AllowSharedRuntime bool   `json:"allowSharedRuntime"`
@@ -46,6 +47,10 @@ type InstallSpec struct {
 		RetainData      bool `json:"retainData"`
 		DeleteOwnedCRDs bool `json:"deleteOwnedCrds"`
 	} `json:"cleanup"`
+}
+
+type Security struct {
+	PlatformMFARequired bool `json:"platformMfaRequired"`
 }
 
 type TelemetryArtifacts struct {

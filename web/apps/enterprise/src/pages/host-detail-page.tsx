@@ -140,8 +140,8 @@ function OverviewTab({ host }: { host: Host }) {
                 ),
               },
               {
-                label: t("hosts.overview.kv.connection_mode"),
-                value: t(`hosts.connection_mode.${host.connection_mode}`),
+                label: t("hosts.overview.kv.connectionMode"),
+                value: t(`hosts.connectionMode.${host.connection_mode}`),
               },
               { label: t("hosts.overview.kv.connectionPath"), value: path },
               {
@@ -209,7 +209,6 @@ function OverviewTab({ host }: { host: Host }) {
     </div>
   );
 }
-
 /** 主机详情页：概览 | 终端与会话 | 已安装组件 | 任务与审计。 */
 export function HostDetailPage() {
   const { t } = useTranslation();

@@ -122,6 +122,15 @@ run_local_identity_flow() {
   request enterprise-step-up 200 POST /enterprise/auth/step-up "$ENTERPRISE_JAR" \
     "$(jq -nc --arg code "$enrollment_code" '{code:$code}')" \
     --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}"
+  request enterprise-openbao-secret-create 201 POST /enterprise/secrets "$ENTERPRISE_JAR" \
+    "$(jq -nc --arg name "m8-openbao-secret-${RUN_ID}" '{name:$name,type:"ssh_password",description:"M8 OpenBao envelope validation",value:"M8-openbao-secret-value"}')" \
+    --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}" --header "Idempotency-Key: m8-openbao-secret-${RUN_ID}"
+  M8_SECRET_ID=$(jq -er '.id' "$RESPONSE_FILE")
+  jq -e 'has("value") | not' "$RESPONSE_FILE" >/dev/null
+  request enterprise-openbao-credential-create 201 POST /enterprise/credentials "$ENTERPRISE_JAR" \
+    "$(jq -nc --arg id "$M8_SECRET_ID" --arg name "m8-openbao-credential-${RUN_ID}" '{name:$name,protocol:"ssh",username:"argus",secret_id:$id}')" \
+    --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}" --header "Idempotency-Key: m8-openbao-credential-${RUN_ID}"
+  M8_CREDENTIAL_ID=$(jq -er '.id' "$RESPONSE_FILE")
   request break-glass-create 201 POST /enterprise/break-glass-sessions "$ENTERPRISE_JAR" \
     '{"reason":"local recovery validation","ticket_ref":"M8-LOCAL-001"}' \
     --header "Origin: ${ENTERPRISE_ORIGIN}" --header "X-CSRF-Token: ${ENTERPRISE_CSRF}" --header "Idempotency-Key: m8-break-glass-${RUN_ID}"
@@ -151,6 +160,10 @@ verify_restored_identity_flow() {
   code=$(jq -er '.codes[1]' "$ENTERPRISE_RECOVERY")
   request restored-enterprise-mfa 200 POST /enterprise/auth/mfa/complete "$ENTERPRISE_JAR" \
     "$(jq -nc --arg challenge "$challenge" --arg code "$code" '{challenge_id:$challenge,code:$code}')" --header "Origin: ${ENTERPRISE_ORIGIN}"
+  request restored-openbao-secret 200 GET /enterprise/secrets "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
+  jq -e --arg id "$M8_SECRET_ID" '.items[] | select(.id == $id and .type == "ssh_password" and .current_version == 1)' "$RESPONSE_FILE" >/dev/null
+  request restored-openbao-credential 200 GET /enterprise/credentials "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
+  jq -e --arg id "$M8_CREDENTIAL_ID" --arg secret "$M8_SECRET_ID" '.items[] | select(.id == $id and .secret_id == $secret and .protocol == "ssh")' "$RESPONSE_FILE" >/dev/null
   request restored-break-glass-history 200 GET /enterprise/break-glass-sessions "$ENTERPRISE_JAR" - --header "Origin: ${ENTERPRISE_ORIGIN}"
   jq -e 'any(.[]; .ticket_ref == "M8-LOCAL-001" and .status == "revoked")' "$RESPONSE_FILE" >/dev/null
   unset challenge code
@@ -187,6 +200,7 @@ sed \
   -e "s/argus-m8-local-system/m8-${RUN_ID}-system/g" \
   -e "s/argus-m8-local-sandbox/m8-${RUN_ID}-sandbox/g" \
   -e "s/argus-m8-local-observability/m8-${RUN_ID}-observability/g" \
+  -e "s/platformMfaRequired: false/platformMfaRequired: true/" \
   deploy/profiles/local-hardening.yaml >"$SOURCE_CONFIG"
 
 sed \
@@ -194,6 +208,7 @@ sed \
   -e "s/argus-m8-local-system/m8r-${RUN_ID}-system/g" \
   -e "s/argus-m8-local-sandbox/m8r-${RUN_ID}-sandbox/g" \
   -e "s/argus-m8-local-observability/m8r-${RUN_ID}-observability/g" \
+  -e "s/platformMfaRequired: false/platformMfaRequired: true/" \
   deploy/profiles/local-hardening.yaml >"$RESTORE_CONFIG"
 
 echo "installing local-hardening source environment"

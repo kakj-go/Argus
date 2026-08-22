@@ -7,7 +7,7 @@ components:
       properties:
         id: {type: string, minLength: 1}
         name: {type: string, minLength: 1, maxLength: 128}
-        code: {type: string, pattern: "^[a-z][a-z0-9-]{1,62}$"}
+        code: {type: string, minLength: 1, maxLength: 63, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
         status: {type: string, enum: [active, suspended, disabled]}
         timezone: {type: string, minLength: 1, maxLength: 128}
         default_locale: {type: string, enum: [zh-CN, en-US]}

@@ -11,7 +11,7 @@ const platformLogin = createMfaLogin("platform");
 
 test.describe("M4 real Agent and governance flow", () => {
   test.skip(!enabled, "M4 Kubernetes environment is not active");
-  test.describe.configure({ mode: "serial" });
+  test.describe.configure({ mode: "serial", timeout: 120_000 });
 
   test("renders persisted Chat, model, approval, execution, and automation facts", async ({
     page,

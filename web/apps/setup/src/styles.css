@@ -72,7 +72,11 @@ body {
 .argus-setup-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  align-items: start;
   gap: var(--space-px-18);
+}
+.argus-setup-grid-2 > .argus-field {
+  align-content: start;
 }
 .argus-setup-section {
   margin: var(--space-px-8) 0 0;
@@ -97,6 +101,16 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-px-14);
+}
+.argus-setup-token-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: var(--space-px-8);
+}
+.argus-setup-token-control .argus-button {
+  width: 38px;
+  height: 38px;
 }
 
 /* 密码强度指示 */

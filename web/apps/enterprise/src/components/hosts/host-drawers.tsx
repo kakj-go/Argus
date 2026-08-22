@@ -566,7 +566,7 @@ export function EditHostDrawer({
                   }}
                   options={HOST_CONNECTION_MODES.map((mode) => ({
                     value: mode,
-                    label: t(`hosts.mode.${mode}`),
+                    label: t(`hosts.connectionMode.${mode}`),
                   }))}
                   value={connectionMode}
                 />

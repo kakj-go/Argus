@@ -11,6 +11,14 @@ import { decodeSse, parseSseBlock, SseTransport } from "./sse";
 import { WebSocketTransport } from "./websocket";
 
 describe("configured adapter", () => {
+  it("resolves a same-origin API base URL", () => {
+    const transport = new HttpTransport({ base_url: "/" });
+    const resolved = transport.resolve("setup/status");
+
+    expect(resolved.pathname).toBe("/api/v1/setup/status");
+    expect(resolved.origin).toBe(globalThis.location?.origin ?? "http://localhost");
+  });
+
   it("fails closed for unknown mode and missing real URL", async () => {
     await expect(
       createConfiguredApiClient({ portal: "setup", mode: "auto" }),

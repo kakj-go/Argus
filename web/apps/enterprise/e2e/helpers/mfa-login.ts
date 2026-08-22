@@ -1,4 +1,6 @@
 import { createHmac } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
 
 type Audience = "enterprise" | "platform";
@@ -7,6 +9,10 @@ export function createMfaLogin(audience: Audience) {
   const prefix = `ARGUS_E2E_${audience.toUpperCase()}_TOTP`;
   const secret = process.env[`${prefix}_SECRET`] ?? "";
   let lastCode = process.env[`${prefix}_LAST_CODE`] ?? "";
+  const artifactDir = process.env.ARGUS_E2E_ARTIFACTS ?? "";
+  const stateFile = artifactDir
+    ? join(artifactDir, `.argus-${audience}-totp-last-code`)
+    : "";
 
   return async (page: Page, url: string, username: string, password: string) => {
     expect(username).not.toBe("");
@@ -22,8 +28,9 @@ export function createMfaLogin(audience: Audience) {
       .toBe(true);
     if (await mfaInput.isVisible()) {
       expect(secret, `${audience} TOTP secret is required`).not.toBe("");
-      const code = await nextCode(secret, lastCode);
+      const code = await nextCode(secret, readLastCode(stateFile) || lastCode);
       lastCode = code;
+      writeLastCode(stateFile, code);
       await mfaInput.fill(code);
       await page.locator('form button[type="submit"]').click();
     }
@@ -32,13 +39,30 @@ export function createMfaLogin(audience: Audience) {
 }
 
 async function nextCode(secret: string, previous: string) {
-  const deadline = Date.now() + 35_000;
+  const deadline = Date.now() + 40_000;
   while (Date.now() < deadline) {
-    const code = totp(secret, Date.now());
-    if (code !== previous) return code;
+    const now = Date.now();
+    const code = totp(secret, now);
+    const secondsRemaining = 30 - (Math.floor(now / 1000) % 30);
+    if (code !== previous && secondsRemaining >= 5) return code;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error("TOTP counter did not advance before the login timeout");
+}
+
+function readLastCode(path: string) {
+  if (!path) return "";
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeLastCode(path: string, code: string) {
+  if (!path) return;
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, code, { encoding: "utf8", mode: 0o600 });
 }
 
 function totp(secret: string, now: number) {

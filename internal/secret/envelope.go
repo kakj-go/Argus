@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	localProvider = "local"
-	localKeyID    = "argus-secret-kek"
-	keySize       = 32
+	EnvelopeProviderLocal = "local"
+	localKeyID            = "argus-secret-kek"
+	keySize               = 32
 )
 
 var ErrUnknownKeyVersion = errors.New("unknown secret KEK version")
@@ -89,9 +89,9 @@ func NewProviderKeyring(provider keywrap.Provider) (Keyring, error) {
 // never falls back to the local key file when OpenBao is unavailable.
 func LoadConfiguredKeyring(path, mode, address, token, keyID string) (Keyring, error) {
 	switch mode {
-	case "local_test":
+	case keywrap.ProviderLocalTest:
 		return LoadKeyring(path)
-	case "openbao_transit":
+	case keywrap.ProviderOpenBaoTransit:
 		return NewProviderKeyring(keywrap.OpenBao{Address: address, Token: token, KeyID: keyID})
 	default:
 		return Keyring{}, fmt.Errorf("unsupported key wrapping mode %q", mode)
@@ -128,7 +128,7 @@ func (keyring Keyring) EncryptContext(ctx context.Context, plaintext, aad []byte
 		return Envelope{}, err
 	}
 	hash := sha256.Sum256(plaintext)
-	return Envelope{Provider: localProvider, KeyID: localKeyID, KeyVersion: keyring.currentVersion,
+	return Envelope{Provider: EnvelopeProviderLocal, KeyID: localKeyID, KeyVersion: keyring.currentVersion,
 		WrappedDEK: wrappedDEK, WrapNonce: wrapNonce, Nonce: nonce, Ciphertext: ciphertext, ValueHash: hash[:]}, nil
 }
 
@@ -143,7 +143,7 @@ func (keyring Keyring) DecryptContext(ctx context.Context, envelope Envelope, aa
 		dek, err = keyring.provider.Decrypt(ctx, keywrap.Ciphertext{Provider: envelope.Provider, KeyID: envelope.KeyID,
 			KeyVersion: int32(envelope.KeyVersion), Value: envelope.WrappedDEK})
 	} else {
-		if envelope.Provider != localProvider || envelope.KeyID != localKeyID {
+		if envelope.Provider != EnvelopeProviderLocal || envelope.KeyID != localKeyID {
 			return nil, errors.New("unsupported secret envelope provider")
 		}
 		kek, ok := keyring.keys[envelope.KeyVersion]

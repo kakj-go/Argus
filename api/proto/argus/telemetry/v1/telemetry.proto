@@ -6,6 +6,7 @@ option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/telemetry
 
 import "argus/common/v1/common.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
 
 service TelemetryIdentityService {
   rpc ResolveCollector(ResolveCollectorRequest) returns (ResolveCollectorResponse);
@@ -14,10 +15,10 @@ service TelemetryIdentityService {
 // TelemetryQueryService is an internal mTLS boundary. The caller supplies a
 // server-authorized enterprise/resource set; the service never accepts SQL.
 service TelemetryQueryService {
-  rpc QueryMetrics(QueryMetricsRequest) returns (QueryMetricsResponse);
-  rpc QueryLogs(QueryLogsRequest) returns (QueryLogsResponse);
-  rpc QueryTraces(QueryTracesRequest) returns (QueryTracesResponse);
+  rpc ExecuteQueryV2(ExecuteQueryV2Request) returns (ExecuteQueryV2Response);
   rpc QueryOverview(QueryOverviewRequest) returns (QueryOverviewResponse);
+  rpc EnsureTenantSchema(EnsureTenantSchemaRequest) returns (EnsureTenantSchemaResponse);
+  rpc DropTenantSchema(DropTenantSchemaRequest) returns (DropTenantSchemaResponse);
 }
 
 message ResolveCollectorRequest {
@@ -51,19 +52,16 @@ message TelemetryQueryScope {
   repeated string allowed_signals = 3;
   uint64 authorization_version = 4;
   string scope_hash = 5;
+  bool sensitive_fields = 6;
 }
 
-message TelemetryQueryRequest {
+message QueryOverviewRequest {
   string schema_version = 1;
   TelemetryQueryScope scope = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
-  uint32 limit = 5;
-  string cursor = 6;
-  bytes filter_json = 7;
-  bool sensitive_fields = 8;
-  uint64 max_scan_bytes = 9;
-  uint32 timeout_millis = 10;
+  uint64 max_scan_bytes = 5;
+  uint32 timeout_millis = 6;
 }
 
 message TelemetryQueryResponse {
@@ -75,11 +73,93 @@ message TelemetryQueryResponse {
   uint64 elapsed_millis = 6;
 }
 
-message QueryMetricsRequest { TelemetryQueryRequest query = 1; }
-message QueryMetricsResponse { TelemetryQueryResponse result = 1; }
-message QueryLogsRequest { TelemetryQueryRequest query = 1; }
-message QueryLogsResponse { TelemetryQueryResponse result = 1; }
-message QueryTracesRequest { TelemetryQueryRequest query = 1; }
-message QueryTracesResponse { TelemetryQueryResponse result = 1; }
-message QueryOverviewRequest { TelemetryQueryRequest query = 1; }
 message QueryOverviewResponse { TelemetryQueryResponse result = 1; }
+
+message EnsureTenantSchemaRequest {
+  string enterprise_id = 1;
+  uint32 schema_version = 2;
+}
+
+message DropTenantSchemaRequest {
+  string enterprise_id = 1;
+  uint32 schema_version = 2;
+}
+
+message EnsureTenantSchemaResponse {
+  uint32 schema_version = 1;
+  string status = 2;
+}
+
+message DropTenantSchemaResponse {
+  uint32 schema_version = 1;
+  string status = 2;
+}
+
+// ExecuteQueryV2Request is the single-process query contract. The oneof keeps
+// language-specific syntax out of a shared DSL/IR while preserving one RPC
+// boundary for auth, budget and audit enforcement.
+message ExecuteQueryV2Request {
+  string schema_version = 1;
+  TelemetryQueryScope scope = 2;
+  QueryBudget budget = 3;
+
+  oneof query {
+    PromQLQuery promql = 10;
+    KQLQuery kql = 11;
+    TraceGraphQLQuery trace_graphql = 12;
+  }
+}
+
+message QueryBudget {
+  uint64 max_scan_bytes = 1;
+  uint32 max_rows = 2;
+  uint32 max_samples = 3;
+  uint32 timeout_millis = 4;
+  uint64 max_result_bytes = 5;
+  uint32 max_series = 6;
+}
+
+message PromQLQuery {
+  string expression = 1;
+  google.protobuf.Timestamp start = 2;
+  google.protobuf.Timestamp end = 3;
+  uint64 step_seconds = 4;
+  bool instant = 5;
+}
+
+message KQLQuery {
+  string expression = 1;
+  string pipeline = 2;
+  google.protobuf.Timestamp start = 3;
+  google.protobuf.Timestamp end = 4;
+}
+
+message TraceGraphQLQuery {
+  string document = 1;
+  string operation_name = 2;
+  google.protobuf.Struct variables = 3;
+  google.protobuf.Timestamp start = 4;
+  google.protobuf.Timestamp end = 5;
+}
+
+message ExecuteQueryV2Response {
+  string schema_version = 1;
+  string language = 2;
+  string result_type = 3;
+  bytes result_json = 4;
+  repeated string warnings = 5;
+  bool partial = 6;
+  QueryMeta meta = 7;
+}
+
+message QueryMeta {
+  string plan_hash = 1;
+  string engine = 2;
+  string engine_version = 3;
+  uint64 scanned_bytes = 4;
+  uint64 scanned_rows = 5;
+  uint64 returned_rows = 6;
+  uint64 loaded_samples = 7;
+  uint64 elapsed_millis = 8;
+  bool partial = 9;
+}

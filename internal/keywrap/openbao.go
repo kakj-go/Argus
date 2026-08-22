@@ -38,11 +38,11 @@ func (provider OpenBao) Encrypt(ctx context.Context, plaintext []byte) (Cipherte
 	if err != nil {
 		return Ciphertext{}, errors.New("OpenBao returned an invalid key version")
 	}
-	return Ciphertext{Provider: "openbao_transit", KeyID: provider.KeyID, KeyVersion: int32(version), Value: []byte(response.Data.Ciphertext)}, nil
+	return Ciphertext{Provider: ProviderOpenBaoTransit, KeyID: provider.KeyID, KeyVersion: int32(version), Value: []byte(response.Data.Ciphertext)}, nil
 }
 
 func (provider OpenBao) Decrypt(ctx context.Context, ciphertext Ciphertext) ([]byte, error) {
-	if ciphertext.Provider != "openbao_transit" || ciphertext.KeyID != provider.KeyID {
+	if ciphertext.Provider != ProviderOpenBaoTransit || ciphertext.KeyID != provider.KeyID {
 		return nil, errors.New("ciphertext key reference mismatch")
 	}
 	var response struct {

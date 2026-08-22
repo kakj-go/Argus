@@ -206,6 +206,39 @@ func (e ConfigRevisionStatus) Valid() bool {
 	}
 }
 
+// Defines values for KQLQueryResponseResultType.
+const (
+	LogEntries KQLQueryResponseResultType = "log_entries"
+	LogStreams KQLQueryResponseResultType = "log_streams"
+)
+
+// Valid indicates whether the value is a known member of the KQLQueryResponseResultType enum.
+func (e KQLQueryResponseResultType) Valid() bool {
+	switch e {
+	case LogEntries:
+		return true
+	case LogStreams:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KQLQueryResponseSchemaVersion.
+const (
+	ArgusKqlResultv1 KQLQueryResponseSchemaVersion = "argus.kql_result/v1"
+)
+
+// Valid indicates whether the value is a known member of the KQLQueryResponseSchemaVersion enum.
+func (e KQLQueryResponseSchemaVersion) Valid() bool {
+	switch e {
+	case ArgusKqlResultv1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for KubernetesNodeHostBindingMatchedBy.
 const (
 	CollectorHostId KubernetesNodeHostBindingMatchedBy = "collector_host_id"
@@ -260,45 +293,6 @@ func (e KubernetesNodeHostBindingStatus) Valid() bool {
 	}
 }
 
-// Defines values for MetricsQueryAggregation.
-const (
-	Avg   MetricsQueryAggregation = "avg"
-	Count MetricsQueryAggregation = "count"
-	Max   MetricsQueryAggregation = "max"
-	Min   MetricsQueryAggregation = "min"
-	P50   MetricsQueryAggregation = "p50"
-	P95   MetricsQueryAggregation = "p95"
-	P99   MetricsQueryAggregation = "p99"
-	Rate  MetricsQueryAggregation = "rate"
-	Sum   MetricsQueryAggregation = "sum"
-)
-
-// Valid indicates whether the value is a known member of the MetricsQueryAggregation enum.
-func (e MetricsQueryAggregation) Valid() bool {
-	switch e {
-	case Avg:
-		return true
-	case Count:
-		return true
-	case Max:
-		return true
-	case Min:
-		return true
-	case P50:
-		return true
-	case P95:
-		return true
-	case P99:
-		return true
-	case Rate:
-		return true
-	case Sum:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for PartialMetadataReasons.
 const (
 	AuthorizationFiltered PartialMetadataReasons = "authorization_filtered"
@@ -317,6 +311,45 @@ func (e PartialMetadataReasons) Valid() bool {
 	case SourceTimeout:
 		return true
 	case SourceUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PrometheusQueryDataResultType.
+const (
+	Matrix PrometheusQueryDataResultType = "matrix"
+	Scalar PrometheusQueryDataResultType = "scalar"
+	String PrometheusQueryDataResultType = "string"
+	Vector PrometheusQueryDataResultType = "vector"
+)
+
+// Valid indicates whether the value is a known member of the PrometheusQueryDataResultType enum.
+func (e PrometheusQueryDataResultType) Valid() bool {
+	switch e {
+	case Matrix:
+		return true
+	case Scalar:
+		return true
+	case String:
+		return true
+	case Vector:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PrometheusQueryResponseStatus.
+const (
+	Success PrometheusQueryResponseStatus = "success"
+)
+
+// Valid indicates whether the value is a known member of the PrometheusQueryResponseStatus enum.
+func (e PrometheusQueryResponseStatus) Valid() bool {
+	switch e {
+	case Success:
 		return true
 	default:
 		return false
@@ -344,48 +377,6 @@ func (e RouteTestResultStatus) Valid() bool {
 	case RouteTestResultStatusRunning:
 		return true
 	case RouteTestResultStatusSucceeded:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TelemetryQueryMetaPartialReasons.
-const (
-	DataLag               TelemetryQueryMetaPartialReasons = "data_lag"
-	RowLimit              TelemetryQueryMetaPartialReasons = "row_limit"
-	ScanBudget            TelemetryQueryMetaPartialReasons = "scan_budget"
-	Timeout               TelemetryQueryMetaPartialReasons = "timeout"
-	UnauthorizedResources TelemetryQueryMetaPartialReasons = "unauthorized_resources"
-)
-
-// Valid indicates whether the value is a known member of the TelemetryQueryMetaPartialReasons enum.
-func (e TelemetryQueryMetaPartialReasons) Valid() bool {
-	switch e {
-	case DataLag:
-		return true
-	case RowLimit:
-		return true
-	case ScanBudget:
-		return true
-	case Timeout:
-		return true
-	case UnauthorizedResources:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TelemetryQueryMetaSchemaVersion.
-const (
-	ArgusTelemetryResultv1 TelemetryQueryMetaSchemaVersion = "argus.telemetry_result/v1"
-)
-
-// Valid indicates whether the value is a known member of the TelemetryQueryMetaSchemaVersion enum.
-func (e TelemetryQueryMetaSchemaVersion) Valid() bool {
-	switch e {
-	case ArgusTelemetryResultv1:
 		return true
 	default:
 		return false
@@ -452,48 +443,6 @@ func (e TelemetrySignal) Valid() bool {
 	case Metrics:
 		return true
 	case Traces:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TraceSummaryStatus.
-const (
-	TraceSummaryStatusError TraceSummaryStatus = "error"
-	TraceSummaryStatusOk    TraceSummaryStatus = "ok"
-	TraceSummaryStatusUnset TraceSummaryStatus = "unset"
-)
-
-// Valid indicates whether the value is a known member of the TraceSummaryStatus enum.
-func (e TraceSummaryStatus) Valid() bool {
-	switch e {
-	case TraceSummaryStatusError:
-		return true
-	case TraceSummaryStatusOk:
-		return true
-	case TraceSummaryStatusUnset:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TracesQueryStatus.
-const (
-	TracesQueryStatusError TracesQueryStatus = "error"
-	TracesQueryStatusOk    TracesQueryStatus = "ok"
-	TracesQueryStatusUnset TracesQueryStatus = "unset"
-)
-
-// Valid indicates whether the value is a known member of the TracesQueryStatus enum.
-func (e TracesQueryStatus) Valid() bool {
-	switch e {
-	case TracesQueryStatusError:
-		return true
-	case TracesQueryStatusOk:
-		return true
-	case TracesQueryStatusUnset:
 		return true
 	default:
 		return false
@@ -694,6 +643,31 @@ type CursorPage struct {
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
 
+// KQLQuery defines model for KQLQuery.
+type KQLQuery struct {
+	Budget      *TelemetryQueryBudget   `json:"budget,omitempty"`
+	Pipeline    *string                 `json:"pipeline,omitempty"`
+	Query       string                  `json:"query"`
+	ResourceIds []openapi_types.UUID    `json:"resource_ids"`
+	TimeRange   TelemetryQueryTimeRange `json:"time_range"`
+}
+
+// KQLQueryResponse defines model for KQLQueryResponse.
+type KQLQueryResponse struct {
+	Data          interface{}                   `json:"data"`
+	Meta          TelemetryQueryMeta            `json:"meta"`
+	Partial       bool                          `json:"partial"`
+	ResultType    KQLQueryResponseResultType    `json:"result_type"`
+	SchemaVersion KQLQueryResponseSchemaVersion `json:"schema_version"`
+	Warnings      []string                      `json:"warnings"`
+}
+
+// KQLQueryResponseResultType defines model for KQLQueryResponse.ResultType.
+type KQLQueryResponseResultType string
+
+// KQLQueryResponseSchemaVersion defines model for KQLQueryResponse.SchemaVersion.
+type KQLQueryResponseSchemaVersion string
+
 // KubernetesNodeHostBinding defines model for KubernetesNodeHostBinding.
 type KubernetesNodeHostBinding struct {
 	Confidence          int                                `json:"confidence"`
@@ -717,69 +691,6 @@ type KubernetesNodeHostBindingMatchedBy string
 // KubernetesNodeHostBindingStatus defines model for KubernetesNodeHostBinding.Status.
 type KubernetesNodeHostBindingStatus string
 
-// LogRecord defines model for LogRecord.
-type LogRecord struct {
-	Body        string             `json:"body"`
-	ResourceId  openapi_types.UUID `json:"resource_id"`
-	ServiceName *string            `json:"service_name,omitempty"`
-	Severity    string             `json:"severity"`
-	Timestamp   time.Time          `json:"timestamp"`
-	TraceId     *string            `json:"trace_id,omitempty"`
-}
-
-// LogsQuery defines model for LogsQuery.
-type LogsQuery struct {
-	Cursor      *string              `json:"cursor,omitempty"`
-	From        time.Time            `json:"from"`
-	Limit       *int                 `json:"limit,omitempty"`
-	ResourceIds []openapi_types.UUID `json:"resource_ids"`
-	ServiceName *string              `json:"service_name,omitempty"`
-	Severity    *[]string            `json:"severity,omitempty"`
-	Text        *string              `json:"text,omitempty"`
-	To          time.Time            `json:"to"`
-}
-
-// LogsResult defines model for LogsResult.
-type LogsResult struct {
-	Meta    TelemetryQueryMeta `json:"meta"`
-	Records []LogRecord        `json:"records"`
-}
-
-// MetricPoint defines model for MetricPoint.
-type MetricPoint struct {
-	Timestamp time.Time `json:"timestamp"`
-	Value     float32   `json:"value"`
-}
-
-// MetricSeries defines model for MetricSeries.
-type MetricSeries struct {
-	MetricName string             `json:"metric_name"`
-	Points     []MetricPoint      `json:"points"`
-	ResourceId openapi_types.UUID `json:"resource_id"`
-	Unit       *string            `json:"unit,omitempty"`
-}
-
-// MetricsQuery defines model for MetricsQuery.
-type MetricsQuery struct {
-	Aggregation MetricsQueryAggregation `json:"aggregation"`
-	Cursor      *string                 `json:"cursor,omitempty"`
-	From        time.Time               `json:"from"`
-	Limit       *int                    `json:"limit,omitempty"`
-	MetricName  string                  `json:"metric_name"`
-	ResourceIds []openapi_types.UUID    `json:"resource_ids"`
-	StepSeconds *int                    `json:"step_seconds,omitempty"`
-	To          time.Time               `json:"to"`
-}
-
-// MetricsQueryAggregation defines model for MetricsQuery.Aggregation.
-type MetricsQueryAggregation string
-
-// MetricsResult defines model for MetricsResult.
-type MetricsResult struct {
-	Meta   TelemetryQueryMeta `json:"meta"`
-	Series []MetricSeries     `json:"series"`
-}
-
 // NodeHostBindingPreview defines model for NodeHostBindingPreview.
 type NodeHostBindingPreview struct {
 	ExpectedVersion int64              `json:"expected_version"`
@@ -794,6 +705,43 @@ type PartialMetadata struct {
 
 // PartialMetadataReasons defines model for PartialMetadata.Reasons.
 type PartialMetadataReasons string
+
+// PromQLInstantQuery defines model for PromQLInstantQuery.
+type PromQLInstantQuery struct {
+	Budget      *TelemetryQueryBudget   `json:"budget,omitempty"`
+	Query       string                  `json:"query"`
+	ResourceIds []openapi_types.UUID    `json:"resource_ids"`
+	TimeRange   TelemetryQueryTimeRange `json:"time_range"`
+}
+
+// PromQLRangeQuery defines model for PromQLRangeQuery.
+type PromQLRangeQuery struct {
+	Budget      *TelemetryQueryBudget   `json:"budget,omitempty"`
+	Query       string                  `json:"query"`
+	ResourceIds []openapi_types.UUID    `json:"resource_ids"`
+	StepSeconds int                     `json:"step_seconds"`
+	TimeRange   TelemetryQueryTimeRange `json:"time_range"`
+}
+
+// PrometheusQueryData defines model for PrometheusQueryData.
+type PrometheusQueryData struct {
+	Result     interface{}                   `json:"result"`
+	ResultType PrometheusQueryDataResultType `json:"resultType"`
+}
+
+// PrometheusQueryDataResultType defines model for PrometheusQueryData.ResultType.
+type PrometheusQueryDataResultType string
+
+// PrometheusQueryResponse defines model for PrometheusQueryResponse.
+type PrometheusQueryResponse struct {
+	ArgusMeta TelemetryQueryMeta            `json:"argus_meta"`
+	Data      PrometheusQueryData           `json:"data"`
+	Status    PrometheusQueryResponseStatus `json:"status"`
+	Warnings  []string                      `json:"warnings"`
+}
+
+// PrometheusQueryResponseStatus defines model for PrometheusQueryResponse.Status.
+type PrometheusQueryResponseStatus string
 
 // PublicJsonObject defines model for PublicJsonObject.
 type PublicJsonObject map[string]*PublicJsonValue
@@ -838,6 +786,30 @@ type RouteTestResult struct {
 // RouteTestResultStatus defines model for RouteTestResult.Status.
 type RouteTestResultStatus string
 
+// SkyWalkingGraphQLError defines model for SkyWalkingGraphQLError.
+type SkyWalkingGraphQLError struct {
+	Message string `json:"message"`
+}
+
+// SkyWalkingGraphQLResponse defines model for SkyWalkingGraphQLResponse.
+type SkyWalkingGraphQLResponse struct {
+	Data       map[string]interface{}    `json:"data"`
+	Errors     *[]SkyWalkingGraphQLError `json:"errors,omitempty"`
+	Extensions struct {
+		Argus TelemetryQueryMeta `json:"argus"`
+	} `json:"extensions"`
+}
+
+// SkyWalkingTraceGraphQLQuery defines model for SkyWalkingTraceGraphQLQuery.
+type SkyWalkingTraceGraphQLQuery struct {
+	Budget        *TelemetryQueryBudget   `json:"budget,omitempty"`
+	OperationName *string                 `json:"operation_name,omitempty"`
+	Query         string                  `json:"query"`
+	ResourceIds   []openapi_types.UUID    `json:"resource_ids"`
+	TimeRange     TelemetryQueryTimeRange `json:"time_range"`
+	Variables     *map[string]interface{} `json:"variables,omitempty"`
+}
+
 // TelemetryOverview defines model for TelemetryOverview.
 type TelemetryOverview struct {
 	DegradedCollectors int   `json:"degraded_collectors"`
@@ -856,22 +828,34 @@ type TelemetryOverviewQuery struct {
 	ResourceIds     []openapi_types.UUID `json:"resource_ids"`
 }
 
-// TelemetryQueryMeta defines model for TelemetryQueryMeta.
-type TelemetryQueryMeta struct {
-	AppliedResourceCount int                                `json:"applied_resource_count"`
-	ElapsedMs            int64                              `json:"elapsed_ms"`
-	NextCursor           *string                            `json:"next_cursor,omitempty"`
-	Partial              bool                               `json:"partial"`
-	PartialReasons       []TelemetryQueryMetaPartialReasons `json:"partial_reasons"`
-	ScannedBytes         int64                              `json:"scanned_bytes"`
-	SchemaVersion        TelemetryQueryMetaSchemaVersion    `json:"schema_version"`
+// TelemetryQueryBudget defines model for TelemetryQueryBudget.
+type TelemetryQueryBudget struct {
+	MaxResultBytes *int64 `json:"max_result_bytes,omitempty"`
+	MaxRows        *int   `json:"max_rows,omitempty"`
+	MaxSamples     *int   `json:"max_samples,omitempty"`
+	MaxScanBytes   *int64 `json:"max_scan_bytes,omitempty"`
+	MaxSeries      *int   `json:"max_series,omitempty"`
+	TimeoutMs      *int   `json:"timeout_ms,omitempty"`
 }
 
-// TelemetryQueryMetaPartialReasons defines model for TelemetryQueryMeta.PartialReasons.
-type TelemetryQueryMetaPartialReasons string
+// TelemetryQueryMeta defines model for TelemetryQueryMeta.
+type TelemetryQueryMeta struct {
+	ElapsedMs     int64  `json:"elapsed_ms"`
+	Engine        string `json:"engine"`
+	EngineVersion string `json:"engine_version"`
+	LoadedSamples int64  `json:"loaded_samples"`
+	Partial       bool   `json:"partial"`
+	PlanHash      string `json:"plan_hash"`
+	ReturnedRows  int64  `json:"returned_rows"`
+	ScannedBytes  int64  `json:"scanned_bytes"`
+	ScannedRows   int64  `json:"scanned_rows"`
+}
 
-// TelemetryQueryMetaSchemaVersion defines model for TelemetryQueryMeta.SchemaVersion.
-type TelemetryQueryMetaSchemaVersion string
+// TelemetryQueryTimeRange defines model for TelemetryQueryTimeRange.
+type TelemetryQueryTimeRange struct {
+	From time.Time `json:"from"`
+	To   time.Time `json:"to"`
+}
 
 // TelemetryRetentionPolicy defines model for TelemetryRetentionPolicy.
 type TelemetryRetentionPolicy struct {
@@ -913,43 +897,6 @@ type TelemetryUsage struct {
 	PeriodEnd             time.Time `json:"period_end"`
 	PeriodStart           time.Time `json:"period_start"`
 	Spans                 int64     `json:"spans"`
-}
-
-// TraceSummary defines model for TraceSummary.
-type TraceSummary struct {
-	DurationMs   float32            `json:"duration_ms"`
-	ResourceId   openapi_types.UUID `json:"resource_id"`
-	RootSpanName string             `json:"root_span_name"`
-	ServiceName  string             `json:"service_name"`
-	SpanCount    int                `json:"span_count"`
-	StartedAt    time.Time          `json:"started_at"`
-	Status       TraceSummaryStatus `json:"status"`
-	TraceId      string             `json:"trace_id"`
-}
-
-// TraceSummaryStatus defines model for TraceSummary.Status.
-type TraceSummaryStatus string
-
-// TracesQuery defines model for TracesQuery.
-type TracesQuery struct {
-	Cursor        *string              `json:"cursor,omitempty"`
-	From          time.Time            `json:"from"`
-	Limit         *int                 `json:"limit,omitempty"`
-	MinDurationMs *int                 `json:"min_duration_ms,omitempty"`
-	Operation     *string              `json:"operation,omitempty"`
-	ResourceIds   []openapi_types.UUID `json:"resource_ids"`
-	ServiceName   *string              `json:"service_name,omitempty"`
-	Status        *TracesQueryStatus   `json:"status,omitempty"`
-	To            time.Time            `json:"to"`
-}
-
-// TracesQueryStatus defines model for TracesQuery.Status.
-type TracesQueryStatus string
-
-// TracesResult defines model for TracesResult.
-type TracesResult struct {
-	Meta   TelemetryQueryMeta `json:"meta"`
-	Traces []TraceSummary     `json:"traces"`
 }
 
 // PendingActionPublicSchema defines model for pending-action-public.schema.
@@ -1048,23 +995,26 @@ type PreviewHostCollectorActionJSONRequestBody = CollectorPreview
 // PreviewKubernetesCollectorActionJSONRequestBody defines body for PreviewKubernetesCollectorAction for application/json ContentType.
 type PreviewKubernetesCollectorActionJSONRequestBody = CollectorPreview
 
+// QueryLogsKQLJSONRequestBody defines body for QueryLogsKQL for application/json ContentType.
+type QueryLogsKQLJSONRequestBody = KQLQuery
+
+// QueryMetricsInstantJSONRequestBody defines body for QueryMetricsInstant for application/json ContentType.
+type QueryMetricsInstantJSONRequestBody = PromQLInstantQuery
+
+// QueryMetricsRangeJSONRequestBody defines body for QueryMetricsRange for application/json ContentType.
+type QueryMetricsRangeJSONRequestBody = PromQLRangeQuery
+
 // PreviewKubernetesNodeHostBindingJSONRequestBody defines body for PreviewKubernetesNodeHostBinding for application/json ContentType.
 type PreviewKubernetesNodeHostBindingJSONRequestBody = NodeHostBindingPreview
-
-// QueryTelemetryLogsJSONRequestBody defines body for QueryTelemetryLogs for application/json ContentType.
-type QueryTelemetryLogsJSONRequestBody = LogsQuery
-
-// QueryTelemetryMetricsJSONRequestBody defines body for QueryTelemetryMetrics for application/json ContentType.
-type QueryTelemetryMetricsJSONRequestBody = MetricsQuery
 
 // QueryTelemetryOverviewJSONRequestBody defines body for QueryTelemetryOverview for application/json ContentType.
 type QueryTelemetryOverviewJSONRequestBody = TelemetryOverviewQuery
 
-// QueryTelemetryTracesJSONRequestBody defines body for QueryTelemetryTraces for application/json ContentType.
-type QueryTelemetryTracesJSONRequestBody = TracesQuery
-
 // CreateTelemetryRouteTestJSONRequestBody defines body for CreateTelemetryRouteTest for application/json ContentType.
 type CreateTelemetryRouteTestJSONRequestBody = RouteTestCreate
+
+// QueryTracesGraphQLJSONRequestBody defines body for QueryTracesGraphQL for application/json ContentType.
+type QueryTracesGraphQLJSONRequestBody = SkyWalkingTraceGraphQLQuery
 
 // EnrollTelemetryCollectorJSONRequestBody defines body for EnrollTelemetryCollector for application/json ContentType.
 type EnrollTelemetryCollectorJSONRequestBody = CollectorEnrollmentRequest

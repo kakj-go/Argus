@@ -711,6 +711,15 @@ type Enterprise struct {
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
+type EnterpriseTelemetryTable struct {
+	EnterpriseID  uuid.UUID          `json:"enterprise_id"`
+	SchemaVersion int32              `json:"schema_version"`
+	Status        string             `json:"status"`
+	ReadyAt       pgtype.Timestamptz `json:"ready_at"`
+	LastError     pgtype.Text        `json:"last_error"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type EnterpriseUser struct {
 	ID                   uuid.UUID          `json:"id"`
 	EnterpriseID         uuid.UUID          `json:"enterprise_id"`

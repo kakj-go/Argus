@@ -4,7 +4,7 @@ import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
-import { useApi } from "@argus/api-client";
+import { ApiError, useApi } from "@argus/api-client";
 import {
   Alert,
   AppearanceControls,
@@ -55,6 +55,19 @@ export default function App() {
     mutationFn: (input: SetupDraft) => api.setup.submit(toSubmission(input)),
     onSuccess: () => setSucceeded(true),
   });
+
+  const submitErrorDescription = (() => {
+    if (!(submitMutation.error instanceof ApiError)) {
+      return t("setup.review.genericError");
+    }
+    if (submitMutation.error.code === "SETUP_TOKEN_INVALID") {
+      return t("setup.review.tokenInvalid");
+    }
+    if (submitMutation.error.code === "PASSWORD_WEAK") {
+      return t("setup.review.passwordWeak");
+    }
+    return t("setup.review.genericError");
+  })();
 
   const canNext =
     step === 0
@@ -141,7 +154,7 @@ export default function App() {
                   <StepReview draft={draft} />
                   {submitMutation.isError && (
                     <Alert
-                      description={submitMutation.error.message}
+                      description={submitErrorDescription}
                       title={t("setup.review.errorTitle")}
                       tone="danger"
                     />

@@ -190,57 +190,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/enterprise/telemetry/query/metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Query authorized Metrics. */
-        post: operations["queryTelemetryMetrics"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/enterprise/telemetry/query/logs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Query authorized Logs. */
-        post: operations["queryTelemetryLogs"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/enterprise/telemetry/query/traces": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Query authorized Traces. */
-        post: operations["queryTelemetryTraces"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/enterprise/telemetry/query/overview": {
         parameters: {
             query?: never;
@@ -252,6 +201,74 @@ export interface paths {
         put?: never;
         /** Query the Card-safe Telemetry overview. */
         post: operations["queryTelemetryOverview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/metrics/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a PromQL instant query. */
+        post: operations["queryMetricsInstant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/metrics/query_range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a PromQL range query. */
+        post: operations["queryMetricsRange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/logs/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a KQL log query. */
+        post: operations["queryLogsKQL"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/traces/graphql": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a read-only SkyWalking GraphQL trace query. */
+        post: operations["queryTracesGraphQL"];
         delete?: never;
         options?: never;
         head?: never;
@@ -534,65 +551,10 @@ export interface components {
             /** Format: int64 */
             estimated_storage_bytes: number;
         };
-        MetricsQuery: {
-            resource_ids: string[];
-            /** Format: date-time */
-            from: string;
-            /** Format: date-time */
-            to: string;
-            /** @default 50000 */
-            limit: number;
-            cursor?: string;
-            metric_name: string;
-            /** @enum {string} */
-            aggregation: "avg" | "min" | "max" | "sum" | "count" | "rate" | "p50" | "p95" | "p99";
-            /** @default 60 */
-            step_seconds: number;
-        };
-        LogsQuery: {
-            resource_ids: string[];
-            /** Format: date-time */
-            from: string;
-            /** Format: date-time */
-            to: string;
-            /** @default 50000 */
-            limit: number;
-            cursor?: string;
-            service_name?: string;
-            severity?: string[];
-            text?: string;
-        };
-        TracesQuery: {
-            resource_ids: string[];
-            /** Format: date-time */
-            from: string;
-            /** Format: date-time */
-            to: string;
-            /** @default 50000 */
-            limit: number;
-            cursor?: string;
-            service_name?: string;
-            operation?: string;
-            /** @enum {string} */
-            status?: "unset" | "ok" | "error";
-            min_duration_ms?: number;
-        };
         TelemetryOverviewQuery: {
             resource_ids: string[];
             /** @default 3600 */
             lookback_seconds: number;
-        };
-        MetricsResult: {
-            series: components["schemas"]["MetricSeries"][];
-            meta: components["schemas"]["TelemetryQueryMeta"];
-        };
-        LogsResult: {
-            records: components["schemas"]["LogRecord"][];
-            meta: components["schemas"]["TelemetryQueryMeta"];
-        };
-        TracesResult: {
-            traces: components["schemas"]["TraceSummary"][];
-            meta: components["schemas"]["TelemetryQueryMeta"];
         };
         TelemetryOverview: {
             resource_count: number;
@@ -606,6 +568,112 @@ export interface components {
             spans: number;
             window_seconds: number;
             partial: boolean;
+        };
+        TelemetryQueryTimeRange: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+        };
+        TelemetryQueryBudget: {
+            /**
+             * Format: int64
+             * @default 268435456
+             */
+            max_scan_bytes: number;
+            /** @default 50000 */
+            max_rows: number;
+            /** @default 5000000 */
+            max_samples: number;
+            /** @default 100000 */
+            max_series: number;
+            /** @default 10000 */
+            timeout_ms: number;
+            /**
+             * Format: int64
+             * @default 8388608
+             */
+            max_result_bytes: number;
+        };
+        PromQLInstantQuery: {
+            query: string;
+            resource_ids: string[];
+            time_range: components["schemas"]["TelemetryQueryTimeRange"];
+            budget?: components["schemas"]["TelemetryQueryBudget"];
+        };
+        PromQLRangeQuery: {
+            query: string;
+            resource_ids: string[];
+            time_range: components["schemas"]["TelemetryQueryTimeRange"];
+            step_seconds: number;
+            budget?: components["schemas"]["TelemetryQueryBudget"];
+        };
+        KQLQuery: {
+            query: string;
+            pipeline?: string;
+            resource_ids: string[];
+            time_range: components["schemas"]["TelemetryQueryTimeRange"];
+            budget?: components["schemas"]["TelemetryQueryBudget"];
+        };
+        SkyWalkingTraceGraphQLQuery: {
+            query: string;
+            operation_name?: string;
+            variables?: {
+                [key: string]: unknown;
+            };
+            resource_ids: string[];
+            time_range: components["schemas"]["TelemetryQueryTimeRange"];
+            budget?: components["schemas"]["TelemetryQueryBudget"];
+        };
+        TelemetryQueryMeta: {
+            /** Format: int64 */
+            scanned_bytes: number;
+            /** Format: int64 */
+            scanned_rows: number;
+            /** Format: int64 */
+            returned_rows: number;
+            /** Format: int64 */
+            loaded_samples: number;
+            /** Format: int64 */
+            elapsed_ms: number;
+            plan_hash: string;
+            engine: string;
+            engine_version: string;
+            partial: boolean;
+        };
+        PrometheusQueryData: {
+            /** @enum {string} */
+            resultType: "scalar" | "string" | "vector" | "matrix";
+            result: unknown;
+        };
+        PrometheusQueryResponse: {
+            /** @constant */
+            status: "success";
+            data: components["schemas"]["PrometheusQueryData"];
+            warnings: string[];
+            argus_meta: components["schemas"]["TelemetryQueryMeta"];
+        };
+        KQLQueryResponse: {
+            /** @constant */
+            schema_version: "argus.kql_result/v1";
+            /** @enum {string} */
+            result_type: "log_entries" | "log_streams";
+            data: unknown;
+            warnings: string[];
+            partial: boolean;
+            meta: components["schemas"]["TelemetryQueryMeta"];
+        };
+        SkyWalkingGraphQLError: {
+            message: string;
+        };
+        SkyWalkingGraphQLResponse: {
+            data: {
+                [key: string]: unknown;
+            };
+            errors?: components["schemas"]["SkyWalkingGraphQLError"][];
+            extensions: {
+                argus: components["schemas"]["TelemetryQueryMeta"];
+            };
         };
         CollectorPage: {
             items: components["schemas"]["CollectorInstance"][];
@@ -711,53 +779,6 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
-        };
-        MetricPoint: {
-            /** Format: date-time */
-            timestamp: string;
-            value: number;
-        };
-        MetricSeries: {
-            /** Format: uuid */
-            resource_id: string;
-            metric_name: string;
-            unit?: string;
-            points: components["schemas"]["MetricPoint"][];
-        };
-        TelemetryQueryMeta: {
-            /** @constant */
-            schema_version: "argus.telemetry_result/v1";
-            partial: boolean;
-            partial_reasons: ("unauthorized_resources" | "row_limit" | "scan_budget" | "timeout" | "data_lag")[];
-            applied_resource_count: number;
-            /** Format: int64 */
-            scanned_bytes: number;
-            /** Format: int64 */
-            elapsed_ms: number;
-            next_cursor?: string;
-        };
-        LogRecord: {
-            /** Format: date-time */
-            timestamp: string;
-            /** Format: uuid */
-            resource_id: string;
-            service_name?: string;
-            severity: string;
-            body: string;
-            trace_id?: string;
-        };
-        TraceSummary: {
-            trace_id: string;
-            /** Format: uuid */
-            resource_id: string;
-            service_name: string;
-            root_span_name: string;
-            /** Format: date-time */
-            started_at: string;
-            duration_ms: number;
-            span_count: number;
-            /** @enum {string} */
-            status: "unset" | "ok" | "error";
         };
         /** @enum {string} */
         ConfigRevisionStatus: "prepared" | "applying" | "effective" | "failed" | "rolled_back" | "superseded";
@@ -1052,81 +1073,6 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
-    queryTelemetryMetrics: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MetricsQuery"];
-            };
-        };
-        responses: {
-            /** @description Metrics. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MetricsResult"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    queryTelemetryLogs: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LogsQuery"];
-            };
-        };
-        responses: {
-            /** @description Logs. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LogsResult"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    queryTelemetryTraces: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TracesQuery"];
-            };
-        };
-        responses: {
-            /** @description Traces. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TracesResult"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
     queryTelemetryOverview: {
         parameters: {
             query?: never;
@@ -1147,6 +1093,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TelemetryOverview"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    queryMetricsInstant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromQLInstantQuery"];
+            };
+        };
+        responses: {
+            /** @description Prometheus-compatible PromQL result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrometheusQueryResponse"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    queryMetricsRange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromQLRangeQuery"];
+            };
+        };
+        responses: {
+            /** @description Prometheus-compatible PromQL range result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrometheusQueryResponse"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    queryLogsKQL: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KQLQuery"];
+            };
+        };
+        responses: {
+            /** @description KQL log result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KQLQueryResponse"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    queryTracesGraphQL: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkyWalkingTraceGraphQLQuery"];
+            };
+        };
+        responses: {
+            /** @description SkyWalking GraphQL trace result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkyWalkingGraphQLResponse"];
                 };
             };
             default: components["responses"]["Error"];

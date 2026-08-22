@@ -68,7 +68,7 @@ export function ClusterCard({
             </dd>
           </div>
           <div className="argus-k8s-kv__item">
-            <dt>{t("kubernetes.card.connection_mode")}</dt>
+            <dt>{t("kubernetes.card.connectionMode")}</dt>
             <dd>{t(`kubernetes.mode.${cluster.connection_mode}`)}</dd>
           </div>
           {(onInstallCollector || onOpenCollector) && (

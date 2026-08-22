@@ -22,7 +22,14 @@ func TestPasswordHashAndPolicy(t *testing.T) {
 }
 
 func TestPasswordRejectsIdentityAndWeakValues(t *testing.T) {
-	for _, password := range []string{"short", "password1234", "operator-secure-2026", "mailbox-secure-2026"} {
+	for _, password := range []string{
+		"short",
+		"abcdefghijkl",
+		"987654321098",
+		"password1234",
+		"operator-secure-2026",
+		"mailbox-secure-2026",
+	} {
 		if err := ValidatePassword(password, "operator", "mailbox@example.test"); err == nil {
 			t.Fatalf("weak password %q accepted", password)
 		}

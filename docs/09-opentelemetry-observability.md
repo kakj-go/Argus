@@ -2,6 +2,14 @@
 
 ## 1. 目标与范围
 
+### M10 查询语义
+
+遥测查询运行在一个 Query 进程内，但由三个独立 Engine 执行：Prometheus PromQL Engine、Argus KQL Engine 和 SkyWalking GraphQL Engine。PromQL 通过 `storage.Queryable` 适配 ClickHouse；KQL 经过白名单 Parser/Pipeline 编译；SkyWalking Trace 使用固定 SDL `internal/telemetry/queryengine/skywalking/schema/trace.graphql` 和 schema-first Resolver。查询文本不进入 SQL，也不再经过统一 Query IR。Metrics 的 Series/Samples、Logs 的 stream labels、Traces 的 Summary/Edges Schema v3 由 `argus-telemetry writer` 规范化写入。
+
+三种外部协议保留自身结果模型：PromQL 使用 Prometheus `status/data.resultType/data.result/warnings` 并附加 `argus_meta`，KQL 使用 `argus.kql_result/v1`，Trace GraphQL 使用 `data/errors/extensions.argus`。旧统一 Query JSON Schema 和 `argus.telemetry_result/v2` 已删除。PromQL 预算同时限制 Samples 与 Series；`MaxSeries` 默认 100,000、硬上限 1,000,000，并由 HTTP、gRPC、MCP 和 ClickHouse Adapter 共同执行。
+
+资源详情同时提供 Query Builder 与 DSL 编辑器。Builder 只负责生成相同语言文本，不绕过服务端 Parser、权限、预算和结果投影。经典 Histogram 的 bucket/count/sum 已转换为 Prometheus 可查询序列；Native Histogram 和 Summary 已由真实 ClickHouse 集成测试及 Kubernetes E2E 覆盖。
+
 Argus 根据主机已有连接路径一键安装并管理 OpenTelemetry Collector：Bastion Scope 成员经所属堡垒机 Connector 执行，公网独立主机经受控 Direct Executor 执行，Kubernetes 经其既定 API 连接路径执行。Collector 主动向 Argus 推送 Metrics、Logs 和 Traces，目标环境不需要公网入站端口。
 
 堡垒机范围内只有堡垒机本机可以启用 Edge Gateway Collector，成员主机可以选择直接推送 Argus，或推送到所属堡垒机上的 Gateway Collector。堡垒机以外的独立主机第一批只支持直接推送；独立 Telemetry Group 保留为后续能力，且不能选择任何 Bastion Scope 内的堡垒机或成员作为跨范围上游。
@@ -18,7 +26,7 @@ Argus 根据主机已有连接路径一键安装并管理 OpenTelemetry Collecto
 - `argus-telemetry ingest` → Kafka → `argus-telemetry writer` → ClickHouse。
 - Host/Kubernetes 详情中的 Collector 安装、采集能力、推送配置和 Metrics/Logs/Traces 有界查询；告警大屏延后。
 
-截至 2026-08-19，M7 已完成 Linux arm64 Host 与 Kubernetes Evaluation 闭环：锁定 OCB Distribution、独立 Telemetry mTLS 身份、OTLP gRPC/HTTP、Kafka、Go Writer、ClickHouse、统一 Query、Web/Agent/Card 以及临时 Namespace 故障恢复 E2E 均已通过。最终成功运行号为 `20260819140437-21054`，证据位于 `artifacts/m7-e2e/20260819140437-21054`，三个 Namespace、运行相关 PVC 和 Lease 零残留。M8 本地 Profile 为 Ingest/Writer 增加独立 PostgreSQL Login、OpenBao 与备份恢复；Windows/AMD64、Production HA/容量和长期 PKI 演练进入 Production Validation。
+截至 2026-08-22，M7 已完成 Linux arm64 Host 与 Kubernetes Evaluation 闭环。M10 已完成单进程 Query、同步租户 Schema lifecycle、PromQL/KQL/SkyWalking GraphQL、真实 ClickHouse 差分、Schema 漂移门禁和最终 Kubernetes E2E；三种独立 wire format、固定 SDL 和 `MaxSeries` 收口后的成功运行号为 `20260822063330-17805`，结束后三个临时 Namespace、相关 PVC 和 E2E Lease 零残留。完整 SkyWalking OAP 和完整 KQL 兼容不在本次范围。
 
 Kubernetes 节点无法拉取镜像时，第一版只检测 Runtime 并提供离线导入提示，不实现镜像分发。
 
@@ -701,46 +709,26 @@ Ingest 侧在认证和可信身份注入后使用幂等 Kafka Producer，并在�
 
 ## 16. ClickHouse 表基线
 
-### 16.1 三个逻辑数据集，不按企业建表
+### 16.1 租户物理表
 
-Argus 对 Writer、Query 和产品层固定三个规范化逻辑数据集：
-
-```text
-argus_metrics
-argus_logs
-argus_traces
-```
-
-所有企业共享这三个逻辑数据集，通过强制 `EnterpriseId` 和授权 Resource 条件隔离。禁止创建以下按企业或用户归类展开的表：
+Argus 对 Writer、Query 和产品层固定 Metrics、Logs、Traces 三类查询协议；M10 的事实存储按 Enterprise 使用独立物理表：
 
 ```text
-${enterprise_id}_metrics
-${enterprise_id}_logs
-${enterprise_id}_traces
-${enterprise_id}_${label_value}_metrics
+metric_series_<enterprise_uuid_hex>
+metric_samples_<enterprise_uuid_hex>
+logs_<enterprise_uuid_hex>
+traces_<enterprise_uuid_hex>
+trace_summary_<enterprise_uuid_hex>
+trace_span_edges_<enterprise_uuid_hex>
 ```
 
-也禁止使用 `(EnterpriseId, ResourceLabel, date)` 作为 Partition Key。企业或标签值数量增长后，按企业/标签建表或分区会使表、Partition、Part、DDL、备份和 Keeper 元数据快速增长，并使扩 Shard 时需要迁移和重建大量 Distributed Table。隔离由认证、Query Service 强制条件、排序键和审计共同保证，不依靠表名。
-
-“三个逻辑数据集”不等于 ClickHouse 集群永远只有三张物理表。为了复制和分片，每个逻辑数据集从第一版就使用：
-
-```text
-argus_metrics_local  ReplicatedMergeTree 本地存储
-argus_metrics        Distributed 查询/写入入口
-argus_logs_local     ReplicatedMergeTree 本地存储
-argus_logs            Distributed 查询/写入入口
-argus_traces_local   ReplicatedMergeTree 本地存储
-argus_traces          Distributed 查询/写入入口
-```
-
-后续还可以增加 Projection、物化视图、Rollup 或 Trace Lookup 辅助表；这些属于同一逻辑数据集的索引和派生数据，不是按企业拆表。
+`TenantTableRouter` 只接受服务端可信 UUID 并生成表名；查询文本不能影响表名。`TenantSchemaManager` 负责六张表的创建、严格结构验证、TTL 和删除。企业创建/启用通过内部 mTLS RPC 同步写入 readiness，disabled 同步进入 deleting 并回收表；周期对账只负责自愈。`resource_id` 仍保留在表内，用于企业内部 DataScope 裁剪；Enterprise 边界由物理表隔离并由 mTLS/RPC Scope 再次校验。
 
 ### 16.2 公共字段
 
-三个逻辑表都必须直接保存受信任的公共列，而不是每次查询再从 Map 中解析：
+每租户物理表都必须直接保存受信任的公共列，而不是每次查询再从 Map 中解析。`EnterpriseId` 只参与可信表路由，不作为租户表列保存：
 
 ```text
-EnterpriseId       LowCardinality(String)
 ResourceId         String
 CollectorId        String
 ServiceName        LowCardinality(String)
@@ -759,7 +747,7 @@ KafkaPartition     UInt32
 KafkaOffset        UInt64
 ```
 
-`EnterpriseId`、`ResourceId` 和 `CollectorId` 来自 Ingest/Edge Gateway 的认证结果和受信资源关系并覆盖客户端同名属性。`ExpiresAt` 在写入时根据企业 Retention Policy 固化，使共享表可以执行每行 TTL，而不用为不同企业或标签创建表。
+`EnterpriseId`、`ResourceId` 和 `CollectorId` 来自 Ingest/Edge Gateway 的认证结果并覆盖客户端同名属性；其中 `EnterpriseId` 只用于 `TenantTableRouter`，`ResourceId`/`CollectorId` 写入物理表。`ExpiresAt` 在写入时根据企业 Retention Policy 固化；租户表删除时由 Schema Manager 负责物理清理。
 
 ### 16.3 Metrics 逻辑表
 
@@ -910,15 +898,14 @@ ClickHouse Exporter 必须设置 `create_schema: false`。Operator 不能代替�
 
 - 所有查询由 Query Service 强制注入 `EnterpriseId`、授权 `ResourceIds` 或经校验标签选择器解析出的资源范围、Signal、字段投影与脱敏，并限制时间范围、行数、扫描字节和超时。
 - 企业用户和 Model Agent 不直接连接 ClickHouse。
-- 所有 Local Table 使用 ReplicatedMergeTree，所有逻辑入口使用 Distributed Table；单 Shard 环境也保留相同命名和迁移协议。
-- Schema Migration 使用 `ON CLUSTER` 并先创建兼容列/表，再升级 Writer 和 Query，最后清理旧 Schema。
-- Partition 只按时间，不按企业或标签；排序键以 `EnterpriseId` 开头并包含 Signal 常用选择字段，通过主键稀疏索引裁剪授权数据。
-- Sharding Key 必须同时包含 `EnterpriseId` 和 Signal 的稳定高基数字段，既防止跨企业键冲突，又避免大型企业集中到单 Shard。
-- 扩 Shard 时使用新 Distributed Sharding Policy 写入新数据，历史数据通过受控 Backfill/Rebalance 任务迁移；不能依赖修改表名完成扩容。
+- 租户表由 Schema Manager 创建，排序键按 Signal 固定；M10 不引入 Distributed/Store Gateway 查询层。
+- Schema Migration 删除旧共享表并建立 Schema Version 3 bootstrap；企业创建/启用同步验证六张表，Query 启动和周期对账负责恢复。
+- 样本表按时间和稳定 series/trace 键排序；资源授权仍在 Query Adapter 中绑定。
+- 扩容和副本拓扑由 ClickHouse 部署层负责，不能通过用户输入改变表名或 Sharding Key。
 - TTL 使用写入时固化的 `ExpiresAt`；冷热层、套餐保留期和删除任务由平台策略管理。
 - `create_schema: false`，所有表、Projection、索引和 Schema Version 由 Argus Migration 管理。
 - Writer 使用大批次；目标批次由 Benchmark 固化，默认从约 5000 行开始测试，并同时限制字节数和最大等待时间。
-- 超大企业后续可以通过 Telemetry Routing Policy 迁移到专用 Shard 或独立 ClickHouseInstallation，但普通企业仍使用共享逻辑表，不能回退为每企业建表。
+- 超大企业后续可以迁移到独立 ClickHouseInstallation；M10 的 Query 协议和 TenantTableRouter 不允许回退到共享事实表。
 
 ## 18. 重复、基数和成本
 

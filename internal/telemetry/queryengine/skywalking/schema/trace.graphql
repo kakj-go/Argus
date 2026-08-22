@@ -1,0 +1,86 @@
+schema {
+  query: Query
+}
+
+input TraceTagInput {
+  key: String!
+  value: String!
+}
+
+type Query {
+  queryBasicTraces(
+    serviceName: String
+    serviceInstanceName: String
+    tags: [TraceTagInput!]
+    durationMin: Float
+    durationMax: Float
+    order: String
+    pageNum: Int
+    pageSize: Int
+  ): TraceQueryResult!
+
+  queryBasicTracesByName(
+    serviceName: String
+    serviceInstanceName: String
+    operationName: String
+    tags: [TraceTagInput!]
+    durationMin: Float
+    durationMax: Float
+    order: String
+    pageNum: Int
+    pageSize: Int
+  ): TraceQueryResult!
+
+  queryTraces(
+    serviceName: String
+    serviceInstanceName: String
+    status: String
+    tags: [TraceTagInput!]
+    durationMin: Float
+    durationMax: Float
+    order: String
+    pageNum: Int
+    pageSize: Int
+  ): TraceQueryResult!
+
+  queryTrace(traceId: String!): Trace
+}
+
+type TraceQueryResult {
+  total: Int!
+  traces: [Trace!]!
+}
+
+type Trace {
+  traceId: String!
+  rootService: String!
+  rootOperation: String!
+  startTime: String!
+  duration: Float!
+  spanCount: Int!
+  errorCount: Int!
+  status: String!
+  spans: [Span!]!
+  edges: [TraceSpanEdge!]!
+}
+
+type Span {
+  spanId: String!
+  parentSpanId: String!
+  serviceName: String!
+  operationName: String!
+  status: String!
+  startTime: String!
+  duration: Float!
+  attributes: String!
+  events: String!
+  links: String!
+}
+
+type TraceSpanEdge {
+  parentSpanId: String!
+  childSpanId: String!
+  parentService: String!
+  childService: String!
+  depth: Int!
+}

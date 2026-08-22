@@ -16,6 +16,7 @@ import (
 	"github.com/kakj-go/Argus/internal/identity"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
+	"github.com/kakj-go/Argus/internal/telemetry/queryengine"
 )
 
 type TelemetryHandler struct {
@@ -272,52 +273,179 @@ func (handler TelemetryHandler) GetTelemetryUsage(ctx context.Context, _ telemet
 		Headers: telemetryapi.GetTelemetryUsage200ResponseHeaders{XRetentionMetricsDays: &metrics, XRetentionLogsDays: &logs, XRetentionTracesDays: &traces}}, nil
 }
 
-func (handler TelemetryHandler) QueryTelemetryMetrics(ctx context.Context, request telemetryapi.QueryTelemetryMetricsRequestObject) (telemetryapi.QueryTelemetryMetricsResponseObject, error) {
-	actor, principal, apiError := handler.actor(ctx, false, "", "telemetry.query.metrics")
-	if apiError != nil {
-		return telemetryapi.QueryTelemetryMetricsdefaultJSONResponse{Body: *apiError, StatusCode: telemetryAuthStatus(*apiError)}, nil
-	}
+func (handler TelemetryHandler) QueryMetricsInstant(ctx context.Context, request telemetryapi.QueryMetricsInstantRequestObject) (telemetryapi.QueryMetricsInstantResponseObject, error) {
 	if request.Body == nil {
-		return telemetryapi.QueryTelemetryMetricsdefaultJSONResponse{Body: telemetryError(ctx, telemetryservice.ErrQueryInvalid), StatusCode: http.StatusBadRequest}, nil
+		return telemetryapi.QueryMetricsInstantdefaultJSONResponse{Body: telemetryError(ctx, telemetryservice.ErrQueryInvalid), StatusCode: http.StatusBadRequest}, nil
 	}
-	limit, step, cursor := optionalInt(request.Body.Limit), optionalInt(request.Body.StepSeconds), optionalString(request.Body.Cursor)
-	items, meta, err := handler.Service.QueryMetrics(ctx, actor, fromOpenAPIUUIDs(request.Body.ResourceIds), request.Body.From, request.Body.To, limit, cursor, request.Body.MetricName, string(request.Body.Aggregation), step, hasPermission(principal, "telemetry.sensitive_fields.read"))
+	result, err := handler.executeEngine(ctx, "telemetry.query.metrics", queryengine.LanguagePromQL, request.Body.Query, "", "", nil, fromOpenAPIUUIDs(request.Body.ResourceIds), request.Body.TimeRange.From, request.Body.TimeRange.To, 0, request.Body.Budget, true, false)
 	if err != nil {
-		return telemetryapi.QueryTelemetryMetricsdefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
+		return telemetryapi.QueryMetricsInstantdefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
 	}
-	return telemetryapi.QueryTelemetryMetrics200JSONResponse{Series: toMetricSeries(items), Meta: toQueryMeta(meta)}, nil
+	return telemetryapi.QueryMetricsInstant200JSONResponse(prometheusQueryResponse(result)), nil
 }
 
-func (handler TelemetryHandler) QueryTelemetryLogs(ctx context.Context, request telemetryapi.QueryTelemetryLogsRequestObject) (telemetryapi.QueryTelemetryLogsResponseObject, error) {
-	actor, principal, apiError := handler.actor(ctx, false, "", "telemetry.query.logs")
-	if apiError != nil {
-		return telemetryapi.QueryTelemetryLogsdefaultJSONResponse{Body: *apiError, StatusCode: telemetryAuthStatus(*apiError)}, nil
-	}
+func (handler TelemetryHandler) QueryMetricsRange(ctx context.Context, request telemetryapi.QueryMetricsRangeRequestObject) (telemetryapi.QueryMetricsRangeResponseObject, error) {
 	if request.Body == nil {
-		return telemetryapi.QueryTelemetryLogsdefaultJSONResponse{Body: telemetryError(ctx, telemetryservice.ErrQueryInvalid), StatusCode: http.StatusBadRequest}, nil
+		return telemetryapi.QueryMetricsRangedefaultJSONResponse{Body: telemetryError(ctx, telemetryservice.ErrQueryInvalid), StatusCode: http.StatusBadRequest}, nil
 	}
-	filter := map[string]any{"service_name": request.Body.ServiceName, "severity": request.Body.Severity, "text": request.Body.Text}
-	items, meta, err := handler.Service.QueryLogs(ctx, actor, fromOpenAPIUUIDs(request.Body.ResourceIds), request.Body.From, request.Body.To, optionalInt(request.Body.Limit), optionalString(request.Body.Cursor), filter, hasPermission(principal, "telemetry.sensitive_fields.read"))
+	result, err := handler.executeEngine(ctx, "telemetry.query.metrics", queryengine.LanguagePromQL, request.Body.Query, "", "", nil, fromOpenAPIUUIDs(request.Body.ResourceIds), request.Body.TimeRange.From, request.Body.TimeRange.To, time.Duration(request.Body.StepSeconds)*time.Second, request.Body.Budget, false, false)
 	if err != nil {
-		return telemetryapi.QueryTelemetryLogsdefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
+		return telemetryapi.QueryMetricsRangedefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
 	}
-	return telemetryapi.QueryTelemetryLogs200JSONResponse{Records: toLogRecords(items), Meta: toQueryMeta(meta)}, nil
+	return telemetryapi.QueryMetricsRange200JSONResponse(prometheusQueryResponse(result)), nil
 }
 
-func (handler TelemetryHandler) QueryTelemetryTraces(ctx context.Context, request telemetryapi.QueryTelemetryTracesRequestObject) (telemetryapi.QueryTelemetryTracesResponseObject, error) {
-	actor, principal, apiError := handler.actor(ctx, false, "", "telemetry.query.traces")
-	if apiError != nil {
-		return telemetryapi.QueryTelemetryTracesdefaultJSONResponse{Body: *apiError, StatusCode: telemetryAuthStatus(*apiError)}, nil
-	}
+func (handler TelemetryHandler) QueryLogsKQL(ctx context.Context, request telemetryapi.QueryLogsKQLRequestObject) (telemetryapi.QueryLogsKQLResponseObject, error) {
 	if request.Body == nil {
-		return telemetryapi.QueryTelemetryTracesdefaultJSONResponse{Body: telemetryError(ctx, telemetryservice.ErrQueryInvalid), StatusCode: http.StatusBadRequest}, nil
+		return telemetryapi.QueryLogsKQLdefaultJSONResponse{Body: telemetryError(ctx, telemetryservice.ErrQueryInvalid), StatusCode: http.StatusBadRequest}, nil
 	}
-	filter := map[string]any{"service_name": request.Body.ServiceName, "operation": request.Body.Operation, "status": request.Body.Status, "min_duration_ms": request.Body.MinDurationMs}
-	items, meta, err := handler.Service.QueryTraces(ctx, actor, fromOpenAPIUUIDs(request.Body.ResourceIds), request.Body.From, request.Body.To, optionalInt(request.Body.Limit), optionalString(request.Body.Cursor), filter, hasPermission(principal, "telemetry.sensitive_fields.read"))
+	pipeline := ""
+	if request.Body.Pipeline != nil {
+		pipeline = *request.Body.Pipeline
+	}
+	result, err := handler.executeEngine(ctx, "telemetry.query.logs", queryengine.LanguageKQL, request.Body.Query, pipeline, "", nil, fromOpenAPIUUIDs(request.Body.ResourceIds), request.Body.TimeRange.From, request.Body.TimeRange.To, 0, request.Body.Budget, false, true)
 	if err != nil {
-		return telemetryapi.QueryTelemetryTracesdefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
+		return telemetryapi.QueryLogsKQLdefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
 	}
-	return telemetryapi.QueryTelemetryTraces200JSONResponse{Traces: toTraceSummaries(items), Meta: toQueryMeta(meta)}, nil
+	return telemetryapi.QueryLogsKQL200JSONResponse(kqlQueryResponse(result)), nil
+}
+
+func (handler TelemetryHandler) QueryTracesGraphQL(ctx context.Context, request telemetryapi.QueryTracesGraphQLRequestObject) (telemetryapi.QueryTracesGraphQLResponseObject, error) {
+	if request.Body == nil {
+		return telemetryapi.QueryTracesGraphQLdefaultJSONResponse{Body: telemetryError(ctx, telemetryservice.ErrQueryInvalid), StatusCode: http.StatusBadRequest}, nil
+	}
+	operation, variables := "", map[string]any(nil)
+	if request.Body.OperationName != nil {
+		operation = *request.Body.OperationName
+	}
+	if request.Body.Variables != nil {
+		variables = *request.Body.Variables
+	}
+	result, err := handler.executeEngine(ctx, "telemetry.query.traces", queryengine.LanguageTrace, request.Body.Query, "", operation, variables, fromOpenAPIUUIDs(request.Body.ResourceIds), request.Body.TimeRange.From, request.Body.TimeRange.To, 0, request.Body.Budget, false, true)
+	if err != nil {
+		return telemetryapi.QueryTracesGraphQLdefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
+	}
+	response, err := skyWalkingGraphQLResponse(result)
+	if err != nil {
+		return telemetryapi.QueryTracesGraphQLdefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
+	}
+	return telemetryapi.QueryTracesGraphQL200JSONResponse(response), nil
+}
+
+func (handler TelemetryHandler) executeEngine(ctx context.Context, permission string, language queryengine.Language, expression, pipeline, operation string, variables map[string]any, resources []uuid.UUID, from, to time.Time, step time.Duration, budget *telemetryapi.TelemetryQueryBudget, instant, sensitive bool) (queryengine.Result, error) {
+	actor, principal, apiError := handler.actor(ctx, false, "", permission)
+	if apiError != nil {
+		return queryengine.Result{}, telemetryRequestError{apiError: *apiError}
+	}
+	if sensitive {
+		sensitive = hasPermission(principal, "telemetry.sensitive_fields.read")
+	}
+	resources, partial, err := handler.Service.AuthorizedResources(ctx, actor, resources)
+	if err != nil {
+		return queryengine.Result{}, err
+	}
+	if partial {
+		return queryengine.Result{}, telemetryservice.ErrQueryScope
+	}
+	if from.IsZero() || to.IsZero() || !from.Before(to) {
+		return queryengine.Result{}, telemetryservice.ErrQueryInvalid
+	}
+	if handler.Service.Engine == nil {
+		return queryengine.Result{}, telemetryservice.ErrUnavailable
+	}
+	result, err := handler.Service.Engine.ExecuteEngineQuery(ctx, queryengine.Request{Language: language, Expression: expression, Pipeline: pipeline, Operation: operation, Variables: variables, Instant: instant, Start: from, End: to, Step: step, Scope: queryengine.Scope{EnterpriseID: actor.EnterpriseID, ResourceIDs: resources, AuthorizationVersion: actor.AuthorizationVersion, SensitiveFields: sensitive}, Budget: telemetryEngineBudget(budget)})
+	if err != nil {
+		return queryengine.Result{}, err
+	}
+	return result, nil
+}
+
+func telemetryEngineBudget(input *telemetryapi.TelemetryQueryBudget) queryengine.Budget {
+	budget := queryengine.Budget{MaxRows: telemetryservice.DefaultMaxRows, MaxSamples: telemetryservice.DefaultMaxSamples, MaxSeries: telemetryservice.DefaultMaxSeries, MaxScanBytes: telemetryservice.DefaultMaxScanBytes, MaxResultBytes: 8 << 20, Timeout: telemetryservice.DefaultTimeout}
+	if input == nil {
+		return budget
+	}
+	if input.MaxRows != nil {
+		budget.MaxRows = *input.MaxRows
+	}
+	if input.MaxSamples != nil {
+		budget.MaxSamples = *input.MaxSamples
+	}
+	if input.MaxSeries != nil {
+		budget.MaxSeries = *input.MaxSeries
+	}
+	if input.MaxScanBytes != nil {
+		budget.MaxScanBytes = *input.MaxScanBytes
+	}
+	if input.MaxResultBytes != nil {
+		budget.MaxResultBytes = *input.MaxResultBytes
+	}
+	if input.TimeoutMs != nil {
+		budget.Timeout = time.Duration(*input.TimeoutMs) * time.Millisecond
+	}
+	return budget
+}
+
+func prometheusQueryResponse(result queryengine.Result) telemetryapi.PrometheusQueryResponse {
+	return telemetryapi.PrometheusQueryResponse{
+		Status: telemetryapi.Success,
+		Data: telemetryapi.PrometheusQueryData{
+			ResultType: telemetryapi.PrometheusQueryDataResultType(result.ResultType),
+			Result:     result.Data,
+		},
+		Warnings:  queryWarnings(result.Meta.Warnings),
+		ArgusMeta: telemetryQueryMeta(result.Meta),
+	}
+}
+
+func kqlQueryResponse(result queryengine.Result) telemetryapi.KQLQueryResponse {
+	return telemetryapi.KQLQueryResponse{
+		SchemaVersion: telemetryapi.ArgusKqlResultv1,
+		ResultType:    telemetryapi.KQLQueryResponseResultType(result.ResultType),
+		Data:          result.Data,
+		Warnings:      queryWarnings(result.Meta.Warnings),
+		Partial:       result.Meta.Partial,
+		Meta:          telemetryQueryMeta(result.Meta),
+	}
+}
+
+func skyWalkingGraphQLResponse(result queryengine.Result) (telemetryapi.SkyWalkingGraphQLResponse, error) {
+	data, ok := result.Data.(map[string]any)
+	if !ok {
+		encoded, err := json.Marshal(result.Data)
+		if err != nil {
+			return telemetryapi.SkyWalkingGraphQLResponse{}, err
+		}
+		if err := json.Unmarshal(encoded, &data); err != nil {
+			return telemetryapi.SkyWalkingGraphQLResponse{}, err
+		}
+	}
+	response := telemetryapi.SkyWalkingGraphQLResponse{Data: data}
+	response.Extensions.Argus = telemetryQueryMeta(result.Meta)
+	return response, nil
+}
+
+func telemetryQueryMeta(meta queryengine.QueryMeta) telemetryapi.TelemetryQueryMeta {
+	return telemetryapi.TelemetryQueryMeta{
+		PlanHash: meta.PlanHash, Engine: meta.Engine, EngineVersion: meta.EngineVersion,
+		ScannedBytes: meta.ScannedBytes, ScannedRows: meta.ScannedRows, ReturnedRows: meta.ReturnedRows,
+		LoadedSamples: meta.LoadedSamples, ElapsedMs: meta.ElapsedMillis, Partial: meta.Partial,
+	}
+}
+
+func queryWarnings(warnings []string) []string {
+	if warnings == nil {
+		return []string{}
+	}
+	return warnings
+}
+
+type telemetryRequestError struct {
+	apiError telemetryapi.ApiError
+}
+
+func (err telemetryRequestError) Error() string {
+	return err.apiError.Code
 }
 
 func (handler TelemetryHandler) QueryTelemetryOverview(ctx context.Context, request telemetryapi.QueryTelemetryOverviewRequestObject) (telemetryapi.QueryTelemetryOverviewResponseObject, error) {
@@ -367,6 +495,10 @@ func (handler TelemetryHandler) previewCollector(ctx context.Context, actor tele
 }
 
 func telemetryStatus(err error) int {
+	var requestError telemetryRequestError
+	if errors.As(err, &requestError) {
+		return telemetryAuthStatus(requestError.apiError)
+	}
 	switch {
 	case errors.Is(err, telemetryservice.ErrEnrollmentInvalid), errors.Is(err, telemetryservice.ErrCertificateFenced):
 		return http.StatusUnauthorized
@@ -376,8 +508,12 @@ func telemetryStatus(err error) int {
 		return http.StatusForbidden
 	case errors.Is(err, telemetryservice.ErrDistributionPending), errors.Is(err, telemetryservice.ErrQueryInvalid):
 		return http.StatusBadRequest
-	case errors.Is(err, telemetryservice.ErrQueryBudget):
+	case errors.Is(err, telemetryservice.ErrQueryBudget), errors.Is(err, queryengine.ErrBudget):
 		return http.StatusRequestEntityTooLarge
+	case errors.Is(err, telemetryservice.ErrQueryParse), errors.Is(err, telemetryservice.ErrQueryType), errors.Is(err, telemetryservice.ErrQueryUnsupported), errors.Is(err, telemetryservice.ErrQueryComplexity), errors.Is(err, telemetryservice.ErrQueryInvalid):
+		return http.StatusBadRequest
+	case errors.Is(err, telemetryservice.ErrQueryScope):
+		return http.StatusForbidden
 	default:
 		return http.StatusServiceUnavailable
 	}
@@ -395,6 +531,10 @@ func telemetryAuthStatus(apiError telemetryapi.ApiError) int {
 }
 
 func telemetryError(ctx context.Context, err error) telemetryapi.ApiError {
+	var requestError telemetryRequestError
+	if errors.As(err, &requestError) {
+		return requestError.apiError
+	}
 	base := setupError(ctx, err)
 	code := "TELEMETRY_UNAVAILABLE"
 	switch {
@@ -408,10 +548,24 @@ func telemetryError(ctx context.Context, err error) telemetryapi.ApiError {
 		code = "COLLECTOR_DISTRIBUTION_VALIDATION_PENDING"
 	case errors.Is(err, telemetryservice.ErrQueryInvalid):
 		code = "TELEMETRY_QUERY_INVALID"
-	case errors.Is(err, telemetryservice.ErrQueryBudget):
-		code = "TELEMETRY_QUERY_BUDGET_EXCEEDED"
+	case errors.Is(err, telemetryservice.ErrQueryParse):
+		code = "QUERY_PARSE_ERROR"
+	case errors.Is(err, telemetryservice.ErrQueryType):
+		code = "QUERY_TYPE_ERROR"
+	case errors.Is(err, telemetryservice.ErrQueryUnsupported):
+		code = "QUERY_FEATURE_UNSUPPORTED"
+	case errors.Is(err, telemetryservice.ErrQueryComplexity):
+		code = "QUERY_COMPLEXITY_LIMIT"
+	case errors.Is(err, telemetryservice.ErrQueryScope):
+		code = "QUERY_SCOPE_DENIED"
+	case errors.Is(err, telemetryservice.ErrQueryBudget), errors.Is(err, queryengine.ErrBudget):
+		code = "QUERY_BUDGET_EXCEEDED"
 	}
-	return telemetryapi.ApiError{Code: code, MessageKey: "errors.telemetry." + code, RequestId: base.RequestId, Retryable: base.Retryable}
+	messageKey := "errors.telemetry." + code
+	if code == "QUERY_BUDGET_EXCEEDED" {
+		messageKey = "errors.telemetry.query_budget_exceeded"
+	}
+	return telemetryapi.ApiError{Code: code, MessageKey: messageKey, RequestId: base.RequestId, Retryable: base.Retryable}
 }
 
 func emptyTelemetryPage() telemetryapi.CursorPage {
@@ -423,13 +577,6 @@ func optionalInt(value *int) int {
 	}
 	return *value
 }
-func optionalString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
 func toCollectorDistribution(value db.CollectorDistributionVersion) telemetryapi.CollectorDistributionVersion {
 	var artifacts []telemetryapi.CollectorArtifact
 	_ = json.Unmarshal(value.ArtifactManifest, &artifacts)
@@ -506,54 +653,6 @@ func toRouteTest(value db.TelemetryRouteTest) telemetryapi.RouteTestResult {
 	}
 	if value.CompletedAt.Valid {
 		result.CompletedAt = &value.CompletedAt.Time
-	}
-	return result
-}
-func toQueryMeta(value telemetryservice.QueryMeta) telemetryapi.TelemetryQueryMeta {
-	reasons := make([]telemetryapi.TelemetryQueryMetaPartialReasons, len(value.PartialReasons))
-	for i := range value.PartialReasons {
-		reasons[i] = telemetryapi.TelemetryQueryMetaPartialReasons(value.PartialReasons[i])
-	}
-	result := telemetryapi.TelemetryQueryMeta{SchemaVersion: telemetryapi.TelemetryQueryMetaSchemaVersion(value.SchemaVersion), Partial: value.Partial, PartialReasons: reasons, AppliedResourceCount: value.AppliedResourceCount, ScannedBytes: value.ScannedBytes, ElapsedMs: value.ElapsedMS}
-	if value.NextCursor != "" {
-		result.NextCursor = &value.NextCursor
-	}
-	return result
-}
-func toMetricSeries(values []telemetryservice.MetricSeries) []telemetryapi.MetricSeries {
-	result := make([]telemetryapi.MetricSeries, 0, len(values))
-	for _, value := range values {
-		unit := value.Unit
-		points := make([]telemetryapi.MetricPoint, len(value.Points))
-		for i := range value.Points {
-			points[i] = telemetryapi.MetricPoint{Timestamp: value.Points[i].Timestamp, Value: float32(value.Points[i].Value)}
-		}
-		item := telemetryapi.MetricSeries{ResourceId: value.ResourceID, MetricName: value.MetricName, Points: points}
-		if unit != "" {
-			item.Unit = &unit
-		}
-		result = append(result, item)
-	}
-	return result
-}
-func toLogRecords(values []telemetryservice.LogRecord) []telemetryapi.LogRecord {
-	result := make([]telemetryapi.LogRecord, 0, len(values))
-	for _, value := range values {
-		item := telemetryapi.LogRecord{Timestamp: value.Timestamp, ResourceId: value.ResourceID, Severity: value.Severity, Body: value.Body}
-		if value.ServiceName != "" {
-			item.ServiceName = &value.ServiceName
-		}
-		if value.TraceID != "" {
-			item.TraceId = &value.TraceID
-		}
-		result = append(result, item)
-	}
-	return result
-}
-func toTraceSummaries(values []telemetryservice.TraceSummary) []telemetryapi.TraceSummary {
-	result := make([]telemetryapi.TraceSummary, 0, len(values))
-	for _, value := range values {
-		result = append(result, telemetryapi.TraceSummary{TraceId: value.TraceID, ResourceId: value.ResourceID, ServiceName: value.ServiceName, RootSpanName: value.RootSpanName, Status: telemetryapi.TraceSummaryStatus(value.Status), StartedAt: value.StartedAt, DurationMs: float32(value.DurationMS), SpanCount: value.SpanCount})
 	}
 	return result
 }

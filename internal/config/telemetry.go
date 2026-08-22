@@ -20,6 +20,8 @@ type Telemetry struct {
 	ClickHouseDatabase          string
 	ClickHouseUsername          string
 	ClickHousePassword          string
+	ClickHouseSchemaUsername    string
+	ClickHouseSchemaPassword    string
 	IngestGRPCAddress           string
 	IngestHTTPAddress           string
 	QueryAddress                string
@@ -48,6 +50,7 @@ func LoadTelemetry(mode string) Telemetry {
 		KafkaUsername: os.Getenv("ARGUS_KAFKA_USERNAME"), KafkaPassword: os.Getenv("ARGUS_KAFKA_PASSWORD"),
 		ClickHouseAddress: os.Getenv("ARGUS_CLICKHOUSE_ADDRESS"), ClickHouseDatabase: valueOrDefault("ARGUS_CLICKHOUSE_DATABASE", "argus_telemetry"),
 		ClickHouseUsername: os.Getenv("ARGUS_CLICKHOUSE_USERNAME"), ClickHousePassword: os.Getenv("ARGUS_CLICKHOUSE_PASSWORD"),
+		ClickHouseSchemaUsername: os.Getenv("ARGUS_CLICKHOUSE_SCHEMA_USERNAME"), ClickHouseSchemaPassword: os.Getenv("ARGUS_CLICKHOUSE_SCHEMA_PASSWORD"),
 		IngestGRPCAddress: valueOrDefault("ARGUS_TELEMETRY_INGEST_GRPC_ADDRESS", ":4317"), IngestHTTPAddress: valueOrDefault("ARGUS_TELEMETRY_INGEST_HTTP_ADDRESS", ":4318"),
 		QueryAddress: valueOrDefault("ARGUS_TELEMETRY_QUERY_ADDRESS", ":9447"), QueryEndpoint: os.Getenv("ARGUS_TELEMETRY_QUERY_ENDPOINT"),
 		TLSCertPath:                 valueOrDefault("ARGUS_TELEMETRY_TLS_CERT_PATH", "/var/run/secrets/argus/telemetry-server/tls.crt"),
@@ -70,7 +73,10 @@ func (cfg Telemetry) Validate() error {
 	if cfg.Mode != "ingest" && cfg.Mode != "writer" && cfg.Mode != "query" {
 		return errors.New("telemetry mode must be ingest, writer, or query")
 	}
-	if (cfg.Mode == "ingest" || cfg.Mode == "writer") && (cfg.DatabaseURL == "" || len(cfg.KafkaBrokers) == 0 || cfg.KafkaUsername == "" || cfg.KafkaPassword == "") {
+	if cfg.DatabaseURL == "" {
+		return errors.New("telemetry PostgreSQL configuration is required")
+	}
+	if (cfg.Mode == "ingest" || cfg.Mode == "writer") && (len(cfg.KafkaBrokers) == 0 || cfg.KafkaUsername == "" || cfg.KafkaPassword == "") {
 		return errors.New("telemetry PostgreSQL and authenticated Kafka configuration are required")
 	}
 	if cfg.Mode == "ingest" || cfg.Mode == "writer" {
@@ -88,6 +94,9 @@ func (cfg Telemetry) Validate() error {
 	}
 	if (cfg.Mode == "writer" || cfg.Mode == "query") && (cfg.ClickHouseAddress == "" || cfg.ClickHouseUsername == "" || cfg.ClickHousePassword == "") {
 		return errors.New("telemetry ClickHouse configuration is required")
+	}
+	if cfg.Mode == "query" && (cfg.ClickHouseSchemaUsername == "" || cfg.ClickHouseSchemaPassword == "") {
+		return errors.New("telemetry query ClickHouse schema manager configuration is required")
 	}
 	if cfg.Mode == "query" && (cfg.RedisURL == "" || cfg.QueryAddress == "" || cfg.TLSCertPath == "" || cfg.TLSKeyPath == "" || cfg.ClientCAPath == "" || cfg.QueryConcurrency < 1 || cfg.QueryConcurrency > 64) {
 		return errors.New("telemetry query Redis, listener, concurrency, and mTLS configuration are required")

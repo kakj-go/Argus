@@ -14,10 +14,11 @@ paths:
   /enterprise/telemetry/node-host-bindings: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1node-host-bindings}
   "/enterprise/telemetry/node-host-bindings/{id}/actions/preview-confirm": {$ref: "../argus.yaml#/paths/~1enterprise~1telemetry~1node-host-bindings~1{id}~1actions~1preview-confirm"}
   /enterprise/telemetry/usage: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1usage}
-  /enterprise/telemetry/query/metrics: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1query~1metrics}
-  /enterprise/telemetry/query/logs: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1query~1logs}
-  /enterprise/telemetry/query/traces: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1query~1traces}
   /enterprise/telemetry/query/overview: {$ref: ../argus.yaml#/paths/~1enterprise~1telemetry~1query~1overview}
+  /enterprise/metrics/query: {$ref: ../argus.yaml#/paths/~1enterprise~1metrics~1query}
+  /enterprise/metrics/query_range: {$ref: ../argus.yaml#/paths/~1enterprise~1metrics~1query_range}
+  /enterprise/logs/query: {$ref: ../argus.yaml#/paths/~1enterprise~1logs~1query}
+  /enterprise/traces/graphql: {$ref: ../argus.yaml#/paths/~1enterprise~1traces~1graphql}
   "/enterprise/hosts/{id}/collector": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1collector"}
   "/enterprise/hosts/{id}/collector/actions/preview-{action}": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1collector~1actions~1preview-{action}"}
   "/enterprise/kubernetes-clusters/{id}/collector": {$ref: "../argus.yaml#/paths/~1enterprise~1kubernetes-clusters~1{id}~1collector"}
@@ -38,14 +39,20 @@ components:
     CollectorPreview: {$ref: ../components/m7.yaml#/components/schemas/CollectorPreview}
     TelemetryRetentionPolicy: {$ref: ../components/m7.yaml#/components/schemas/TelemetryRetentionPolicy}
     TelemetryUsage: {$ref: ../components/m7.yaml#/components/schemas/TelemetryUsage}
-    MetricsQuery: {$ref: ../components/m7.yaml#/components/schemas/MetricsQuery}
-    LogsQuery: {$ref: ../components/m7.yaml#/components/schemas/LogsQuery}
-    TracesQuery: {$ref: ../components/m7.yaml#/components/schemas/TracesQuery}
     TelemetryOverviewQuery: {$ref: ../components/m7.yaml#/components/schemas/TelemetryOverviewQuery}
-    MetricsResult: {$ref: ../components/m7.yaml#/components/schemas/MetricsResult}
-    LogsResult: {$ref: ../components/m7.yaml#/components/schemas/LogsResult}
-    TracesResult: {$ref: ../components/m7.yaml#/components/schemas/TracesResult}
     TelemetryOverview: {$ref: ../components/m7.yaml#/components/schemas/TelemetryOverview}
+    TelemetryQueryTimeRange: {$ref: ../components/m7.yaml#/components/schemas/TelemetryQueryTimeRange}
+    TelemetryQueryBudget: {$ref: ../components/m7.yaml#/components/schemas/TelemetryQueryBudget}
+    PromQLInstantQuery: {$ref: ../components/m7.yaml#/components/schemas/PromQLInstantQuery}
+    PromQLRangeQuery: {$ref: ../components/m7.yaml#/components/schemas/PromQLRangeQuery}
+    KQLQuery: {$ref: ../components/m7.yaml#/components/schemas/KQLQuery}
+    SkyWalkingTraceGraphQLQuery: {$ref: ../components/m7.yaml#/components/schemas/SkyWalkingTraceGraphQLQuery}
+    TelemetryQueryMeta: {$ref: ../components/m7.yaml#/components/schemas/TelemetryQueryMeta}
+    PrometheusQueryData: {$ref: ../components/m7.yaml#/components/schemas/PrometheusQueryData}
+    PrometheusQueryResponse: {$ref: ../components/m7.yaml#/components/schemas/PrometheusQueryResponse}
+    KQLQueryResponse: {$ref: ../components/m7.yaml#/components/schemas/KQLQueryResponse}
+    SkyWalkingGraphQLError: {$ref: ../components/m7.yaml#/components/schemas/SkyWalkingGraphQLError}
+    SkyWalkingGraphQLResponse: {$ref: ../components/m7.yaml#/components/schemas/SkyWalkingGraphQLResponse}
     CollectorPage: {$ref: ../components/m7.yaml#/components/schemas/CollectorPage}
     RouteTestCreate: {$ref: ../components/m7.yaml#/components/schemas/RouteTestCreate}
     RouteTestResult: {$ref: ../components/m7.yaml#/components/schemas/RouteTestResult}

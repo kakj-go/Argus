@@ -16,6 +16,7 @@ stringData:
   migration: {{ required "databaseRoles.migrationPassword is required" .Values.databaseRoles.migrationPassword | quote }}
   telemetry-ingest: {{ required "databaseRoles.telemetryIngestPassword is required" .Values.databaseRoles.telemetryIngestPassword | quote }}
   telemetry-writer: {{ required "databaseRoles.telemetryWriterPassword is required" .Values.databaseRoles.telemetryWriterPassword | quote }}
+  telemetry-query: {{ required "databaseRoles.telemetryQueryPassword is required" .Values.databaseRoles.telemetryQueryPassword | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -43,6 +44,7 @@ data:
     create_role argus_migration "$ARGUS_MIGRATION_PASSWORD"
     create_role argus_telemetry_ingest "$ARGUS_TELEMETRY_INGEST_PASSWORD"
     create_role argus_telemetry_writer "$ARGUS_TELEMETRY_WRITER_PASSWORD"
+    create_role argus_telemetry_query "$ARGUS_TELEMETRY_QUERY_PASSWORD"
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'SQL'
     GRANT argus TO argus_migration;
     SQL

@@ -253,6 +253,7 @@ type Querier interface {
 	GetEnabledAIModelRevision(ctx context.Context, arg GetEnabledAIModelRevisionParams) (AiModelRevision, error)
 	GetEnrollmentTokenForUpdate(ctx context.Context, tokenHash []byte) (ConnectorEnrollmentToken, error)
 	GetEnterprise(ctx context.Context, id uuid.UUID) (Enterprise, error)
+	GetEnterpriseTelemetryTables(ctx context.Context, enterpriseID uuid.UUID) (EnterpriseTelemetryTable, error)
 	GetEnterpriseUser(ctx context.Context, arg GetEnterpriseUserParams) (EnterpriseUser, error)
 	GetEnterpriseUserByID(ctx context.Context, id uuid.UUID) (EnterpriseUser, error)
 	GetEnterpriseUserByUsername(ctx context.Context, lower string) (GetEnterpriseUserByUsernameRow, error)
@@ -427,6 +428,7 @@ type Querier interface {
 	MarkConnectorConnectionTestRunning(ctx context.Context, arg MarkConnectorConnectionTestRunningParams) (ConnectionTest, error)
 	MarkConnectorDisconnected(ctx context.Context, arg MarkConnectorDisconnectedParams) (int64, error)
 	MarkEnterpriseLogin(ctx context.Context, id uuid.UUID) error
+	MarkEnterpriseTelemetryDeleting(ctx context.Context, enterpriseID uuid.UUID) error
 	MarkExecutionResultUnknown(ctx context.Context, arg MarkExecutionResultUnknownParams) (Execution, error)
 	MarkExecutionTelemetryResultUnknown(ctx context.Context, arg MarkExecutionTelemetryResultUnknownParams) (Execution, error)
 	MarkKubernetesConnectorUninstalling(ctx context.Context, arg MarkKubernetesConnectorUninstallingParams) (int64, error)
@@ -540,6 +542,7 @@ type Querier interface {
 	UpsertCollectorDistributionVersion(ctx context.Context, arg UpsertCollectorDistributionVersionParams) (CollectorDistributionVersion, error)
 	UpsertCollectorForAction(ctx context.Context, arg UpsertCollectorForActionParams) (CollectorInstance, error)
 	UpsertConnectorSession(ctx context.Context, arg UpsertConnectorSessionParams) (ConnectorSession, error)
+	UpsertEnterpriseTelemetryTables(ctx context.Context, arg UpsertEnterpriseTelemetryTablesParams) error
 	UpsertKubernetesNodeHostBindingProposal(ctx context.Context, arg UpsertKubernetesNodeHostBindingProposalParams) (KubernetesNodeHostBinding, error)
 	UpsertMfaEnrollment(ctx context.Context, arg UpsertMfaEnrollmentParams) (MfaCredential, error)
 	UpsertModelQuota(ctx context.Context, arg UpsertModelQuotaParams) (ModelQuota, error)

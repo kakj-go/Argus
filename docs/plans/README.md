@@ -13,8 +13,10 @@
 | M6（已完成） | [远程访问](./M6-remote-access.md)                     | Grant、Ticket、SSH PTY/HTTPS WinRS、加密录像、终止与撤权                                |
 | M7（已完成） | [遥测](./M7-telemetry.md)                             | Collector、Ingest、Kafka、ClickHouse、Query 和统一权限裁剪                              |
 | M8           | [本地安全与恢复](./M8-production-readiness.md)        | MFA/Step-up、OpenBao、备份恢复、升级、供应链和本地完整 E2E                              |
+| M9（已归档） | [PromQL/LogQL/TraceQL 查询语言](./M9-query-language.md) | 历史 Query IR 设计，运行代码和发布门禁已删除                               |
+| M10（已完成） | [单进程 PromQL/KQL/SkyWalking Query](./M10-query-engine.md) | Prometheus Engine、租户物理表、KQL、SkyWalking GraphQL 和单进程 Query Coordinator |
 
-截至 2026-08-19，M0-M7 已完成，M8 本地安全、恢复与发布基座已经进入最终门禁验证。M8 只允许在 arm64 Docker Desktop 标记 `local_hardening_complete`；Production Profile 继续阻断。Windows/AMD64、生产 HA、容量、固定出口和跨集群灾备进入独立 Production Validation 清单。
+截至 2026-08-22，M0-M7 和 M10 已完成，M9 已归档且不再提供可执行门禁。M10 最终真实 Kubernetes E2E 运行号为 `20260822031526-50529`，同步租户 readiness、PromQL 差分、严格 Schema 校验、三种查询、安全边界、故障恢复和清理均通过。完整 OAP/KQL 兼容不在 M10 承诺范围。M8 本地安全、恢复与发布基座已经进入最终门禁验证。M8 只允许在 arm64 Docker Desktop 标记 `local_hardening_complete`；Production Profile 继续阻断。
 
 ## 状态规则
 
