@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { type ReactNode, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MetricChart } from "./chart";
@@ -12,6 +18,7 @@ import { LogViewer } from "./log-viewer";
 import { ConfirmDialog, FormDrawer } from "./overlays";
 import { PageShell } from "./page";
 import { PreviewCommitCard } from "./preview-commit";
+import { Select } from "./select";
 import { StatCard } from "./stat-card";
 import { StatusBadge } from "./status-badge";
 import { TerminalEmulator } from "./terminal";
@@ -123,7 +130,9 @@ describe("ConfirmDialog", () => {
     trigger.focus();
     fireEvent.click(trigger);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(trigger).toHaveFocus());
   });
@@ -141,15 +150,20 @@ describe("FormDrawer", () => {
     expect(screen.getByRole("button", { name: "提交" })).toBeInTheDocument();
   });
 
-  it("submits from an input with Enter", () => {
+  it("submits through the native form", () => {
     const onSubmit = vi.fn();
     render(
-      <FormDrawer onOpenChange={() => {}} onSubmit={onSubmit} open title="New host">
+      <FormDrawer
+        onOpenChange={() => {}}
+        onSubmit={onSubmit}
+        open
+        title="New host"
+      >
         <Input aria-label="hostname" />
       </FormDrawer>,
       { wrapper: Wrapper },
     );
-    fireEvent.keyDown(screen.getByLabelText("hostname"), { key: "Enter" });
+    fireEvent.submit(screen.getByRole("dialog", { name: "New host" }));
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });
@@ -157,18 +171,78 @@ describe("FormDrawer", () => {
 describe("Field", () => {
   it("associates validation errors with the input", () => {
     render(
-      <Field error="Hostname is required" label="Hostname">
+      <Field
+        error="Hostname is required"
+        label="Hostname"
+        requirement="required"
+      >
         <Input />
       </Field>,
       { wrapper: Wrapper },
     );
-    const input = screen.getByLabelText("Hostname");
+    const input = screen.getByRole("textbox", { name: "Hostname" });
     expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-required", "true");
+    expect(input).toBeRequired();
+    expect(screen.getByText("*")).toHaveAttribute("aria-hidden", "true");
     const messageId = input.getAttribute("aria-describedby");
     expect(messageId).toBeTruthy();
     expect(document.getElementById(messageId!)).toHaveTextContent(
       "Hostname is required",
     );
+  });
+
+  it("does not render a marker for optional fields", () => {
+    render(
+      <Field label="Notes" requirement="optional">
+        <Input />
+      </Field>,
+      { wrapper: Wrapper },
+    );
+    expect(screen.queryByText("*")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Notes")).not.toBeRequired();
+  });
+
+  it("associates required and error semantics with Select", () => {
+    render(
+      <Field
+        error="Choose an environment"
+        label="Environment"
+        requirement="required"
+      >
+        <Select
+          onValueChange={() => {}}
+          options={[{ label: "Production", value: "production" }]}
+          value=""
+        />
+      </Field>,
+      { wrapper: Wrapper },
+    );
+    const select = screen.getByRole("combobox", { name: "Environment" });
+    expect(select).toHaveAttribute("aria-required", "true");
+    expect(select).toHaveAttribute("aria-invalid", "true");
+    expect(
+      document.getElementById(select.getAttribute("aria-describedby")!),
+    ).toHaveTextContent("Choose an environment");
+  });
+
+  it("labels composite controls as a group without duplicating control ids", () => {
+    render(
+      <Field controlMode="group" label="Port range" requirement="optional">
+        <Input aria-label="Start port" />
+        <Input aria-label="End port" />
+      </Field>,
+      { wrapper: Wrapper },
+    );
+    const group = screen.getByRole("group", { name: "Port range" });
+    const start = screen.getByRole("textbox", { name: "Start port" });
+    const end = screen.getByRole("textbox", { name: "End port" });
+    const controls = [start, end];
+    expect(group).toContainElement(controls[0]!);
+    expect(controls[0]!).not.toHaveAttribute("id");
+    expect(controls[1]!).not.toHaveAttribute("id");
+    expect(controls[0]!).not.toHaveAttribute("aria-labelledby");
+    expect(controls[1]!).not.toHaveAttribute("aria-labelledby");
   });
 });
 

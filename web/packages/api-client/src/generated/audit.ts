@@ -32,9 +32,12 @@ export interface components {
             /** @enum {string} */
             actor_type: "platform_user" | "enterprise_user" | "service_account" | "connector" | "direct_executor" | "remote_access_gateway" | "system";
             actor_id: string;
+            actor_display_name?: string;
+            actor_username?: string;
             action: string;
             resource_type?: string;
             resource_id?: string;
+            resource_display_name?: string;
             /** @enum {string} */
             result: "success" | "failure" | "denied";
             details: {

@@ -21,9 +21,13 @@ import type {
 } from "../../types";
 import { page, type RealDomainContext } from "./context";
 
-function modelCompatibility(value: AIModelTestResult): ModelCompatibilityResult {
+function modelCompatibility(
+  value: AIModelTestResult,
+): ModelCompatibilityResult {
   const passed = (name: AIModelTestResult["checks"][number]["name"]) =>
-    value.checks.some((check) => check.name === name && check.status === "passed");
+    value.checks.some(
+      (check) => check.name === name && check.status === "passed",
+    );
   return {
     openAICompatible: passed("basic"),
     streaming: passed("streaming"),
@@ -83,14 +87,8 @@ function quotaView(value: ModelQuotaContract): ModelQuota {
 }
 
 export function installAgentDomains(context: RealDomainContext): void {
-  const {
-    client,
-    http,
-    sse,
-    remember,
-    expectedVersion,
-    idempotencyKey,
-  } = context;
+  const { client, http, sse, remember, expectedVersion, idempotencyKey } =
+    context;
 
   client.conversations = {
     async list(query) {
@@ -229,7 +227,7 @@ export function installAgentDomains(context: RealDomainContext): void {
     },
     async testAndCreate(input) {
       const value = await http.request<AIModelTestResult>(
-        "enterprise/ai-models/actions/test-create",
+        "enterprise/ai-models/test-and-create",
         {
           method: "POST",
           csrf: true,
@@ -289,7 +287,7 @@ export function installAgentDomains(context: RealDomainContext): void {
     async test(id) {
       return modelCompatibility(
         await http.request<AIModelTestResult>(
-          `enterprise/ai-models/${id}/actions/test`,
+          `enterprise/ai-models/${id}/test`,
           {
             method: "POST",
             csrf: true,
@@ -362,9 +360,18 @@ export function installAgentDomains(context: RealDomainContext): void {
         from: `${month}-01`,
         to: `${month}-31`,
         modelId: range?.modelId,
-        totalInputTokens: values.reduce((sum, item) => sum + item.input_tokens, 0),
-        totalOutputTokens: values.reduce((sum, item) => sum + item.output_tokens, 0),
-        totalRequests: values.reduce((sum, item) => sum + item.request_count, 0),
+        totalInputTokens: values.reduce(
+          (sum, item) => sum + item.input_tokens,
+          0,
+        ),
+        totalOutputTokens: values.reduce(
+          (sum, item) => sum + item.output_tokens,
+          0,
+        ),
+        totalRequests: values.reduce(
+          (sum, item) => sum + item.request_count,
+          0,
+        ),
         successRate: values.length > 0 ? 1 : 0,
         totalAmount: values.reduce((sum, item) => sum + item.amount, 0),
         avgLatencyMs: 0,

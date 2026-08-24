@@ -16,6 +16,8 @@ export const commonZh = {
   "common.createdAt": "创建时间",
   "common.yes": "是",
   "common.no": "否",
+  "common.requestReference": "请求 ID：{{requestId}}",
+  "common.saveFailed": "保存失败，请检查标记字段后重试。",
 };
 
 export const commonEn = {
@@ -35,4 +37,6 @@ export const commonEn = {
   "common.createdAt": "Created at",
   "common.yes": "Yes",
   "common.no": "No",
+  "common.requestReference": "Request ID: {{requestId}}",
+  "common.saveFailed": "Save failed. Check the indicated fields and try again.",
 };

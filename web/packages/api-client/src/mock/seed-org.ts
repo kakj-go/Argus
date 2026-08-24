@@ -439,10 +439,7 @@ export function createOrgSeed(now: number): OrgSeed {
         id: "ap-prod-danger",
         enterpriseId: "ent-acme",
         name: "生产危险操作审批",
-        description:
-          "production 环境 dangerous/critical 操作需 resource_operator 审批",
         matchRiskLevels: ["dangerous", "critical"],
-        matchEnvironments: ["production", "staging"],
         minApprovers: 1,
         approverRoleIds: ["role-po"],
         separationOfDuty: true,
@@ -454,7 +451,6 @@ export function createOrgSeed(now: number): OrgSeed {
         enterpriseId: "ent-acme",
         name: "关键操作双人审批",
         matchRiskLevels: ["critical"],
-        matchEnvironments: [],
         minApprovers: 2,
         approverRoleIds: ["role-po", "role-audit"],
         separationOfDuty: true,

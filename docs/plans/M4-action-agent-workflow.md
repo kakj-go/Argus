@@ -63,15 +63,15 @@
 
 ## 自动化证据
 
-- `make contract-check contract-breaking`
+- `go run ./cmd/argus-dev contracts check`、`go run ./cmd/argus-dev contracts breaking`
 - `go test ./...`、`go vet ./...`
 - `pnpm typecheck lint test build check:bundle check:real-build e2e`
-- `make check-production-artifacts`
-- `make e2e-m4-k8s`
+- `go run ./cmd/argus-dev check production-artifacts`
+- `go run ./cmd/argus-dev e2e run --suite m4`
 
 只有上述门禁和临时 Namespace 流程全部通过后，任务复选框才可标记完成。
 
-截至 2026-08-17，上述门禁已全部通过。最终 `make e2e-m4-k8s` 成功运行号为 `20260817144832-31660`，脱敏证据位于 `artifacts/m4-e2e/20260817144832-31660`；测试覆盖双策略审批、可信 Run 绑定、AutomationRevision、ResultUnknown 不重放、模型额度耗尽、Sandbox 配额、Redis 停止与 Server 恢复和 real Playwright，结束后临时 Namespace、PVC 和 Lease 已清理。
+截至 2026-08-17，上述门禁已由旧 Shell Harness 全部通过。最终成功运行号为 `20260817144832-31660`，脱敏证据位于 `artifacts/m4-e2e/20260817144832-31660`；测试覆盖双策略审批、可信 Run 绑定、AutomationRevision、ResultUnknown 不重放、模型额度耗尽、Sandbox 配额、Redis 停止与 Server 恢复和 real Playwright，结束后临时 Namespace、PVC 和 Lease 已清理。
 
 ## 退出标准
 

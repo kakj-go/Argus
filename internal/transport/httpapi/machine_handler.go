@@ -199,17 +199,21 @@ func emptyMachinePage() machineapi.CursorPage {
 	return machineapi.CursorPage{NextCursor: nil, HasMore: false, Partial: machineapi.PartialMetadata{Partial: false, Reasons: []machineapi.PartialMetadataReasons{}}}
 }
 func machineError(ctx context.Context, err error) machineapi.ApiError {
-	base := setupError(ctx, err)
+	base := setupErrorBase(ctx, err)
+	defer func() { logMappedError(ctx, base.Code, err) }()
 	if errors.Is(err, postgres.ErrIdempotencyConflict) {
 		base.Code, base.MessageKey = "IDEMPOTENCY_CONFLICT", "errors.common.idempotency_conflict"
 	}
 	if errors.Is(err, postgres.ErrIdempotencyExpired) {
 		base.Code, base.MessageKey = "IDEMPOTENCY_RESULT_EXPIRED", "errors.common.idempotency_result_expired"
 	}
-	return machineapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	return machineapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]machineapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }
 
 func machinePaginationError(ctx context.Context, err error) (machineapi.ApiError, int) {
 	code, key, status := paginationError(err)
+	logMappedError(ctx, code, err)
 	return machineapi.ApiError{Code: code, MessageKey: key, RequestId: requestID(ctx), Retryable: retryablePointer(code == "CURSOR_EXPIRED")}, status
 }

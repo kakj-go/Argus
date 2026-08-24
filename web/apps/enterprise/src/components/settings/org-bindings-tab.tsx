@@ -5,12 +5,14 @@ import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
+  presentApiFormError,
   useApi,
   type CreateRoleBindingInput,
   type RoleBinding,
   type RoleBindingSubjectType,
 } from "@argus/api-client";
 import {
+  Alert,
   Badge,
   Button,
   ConfirmDialog,
@@ -216,7 +218,7 @@ export function OrgBindingsTab() {
           binding={editing}
           loading={save.isPending}
           onClose={() => setEditing(undefined)}
-          onSubmit={(values) => save.mutate({ id: editing?.id, values })}
+          onSubmit={(values) => save.mutateAsync({ id: editing?.id, values })}
         />
       )}
       <ConfirmDialog
@@ -241,7 +243,7 @@ function BindingDrawer({
   binding: RoleBinding | null;
   loading: boolean;
   onClose: () => void;
-  onSubmit: (values: CreateRoleBindingInput) => void;
+  onSubmit: (values: CreateRoleBindingInput) => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const api = useApi();
@@ -282,7 +284,9 @@ function BindingDrawer({
   );
   type BindingForm = z.infer<typeof bindingSchema>;
   const {
+    clearErrors,
     control,
+    setError,
     setValue,
     watch,
     handleSubmit,
@@ -331,22 +335,44 @@ function BindingDrawer({
     if (!binding && roles.data?.[0])
       setValue("role_id", roles.data[0].id, { shouldValidate: true });
   }, [binding, roles.data, setValue]);
+  const submit = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await onSubmit({
+        subject_type: values.subject_type,
+        subject_id: values.subject_id,
+        role_id: values.role_id,
+        data_scope_ids: values.data_scope_ids,
+        valid_from: fromDateInput(values.valid_from),
+        valid_until: fromDateInput(values.valid_until, true),
+        status: values.active ? "active" : "disabled",
+      });
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("settings.common.saveFailed"),
+        fieldMap: {
+          data_scope_ids: "data_scope_ids",
+          role_id: "role_id",
+          subject_id: "subject_id",
+          subject_type: "subject_type",
+          valid_from: "valid_from",
+          valid_until: "valid_until",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={(open) => !open && onClose()}
-      onSubmit={handleSubmit((values) =>
-        onSubmit({
-          subject_type: values.subject_type,
-          subject_id: values.subject_id,
-          role_id: values.role_id,
-          data_scope_ids: values.data_scope_ids,
-          valid_from: fromDateInput(values.valid_from),
-          valid_until: fromDateInput(values.valid_until, true),
-          status: values.active ? "active" : "disabled",
-        }),
-      )}
+      onSubmit={submit}
       open
       title={
         binding
@@ -355,12 +381,22 @@ function BindingDrawer({
       }
     >
       <div className="argus-settings-form">
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("settings.common.saveFailed")}
+            tone="danger"
+          />
+        )}
         {binding && (
           <p className="argus-settings-section__hint">
             {t("settings.org.bindingsTab.immutableHint")}
           </p>
         )}
-        <Field label={t("settings.org.bindingsTab.subjectType")}>
+        <Field
+          requirement="required"
+          label={t("settings.org.bindingsTab.subjectType")}
+        >
           <Controller
             control={control}
             name="subject_type"
@@ -395,6 +431,7 @@ function BindingDrawer({
           />
         </Field>
         <Field
+          requirement="required"
           error={errors.subject_id?.message}
           label={t("settings.org.bindingsTab.subject")}
         >
@@ -412,6 +449,7 @@ function BindingDrawer({
           />
         </Field>
         <Field
+          requirement="required"
           error={errors.role_id?.message}
           label={t("settings.org.bindingsTab.role")}
         >
@@ -431,7 +469,7 @@ function BindingDrawer({
             )}
           />
         </Field>
-        <Field label={t("settings.org.tabs.scopes")}>
+        <Field requirement="optional" label={t("settings.org.tabs.scopes")}>
           <Controller
             control={control}
             name="data_scope_ids"
@@ -447,7 +485,10 @@ function BindingDrawer({
             )}
           />
         </Field>
-        <Field label={t("settings.org.bindingsTab.validFrom")}>
+        <Field
+          requirement="optional"
+          label={t("settings.org.bindingsTab.validFrom")}
+        >
           <Controller
             control={control}
             name="valid_from"
@@ -455,6 +496,7 @@ function BindingDrawer({
           />
         </Field>
         <Field
+          requirement="optional"
           error={errors.valid_until?.message}
           label={t("settings.org.bindingsTab.validUntil")}
         >

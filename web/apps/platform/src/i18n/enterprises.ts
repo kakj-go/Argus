@@ -33,6 +33,7 @@ export const enterprisesZh = {
   "enterprises.form.timezone": "默认时区",
   "enterprises.form.remark": "备注",
   "enterprises.form.required": "此字段不能为空",
+  "enterprises.form.tooLong": "不能超过 {{max}} 个字符",
   "enterprises.form.codeInvalid": "仅可使用小写字母、数字和分隔用中划线",
   "enterprises.detail.title": "企业详情",
   "enterprises.detail.id": "企业 ID",
@@ -76,6 +77,7 @@ export const enterprisesEn = {
   "enterprises.form.timezone": "Default timezone",
   "enterprises.form.remark": "Remark",
   "enterprises.form.required": "This field is required",
+  "enterprises.form.tooLong": "Must not exceed {{max}} characters",
   "enterprises.form.codeInvalid":
     "Use lowercase letters, digits, and separating dashes only",
   "enterprises.detail.title": "Enterprise detail",

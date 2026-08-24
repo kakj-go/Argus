@@ -1,4 +1,4 @@
-import type { Environment, ISODateString, RiskLevel } from "./common";
+import type { ISODateString, RiskLevel } from "./common";
 import type {
   ApiKey,
   DataScope,
@@ -89,9 +89,7 @@ export interface ApprovalPolicy {
   id: string;
   enterpriseId: string;
   name: string;
-  description?: string;
-  matchRiskLevels: RiskLevel[];
-  matchEnvironments: Environment[];
+  matchRiskLevels: Array<Exclude<RiskLevel, "read">>;
   toolIds?: string[];
   resourceTypes?: string[];
   labelSelector?: import("../generated/contracts").LabelSelector;

@@ -1,0 +1,23 @@
+releaseId: argus-e2e
+namespaces:
+  system: argus-system
+  sandbox: argus-sandbox
+  observability: argus-observability
+images:
+  pullPolicy: Never
+  sshTarget: ""
+  replayModel: ""
+  winrsTarget: ""
+  artifactServer: ""
+features:
+  sshTarget: false
+  replayModel: false
+  winrsTarget: false
+  artifactServer: false
+tls:
+  replay: {ca: "", certificate: "", privateKey: ""}
+  winrs: {ca: "", certificate: "", privateKey: ""}
+  artifact: {ca: "", certificate: "", privateKey: ""}
+loader:
+  enabled: false
+  images: []

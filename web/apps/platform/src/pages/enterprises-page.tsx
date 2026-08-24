@@ -4,8 +4,15 @@ import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { useApi, type Enterprise } from "@argus/api-client";
 import {
+  apiErrorField,
+  formConstraint,
+  formatApiError,
+  useApi,
+  type Enterprise,
+} from "@argus/api-client";
+import {
+  Alert,
   Button,
   ConfirmDialog,
   DataTable,
@@ -48,6 +55,17 @@ const TIMEZONES = [
   "UTC",
 ];
 
+const enterpriseCreateConstraints = {
+  name: formConstraint("EnterpriseCreate", "name"),
+  code: formConstraint("EnterpriseCreate", "code"),
+  timezone: formConstraint("EnterpriseCreate", "timezone"),
+  remark: formConstraint("EnterpriseCreate", "remark"),
+};
+
+const enterpriseCodePattern = new RegExp(
+  enterpriseCreateConstraints.code.pattern ?? "^(?!)$",
+);
+
 /** 企业管理：生命周期（创建/暂停/激活/停用，无删除）+ 详情抽屉内配额编辑。 */
 export function EnterprisesPage() {
   const { t, i18n } = useTranslation();
@@ -65,18 +83,49 @@ export function EnterprisesPage() {
   const enterpriseSchema = useMemo(
     () =>
       z.object({
-        name: z.string().trim().min(1, t("enterprises.form.required")),
+        name: z
+          .string()
+          .trim()
+          .min(
+            enterpriseCreateConstraints.name.minLength ?? 1,
+            t("enterprises.form.required"),
+          )
+          .max(
+            enterpriseCreateConstraints.name.maxLength ?? 128,
+            t("enterprises.form.tooLong", {
+              max: enterpriseCreateConstraints.name.maxLength ?? 128,
+            }),
+          ),
         code: z
           .string()
           .trim()
-          .min(1, t("enterprises.form.required"))
-          .max(63, t("enterprises.form.codeInvalid"))
-          .regex(
-            /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+          .min(
+            enterpriseCreateConstraints.code.minLength ?? 1,
+            t("enterprises.form.required"),
+          )
+          .max(
+            enterpriseCreateConstraints.code.maxLength ?? 63,
             t("enterprises.form.codeInvalid"),
+          )
+          .regex(enterpriseCodePattern, t("enterprises.form.codeInvalid")),
+        timezone: z
+          .string()
+          .min(
+            enterpriseCreateConstraints.timezone.minLength ?? 1,
+            t("enterprises.form.required"),
+          )
+          .max(
+            enterpriseCreateConstraints.timezone.maxLength ?? 128,
+            t("enterprises.form.tooLong", {
+              max: enterpriseCreateConstraints.timezone.maxLength ?? 128,
+            }),
           ),
-        timezone: z.string().min(1, t("enterprises.form.required")),
-        remark: z.string(),
+        remark: z.string().max(
+          enterpriseCreateConstraints.remark.maxLength ?? 2048,
+          t("enterprises.form.tooLong", {
+            max: enterpriseCreateConstraints.remark.maxLength ?? 2048,
+          }),
+        ),
       }),
     [t],
   );
@@ -85,6 +134,7 @@ export function EnterprisesPage() {
     control,
     register,
     reset,
+    setError,
     handleSubmit,
     formState: { errors },
   } = useForm<EnterpriseForm>({
@@ -116,6 +166,26 @@ export function EnterprisesPage() {
       setCreateOpen(false);
       reset();
       void invalidate();
+    },
+    onError: (error) => {
+      const field = apiErrorField(error);
+      const formField =
+        field === "name" ||
+        field === "code" ||
+        field === "timezone" ||
+        field === "remark"
+          ? field
+          : undefined;
+      const message = formatApiError(
+        error,
+        t("common.saveFailed"),
+        (requestId) => t("common.requestReference", { requestId }),
+      );
+      if (formField) {
+        setError(formField, { message, type: "server" }, { shouldFocus: true });
+      } else {
+        setError("root", { message, type: "server" });
+      }
     },
   });
 
@@ -275,17 +345,24 @@ export function EnterprisesPage() {
         submitLabel={t("common.create")}
         title={t("enterprises.form.create.title")}
       >
-        <Field error={errors.name?.message} label={t("enterprises.form.name")}>
-          <Input {...register("name")} required />
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("common.saveFailed")}
+            tone="danger"
+          />
+        )}
+        <Field requirement="required" error={errors.name?.message} label={t("enterprises.form.name")}>
+          <Input {...register("name")} maxLength={enterpriseCreateConstraints.name.maxLength} required />
         </Field>
-        <Field
+        <Field requirement="required"
           hint={t("enterprises.form.codeHint")}
           error={errors.code?.message}
           label={t("enterprises.form.code")}
         >
-          <Input {...register("code")} maxLength={63} required />
+          <Input {...register("code")} maxLength={enterpriseCreateConstraints.code.maxLength} required />
         </Field>
-        <Field
+        <Field requirement="required"
           error={errors.timezone?.message}
           label={t("enterprises.form.timezone")}
         >
@@ -304,8 +381,8 @@ export function EnterprisesPage() {
             )}
           />
         </Field>
-        <Field label={t("enterprises.form.remark")}>
-          <Textarea {...register("remark")} rows={3} />
+        <Field requirement="optional" error={errors.remark?.message} label={t("enterprises.form.remark")}>
+          <Textarea {...register("remark")} maxLength={enterpriseCreateConstraints.remark.maxLength} rows={3} />
         </Field>
       </FormDrawer>
 
@@ -314,7 +391,9 @@ export function EnterprisesPage() {
           enterprise={editing}
           loading={update.isPending}
           onClose={() => setEditing(null)}
-          onSubmit={(input) => update.mutate({ id: editing.id, ...input })}
+          onSubmit={(input) =>
+            update.mutateAsync({ id: editing.id, ...input })
+          }
         />
       )}
 
@@ -415,15 +494,46 @@ function EnterpriseEditDrawer({
     name: string;
     timezone: string;
     remark?: string;
-  }) => void;
+  }) => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const schema = useMemo(
     () =>
       z.object({
-        name: z.string().trim().min(1, t("enterprises.form.required")),
-        timezone: z.string().min(1, t("enterprises.form.required")),
-        remark: z.string().trim(),
+        name: z
+          .string()
+          .trim()
+          .min(
+            enterpriseCreateConstraints.name.minLength ?? 1,
+            t("enterprises.form.required"),
+          )
+          .max(
+            enterpriseCreateConstraints.name.maxLength ?? 128,
+            t("enterprises.form.tooLong", {
+              max: enterpriseCreateConstraints.name.maxLength ?? 128,
+            }),
+          ),
+        timezone: z
+          .string()
+          .min(
+            enterpriseCreateConstraints.timezone.minLength ?? 1,
+            t("enterprises.form.required"),
+          )
+          .max(
+            enterpriseCreateConstraints.timezone.maxLength ?? 128,
+            t("enterprises.form.tooLong", {
+              max: enterpriseCreateConstraints.timezone.maxLength ?? 128,
+            }),
+          ),
+        remark: z
+          .string()
+          .trim()
+          .max(
+            enterpriseCreateConstraints.remark.maxLength ?? 2048,
+            t("enterprises.form.tooLong", {
+              max: enterpriseCreateConstraints.remark.maxLength ?? 2048,
+            }),
+          ),
       }),
     [t],
   );
@@ -431,6 +541,7 @@ function EnterpriseEditDrawer({
   const {
     control,
     register,
+    setError,
     handleSubmit,
     formState: { errors },
   } = useForm<EditForm>({
@@ -445,20 +556,45 @@ function EnterpriseEditDrawer({
     <FormDrawer
       loading={loading}
       onOpenChange={(open) => !open && onClose()}
-      onSubmit={handleSubmit((values) =>
-        onSubmit({
-          name: values.name,
-          timezone: values.timezone,
-          remark: values.remark || undefined,
-        }),
-      )}
+      onSubmit={handleSubmit(async (values) => {
+        try {
+          await onSubmit({
+            name: values.name,
+            timezone: values.timezone,
+            remark: values.remark || undefined,
+          });
+        } catch (error) {
+          const field = apiErrorField(error);
+          const formField =
+            field === "name" || field === "timezone" || field === "remark"
+              ? field
+              : undefined;
+          const message = formatApiError(
+            error,
+            t("common.saveFailed"),
+            (requestId) => t("common.requestReference", { requestId }),
+          );
+          if (formField) {
+            setError(formField, { message, type: "server" }, { shouldFocus: true });
+          } else {
+            setError("root", { message, type: "server" });
+          }
+        }
+      })}
       open
       title={t("enterprises.form.edit.title")}
     >
-      <Field error={errors.name?.message} label={t("enterprises.form.name")}>
-        <Input {...register("name")} required />
+      {errors.root?.message && (
+        <Alert
+          description={errors.root.message}
+          title={t("common.saveFailed")}
+          tone="danger"
+        />
+      )}
+      <Field requirement="required" error={errors.name?.message} label={t("enterprises.form.name")}>
+        <Input {...register("name")} maxLength={enterpriseCreateConstraints.name.maxLength} required />
       </Field>
-      <Field
+      <Field requirement="required"
         error={errors.timezone?.message}
         label={t("enterprises.form.timezone")}
       >
@@ -474,8 +610,8 @@ function EnterpriseEditDrawer({
           )}
         />
       </Field>
-      <Field label={t("enterprises.form.remark")}>
-        <Textarea {...register("remark")} rows={3} />
+      <Field requirement="optional" error={errors.remark?.message} label={t("enterprises.form.remark")}>
+        <Textarea {...register("remark")} maxLength={enterpriseCreateConstraints.remark.maxLength} rows={3} />
       </Field>
     </FormDrawer>
   );

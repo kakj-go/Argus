@@ -101,7 +101,7 @@ spec:
           command: ["/bin/sh", "-ec"]
           args:
             - |
-              until mc alias set argus http://argus-minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+              until mc alias set -- argus http://argus-minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
                 sleep 2
               done
               mc mb --ignore-existing argus/argus-remote-recordings

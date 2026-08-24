@@ -18,10 +18,10 @@ M1 删除旧引用时无需更新基线；只有确认重建基线时才运行�
 常用命令：
 
 ```text
-make contract-lint
-make contract-generate
-make contract-check
-make contract-breaking
+go run ./cmd/argus-dev contracts lint
+go run ./cmd/argus-dev contracts generate
+go run ./cmd/argus-dev contracts check
+go run ./cmd/argus-dev contracts breaking
 ```
 
 首次合并 M0 时 `origin/main` 没有旧契约，兼容性测试会建立基线；此后删除字段、

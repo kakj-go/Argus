@@ -5,11 +5,15 @@ import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
+  formConstraint,
+  formValueConstraint,
+  presentApiFormError,
   useApi,
   type DataScope,
   type SaveDataScopeInput,
 } from "@argus/api-client";
 import {
+  Alert,
   Badge,
   Button,
   CheckItem,
@@ -49,7 +53,16 @@ type RequirementDraft = {
 
 const RESOURCE_TYPES: ResourceType[] = ["host", "kubernetes_cluster"];
 const OPERATORS: RequirementOperator[] = ["eq", "in", "exists", "not_exists"];
-const LABEL_VALUE_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$/;
+const labelKeyConstraint = formValueConstraint("UserLabelKey");
+const labelValueConstraint = formValueConstraint("LabelValue");
+const LABEL_KEY_PATTERN = new RegExp(labelKeyConstraint.pattern ?? "(?!)");
+const LABEL_VALUE_PATTERN = new RegExp(labelValueConstraint.pattern ?? "(?!)");
+const scopeConstraints = {
+  description: formConstraint("DataScopeCreate", "description"),
+  name: formConstraint("DataScopeCreate", "name"),
+  requirements: formConstraint("LabelSelector", "requirements"),
+  resourceTypes: formConstraint("DataScopeCreate", "resource_types"),
+};
 function createRequirementDraft(
   requirement?: LabelRequirement,
 ): RequirementDraft {
@@ -250,7 +263,7 @@ export function OrgScopesTab() {
           setDrawerOpen(open);
           if (!open) setEditing(null);
         }}
-        onSubmit={(input) => save.mutate({ ...input, id: editing?.id })}
+        onSubmit={(input) => save.mutateAsync({ ...input, id: editing?.id })}
         open={drawerOpen}
         scope={editing}
       />
@@ -279,7 +292,7 @@ function ScopeDrawer({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: Omit<SaveDataScopeInput, "id">) => void;
+  onSubmit: (input: Omit<SaveDataScopeInput, "id">) => Promise<unknown>;
   loading: boolean;
   scope: DataScope | null;
 }) {
@@ -287,11 +300,24 @@ function ScopeDrawer({
   const scopeSchema = useMemo(
     () =>
       z.object({
-        name: z.string().trim().min(1, t("settings.common.required")),
-        description: z.string().trim(),
+        name: z
+          .string()
+          .trim()
+          .min(
+            scopeConstraints.name.minLength ?? 1,
+            t("settings.common.required"),
+          )
+          .max(scopeConstraints.name.maxLength ?? 128),
+        description: z
+          .string()
+          .trim()
+          .max(scopeConstraints.description.maxLength ?? 1024),
         resource_types: z
           .array(z.enum(RESOURCE_TYPES))
-          .min(1, t("settings.org.scopesTab.resourceTypeRequired")),
+          .min(
+            scopeConstraints.resourceTypes.minItems ?? 1,
+            t("settings.org.scopesTab.resourceTypeRequired"),
+          ),
         resource_ids: z.string(),
         requirements: z
           .array(
@@ -301,7 +327,7 @@ function ScopeDrawer({
                   .string()
                   .trim()
                   .regex(
-                    /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/,
+                    LABEL_KEY_PATTERN,
                     t("settings.org.scopesTab.labelKeyInvalid"),
                   ),
                 operator: z.enum(OPERATORS),
@@ -324,7 +350,7 @@ function ScopeDrawer({
                 }
               }),
           )
-          .max(16)
+          .max(scopeConstraints.requirements.maxItems ?? 16)
           .superRefine((requirements, context) => {
             const keys = new Set<string>();
             let valueCount = 0;
@@ -350,10 +376,12 @@ function ScopeDrawer({
   );
   type ScopeForm = z.infer<typeof scopeSchema>;
   const {
+    clearErrors,
     control,
     register,
     reset,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<ScopeForm>({
     resolver: zodResolver(scopeSchema),
@@ -389,33 +417,54 @@ function ScopeDrawer({
       status: scope?.status ?? "active",
     });
   }, [open, reset, scope]);
+  const submit = handleSubmit(async (values) => {
+    const normalizedRequirements = values.requirements
+      .map(toRequirement)
+      .filter(
+        (requirement): requirement is LabelRequirement => requirement !== null,
+      );
+    clearErrors();
+    try {
+      await onSubmit({
+        name: values.name,
+        description: values.description || undefined,
+        resource_types: values.resource_types,
+        explicit_resource_ids: parseList(values.resource_ids),
+        label_selector:
+          normalizedRequirements.length > 0
+            ? {
+                schema_version: "argus.label_selector/v1",
+                requirements: normalizedRequirements,
+              }
+            : undefined,
+        status: values.status,
+      });
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("settings.common.saveFailed"),
+        fieldMap: {
+          description: "description",
+          explicit_resource_ids: "resource_ids",
+          label_selector: "requirements",
+          name: "name",
+          resource_types: "resource_types",
+          status: "status",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={handleSubmit((values) => {
-        const normalizedRequirements = values.requirements
-          .map(toRequirement)
-          .filter(
-            (requirement): requirement is LabelRequirement =>
-              requirement !== null,
-          );
-        onSubmit({
-          name: values.name,
-          description: values.description || undefined,
-          resource_types: values.resource_types,
-          explicit_resource_ids: parseList(values.resource_ids),
-          label_selector:
-            normalizedRequirements.length > 0
-              ? {
-                  schema_version: "argus.label_selector/v1",
-                  requirements: normalizedRequirements,
-                }
-              : undefined,
-          status: values.status,
-        });
-      })}
+      onSubmit={submit}
       open={open}
       title={
         scope
@@ -424,13 +473,33 @@ function ScopeDrawer({
       }
     >
       <div className="argus-settings-form">
-        <Field error={errors.name?.message} label={t("settings.common.name")}>
-          <Input {...register("name")} required />
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("settings.common.saveFailed")}
+            tone="danger"
+          />
+        )}
+        <Field
+          requirement="required"
+          error={errors.name?.message}
+          label={t("settings.common.name")}
+        >
+          <Input
+            {...register("name")}
+            maxLength={scopeConstraints.name.maxLength}
+            required
+          />
         </Field>
-        <Field label={t("settings.common.description")}>
-          <Textarea {...register("description")} rows={2} />
+        <Field requirement="optional" label={t("settings.common.description")}>
+          <Textarea
+            {...register("description")}
+            maxLength={scopeConstraints.description.maxLength}
+            rows={2}
+          />
         </Field>
         <Field
+          requirement="required"
           error={errors.resource_types?.message}
           label={t("settings.org.scopesTab.resourceTypes")}
         >
@@ -462,12 +531,15 @@ function ScopeDrawer({
           />
         </Field>
         <Field
+          requirement="optional"
           hint={t("settings.org.scopesTab.resourceIdsHint")}
           label={t("settings.org.scopesTab.resourceIds")}
         >
           <Textarea {...register("resource_ids")} rows={3} />
         </Field>
         <Field
+          controlMode="group"
+          requirement="optional"
           hint={t("settings.org.scopesTab.labelSelectorHint")}
           label={t("settings.org.scopesTab.labelSelector")}
         >
@@ -477,7 +549,7 @@ function ScopeDrawer({
                 <Input
                   {...register(`requirements.${index}.key`)}
                   aria-label={t("settings.org.scopesTab.labelKey")}
-                  maxLength={63}
+                  maxLength={labelKeyConstraint.maxLength}
                   placeholder={t("settings.org.scopesTab.labelKey")}
                 />
                 <Controller
@@ -518,7 +590,10 @@ function ScopeDrawer({
               </div>
             ))}
             <Button
-              disabled={requirements.length >= 16}
+              disabled={
+                requirements.length >=
+                (scopeConstraints.requirements.maxItems ?? 16)
+              }
               onClick={() => append(createRequirementDraft())}
               size="sm"
               variant="ghost"
@@ -532,7 +607,7 @@ function ScopeDrawer({
             {errors.requirements.root.message}
           </p>
         )}
-        <Field label={t("settings.common.status")}>
+        <Field requirement="required" label={t("settings.common.status")}>
           <Controller
             control={control}
             name="status"

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const apps = ["enterprise", "platform", "setup"];
+const apps = ["enterprise", "platform", "card-runtime"];
 const forbidden = [
   "argus-mock:",
   "createMockApiClient",

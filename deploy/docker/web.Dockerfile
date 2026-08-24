@@ -19,7 +19,6 @@ RUN VITE_API_MODE=$VITE_API_MODE \
     VITE_CARD_ORIGIN=$VITE_CARD_ORIGIN \
     VITE_PLATFORM_URL=$VITE_PLATFORM_URL \
     VITE_DIRECT_EGRESS_ADDRESSES=$VITE_DIRECT_EGRESS_ADDRESSES \
-    pnpm --filter @argus/setup build && \
     pnpm --filter @argus/platform build && \
     pnpm --filter @argus/enterprise build && \
     pnpm --filter @argus/card-runtime build
@@ -28,6 +27,5 @@ FROM nginxinc/nginx-unprivileged:1.29.4-alpine
 COPY deploy/docker/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /src/web/apps/enterprise/dist /srv/enterprise
 COPY --from=build /src/web/apps/platform/dist /srv/platform
-COPY --from=build /src/web/apps/setup/dist /srv/setup
 COPY --from=build /src/web/apps/card-runtime/dist /srv/card-runtime
-EXPOSE 8080 8081 8082 8083
+EXPOSE 8080 8081 8083

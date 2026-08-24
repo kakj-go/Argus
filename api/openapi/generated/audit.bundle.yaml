@@ -80,6 +80,14 @@ components:
         actor_id:
           type: string
           minLength: 1
+        actor_display_name:
+          type: string
+          minLength: 1
+          maxLength: 256
+        actor_username:
+          type: string
+          minLength: 1
+          maxLength: 128
         action:
           type: string
           pattern: ^[a-z][a-z0-9_.]+$
@@ -88,6 +96,10 @@ components:
           minLength: 1
           maxLength: 128
         resource_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        resource_display_name:
           type: string
           minLength: 1
           maxLength: 256

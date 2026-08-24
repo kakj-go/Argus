@@ -19,8 +19,6 @@ const enterpriseOrigin =
   process.env.ARGUS_E2E_ENTERPRISE_ORIGIN ?? "http://127.0.0.1:4173";
 const platformOrigin =
   process.env.ARGUS_E2E_PLATFORM_ORIGIN ?? "http://127.0.0.1:4174";
-const setupOrigin =
-  process.env.ARGUS_E2E_SETUP_ORIGIN ?? "http://127.0.0.1:4175";
 const cardOrigin = process.env.ARGUS_E2E_CARD_ORIGIN ?? "http://127.0.0.1:4176";
 const port = (origin: string) => new URL(origin).port;
 
@@ -35,22 +33,17 @@ export default defineConfig({
     ? undefined
     : [
         {
-          command: `VITE_API_MODE=mock pnpm exec vite --host 0.0.0.0 --port ${port(enterpriseOrigin)}`,
+          command: `node ../../../scripts/run-vite.mjs enterprise ${port(enterpriseOrigin)} mock`,
           url: enterpriseOrigin,
           reuseExistingServer: !process.env.CI,
         },
         {
-          command: `VITE_API_MODE=mock pnpm --filter @argus/platform exec vite --host 0.0.0.0 --port ${port(platformOrigin)}`,
+          command: `node ../../../scripts/run-vite.mjs platform ${port(platformOrigin)} mock`,
           url: platformOrigin,
           reuseExistingServer: !process.env.CI,
         },
         {
-          command: `VITE_API_MODE=mock VITE_PLATFORM_URL=${platformOrigin}/login pnpm --filter @argus/setup exec vite --host 0.0.0.0 --port ${port(setupOrigin)}`,
-          url: setupOrigin,
-          reuseExistingServer: !process.env.CI,
-        },
-        {
-          command: `pnpm --filter @argus/card-runtime exec vite --host 0.0.0.0 --port ${port(cardOrigin)}`,
+          command: `node ../../../scripts/run-vite.mjs card ${port(cardOrigin)}`,
           url: cardOrigin,
           reuseExistingServer: !process.env.CI,
         },

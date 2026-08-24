@@ -162,7 +162,9 @@ func (handler WorkflowHandler) auth(ctx context.Context, mutation bool, csrf, pe
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &workflowapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &workflowapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]workflowapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func workflowPolicyInput(value workflowapi.ApprovalPolicyWrite) actionservice.PolicyInput {
@@ -237,7 +239,8 @@ func toWorkflowExecution(value actionservice.ExecutionView) workflowapi.Executio
 }
 
 func workflowError(ctx context.Context, err error) workflowapi.ApiError {
-	code, key := "INTERNAL_ERROR", "errors.internal"
+	code, key := "INTERNAL_ERROR", "errors.common.internal"
+	defer func() { logMappedError(ctx, code, err) }()
 	switch {
 	case errors.Is(err, actionservice.ErrInvalidated):
 		code, key = "ACTION_INVALIDATED", "errors.actions.invalidated"
@@ -254,7 +257,7 @@ func workflowError(ctx context.Context, err error) workflowapi.ApiError {
 	case errors.Is(err, postgres.ErrIdempotencyExpired):
 		code, key = "IDEMPOTENCY_RESULT_EXPIRED", "errors.common.idempotency_result_expired"
 	case errors.Is(err, pgx.ErrNoRows):
-		code, key = "NOT_FOUND", "errors.not_found"
+		code, key = "RESOURCE_NOT_FOUND", "errors.common.resource_not_found"
 	}
 	requestID := "server-generated-request"
 	if current, ok := RequestFromContext(ctx); ok {

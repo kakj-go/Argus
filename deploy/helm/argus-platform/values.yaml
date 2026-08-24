@@ -46,11 +46,9 @@ runtime:
   allowedOrigins:
     - http://localhost:4173
     - http://localhost:4174
-    - http://localhost:4175
     - http://localhost:4176
     - http://127.0.0.1:4173
     - http://127.0.0.1:4174
-    - http://127.0.0.1:4175
     - http://127.0.0.1:4176
   secureCookies: false
   cardPresentationTtl: 10m
@@ -124,7 +122,6 @@ production:
   hosts:
     enterprise: argus.example.com
     platform: platform.argus.example.com
-    setup: setup.argus.example.com
     cards: cards.argus.example.com
     connector: connector.argus.example.com
     remote: remote.argus.example.com

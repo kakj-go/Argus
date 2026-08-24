@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import {
+  apiErrorField,
+  formConstraint,
+  formatApiError,
   useApi,
   type ConfirmActionResult,
   type Environment,
@@ -34,6 +40,21 @@ const CONNECTION_MODES: ClusterConnectionMode[] = [
   "in_cluster",
 ];
 const ENVIRONMENTS: Environment[] = ["development", "staging", "production"];
+const clusterConstraints = {
+  name: formConstraint("KubernetesPreviewCreate", "name"),
+  apiServer: formConstraint("KubernetesPreviewCreate", "api_server"),
+  kubeconfig: formConstraint("SecretCreate", "value"),
+};
+
+type ClusterFormValues = {
+  name: string;
+  apiServer: string;
+  connectionMode: ClusterConnectionMode;
+  bastionScopeId: string;
+  environment: Environment;
+  kubeconfig: string;
+  labelsText: string;
+};
 
 export type ClusterFormState =
   { mode: "create" } | { mode: "edit"; cluster: KubernetesCluster };
@@ -52,20 +73,83 @@ export function ClusterFormDrawer({
   const api = useApi();
   const queryClient = useQueryClient();
   const editing = state?.mode === "edit" ? state.cluster : null;
-
-  const [name, setName] = useState("");
-  const [apiServer, setApiServer] = useState("");
-  const [connectionMode, setConnectionMode] =
-    useState<ClusterConnectionMode>("via_bastion");
-  const [bastionScopeId, setBastionScopeId] = useState("");
-  const [environment, setEnvironment] = useState<Environment>("production");
-  const [kubeconfig, setKubeconfig] = useState("");
-  const [labelsText, setLabelsText] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
   const [enrollment, setEnrollment] =
     useState<ConfirmActionResult["one_time_result"]>();
+  const schema = useMemo(
+    () =>
+      z
+        .object({
+          name: z
+            .string()
+            .trim()
+            .min(1, t("kubernetes.form.required"))
+            .max(clusterConstraints.name.maxLength ?? 128),
+          apiServer: z
+            .string()
+            .trim()
+            .min(1, t("kubernetes.form.required"))
+            .max(clusterConstraints.apiServer.maxLength ?? 2048)
+            .refine((value) => {
+              try {
+                const url = new URL(value);
+                return url.protocol === "http:" || url.protocol === "https:";
+              } catch {
+                return false;
+              }
+            }, t("kubernetes.form.required")),
+          connectionMode: z.enum(["via_bastion", "direct", "in_cluster"]),
+          bastionScopeId: z.string(),
+          environment: z.enum(["development", "staging", "production"]),
+          kubeconfig: z
+            .string()
+            .max(clusterConstraints.kubeconfig.maxLength ?? 1048576),
+          labelsText: z.string(),
+        })
+        .superRefine((values, context) => {
+          if (values.connectionMode === "via_bastion" && !values.bastionScopeId) {
+            context.addIssue({
+              code: "custom",
+              message: t("kubernetes.form.required"),
+              path: ["bastionScopeId"],
+            });
+          }
+          if (
+            values.connectionMode !== "in_cluster" &&
+            !editing &&
+            !values.kubeconfig.trim()
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: t("kubernetes.form.required"),
+              path: ["kubeconfig"],
+            });
+          }
+        }),
+    [editing, t],
+  );
+  const {
+    control,
+    register,
+    reset,
+    setError,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<ClusterFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      apiServer: "",
+      connectionMode: "via_bastion",
+      bastionScopeId: "",
+      environment: "production",
+      kubeconfig: "",
+      labelsText: "",
+    },
+  });
+  const connectionMode = watch("connectionMode");
 
   const scopesQuery = useQuery({
     queryKey: ["connectors", "bastionScopes"],
@@ -74,14 +158,7 @@ export function ClusterFormDrawer({
   });
 
   const resetAndClose = () => {
-    setName("");
-    setApiServer("");
-    setConnectionMode("via_bastion");
-    setBastionScopeId("");
-    setEnvironment("production");
-    setKubeconfig("");
-    setLabelsText("");
-    setError(null);
+    reset();
     setPendingAction(null);
     setEnrollment(undefined);
     onClose();
@@ -91,29 +168,31 @@ export function ClusterFormDrawer({
     queryClient.invalidateQueries({ queryKey: ["kubernetes"] });
 
   const submit = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: ClusterFormValues) => {
       let credentialId = editing?.credential_id || undefined;
       let connectionTest: ConnectionTest | undefined;
-      if (connectionMode !== "in_cluster" && kubeconfig.trim()) {
+      if (values.connectionMode !== "in_cluster" && values.kubeconfig.trim()) {
         const secret = await api.secrets.create({
-          name: `kubeconfig-${name.trim()}`,
+          name: `kubeconfig-${values.name}`,
           type: "kubeconfig",
-          value: kubeconfig,
+          value: values.kubeconfig,
         });
         const credential = await api.secrets.createCredential({
-          name: `kubernetes-${name.trim()}`,
+          name: `kubernetes-${values.name}`,
           protocol: "kubernetes",
           secret_id: secret.id,
         });
         credentialId = credential.id;
       }
-      if (connectionMode !== "in_cluster") {
+      if (values.connectionMode !== "in_cluster") {
         if (!credentialId) throw new Error("Kubernetes credential is required");
         connectionTest = await api.kubernetes.createConnectionTest({
-          api_server: apiServer.trim(),
-          connection_mode: connectionMode,
+          api_server: values.apiServer,
+          connection_mode: values.connectionMode,
           bastion_scope_id:
-            connectionMode === "via_bastion" ? bastionScopeId : undefined,
+            values.connectionMode === "via_bastion"
+              ? values.bastionScopeId
+              : undefined,
           credential_id: credentialId,
         });
         for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -131,9 +210,9 @@ export function ClusterFormDrawer({
       }
       if (editing) {
         const input: KubernetesPreviewUpdate = {
-          name: name.trim(),
-          environment,
-          labels: parseLabels(labelsText),
+          name: values.name,
+          environment: values.environment,
+          labels: parseLabels(values.labelsText),
           credential_id: credentialId,
           connection_test_id: connectionTest?.id,
           expected_version: editing.resource_version ?? 1,
@@ -141,14 +220,16 @@ export function ClusterFormDrawer({
         return api.kubernetes.previewUpdateResource(editing.id, input);
       }
       const input: KubernetesPreviewCreate = {
-        name: name.trim(),
-        api_server: apiServer.trim(),
-        connection_mode: connectionMode,
+        name: values.name,
+        api_server: values.apiServer,
+        connection_mode: values.connectionMode,
         bastion_scope_id:
-          connectionMode === "via_bastion" ? bastionScopeId : undefined,
+          values.connectionMode === "via_bastion"
+            ? values.bastionScopeId
+            : undefined,
         credential_id: credentialId,
-        environment,
-        labels: parseLabels(labelsText),
+        environment: values.environment,
+        labels: parseLabels(values.labelsText),
         connection_test_id: connectionTest?.id,
       };
       return api.kubernetes.previewCreateResource(input);
@@ -156,38 +237,42 @@ export function ClusterFormDrawer({
     onSuccess: (action) => {
       setPendingAction(action);
     },
-    onError: () => setError(t("kubernetes.loadFailed")),
+    onError: (error) => {
+      const field = apiErrorField(error);
+      const formField =
+        field === "name"
+          ? "name"
+          : field === "api_server"
+            ? "apiServer"
+            : field === "bastion_scope_id"
+              ? "bastionScopeId"
+              : undefined;
+      const message = formatApiError(
+        error,
+        t("kubernetes.loadFailed"),
+        (requestId) => t("common.requestReference", { requestId }),
+      );
+      if (formField) {
+        setError(formField, { message, type: "server" }, { shouldFocus: true });
+      } else {
+        setError("root", { message, type: "server" });
+      }
+    },
   });
-
-  const handleSubmit = () => {
-    setError(null);
-    const missing =
-      !name.trim() ||
-      !apiServer.trim() ||
-      (connectionMode !== "in_cluster" && !editing && !kubeconfig.trim()) ||
-      (connectionMode === "via_bastion" && !bastionScopeId);
-    if (missing) {
-      setError(t("kubernetes.form.required"));
-      return;
-    }
-    submit.mutate();
-  };
-
-  // 打开编辑时回填字段（state 切换时重置）
-  const [filledFor, setFilledFor] = useState<KubernetesCluster | null>(null);
-  if (editing && editing !== filledFor) {
-    setFilledFor(editing);
-    setName(editing.name);
-    setApiServer(editing.api_server);
-    setConnectionMode(editing.connection_mode);
-    setBastionScopeId(editing.bastion_scope_id ?? "");
-    setEnvironment(editing.environment);
-    setKubeconfig("");
-    setLabelsText(labelsToText(editing.labels));
+  useEffect(() => {
+    if (!state) return;
+    reset({
+      name: editing?.name ?? "",
+      apiServer: editing?.api_server ?? "",
+      connectionMode: editing?.connection_mode ?? "via_bastion",
+      bastionScopeId: editing?.bastion_scope_id ?? "",
+      environment: editing?.environment ?? "production",
+      kubeconfig: "",
+      labelsText: labelsToText(editing?.labels ?? {}),
+    });
     setPendingAction(null);
     setEnrollment(undefined);
-    setError(null);
-  }
+  }, [editing, reset, state]);
 
   return (
     <FormDrawer
@@ -196,7 +281,7 @@ export function ClusterFormDrawer({
       onOpenChange={(open) => {
         if (!open) resetAndClose();
       }}
-      onSubmit={handleSubmit}
+      onSubmit={handleSubmit((values) => submit.mutate(values))}
       open={state !== null}
       submitLabel={
         editing ? t("kubernetes.form.save") : t("kubernetes.form.submit")
@@ -246,77 +331,87 @@ export function ClusterFormDrawer({
         />
       ) : (
         <div className="argus-k8s-stack">
-          {error && (
-            <p className="argus-field__hint is-error" role="alert">
-              {error}
-            </p>
+          {errors.root?.message && (
+            <Alert
+              description={errors.root.message}
+              title={t("kubernetes.loadFailed")}
+              tone="danger"
+            />
           )}
-          <Field label={t("kubernetes.form.name")}>
+          <Field requirement="required" error={errors.name?.message} label={t("kubernetes.form.name")}>
             <Input
+              {...register("name")}
               autoFocus
-              onChange={(event) => setName(event.target.value)}
+              maxLength={clusterConstraints.name.maxLength}
               placeholder={t("kubernetes.form.namePlaceholder")}
-              value={name}
             />
           </Field>
-          <Field label={t("kubernetes.form.apiServer")}>
+          <Field requirement="required" error={errors.apiServer?.message} label={t("kubernetes.form.apiServer")}>
             <Input
+              {...register("apiServer")}
               disabled={editing !== null}
-              onChange={(event) => setApiServer(event.target.value)}
+              maxLength={clusterConstraints.apiServer.maxLength}
               placeholder={t("kubernetes.form.apiServerPlaceholder")}
-              value={apiServer}
-            />
-          </Field>
-          <Field label={t("kubernetes.form.connectionMode")}>
-            <Select
-              disabled={editing !== null}
-              onValueChange={(value) =>
-                setConnectionMode(value as ClusterConnectionMode)
-              }
-              options={CONNECTION_MODES.map((mode) => ({
-                value: mode,
-                label: t(`kubernetes.mode.${mode}`),
-              }))}
-              value={connectionMode}
-            />
-          </Field>
-          {connectionMode === "via_bastion" && (
-            <Field label={t("kubernetes.form.bastionScope")}>
-              <Select
-                disabled={editing !== null}
-                onValueChange={setBastionScopeId}
-                options={[
-                  { value: "", label: "—" },
-                  ...(scopesQuery.data?.items ?? []).map((scope) => ({
-                    value: scope.id,
-                    label: scope.name,
-                  })),
-                ]}
-                value={bastionScopeId}
-              />
-            </Field>
-          )}
-          <Field label={t("kubernetes.form.environment")}>
-            <Select
-              onValueChange={(value) => setEnvironment(value as Environment)}
-              options={ENVIRONMENTS.map((item) => ({
-                value: item,
-                label: t(`kubernetes.environment.${item}`),
-              }))}
-              value={environment}
             />
           </Field>
           <Field
+            requirement="required"
+            label={t("kubernetes.form.connectionMode")}
+          >
+            <Controller control={control} name="connectionMode" render={({ field }) => (
+              <Select
+                disabled={editing !== null}
+                onValueChange={field.onChange}
+                options={CONNECTION_MODES.map((mode) => ({ value: mode, label: t(`kubernetes.mode.${mode}`) }))}
+                value={field.value}
+              />
+            )} />
+          </Field>
+          {connectionMode === "via_bastion" && (
+            <Field
+              requirement="required"
+              error={errors.bastionScopeId?.message}
+              label={t("kubernetes.form.bastionScope")}
+            >
+              <Controller control={control} name="bastionScopeId" render={({ field }) => (
+                <Select
+                  disabled={editing !== null}
+                  onValueChange={field.onChange}
+                  options={[{ value: "", label: "—" }, ...(scopesQuery.data?.items ?? []).map((scope) => ({ value: scope.id, label: scope.name }))]}
+                  value={field.value}
+                />
+              )} />
+            </Field>
+          )}
+          <Field
+            requirement="required"
+            label={t("kubernetes.form.environment")}
+          >
+            <Controller control={control} name="environment" render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                options={ENVIRONMENTS.map((item) => ({ value: item, label: t(`kubernetes.environment.${item}`) }))}
+                value={field.value}
+              />
+            )} />
+          </Field>
+          <Field
+            requirement="optional"
             hint={t("kubernetes.form.labelsHint")}
             label={t("kubernetes.form.labels")}
           >
             <Textarea
-              onChange={(event) => setLabelsText(event.target.value)}
+              {...register("labelsText")}
               rows={3}
-              value={labelsText}
             />
           </Field>
           <Field
+            requirement={
+              connectionMode !== "in_cluster" && !editing
+                ? "required"
+                : "optional"
+            }
+            error={errors.kubeconfig?.message}
             hint={
               editing
                 ? t("kubernetes.form.kubeconfigRotateHint")
@@ -325,10 +420,10 @@ export function ClusterFormDrawer({
             label={t("kubernetes.form.kubeconfig")}
           >
             <Textarea
-              onChange={(event) => setKubeconfig(event.target.value)}
+              {...register("kubeconfig")}
+              maxLength={clusterConstraints.kubeconfig.maxLength}
               placeholder={t("kubernetes.form.kubeconfigPlaceholder")}
               rows={8}
-              value={kubeconfig}
             />
           </Field>
         </div>

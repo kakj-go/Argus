@@ -1,0 +1,246 @@
+/**
+ * 初始化向导文案（`setup.*` 命名空间）。
+ * 设计依据 docs/07 §2-4：一次性初始化向导，三步完成平台初始化。
+ */
+export const setupZh = {
+  setup: {
+    badge: "首次初始化",
+    title: "欢迎使用 Argus",
+    subtitle:
+      "完成一次性系统初始化：验证部署凭据并创建平台超级管理员。初始化完成后本页面将永久关闭。",
+    loading: "正在检查系统初始化状态…",
+    initializing: "系统正在完成初始化，请稍候…",
+    statusError: {
+      title: "无法获取系统状态",
+      description: "请检查控制平面服务是否可用，然后重试。",
+      retry: "重试",
+    },
+    initialized: {
+      badge: "已初始化",
+      title: "系统已完成初始化",
+      description:
+        "本平台已完成一次性初始化，初始化向导已永久关闭。请使用超级管理员账号登录平台控制台。",
+      goLogin: "前往登录",
+    },
+    success: {
+      badge: "初始化完成",
+      title: "系统初始化成功",
+      description:
+        "平台超级管理员已创建，初始化向导已永久关闭。请使用刚才创建的超级管理员账号登录。",
+      goLogin: "前往登录",
+    },
+    steps: {
+      token: { title: "验证 Setup Token", description: "部署侧一次性凭据" },
+      system: { title: "系统与管理员", description: "平台信息与超级管理员" },
+      review: { title: "确认提交", description: "单事务提交，不可重复" },
+    },
+    token: {
+      label: "Setup Token",
+      placeholder: "stp_••••••••••••",
+      hint: "请使用 argusctl 或部署者提供的命令读取一次性 Token；初始化成功后立即失效。",
+      required: "请输入 Setup Token",
+      tooShort: "Setup Token 长度至少 8 位",
+    },
+    system: {
+      platformSection: "系统信息",
+      adminSection: "超级管理员",
+      platformName: {
+        label: "平台显示名称",
+        placeholder: "Argus Production",
+        required: "请输入平台显示名称",
+        tooLong: "平台显示名称不能超过 128 个字符",
+      },
+      defaultLocale: { label: "默认语言" },
+      timezone: { label: "默认时区" },
+      externalUrl: {
+        label: "外部访问地址",
+        placeholder: "https://argus.example.com",
+        hint: "用户访问平台的入口地址，用于生成回调与通知链接。",
+        required: "请输入外部访问地址",
+        invalid: "请输入合法的 http(s) 地址",
+      },
+      username: {
+        label: "登录名",
+        placeholder: "admin",
+        hint: "3-128 位，字母开头，可含字母、数字、下划线与连字符。",
+        required: "请输入登录名",
+        invalid: "登录名需字母开头，3-128 位字母、数字、_ 或 -",
+      },
+      displayName: {
+        label: "显示名",
+        placeholder: "平台管理员",
+        required: "请输入显示名",
+        tooLong: "显示名不能超过 128 个字符",
+      },
+      email: {
+        label: "邮箱",
+        placeholder: "admin@example.com",
+        required: "请输入邮箱",
+        invalid: "请输入合法的邮箱地址",
+      },
+      password: {
+        label: "密码",
+        hint: "12-1024 个字符，包含字母和数字，且不能包含用户名或邮箱账号部分。",
+        required: "请输入密码",
+        min_length: "密码至少需要 12 个字符",
+        max_length: "密码不能超过 1024 个字符",
+        letter_required: "密码必须包含至少一个字母",
+        digit_required: "密码必须包含至少一个数字",
+        common_password: "该密码过于常见，请使用其他密码",
+        contains_identity: "密码不能包含用户名或邮箱账号部分",
+        reused_password: "新密码不能与当前或临时密码相同",
+      },
+      confirmPassword: {
+        label: "确认密码",
+        mismatch: "两次输入的密码不一致",
+      },
+      strength: {
+        label: "密码强度",
+        weak: "弱",
+        medium: "中",
+        strong: "强",
+      },
+    },
+    review: {
+      intro:
+        "请核对以下信息。提交为单事务操作：任一环节失败将整体回滚；成功后 Setup Token 立即失效，本向导永久关闭。",
+      tokenMasked: "已就绪（提交时由服务端校验）",
+      masked: "••••••••",
+      submit: "确认初始化",
+      errorTitle: "初始化失败",
+      tokenInvalid:
+        "Setup Token 已失效或与当前部署不一致。请返回第一步重新读取当前 Token。",
+      passwordWeak: "密码不符合策略：至少 12 位，并同时包含字母和数字。",
+      genericError: "初始化未完成，请检查表单后重试。",
+      requestReference: "请求 ID：{{requestId}}",
+    },
+  },
+};
+
+export const setupEn = {
+  setup: {
+    badge: "First-time setup",
+    title: "Welcome to Argus",
+    subtitle:
+      "Complete the one-time initialization by verifying the deployment credential and creating the platform super administrator. This page closes permanently once finished.",
+    loading: "Checking platform initialization state…",
+    initializing: "Platform initialization is in progress…",
+    statusError: {
+      title: "Unable to fetch platform status",
+      description: "Check that the control plane is reachable, then retry.",
+      retry: "Retry",
+    },
+    initialized: {
+      badge: "Initialized",
+      title: "Platform already initialized",
+      description:
+        "One-time initialization has already completed and this wizard is permanently closed. Sign in to the platform console with the super administrator account.",
+      goLogin: "Go to sign in",
+    },
+    success: {
+      badge: "Setup complete",
+      title: "Platform initialized successfully",
+      description:
+        "The super administrator has been created and this wizard is now permanently closed. Sign in with the account you just created.",
+      goLogin: "Go to sign in",
+    },
+    steps: {
+      token: {
+        title: "Verify Setup Token",
+        description: "One-time deployment credential",
+      },
+      system: {
+        title: "System & admin",
+        description: "Platform info and super admin",
+      },
+      review: {
+        title: "Confirm & submit",
+        description: "Single transaction, one-shot",
+      },
+    },
+    token: {
+      label: "Setup Token",
+      placeholder: "stp_••••••••••••",
+      hint: "Read the one-time token with argusctl or the command supplied by the deployer. It is invalidated after initialization.",
+      required: "Enter the Setup Token",
+      tooShort: "Setup Token must be at least 8 characters",
+    },
+    system: {
+      platformSection: "System information",
+      adminSection: "Super administrator",
+      platformName: {
+        label: "Platform display name",
+        placeholder: "Argus Production",
+        required: "Enter the platform display name",
+        tooLong: "Platform display name must be at most 128 characters",
+      },
+      defaultLocale: { label: "Default language" },
+      timezone: { label: "Default timezone" },
+      externalUrl: {
+        label: "External access URL",
+        placeholder: "https://argus.example.com",
+        hint: "The entry URL users visit; used for callbacks and notification links.",
+        required: "Enter the external access URL",
+        invalid: "Enter a valid http(s) URL",
+      },
+      username: {
+        label: "Username",
+        placeholder: "admin",
+        hint: "3-128 characters, starts with a letter; letters, digits, _ and - allowed.",
+        required: "Enter a username",
+        invalid: "Must start with a letter; 3-128 letters, digits, _ or -",
+      },
+      displayName: {
+        label: "Display name",
+        placeholder: "Platform Admin",
+        required: "Enter a display name",
+        tooLong: "Display name must be at most 128 characters",
+      },
+      email: {
+        label: "Email",
+        placeholder: "admin@example.com",
+        required: "Enter an email address",
+        invalid: "Enter a valid email address",
+      },
+      password: {
+        label: "Password",
+        hint: "12-1024 characters with letters and numbers; do not include the username or email account name.",
+        required: "Enter a password",
+        min_length: "The password must contain at least 12 characters",
+        max_length: "The password must not exceed 1024 characters",
+        letter_required: "The password must contain at least one letter",
+        digit_required: "The password must contain at least one number",
+        common_password: "This password is too common; choose another password",
+        contains_identity:
+          "The password must not contain the username or email account name",
+        reused_password:
+          "The new password must differ from the current or temporary password",
+      },
+      confirmPassword: {
+        label: "Confirm password",
+        mismatch: "Passwords do not match",
+      },
+      strength: {
+        label: "Password strength",
+        weak: "Weak",
+        medium: "Medium",
+        strong: "Strong",
+      },
+    },
+    review: {
+      intro:
+        "Review the information below. Submission is a single transaction: any failure rolls everything back; on success the Setup Token is invalidated and this wizard closes permanently.",
+      tokenMasked: "Ready (validated by the server on submit)",
+      masked: "••••••••",
+      submit: "Confirm & initialize",
+      errorTitle: "Initialization failed",
+      tokenInvalid:
+        "The Setup Token has expired or does not match this deployment. Return to the first step to load the current token.",
+      passwordWeak:
+        "The password must be at least 12 characters and contain both letters and digits.",
+      genericError:
+        "Initialization did not complete. Check the form and try again.",
+      requestReference: "Request ID: {{requestId}}",
+    },
+  },
+};

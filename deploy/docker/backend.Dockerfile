@@ -11,12 +11,14 @@ ARG GO_BUILD_TAGS=""
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
+COPY api/openapi ./api/openapi
 COPY cmd ./cmd
 COPY internal ./internal
 COPY migrations ./migrations
 
-RUN mkdir -p /out && \
-    for name in argus-server argus-worker argus-connector-gateway argus-telemetry argus-telemetry-dlq-replay argus-connector argusctl argus-migrate argus-card-catalog-sync argus-telemetry-catalog-sync; do \
+RUN set -eu; \
+    mkdir -p /out && \
+    for name in argus-server argus-worker argus-connector-gateway argus-telemetry argus-telemetry-dlq-replay argus-connector argusctl argus-migrate argus-card-catalog-sync argus-telemetry-catalog-sync argus-sandbox-smoke; do \
       CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
 		-tags "$GO_BUILD_TAGS" \
         -trimpath \

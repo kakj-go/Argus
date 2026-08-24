@@ -1,7 +1,12 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import {
+  formConstraint,
+  presentApiFormError,
   useApi,
   type ConnectionTestResult,
   type SandboxBackend,
@@ -51,6 +56,12 @@ const EMPTY_FORM: FormState = {
   credentialRef: "",
   tlsVerify: true,
   defaultStorage: "sandbox-artifacts",
+};
+
+const backendConstraints = {
+  credential: formConstraint("SandboxBackendWrite", "api_key"),
+  endpoint: formConstraint("SandboxBackendWrite", "endpoint"),
+  name: formConstraint("SandboxBackendWrite", "name"),
 };
 
 /** 服务连接 Tab：SandboxBackend 列表、新建/编辑、启停、内联连接测试。 */
@@ -236,65 +247,163 @@ export function BackendsTab() {
         />
       )}
 
-      <FormDrawer
-        loading={save.isPending}
-        onOpenChange={(open) => {
-          if (!open) setForm(null);
-        }}
-        onSubmit={() => form && save.mutate(form)}
-        open={form !== null}
-        submitLabel={t("common.save")}
-        title={t(form?.id ? "sandbox.backends.edit" : "sandbox.backends.add")}
-      >
-        {form && (
-          <>
-            <Field label={t("sandbox.backends.form.name")}>
-              <Input
-                onChange={(event) =>
-                  setForm({ ...form, name: event.target.value })
-                }
-                required
-                value={form.name}
-              />
-            </Field>
-            <Field label={t("sandbox.backends.form.endpoint")}>
-              <Input
-                onChange={(event) =>
-                  setForm({ ...form, endpoint: event.target.value })
-                }
-                placeholder="https://sandbox.internal"
-                required
-                value={form.endpoint}
-              />
-            </Field>
-            <Field label={t("sandbox.backends.form.credentialRef")}>
-              <Input
-                onChange={(event) =>
-                  setForm({ ...form, credentialRef: event.target.value })
-                }
-                required
-                value={form.credentialRef}
-              />
-            </Field>
-            <Field label={t("sandbox.backends.form.defaultStorage")}>
-              <Input
-                onChange={(event) =>
-                  setForm({ ...form, defaultStorage: event.target.value })
-                }
-                value={form.defaultStorage}
-              />
-            </Field>
-            <label className="argus-switch-row">
-              <Switch
-                checked={form.tlsVerify}
-                label={t("sandbox.backends.form.tlsVerify")}
-                onChange={(checked) => setForm({ ...form, tlsVerify: checked })}
-              />
-              <span>{t("sandbox.backends.form.tlsVerify")}</span>
-            </label>
-          </>
-        )}
-      </FormDrawer>
+      {form && (
+        <BackendFormDrawer
+          initial={form}
+          loading={save.isPending}
+          onClose={() => setForm(null)}
+          onSubmit={(values) => save.mutateAsync(values)}
+        />
+      )}
     </div>
+  );
+}
+
+function BackendFormDrawer({
+  initial,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  initial: FormState;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (values: FormState) => Promise<unknown>;
+}) {
+  const { t } = useTranslation();
+  const schema = z.object({
+    name: z
+      .string()
+      .trim()
+      .min(backendConstraints.name.minLength ?? 1, t("sandbox.form.required"))
+      .max(backendConstraints.name.maxLength ?? 128),
+    endpoint: z
+      .string()
+      .trim()
+      .min(1, t("sandbox.form.required"))
+      .max(backendConstraints.endpoint.maxLength ?? 2048)
+      .refine((value) => {
+        try {
+          const url = new URL(value);
+          return url.protocol === "http:" || url.protocol === "https:";
+        } catch {
+          return false;
+        }
+      }, t("sandbox.form.urlInvalid")),
+    credentialRef: z
+      .string()
+      .trim()
+      .max(backendConstraints.credential.maxLength ?? 8192)
+      .refine(
+        (value) => initial.id !== null || value.length > 0,
+        t("sandbox.form.required"),
+      ),
+    tlsVerify: z.boolean(),
+    defaultStorage: z.string(),
+  });
+  type Values = z.infer<typeof schema>;
+  const {
+    control,
+    clearErrors,
+    handleSubmit,
+    register,
+    setError,
+    formState: { errors },
+  } = useForm<Values>({
+    resolver: zodResolver(schema),
+    defaultValues: initial,
+  });
+  const submit = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await onSubmit({ ...values, id: initial.id });
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("sandbox.form.saveFailed"),
+        fieldMap: {
+          api_key: "credentialRef",
+          credentialRef: "credentialRef",
+          endpoint: "endpoint",
+          name: "name",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
+  return (
+    <FormDrawer
+      loading={loading}
+      onOpenChange={(open) => !open && onClose()}
+      onSubmit={submit}
+      open
+      submitLabel={t("common.save")}
+      title={t(initial.id ? "sandbox.backends.edit" : "sandbox.backends.add")}
+    >
+      {errors.root?.message && (
+        <Alert
+          description={errors.root.message}
+          title={t("sandbox.form.saveFailed")}
+          tone="danger"
+        />
+      )}
+      <Field
+        error={errors.name?.message}
+        requirement="required"
+        label={t("sandbox.backends.form.name")}
+      >
+        <Input
+          {...register("name")}
+          maxLength={backendConstraints.name.maxLength}
+        />
+      </Field>
+      <Field
+        error={errors.endpoint?.message}
+        requirement="required"
+        label={t("sandbox.backends.form.endpoint")}
+      >
+        <Input
+          {...register("endpoint")}
+          maxLength={backendConstraints.endpoint.maxLength}
+          placeholder="https://sandbox.internal"
+          type="url"
+        />
+      </Field>
+      <Field
+        error={errors.credentialRef?.message}
+        requirement={initial.id ? "optional" : "required"}
+        label={t("sandbox.backends.form.credentialRef")}
+      >
+        <Input
+          {...register("credentialRef")}
+          maxLength={backendConstraints.credential.maxLength}
+        />
+      </Field>
+      <Field
+        error={errors.defaultStorage?.message}
+        requirement="optional"
+        label={t("sandbox.backends.form.defaultStorage")}
+      >
+        <Input {...register("defaultStorage")} />
+      </Field>
+      <Controller
+        control={control}
+        name="tlsVerify"
+        render={({ field }) => (
+          <label className="argus-switch-row">
+            <Switch
+              checked={field.value}
+              label={t("sandbox.backends.form.tlsVerify")}
+              onChange={field.onChange}
+            />
+            <span>{t("sandbox.backends.form.tlsVerify")}</span>
+          </label>
+        )}
+      />
+    </FormDrawer>
   );
 }

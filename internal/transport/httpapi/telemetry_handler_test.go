@@ -7,6 +7,7 @@ import (
 	"time"
 
 	telemetryapi "github.com/kakj-go/Argus/internal/gen/openapi/telemetryapi"
+	"github.com/kakj-go/Argus/internal/storage/postgres"
 	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 	"github.com/kakj-go/Argus/internal/telemetry/queryengine"
 )
@@ -103,5 +104,34 @@ func TestTelemetryQueryErrorsHaveStablePublicMappings(t *testing.T) {
 				t.Fatalf("telemetryError(%v) message key = %q", test.err, got)
 			}
 		}
+	}
+}
+
+func TestTelemetryIdempotencyErrorsHaveStablePublicMappings(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		err  error
+		code string
+		key  string
+	}{
+		{postgres.ErrIdempotencyConflict, "IDEMPOTENCY_CONFLICT", "errors.common.idempotency_conflict"},
+		{postgres.ErrIdempotencyExpired, "IDEMPOTENCY_RESULT_EXPIRED", "errors.common.idempotency_result_expired"},
+	}
+	for _, test := range tests {
+		if got := telemetryStatus(test.err); got != http.StatusConflict {
+			t.Fatalf("telemetryStatus(%v) = %d, want %d", test.err, got, http.StatusConflict)
+		}
+		got := telemetryError(context.Background(), test.err)
+		if got.Code != test.code || got.MessageKey != test.key {
+			t.Fatalf("telemetryError(%v) = %#v", test.err, got)
+		}
+	}
+}
+
+func TestTelemetryDependencyErrorMatchesPublicContract(t *testing.T) {
+	t.Parallel()
+	got := telemetryError(context.Background(), telemetryservice.ErrUnavailable)
+	if got.Code != "TELEMETRY_DEPENDENCY_UNAVAILABLE" || got.MessageKey != "errors.telemetry.dependency_unavailable" || got.Retryable == nil || !*got.Retryable {
+		t.Fatalf("telemetryError(ErrUnavailable) = %#v", got)
 	}
 }

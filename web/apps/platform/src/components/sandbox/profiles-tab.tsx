@@ -1,13 +1,20 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import {
+  formConstraint,
+  presentApiFormError,
   useApi,
   type CreateSandboxProfileInput,
+  type SandboxImage,
   type SandboxProfile,
 } from "@argus/api-client";
 import {
   Badge,
+  Alert,
   Button,
   DataTable,
   Field,
@@ -30,6 +37,16 @@ type ProfileRow = {
   builtin: boolean;
   enabled: boolean;
 };
+
+const profileConstraints = {
+  cpu: formConstraint("SandboxProfileWrite", "cpu_millis"),
+  memory: formConstraint("SandboxProfileWrite", "memory_mib"),
+  name: formConstraint("SandboxProfileWrite", "name"),
+  timeout: formConstraint("SandboxProfileWrite", "timeout_seconds"),
+};
+
+const cpuMinimum = (profileConstraints.cpu.minimum ?? 100) / 1000;
+const cpuMaximum = (profileConstraints.cpu.maximum ?? 16000) / 1000;
 
 type FormState = {
   id: string | null;
@@ -189,30 +206,6 @@ export function ProfilesTab() {
   const findProfile = (id: string) =>
     profiles.data?.find((item) => item.id === id);
 
-  const numberField = (
-    label: string,
-    key:
-      | "cpu"
-      | "memoryMb"
-      | "diskMb"
-      | "pids"
-      | "commandSeconds"
-      | "idleSeconds"
-      | "lifetimeSeconds",
-  ) =>
-    form && (
-      <Field label={label}>
-        <Input
-          min={0}
-          onChange={(event) =>
-            setForm({ ...form, [key]: Number(event.target.value) || 0 })
-          }
-          type="number"
-          value={String(form[key])}
-        />
-      </Field>
-    );
-
   return (
     <div className="argus-platform-stack">
       <div className="argus-tab-toolbar">
@@ -303,86 +296,239 @@ export function ProfilesTab() {
         />
       )}
 
-      <FormDrawer
-        loading={save.isPending}
-        onOpenChange={(open) => {
-          if (!open) setForm(null);
-        }}
-        onSubmit={() => form && save.mutate(form)}
-        open={form !== null}
-        submitLabel={t("common.save")}
-        title={t(form?.id ? "sandbox.profiles.edit" : "sandbox.profiles.add")}
-        width={560}
+      {form && (
+        <ProfileFormDrawer
+          images={images.data ?? []}
+          initial={form}
+          loading={save.isPending}
+          onClose={() => setForm(null)}
+          onSubmit={(values) => save.mutateAsync(values)}
+        />
+      )}
+    </div>
+  );
+}
+
+const numericProfileFields = [
+  "cpu",
+  "memoryMb",
+  "diskMb",
+  "pids",
+  "commandSeconds",
+  "idleSeconds",
+  "lifetimeSeconds",
+] as const;
+
+const capabilityFields = [
+  "fileUpload",
+  "artifactDownload",
+  "secretInjection",
+  "gpu",
+] as const;
+
+function ProfileFormDrawer({
+  initial,
+  images,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  initial: FormState;
+  images: SandboxImage[];
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (values: FormState) => Promise<unknown>;
+}) {
+  const { t } = useTranslation();
+  const schema = z.object({
+    name: z
+      .string()
+      .trim()
+      .min(profileConstraints.name.minLength ?? 1, t("sandbox.form.required"))
+      .max(profileConstraints.name.maxLength ?? 128),
+    description: z.string(),
+    imageId: z.string().min(1, t("sandbox.form.required")),
+    cpu: z
+      .number({ error: t("sandbox.form.required") })
+      .min(cpuMinimum)
+      .max(cpuMaximum),
+    memoryMb: z
+      .number({ error: t("sandbox.form.required") })
+      .min(profileConstraints.memory.minimum ?? 128)
+      .max(profileConstraints.memory.maximum ?? 65536),
+    diskMb: z.number({ error: t("sandbox.form.required") }).min(0),
+    pids: z
+      .number({ error: t("sandbox.form.required") })
+      .int()
+      .min(0),
+    commandSeconds: z
+      .number({ error: t("sandbox.form.required") })
+      .min(profileConstraints.timeout.minimum ?? 10)
+      .max(profileConstraints.timeout.maximum ?? 3600),
+    idleSeconds: z
+      .number({ error: t("sandbox.form.required") })
+      .min(profileConstraints.timeout.minimum ?? 10)
+      .max(profileConstraints.timeout.maximum ?? 3600),
+    lifetimeSeconds: z
+      .number({ error: t("sandbox.form.required") })
+      .min(profileConstraints.timeout.minimum ?? 10)
+      .max(profileConstraints.timeout.maximum ?? 3600),
+    networkMode: z.enum(["deny_all", "allow_list"]),
+    allowedDomains: z.string(),
+    fileUpload: z.boolean(),
+    artifactDownload: z.boolean(),
+    secretInjection: z.boolean(),
+    gpu: z.boolean(),
+  });
+  type Values = z.infer<typeof schema>;
+  const {
+    control,
+    clearErrors,
+    handleSubmit,
+    register,
+    setError,
+    watch,
+    formState: { errors },
+  } = useForm<Values>({
+    resolver: zodResolver(schema),
+    defaultValues: initial,
+  });
+  const networkMode = watch("networkMode");
+  const submit = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await onSubmit({ ...values, id: initial.id });
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("sandbox.form.saveFailed"),
+        fieldMap: {
+          backend_id: "imageId",
+          cpu_millis: "cpu",
+          image_id: "imageId",
+          memory_mib: "memoryMb",
+          name: "name",
+          network_mode: "networkMode",
+          timeout_seconds: "commandSeconds",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
+  const numberField = (key: (typeof numericProfileFields)[number]) => {
+    const bounds =
+      key === "cpu"
+        ? { maximum: cpuMaximum, minimum: cpuMinimum, step: 0.1 }
+        : key === "memoryMb"
+          ? profileConstraints.memory
+          : key === "commandSeconds" ||
+              key === "idleSeconds" ||
+              key === "lifetimeSeconds"
+            ? profileConstraints.timeout
+            : { minimum: 0 };
+    return (
+      <Field
+        error={errors[key]?.message}
+        requirement="required"
+        label={t(`sandbox.profiles.form.${key}`)}
       >
-        {form && (
-          <div className="argus-drawer-stack">
-            <Field label={t("sandbox.profiles.form.name")}>
-              <Input
-                onChange={(event) =>
-                  setForm({ ...form, name: event.target.value })
-                }
-                required
-                value={form.name}
-              />
-            </Field>
-            <Field label={t("sandbox.profiles.form.description")}>
-              <Textarea
-                onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
-                }
-                rows={2}
-                value={form.description}
-              />
-            </Field>
-            <Field label={t("sandbox.profiles.form.image")}>
+        <Input
+          {...register(key, { valueAsNumber: true })}
+          max={bounds.maximum}
+          min={bounds.minimum}
+          step={"step" in bounds ? bounds.step : undefined}
+          type="number"
+        />
+      </Field>
+    );
+  };
+  return (
+    <FormDrawer
+      loading={loading}
+      onOpenChange={(open) => !open && onClose()}
+      onSubmit={submit}
+      open
+      submitLabel={t("common.save")}
+      title={t(initial.id ? "sandbox.profiles.edit" : "sandbox.profiles.add")}
+      width={560}
+    >
+      <div className="argus-drawer-stack">
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("sandbox.form.saveFailed")}
+            tone="danger"
+          />
+        )}
+        <Field
+          error={errors.name?.message}
+          requirement="required"
+          label={t("sandbox.profiles.form.name")}
+        >
+          <Input
+            {...register("name")}
+            maxLength={profileConstraints.name.maxLength}
+          />
+        </Field>
+        <Field
+          error={errors.description?.message}
+          requirement="optional"
+          label={t("sandbox.profiles.form.description")}
+        >
+          <Textarea {...register("description")} rows={2} />
+        </Field>
+        <Field
+          error={errors.imageId?.message}
+          requirement="required"
+          label={t("sandbox.profiles.form.image")}
+        >
+          <Controller
+            control={control}
+            name="imageId"
+            render={({ field }) => (
               <Select
-                onValueChange={(value) => setForm({ ...form, imageId: value })}
-                options={(images.data ?? []).map((image) => ({
+                onValueChange={field.onChange}
+                options={images.map((image) => ({
                   value: image.id,
                   label: image.name,
                 }))}
-                value={form.imageId}
+                value={field.value}
               />
-            </Field>
+            )}
+          />
+        </Field>
 
-            <section className="argus-drawer-section">
-              <h3>{t("sandbox.profiles.form.resources")}</h3>
-              <div className="argus-form-grid">
-                {numberField(t("sandbox.profiles.form.cpu"), "cpu")}
-                {numberField(t("sandbox.profiles.form.memoryMb"), "memoryMb")}
-                {numberField(t("sandbox.profiles.form.diskMb"), "diskMb")}
-                {numberField(t("sandbox.profiles.form.pids"), "pids")}
-              </div>
-            </section>
+        <section className="argus-drawer-section">
+          <h3>{t("sandbox.profiles.form.resources")}</h3>
+          <div className="argus-form-grid">
+            {numericProfileFields.slice(0, 4).map(numberField)}
+          </div>
+        </section>
 
-            <section className="argus-drawer-section">
-              <h3>{t("sandbox.profiles.form.timeouts")}</h3>
-              <div className="argus-form-grid">
-                {numberField(
-                  t("sandbox.profiles.form.commandSeconds"),
-                  "commandSeconds",
-                )}
-                {numberField(
-                  t("sandbox.profiles.form.idleSeconds"),
-                  "idleSeconds",
-                )}
-                {numberField(
-                  t("sandbox.profiles.form.lifetimeSeconds"),
-                  "lifetimeSeconds",
-                )}
-              </div>
-            </section>
+        <section className="argus-drawer-section">
+          <h3>{t("sandbox.profiles.form.timeouts")}</h3>
+          <div className="argus-form-grid">
+            {numericProfileFields.slice(4).map(numberField)}
+          </div>
+        </section>
 
-            <section className="argus-drawer-section">
-              <h3>{t("sandbox.profiles.form.network")}</h3>
-              <Field label={t("sandbox.profiles.form.networkMode")}>
+        <section className="argus-drawer-section">
+          <h3>{t("sandbox.profiles.form.network")}</h3>
+          <Field
+            error={errors.networkMode?.message}
+            requirement="required"
+            label={t("sandbox.profiles.form.networkMode")}
+          >
+            <Controller
+              control={control}
+              name="networkMode"
+              render={({ field }) => (
                 <Select
-                  onValueChange={(value) =>
-                    setForm({
-                      ...form,
-                      networkMode: value as "deny_all" | "allow_list",
-                    })
-                  }
+                  onValueChange={field.onChange}
                   options={[
                     {
                       value: "deny_all",
@@ -393,47 +539,44 @@ export function ProfilesTab() {
                       label: t("sandbox.profiles.network.allow_list"),
                     },
                   ]}
-                  value={form.networkMode}
+                  value={field.value}
                 />
-              </Field>
-              {form.networkMode === "allow_list" && (
-                <Field
-                  hint={t("sandbox.profiles.form.allowedDomainsHint")}
-                  label={t("sandbox.profiles.form.allowedDomains")}
-                >
-                  <Input
-                    onChange={(event) =>
-                      setForm({ ...form, allowedDomains: event.target.value })
-                    }
-                    value={form.allowedDomains}
-                  />
-                </Field>
               )}
-            </section>
+            />
+          </Field>
+          {networkMode === "allow_list" && (
+            <Field
+              error={errors.allowedDomains?.message}
+              requirement="optional"
+              hint={t("sandbox.profiles.form.allowedDomainsHint")}
+              label={t("sandbox.profiles.form.allowedDomains")}
+            >
+              <Input {...register("allowedDomains")} />
+            </Field>
+          )}
+        </section>
 
-            <section className="argus-drawer-section">
-              <h3>{t("sandbox.profiles.form.capabilities")}</h3>
-              {(
-                [
-                  "fileUpload",
-                  "artifactDownload",
-                  "secretInjection",
-                  "gpu",
-                ] as const
-              ).map((cap) => (
-                <label className="argus-switch-row" key={cap}>
+        <section className="argus-drawer-section">
+          <h3>{t("sandbox.profiles.form.capabilities")}</h3>
+          {capabilityFields.map((capability) => (
+            <Controller
+              control={control}
+              key={capability}
+              name={capability}
+              render={({ field }) => (
+                <label className="argus-switch-row">
                   <Switch
-                    checked={form[cap]}
-                    label={t(`sandbox.profiles.caps.${cap}`)}
-                    onChange={(checked) => setForm({ ...form, [cap]: checked })}
+                    checked={field.value}
+                    label={t(`sandbox.profiles.caps.${capability}`)}
+                    onChange={field.onChange}
                   />
-                  <span>{t(`sandbox.profiles.caps.${cap}`)}</span>
+                  <span>{t(`sandbox.profiles.caps.${capability}`)}</span>
                 </label>
-              ))}
-            </section>
-          </div>
-        )}
-      </FormDrawer>
-    </div>
+              )}
+            />
+          ))}
+        </section>
+      </div>
+    </FormDrawer>
   );
 }

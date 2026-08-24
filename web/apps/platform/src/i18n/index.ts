@@ -8,6 +8,7 @@ import { dashboardEn, dashboardZh } from "./dashboard";
 import { enterprisesEn, enterprisesZh } from "./enterprises";
 import { loginEn, loginZh } from "./login";
 import { sandboxEn, sandboxZh } from "./sandbox";
+import { setupEn, setupZh } from "./setup";
 import { shellEn, shellZh } from "./shell";
 
 /**
@@ -25,6 +26,7 @@ const modulesZh = [
   sandboxZh,
   auditZh,
   accountZh,
+  setupZh,
 ];
 const modulesEn = [
   commonEn,
@@ -36,6 +38,7 @@ const modulesEn = [
   sandboxEn,
   auditEn,
   accountEn,
+  setupEn,
 ];
 
 const storedLocale = window.localStorage.getItem("argus.locale");

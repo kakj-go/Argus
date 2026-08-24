@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@argus/api-client";
+import {
+  auditPresentationKey,
+  humanizeAuditCode,
+  useApi,
+} from "@argus/api-client";
 import type { AuditResult, PlatformAuditEvent } from "@argus/api-client";
 import {
   Button,
@@ -20,7 +24,7 @@ type AuditRow = {
   id: string;
   createdAt: string;
   actorName: string;
-  action: string;
+  actionLabel: string;
   resource: string;
   result: AuditResult;
   summary: string;
@@ -45,6 +49,35 @@ export function AuditPage() {
   const [result, setResult] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<PlatformAuditEvent | null>(null);
+  const labelFor = useCallback(
+    (kind: "actions" | "resourceTypes" | "actorTypes", code: string) =>
+      t(auditPresentationKey("audit", kind, code), {
+        defaultValue: humanizeAuditCode(code),
+      }),
+    [t],
+  );
+  const actorLabel = (item: PlatformAuditEvent) =>
+    item.actorName !== item.actorUserId
+      ? item.actorUsername && item.actorUsername !== item.actorName
+        ? `${item.actorName} (${item.actorUsername})`
+        : item.actorName
+      : labelFor("actorTypes", item.actorType);
+  const actionLabel = (item: PlatformAuditEvent) =>
+    labelFor("actions", item.action);
+  const resourceLabel = (item: PlatformAuditEvent) => {
+    if (!item.resourceType) return "—";
+    const typeLabel = labelFor("resourceTypes", item.resourceType);
+    return item.resourceName
+      ? `${typeLabel} · ${item.resourceName}`
+      : typeLabel;
+  };
+  const summaryLabel = (item: PlatformAuditEvent) =>
+    item.resourceName
+      ? t("audit.summaryWithResource", {
+          action: actionLabel(item),
+          resource: item.resourceName,
+        })
+      : actionLabel(item);
 
   const events = useQuery({
     queryKey: ["platform", "audit", { search }],
@@ -54,16 +87,20 @@ export function AuditPage() {
   const actionOptions = useMemo(() => {
     const set = new Set<string>();
     for (const item of events.data?.items ?? []) set.add(item.action);
-    return [...set].sort().map((value) => ({ value, label: value }));
-  }, [events.data]);
+    return [...set]
+      .sort()
+      .map((value) => ({ value, label: labelFor("actions", value) }));
+  }, [events.data, labelFor]);
 
   const resourceTypeOptions = useMemo(() => {
     const set = new Set<string>();
     for (const item of events.data?.items ?? []) {
       if (item.resourceType) set.add(item.resourceType);
     }
-    return [...set].sort().map((value) => ({ value, label: value }));
-  }, [events.data]);
+    return [...set]
+      .sort()
+      .map((value) => ({ value, label: labelFor("resourceTypes", value) }));
+  }, [events.data, labelFor]);
 
   // mock 的平台审计只支持 action/query 服务端过滤，其余在客户端过滤。
   const filtered = useMemo(() => {
@@ -81,13 +118,11 @@ export function AuditPage() {
   const rows: AuditRow[] = filtered.map((item) => ({
     id: item.id,
     createdAt: item.createdAt,
-    actorName: item.actorName,
-    action: item.action,
-    resource: item.resourceType
-      ? `${item.resourceType}${item.resourceId ? ` / ${item.resourceId}` : ""}`
-      : "—",
+    actorName: actorLabel(item),
+    actionLabel: actionLabel(item),
+    resource: resourceLabel(item),
     result: item.result,
-    summary: item.summary,
+    summary: summaryLabel(item),
   }));
 
   const openDetail = (row: AuditRow) =>
@@ -136,48 +171,47 @@ export function AuditPage() {
         ) : rows.length === 0 ? (
           <EmptyState description="" title={t("audit.empty")} />
         ) : (
-          <DataTable<AuditRow>
-            columns={[
-              {
-                key: "createdAt",
-                header: t("audit.table.time"),
-                render: (row) => formatDateTime(row.createdAt, i18n.language),
-              },
-              { key: "actorName", header: t("audit.table.actor") },
-              {
-                key: "action",
-                header: t("audit.table.action"),
-                render: (row) => (
-                  <code className="argus-mono">{row.action}</code>
-                ),
-              },
-              { key: "resource", header: t("audit.table.resource") },
-              {
-                key: "result",
-                header: t("audit.table.result"),
-                render: (row) => (
-                  <StatusBadge tone={resultTone(row.result)}>
-                    {t(`audit.results.${row.result}`)}
-                  </StatusBadge>
-                ),
-              },
-              {
-                key: "id",
-                header: t("common.actions"),
-                render: (row) => (
-                  <Button
-                    onClick={() => openDetail(row)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    {t("common.detail")}
-                  </Button>
-                ),
-              },
-            ]}
-            data={rows}
-            getRowKey={(row) => row.id}
-          />
+          <div className="argus-platform-audit-table">
+            <DataTable<AuditRow>
+              columns={[
+                {
+                  key: "createdAt",
+                  header: t("audit.table.time"),
+                  render: (row) => formatDateTime(row.createdAt, i18n.language),
+                },
+                { key: "actorName", header: t("audit.table.actor") },
+                {
+                  key: "actionLabel",
+                  header: t("audit.table.action"),
+                },
+                { key: "resource", header: t("audit.table.resource") },
+                {
+                  key: "result",
+                  header: t("audit.table.result"),
+                  render: (row) => (
+                    <StatusBadge tone={resultTone(row.result)}>
+                      {t(`audit.results.${row.result}`)}
+                    </StatusBadge>
+                  ),
+                },
+                {
+                  key: "id",
+                  header: t("common.actions"),
+                  render: (row) => (
+                    <Button
+                      onClick={() => openDetail(row)}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      {t("common.detail")}
+                    </Button>
+                  ),
+                },
+              ]}
+              data={rows}
+              getRowKey={(row) => row.id}
+            />
+          </div>
         )}
       </div>
 
@@ -203,16 +237,36 @@ export function AuditPage() {
               },
               {
                 label: t("audit.detail.actor"),
-                value: `${selected.actorName} (${selected.actorUserId})`,
+                value: actorLabel(selected),
+              },
+              {
+                label: t("audit.detail.actorType"),
+                value: labelFor("actorTypes", selected.actorType),
+              },
+              {
+                label: t("audit.detail.actorId"),
+                value: (
+                  <code className="argus-mono">{selected.actorUserId}</code>
+                ),
               },
               {
                 label: t("audit.detail.action"),
+                value: actionLabel(selected),
+              },
+              {
+                label: t("audit.detail.actionKey"),
                 value: <code className="argus-mono">{selected.action}</code>,
               },
               { label: t("audit.detail.origin"), value: selected.origin },
               {
                 label: t("audit.detail.resourceType"),
-                value: selected.resourceType ?? "—",
+                value: selected.resourceType
+                  ? labelFor("resourceTypes", selected.resourceType)
+                  : "—",
+              },
+              {
+                label: t("audit.detail.resourceName"),
+                value: selected.resourceName ?? "—",
               },
               {
                 label: t("audit.detail.resourceId"),
@@ -226,7 +280,10 @@ export function AuditPage() {
                   </StatusBadge>
                 ),
               },
-              { label: t("audit.detail.summary"), value: selected.summary },
+              {
+                label: t("audit.detail.summary"),
+                value: summaryLabel(selected),
+              },
               {
                 label: t("audit.detail.createdAt"),
                 value: formatDateTime(selected.createdAt, i18n.language),

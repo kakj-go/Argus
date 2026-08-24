@@ -25,8 +25,9 @@ import (
 )
 
 const (
-	backupMagic     = "ARGUSM8\x01"
-	backupChunkSize = 1 << 20
+	backupMagic                 = "ARGUSM8\x01"
+	backupChunkSize             = 1 << 20
+	openBaoMaintenanceContainer = "local-unseal"
 )
 
 type backupManifest struct {
@@ -155,11 +156,11 @@ func (a *App) captureBackupComponents(ctx context.Context, cfg *InstallConfig, s
 		return err
 	}
 	openBaoSnapshot := "/tmp/argus-m8.snap"
-	openBaoCommand := `state=/openbao/data/argus-bootstrap.json; root=$(sed -n 's/.*"root_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$state"); BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="$root" bao operator raft snapshot save -force ` + openBaoSnapshot
-	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "exec", "statefulset/argus-openbao", "--", "sh", "-ec", openBaoCommand)...); err != nil {
+	openBaoCommand := openBaoSnapshotSaveCommand(openBaoSnapshot)
+	if _, err := a.runner.quiet(ctx, "kubectl", openBaoExecArgs(kube, openBaoCommand)...); err != nil {
 		return err
 	}
-	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "cp", "argus-openbao-0:"+openBaoSnapshot, filepath.Join(stage, "openbao.snap"))...); err != nil {
+	if _, err := a.runner.quiet(ctx, "kubectl", openBaoCopyArgs(kube, "argus-openbao-0:"+openBaoSnapshot, filepath.Join(stage, "openbao.snap"))...); err != nil {
 		return err
 	}
 	if err := a.capturePodArchive(ctx, kube, "argus-minio-0", "/data", filepath.Join(stage, "minio.tgz")); err != nil {
@@ -336,14 +337,14 @@ func (a *App) applyRestore(ctx context.Context, cfg *InstallConfig, stage string
 	if _, err := a.runner.quietInput(ctx, dump, "kubectl", append(kube, "exec", "-i", "statefulset/argus-postgresql", "--", "env", "PGPASSWORD="+string(password), "pg_restore", "-U", "argus", "-d", "argus", "--clean", "--if-exists", "--no-owner")...); err != nil {
 		return err
 	}
-	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "cp", filepath.Join(stage, "openbao.snap"), "argus-openbao-0:/tmp/argus-m8-restore.snap")...); err != nil {
+	if _, err := a.runner.quiet(ctx, "kubectl", openBaoCopyArgs(kube, filepath.Join(stage, "openbao.snap"), "argus-openbao-0:/tmp/argus-m8-restore.snap")...); err != nil {
 		return err
 	}
 	openBaoCommand := `state=/openbao/data/argus-bootstrap.json; root=$(sed -n 's/.*"root_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$state"); BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="$root" bao operator raft snapshot restore -force /tmp/argus-m8-restore.snap`
-	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "exec", "statefulset/argus-openbao", "--", "sh", "-ec", openBaoCommand)...); err != nil {
+	if _, err := a.runner.quiet(ctx, "kubectl", openBaoExecArgs(kube, openBaoCommand)...); err != nil {
 		return err
 	}
-	if err := a.restorePodArchive(ctx, kube, "argus-minio-0", filepath.Join(stage, "minio.tgz"), "/data"); err != nil {
+	if err := a.restoreMinIOArchive(ctx, cfg, filepath.Join(stage, "minio.tgz")); err != nil {
 		return err
 	}
 	observability := []string{"--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.Observability}
@@ -369,6 +370,20 @@ func (a *App) applyRestore(ctx context.Context, cfg *InstallConfig, stage string
 	return a.verify(ctx, cfg, "text", "")
 }
 
+func openBaoExecArgs(kube []string, command string) []string {
+	args := append([]string{}, kube...)
+	return append(args, "exec", "statefulset/argus-openbao", "--container", openBaoMaintenanceContainer, "--", "sh", "-ec", command)
+}
+
+func openBaoSnapshotSaveCommand(snapshot string) string {
+	return `state=/openbao/data/argus-bootstrap.json; root=$(sed -n 's/.*"root_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$state"); rm -f ` + snapshot + `; BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="$root" bao operator raft snapshot save ` + snapshot
+}
+
+func openBaoCopyArgs(kube []string, source, destination string) []string {
+	args := append([]string{}, kube...)
+	return append(args, "cp", source, destination, "--container", openBaoMaintenanceContainer)
+}
+
 func (a *App) restorePodArchive(ctx context.Context, kube []string, pod, source, target string) error {
 	remote := "/tmp/argus-m8-restore.tgz"
 	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "cp", source, pod+":"+remote)...); err != nil {
@@ -376,6 +391,102 @@ func (a *App) restorePodArchive(ctx context.Context, kube []string, pod, source,
 	}
 	_, err := a.runner.quiet(ctx, "kubectl", append(kube, "exec", pod, "--", "tar", "-xzf", remote, "-C", target)...)
 	return err
+}
+
+func (a *App) restoreMinIOArchive(ctx context.Context, cfg *InstallConfig, source string) error {
+	kube := []string{"--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.System}
+	maintenancePod := kubernetesName("argus-minio-restore-" + cfg.Spec.ReleaseID)
+	statefulSet := "argus-minio"
+	dataPod := statefulSet + "-0"
+	dataClaim := "data-" + dataPod
+
+	minioStopped := false
+	maintenanceCreated := false
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if maintenanceCreated {
+			_, _ = a.runner.quiet(cleanupCtx, "kubectl", append(kube, "delete", "pod", maintenancePod, "--ignore-not-found", "--wait=true", "--timeout=5m")...)
+		}
+		if minioStopped {
+			_, _ = a.runner.quiet(cleanupCtx, "kubectl", append(kube, "scale", "statefulset/"+statefulSet, "--replicas=1")...)
+			_, _ = a.runner.quiet(cleanupCtx, "kubectl", append(kube, "rollout", "status", "statefulset/"+statefulSet, "--timeout=5m")...)
+		}
+	}()
+
+	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "scale", "statefulset/"+statefulSet, "--replicas=0")...); err != nil {
+		return fmt.Errorf("stop MinIO for offline restore: %w", err)
+	}
+	minioStopped = true
+	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "delete", "pod", dataPod, "--ignore-not-found", "--wait=true", "--timeout=5m")...); err != nil {
+		return fmt.Errorf("wait for MinIO to stop: %w", err)
+	}
+
+	manifest := minioVolumeMaintenancePod(cfg, maintenancePod, dataClaim)
+	if _, err := a.runner.quietInput(ctx, strings.NewReader(manifest), "kubectl", "--context", cfg.Spec.KubeContext, "apply", "--filename", "-"); err != nil {
+		return fmt.Errorf("create MinIO restore pod: %w", err)
+	}
+	maintenanceCreated = true
+	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "wait", "pod/"+maintenancePod, "--for=condition=Ready", "--timeout=5m")...); err != nil {
+		return fmt.Errorf("wait for MinIO restore pod: %w", err)
+	}
+
+	archive, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer archive.Close()
+	restoreCommand := `find /data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; tar -xzf - -C /data`
+	if _, err := a.runner.quietInput(ctx, archive, "kubectl", append(kube, "exec", "-i", maintenancePod, "--", "sh", "-ec", restoreCommand)...); err != nil {
+		return fmt.Errorf("restore MinIO data volume: %w", err)
+	}
+
+	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "delete", "pod", maintenancePod, "--wait=true", "--timeout=5m")...); err != nil {
+		return fmt.Errorf("remove MinIO restore pod: %w", err)
+	}
+	maintenanceCreated = false
+	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "scale", "statefulset/"+statefulSet, "--replicas=1")...); err != nil {
+		return fmt.Errorf("restart restored MinIO: %w", err)
+	}
+	if _, err := a.runner.quiet(ctx, "kubectl", append(kube, "rollout", "status", "statefulset/"+statefulSet, "--timeout=5m")...); err != nil {
+		return fmt.Errorf("wait for restored MinIO: %w", err)
+	}
+	minioStopped = false
+	return nil
+}
+
+func minioVolumeMaintenancePod(cfg *InstallConfig, name, claim string) string {
+	return fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    app.kubernetes.io/name: argus-minio-restore
+    app.kubernetes.io/part-of: argus
+spec:
+  restartPolicy: Never
+  securityContext:
+    fsGroup: 1000
+  containers:
+    - name: maintenance
+      image: %s
+      imagePullPolicy: %s
+      command: ["/bin/sh", "-ec"]
+      args: ["while true; do sleep 3600; done"]
+      readinessProbe:
+        exec:
+          command: ["/bin/sh", "-ec", "test -w /data"]
+        initialDelaySeconds: 1
+        periodSeconds: 2
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: %s
+`, name, cfg.Spec.Namespaces.System, cfg.Image("minio"), cfg.Spec.Images.PullPolicy, claim)
 }
 
 func (a *App) runUpgrade(ctx context.Context, operation string, args []string) error {

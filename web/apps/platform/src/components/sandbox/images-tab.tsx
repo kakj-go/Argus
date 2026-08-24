@@ -1,8 +1,17 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { useApi, type SandboxImage } from "@argus/api-client";
+import { z } from "zod";
 import {
+  formConstraint,
+  presentApiFormError,
+  useApi,
+  type SandboxImage,
+} from "@argus/api-client";
+import {
+  Alert,
   Badge,
   Button,
   DataTable,
@@ -25,6 +34,12 @@ type ImageRow = {
   enabled: boolean;
 };
 
+const imageConstraints = {
+  digest: formConstraint("SandboxImageWrite", "digest"),
+  name: formConstraint("SandboxImageWrite", "name"),
+  reference: formConstraint("SandboxImageWrite", "image_ref"),
+};
+
 function scanTone(status: SandboxImage["scanStatus"]) {
   if (status === "passed") return "success" as const;
   if (status === "pending") return "warning" as const;
@@ -44,10 +59,38 @@ export function ImagesTab() {
   const queryClient = useQueryClient();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [reference, setReference] = useState("");
-  const [digest, setDigest] = useState("");
-  const [languages, setLanguages] = useState("");
+  const schema = z.object({
+    name: z
+      .string()
+      .trim()
+      .min(imageConstraints.name.minLength ?? 1, t("sandbox.form.required"))
+      .max(imageConstraints.name.maxLength ?? 128),
+    reference: z
+      .string()
+      .trim()
+      .min(
+        imageConstraints.reference.minLength ?? 1,
+        t("sandbox.form.required"),
+      )
+      .max(imageConstraints.reference.maxLength ?? 1024),
+    digest: z
+      .string()
+      .trim()
+      .regex(/^sha256:[a-f0-9]{64}$/i, t("sandbox.form.digestInvalid")),
+    languages: z.string().trim().min(1, t("sandbox.form.required")),
+  });
+  type ImageFormValues = z.infer<typeof schema>;
+  const {
+    clearErrors,
+    handleSubmit,
+    register,
+    reset,
+    setError,
+    formState: { errors },
+  } = useForm<ImageFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: "", reference: "", digest: "", languages: "" },
+  });
 
   const images = useQuery({
     queryKey: ["platform", "images"],
@@ -58,12 +101,12 @@ export function ImagesTab() {
     queryClient.invalidateQueries({ queryKey: ["platform", "images"] });
 
   const create = useMutation({
-    mutationFn: () =>
+    mutationFn: (values: ImageFormValues) =>
       api.platform.images.create({
-        name: name.trim(),
-        reference: reference.trim(),
-        digest: digest.trim(),
-        languages: languages
+        name: values.name,
+        reference: values.reference,
+        digest: values.digest,
+        languages: values.languages
           .split(",")
           .map((entry) => entry.trim())
           .filter(Boolean)
@@ -77,10 +120,7 @@ export function ImagesTab() {
       }),
     onSuccess: () => {
       setCreateOpen(false);
-      setName("");
-      setReference("");
-      setDigest("");
-      setLanguages("");
+      reset();
       void invalidate();
     },
   });
@@ -89,6 +129,27 @@ export function ImagesTab() {
     mutationFn: (input: { id: string; enabled: boolean }) =>
       api.platform.images.setEnabled(input.id, input.enabled),
     onSuccess: () => void invalidate(),
+  });
+  const submit = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await create.mutateAsync(values);
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("sandbox.form.saveFailed"),
+        fieldMap: {
+          digest: "digest",
+          image_ref: "reference",
+          name: "name",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
   });
 
   const rows: ImageRow[] = (images.data ?? []).map((item) => ({
@@ -174,45 +235,57 @@ export function ImagesTab() {
 
       <FormDrawer
         loading={create.isPending}
-        onOpenChange={setCreateOpen}
-        onSubmit={() => create.mutate()}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) reset();
+        }}
+        onSubmit={submit}
         open={createOpen}
         submitLabel={t("common.create")}
         title={t("sandbox.images.add")}
       >
-        <Field label={t("sandbox.images.form.name")}>
-          <Input
-            onChange={(event) => setName(event.target.value)}
-            required
-            value={name}
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("sandbox.form.saveFailed")}
+            tone="danger"
           />
-        </Field>
-        <Field label={t("sandbox.images.form.reference")}>
+        )}
+        <Field
+          error={errors.name?.message}
+          requirement="required"
+          label={t("sandbox.images.form.name")}
+        >
           <Input
-            onChange={(event) => setReference(event.target.value)}
-            placeholder="registry.argus.local/sandbox/…"
-            required
-            value={reference}
-          />
-        </Field>
-        <Field label={t("sandbox.images.form.digest")}>
-          <Input
-            onChange={(event) => setDigest(event.target.value)}
-            placeholder="sha256:…"
-            required
-            value={digest}
+            {...register("name")}
+            maxLength={imageConstraints.name.maxLength}
           />
         </Field>
         <Field
+          error={errors.reference?.message}
+          requirement="required"
+          label={t("sandbox.images.form.reference")}
+        >
+          <Input
+            {...register("reference")}
+            maxLength={imageConstraints.reference.maxLength}
+            placeholder="registry.argus.local/sandbox/…"
+          />
+        </Field>
+        <Field
+          error={errors.digest?.message}
+          requirement="required"
+          label={t("sandbox.images.form.digest")}
+        >
+          <Input {...register("digest")} placeholder="sha256:…" />
+        </Field>
+        <Field
+          error={errors.languages?.message}
+          requirement="required"
           hint={t("sandbox.images.form.languagesHint")}
           label={t("sandbox.images.form.languages")}
         >
-          <Input
-            onChange={(event) => setLanguages(event.target.value)}
-            placeholder="python:3.13"
-            required
-            value={languages}
-          />
+          <Input {...register("languages")} placeholder="python:3.13" />
         </Field>
       </FormDrawer>
     </div>

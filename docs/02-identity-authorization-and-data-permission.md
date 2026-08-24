@@ -354,6 +354,10 @@ Redis 可以缓存授权结果和版本，但 PostgreSQL 保存权威授权状�
 
 审计记录应防篡改并与普通应用日志分离。平台超级管理员默认不能读取企业审计正文；企业审计读取也必须经过功能权限、DataScope 和字段脱敏。
 
+审计事实层继续保存稳定的 `actor_type + actor_id`、`action`、`resource_type + resource_id`，不能用可变名称替代这些字段。审计列表读模型可以尽力补充当前 `actor_display_name`、`actor_username` 和 `resource_display_name`；名称解析失败不得导致审计查询失败，也不得跨越平台/企业可见性边界。管理界面主列表使用本地化动作、资源类型和可读名称，原始 key 与 UUID 只在详情中作为精确追踪引用展示。
+
+普通业务列表和编辑表单同样优先展示已授权对象的名称或账号，并以选择器提交底层 ID；只有事件 ID、执行引用、Trace/Result Ref、Kubernetes UID 等本身就是排障标识的字段可以在主界面保留技术 ID。引用对象已删除或当前不可见时显示明确的“引用对象不可用”，不能把 UUID 冒充为业务名称。
+
 ## 13. 第一版实现边界
 
 第一版实现企业级 RoleBinding、显式资源 ID/标签选择器 DataScope、Host/ManagedAccount RemoteAccessGrant、资源级 Telemetry 权限和类型化 Policy。以下能力延后：

@@ -225,6 +225,10 @@
   font-size: var(--font-size-12);
   font-weight: 600;
 }
+.argus-field__required {
+  color: var(--danger);
+  margin-left: var(--space-px-3);
+}
 .argus-field__hint {
   color: var(--text-tertiary);
   font-size: var(--font-size-11);

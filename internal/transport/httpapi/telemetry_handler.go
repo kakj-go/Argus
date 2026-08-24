@@ -14,6 +14,7 @@ import (
 
 	telemetryapi "github.com/kakj-go/Argus/internal/gen/openapi/telemetryapi"
 	"github.com/kakj-go/Argus/internal/identity"
+	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 	"github.com/kakj-go/Argus/internal/telemetry/queryengine"
@@ -467,7 +468,9 @@ func (handler TelemetryHandler) QueryTelemetryOverview(ctx context.Context, requ
 func (handler TelemetryHandler) actor(ctx context.Context, mutation bool, csrf, permission string) (telemetryservice.Actor, identity.Principal, *telemetryapi.ApiError) {
 	principal, value := handler.Identity.enterprisePrincipal(ctx, mutation, csrf, permission)
 	if value != nil {
-		converted := telemetryapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+		converted := telemetryapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+			Params: copyErrorParams[map[string]telemetryapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+			Retryable: value.Retryable, TraceId: value.TraceId}
 		return telemetryservice.Actor{}, identity.Principal{}, &converted
 	}
 	if principal.EnterpriseUser == nil {
@@ -514,6 +517,8 @@ func telemetryStatus(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, telemetryservice.ErrQueryScope):
 		return http.StatusForbidden
+	case errors.Is(err, postgres.ErrIdempotencyConflict), errors.Is(err, postgres.ErrIdempotencyExpired):
+		return http.StatusConflict
 	default:
 		return http.StatusServiceUnavailable
 	}
@@ -533,10 +538,12 @@ func telemetryAuthStatus(apiError telemetryapi.ApiError) int {
 func telemetryError(ctx context.Context, err error) telemetryapi.ApiError {
 	var requestError telemetryRequestError
 	if errors.As(err, &requestError) {
+		logMappedError(ctx, requestError.apiError.Code, err)
 		return requestError.apiError
 	}
-	base := setupError(ctx, err)
-	code := "TELEMETRY_UNAVAILABLE"
+	base := setupErrorBase(ctx, err)
+	code := "TELEMETRY_DEPENDENCY_UNAVAILABLE"
+	defer func() { logMappedError(ctx, code, err) }()
 	switch {
 	case errors.Is(err, telemetryservice.ErrEnrollmentInvalid):
 		code = "TELEMETRY_ENROLLMENT_INVALID"
@@ -560,12 +567,25 @@ func telemetryError(ctx context.Context, err error) telemetryapi.ApiError {
 		code = "QUERY_SCOPE_DENIED"
 	case errors.Is(err, telemetryservice.ErrQueryBudget), errors.Is(err, queryengine.ErrBudget):
 		code = "QUERY_BUDGET_EXCEEDED"
+	case errors.Is(err, postgres.ErrIdempotencyConflict):
+		code = "IDEMPOTENCY_CONFLICT"
+	case errors.Is(err, postgres.ErrIdempotencyExpired):
+		code = "IDEMPOTENCY_RESULT_EXPIRED"
 	}
 	messageKey := "errors.telemetry." + code
-	if code == "QUERY_BUDGET_EXCEEDED" {
+	retryable := base.Retryable
+	switch code {
+	case "QUERY_BUDGET_EXCEEDED":
 		messageKey = "errors.telemetry.query_budget_exceeded"
+	case "TELEMETRY_DEPENDENCY_UNAVAILABLE":
+		messageKey = "errors.telemetry.dependency_unavailable"
+		retryable = pointer(true)
+	case "IDEMPOTENCY_CONFLICT":
+		messageKey = "errors.common.idempotency_conflict"
+	case "IDEMPOTENCY_RESULT_EXPIRED":
+		messageKey = "errors.common.idempotency_result_expired"
 	}
-	return telemetryapi.ApiError{Code: code, MessageKey: messageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	return telemetryapi.ApiError{Code: code, MessageKey: messageKey, RequestId: base.RequestId, Retryable: retryable}
 }
 
 func emptyTelemetryPage() telemetryapi.CursorPage {

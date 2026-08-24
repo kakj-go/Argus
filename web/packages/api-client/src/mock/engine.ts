@@ -138,6 +138,7 @@ export function createEngine(ctx: BaseContext): Engine {
       (candidate) =>
         candidate.enterpriseId === ctx.enterpriseId() &&
         candidate.enabled &&
+        riskLevel !== "read" &&
         candidate.matchRiskLevels.includes(riskLevel),
     );
     const who = ctx.actor();
@@ -466,9 +467,12 @@ export function createEngine(ctx: BaseContext): Engine {
       return;
     }
     if (plan.tool === "telemetry.host.install") {
-      const hostId = String(input_data["host_id"] ?? input_data["hostId"] ?? "");
+      const hostId = String(
+        input_data["host_id"] ?? input_data["hostId"] ?? "",
+      );
       const existing = db.collectors.find(
-        (entry) => entry.resource_type === "host" && entry.resource_id === hostId,
+        (entry) =>
+          entry.resource_type === "host" && entry.resource_id === hostId,
       );
       if (existing) {
         existing.status = "converged";
@@ -498,7 +502,9 @@ export function createEngine(ctx: BaseContext): Engine {
       if (host) {
         host.collectorStatus = "converged";
         host.telemetryRoute = String(
-          input_data["route_kind"] ?? input_data["telemetryRoute"] ?? "direct_argus",
+          input_data["route_kind"] ??
+            input_data["telemetryRoute"] ??
+            "direct_argus",
         );
         host.updatedAt = ctx.nowIso();
       }
@@ -510,7 +516,9 @@ export function createEngine(ctx: BaseContext): Engine {
         id: nextId(db, "col"),
         enterprise_id: plan.enterprise_id,
         resource_type: "kubernetes_cluster",
-        resource_id: String(input_data["cluster_id"] ?? input_data["clusterId"] ?? ""),
+        resource_id: String(
+          input_data["cluster_id"] ?? input_data["clusterId"] ?? "",
+        ),
         distribution_version_id: String(
           input_data["distribution_version_id"] ?? "dist-linux-arm64-v1",
         ),
@@ -526,9 +534,12 @@ export function createEngine(ctx: BaseContext): Engine {
       return;
     }
     if (plan.tool === "telemetry.collector.configure") {
-      const hostId = String(input_data["host_id"] ?? input_data["hostId"] ?? "");
+      const hostId = String(
+        input_data["host_id"] ?? input_data["hostId"] ?? "",
+      );
       const collector = db.collectors.find(
-        (entry) => entry.resource_type === "host" && entry.resource_id === hostId,
+        (entry) =>
+          entry.resource_type === "host" && entry.resource_id === hostId,
       );
       if (collector) {
         collector.desired_revision += 1;

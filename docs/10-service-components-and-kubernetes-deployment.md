@@ -4,7 +4,7 @@
 
 `argus-telemetry query` 只在 ClickHouse Schema Version 3 就绪后启动。Schema v3 包含 metric series/samples、logs、traces、trace summary 和 span edges；部署按一次性替换处理，不保留旧 M7 查询表和协议。
 
-`make e2e-m10-query-k8s` 默认运行临时 Namespace 的真实 Collector → Kafka → Writer → ClickHouse → 单进程 Query 流程，并以 PromQL、KQL、SkyWalking GraphQL 验证查询、安全投影、租户表隔离、故障恢复和清理。`ARGUS_E2E_M10_UNIT_ONLY=1` 只用于开发机快速门禁检查，不构成发布证据。
+`go run ./cmd/argus-dev e2e run --suite m10-query` 默认运行临时 Namespace 的真实 Collector → Kafka → Writer → ClickHouse → 单进程 Query 流程，并以 PromQL、KQL、SkyWalking GraphQL 验证查询、安全投影、租户表隔离、故障恢复和清理。`--unit-only` 只用于开发机快速门禁检查，不构成发布证据。
 
 > 本文描述第一版目标部署架构。仓库已经具备可安装、可验证和可清理的 Evaluation 基座；M2-M7 的身份、资源/Connector、Agent、Card、Remote Access 和 Telemetry 均已接入 real API。实际完成度见[当前实现盘点与 Kubernetes 落地路线](./13-current-implementation-and-kubernetes-rollout.md)，PostgreSQL 环境决策见[PostgreSQL 部署决策](./14-postgresql-deployment-decision.md)。
 
@@ -101,7 +101,7 @@ flowchart TB
         RA --> CG
         CG --> DE
         Server --> DE["argus-direct-executor"]
-        DE --> PublicHost["Public Host SSH/WinRM"]
+        DE --> DirectHost["Direct Host SSH/WinRM"]
         Worker --> OS["OpenSandbox"]
         Server --> PG["PostgreSQL"]
     end
@@ -191,9 +191,19 @@ flowchart LR
     B --> V
 ```
 
-`port-forward` 暴露模式安装完成后使用 `argusctl tunnel --config <profile>` 启动本地入口：Enterprise `4173`、Platform `4174`、Setup `4175`、Card Runtime `4176`。浏览器可以使用 `localhost` 或 `127.0.0.1` 访问这四个入口，两组 loopback Origin 都必须进入本地 Profile 的精确允许列表。Web 容器以当前页面同源访问 `/api/v1/`，由 Nginx 代理到集群内 `argus-server`；本地部署不得把前端编译到占位 API 域名，也不依赖浏览器 mock 数据。
+`port-forward` 暴露模式安装完成后使用 `argusctl tunnel --config <profile>` 启动本地地址：Enterprise `4173`、Platform `4174`、Card Runtime `4176`。Platform 在未初始化时显示首次初始化向导，初始化完成后同一地址只进入登录页；Card Runtime 是 Enterprise 自动加载的隔离 Origin，不是用户门户。浏览器可以使用 `localhost` 或 `127.0.0.1` 访问这些地址，两组 loopback Origin 都必须进入本地 Profile 的精确允许列表。Web 容器以当前页面同源访问 `/api/v1/`，由 Nginx 代理到集群内 `argus-server`；本地部署不得把前端编译到占位 API 域名，也不依赖浏览器 mock 数据。
 
 每一步写入 `ArgusInstallation` 状态或安装状态 ConfigMap。再次执行相同命令时，从未完成阶段继续，并对配置变更生成计划。自动化/GitOps 环境也可以直接使用对应 Helm Release 和 CR，不强制使用 `argusctl`。
+
+`argus-dev` 不进入正式部署边界。它是仓库开发与 E2E 编排器，在 Windows、Linux 和 macOS 上统一执行检查、契约生成、Web 构建、本地发布和能力诊断；完整 Kubernetes E2E 仍调用真实 `argusctl` 子进程完成 `preflight/plan/install/verify/uninstall`，不会绕过正式安装路径或直接调用其内部函数。测试 Fixture Chart 位于 `tests/e2e/helm/argus-e2e-fixtures`，不进入正式发布包。
+
+```text
+go run ./cmd/argus-dev doctor portable
+go run ./cmd/argus-dev doctor e2e
+go run ./cmd/argus-dev e2e run --suite m2
+```
+
+完整 E2E 要求可用容器引擎、Kubernetes Context、StorageClass、受支持节点架构、空闲端口和至少 25 GiB 主机磁盘。能力不足时 `doctor e2e` 与运行命令以退出码 2 明确失败，不静默跳过。
 
 ## 6. 安装配置
 
@@ -519,7 +529,6 @@ Token 过期时间
 
 ```text
 deploy/
-├── argusctl/
 ├── schemas/argus-install-config.schema.json
 ├── helm/
 │   ├── argus-foundation/
@@ -537,6 +546,8 @@ deploy/
     ├── production.yaml
     └── air-gapped.example.yaml
 ```
+
+对应可执行入口位于 `cmd/argusctl`；跨平台仓库工具位于 `cmd/argus-dev`，两者职责独立。
 
 当前完成联网 Kubernetes 的 `evaluation` 与 `local-hardening` Profile；`production` 只允许校验和渲染，实际安装保持 fail closed。`air-gapped.example.yaml` 只表达私有 Registry、镜像和 Artifact 配置边界，不代表已经支持完整离线安装。外部托管中间件、离线镜像 Bundle、跨集群灾备、多地域 Kafka/ClickHouse 和自动 StorageClass 安装作为后续能力。
 

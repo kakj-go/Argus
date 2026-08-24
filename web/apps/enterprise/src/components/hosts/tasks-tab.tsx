@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useApi, type AuditEvent, type Host } from "@argus/api-client";
+import {
+  auditPresentationKey,
+  humanizeAuditCode,
+  useApi,
+  type AuditEvent,
+  type Host,
+} from "@argus/api-client";
 import type { TaskStatus, TaskViewModel } from "@argus/api-client/provisional";
 import {
   Badge,
@@ -192,12 +198,18 @@ export function TasksTab({ host }: { host: Host }) {
     {
       key: "action",
       header: t("hosts.tasks.colAction"),
-      render: (event) => <span className="argus-mono">{event.action}</span>,
+      render: (event) =>
+        t(auditPresentationKey("settings.audit", "actions", event.action), {
+          defaultValue: humanizeAuditCode(event.action),
+        }),
     },
     {
       key: "summary",
       header: t("hosts.tasks.colSummary"),
-      render: (event) => event.summary,
+      render: (event) =>
+        t(auditPresentationKey("settings.audit", "actions", event.action), {
+          defaultValue: humanizeAuditCode(event.action),
+        }),
     },
     {
       key: "result",
@@ -212,7 +224,7 @@ export function TasksTab({ host }: { host: Host }) {
                 : "danger"
           }
         >
-          {event.result}
+          {t(`settings.audit.results.${event.result}`)}
         </StatusBadge>
       ),
     },

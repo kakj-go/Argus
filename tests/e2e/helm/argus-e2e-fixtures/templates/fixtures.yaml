@@ -1,0 +1,206 @@
+{{- if .Values.features.sshTarget }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argus-e2e-ssh-target
+  namespace: {{ .Values.namespaces.system }}
+  labels: &labels
+    app.kubernetes.io/name: argus-e2e-ssh-target
+    app.kubernetes.io/part-of: argus-e2e
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: argus-e2e-ssh-target}}
+  template:
+    metadata: {labels: *labels}
+    spec:
+      containers:
+        - name: ssh
+          image: {{ .Values.images.sshTarget | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          env: [{name: ARGUS_E2E_SSH_PASSWORD, value: "M3-e2e-ssh-password"}]
+          ports: [{name: ssh, containerPort: 2222}]
+          readinessProbe: {tcpSocket: {port: ssh}, initialDelaySeconds: 1, periodSeconds: 1}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: argus-e2e-ssh-target, namespace: {{ .Values.namespaces.system }}}
+spec:
+  selector: {app.kubernetes.io/name: argus-e2e-ssh-target}
+  ports: [{name: ssh, port: 22, targetPort: ssh}]
+{{- end }}
+{{- if .Values.features.replayModel }}
+---
+apiVersion: v1
+kind: Secret
+metadata: {name: argus-replay-model-tls, namespace: {{ .Values.namespaces.sandbox }}}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ .Values.tls.replay.certificate | b64enc | quote }}
+  tls.key: {{ .Values.tls.replay.privateKey | b64enc | quote }}
+  ca.crt: {{ .Values.tls.replay.ca | b64enc | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argus-replay-model
+  namespace: {{ .Values.namespaces.sandbox }}
+  labels: &replayLabels
+    app.kubernetes.io/name: argus-replay-model
+    app.kubernetes.io/part-of: argus-e2e
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: argus-replay-model}}
+  template:
+    metadata: {labels: *replayLabels}
+    spec:
+      containers:
+        - name: replay-model
+          image: {{ .Values.images.replayModel | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          env:
+            - {name: ARGUS_REPLAY_ADDRESS, value: ":8080"}
+            - {name: ARGUS_REPLAY_PLAINTEXT_ADDRESS, value: ":8081"}
+            - {name: ARGUS_REPLAY_TLS_CERT, value: /tls/tls.crt}
+            - {name: ARGUS_REPLAY_TLS_KEY, value: /tls/tls.key}
+          ports: [{name: model, containerPort: 8080}, {name: sandbox, containerPort: 8081}]
+          volumeMounts: [{name: tls, mountPath: /tls, readOnly: true}]
+          readinessProbe: {httpGet: {path: /healthz, port: sandbox}, initialDelaySeconds: 1, periodSeconds: 1}
+      volumes: [{name: tls, secret: {secretName: argus-replay-model-tls}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: argus-replay-model, namespace: {{ .Values.namespaces.sandbox }}}
+spec:
+  selector: {app.kubernetes.io/name: argus-replay-model}
+  ports: [{name: model, port: 443, targetPort: model}, {name: sandbox, port: 8081, targetPort: sandbox}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: argus-e2e-replay-egress, namespace: {{ .Values.namespaces.system }}}
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: app.kubernetes.io/name, operator: In, values: [argus-worker]}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .Values.namespaces.sandbox }}}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: argus-replay-model}}
+      ports: [{protocol: TCP, port: 8080}, {protocol: TCP, port: 8081}]
+{{- end }}
+{{- if .Values.features.winrsTarget }}
+---
+apiVersion: v1
+kind: Secret
+metadata: {name: argus-e2e-winrs-tls, namespace: {{ .Values.namespaces.system }}}
+type: Opaque
+data:
+  ca.crt: {{ .Values.tls.winrs.ca | b64enc | quote }}
+  tls.crt: {{ .Values.tls.winrs.certificate | b64enc | quote }}
+  tls.key: {{ .Values.tls.winrs.privateKey | b64enc | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argus-e2e-winrs-target
+  namespace: {{ .Values.namespaces.system }}
+  labels: &winrsLabels
+    app.kubernetes.io/name: argus-e2e-winrs-target
+    app.kubernetes.io/part-of: argus-e2e
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: argus-e2e-winrs-target}}
+  template:
+    metadata: {labels: *winrsLabels}
+    spec:
+      containers:
+        - name: winrs
+          image: {{ .Values.images.winrsTarget | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: [/usr/local/bin/argus-e2e-winrs]
+          env: [{name: ARGUS_E2E_WINRS_PASSWORD, value: "M6-e2e-winrs-password"}]
+          ports: [{name: winrs, containerPort: 5986}]
+          volumeMounts: [{name: tls, mountPath: /tls, readOnly: true}]
+          readinessProbe: {tcpSocket: {port: winrs}, initialDelaySeconds: 1, periodSeconds: 1}
+      volumes: [{name: tls, secret: {secretName: argus-e2e-winrs-tls}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: argus-e2e-winrs-target, namespace: {{ .Values.namespaces.system }}}
+spec:
+  selector: {app.kubernetes.io/name: argus-e2e-winrs-target}
+  ports: [{name: winrs, port: 5986, targetPort: winrs}]
+{{- end }}
+{{- if .Values.features.artifactServer }}
+---
+apiVersion: v1
+kind: Secret
+metadata: {name: argus-e2e-artifact-tls, namespace: {{ .Values.namespaces.system }}}
+type: Opaque
+data:
+  ca.crt: {{ .Values.tls.artifact.ca | b64enc | quote }}
+  tls.crt: {{ .Values.tls.artifact.certificate | b64enc | quote }}
+  tls.key: {{ .Values.tls.artifact.privateKey | b64enc | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argus-e2e-artifact-server
+  namespace: {{ .Values.namespaces.system }}
+  labels: &artifactLabels
+    app.kubernetes.io/name: argus-e2e-artifact-server
+    app.kubernetes.io/part-of: argus-e2e
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: argus-e2e-artifact-server}}
+  template:
+    metadata: {labels: *artifactLabels}
+    spec:
+      containers:
+        - name: artifacts
+          image: {{ .Values.images.artifactServer | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          ports: [{name: https, containerPort: 8443}]
+          volumeMounts: [{name: tls, mountPath: /run/tls, readOnly: true}]
+          readinessProbe: {tcpSocket: {port: https}, initialDelaySeconds: 1, periodSeconds: 1}
+      volumes: [{name: tls, secret: {secretName: argus-e2e-artifact-tls}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: argus-e2e-artifact-server, namespace: {{ .Values.namespaces.system }}}
+spec:
+  selector: {app.kubernetes.io/name: argus-e2e-artifact-server}
+  ports: [{name: https, port: 8443, targetPort: https}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: argus-e2e-artifact-access, namespace: {{ .Values.namespaces.system }}}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: argus-e2e-artifact-server}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - {key: app.kubernetes.io/name, operator: In, values: [argus-worker, argus-direct-executor]}
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: argus-e2e-systemd-telemetry-egress, namespace: {{ .Values.namespaces.system }}}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: argus-direct-executor}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .Values.namespaces.observability }}}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: argus-telemetry-ingest}}
+      ports: [{protocol: TCP, port: 4317}, {protocol: TCP, port: 4318}]
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: argus-e2e-artifact-server}}
+      ports: [{protocol: TCP, port: 8443}]
+{{- end }}

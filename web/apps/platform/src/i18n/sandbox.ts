@@ -1,5 +1,6 @@
 /** OpenSandbox 基座（六个 Tab）文案。 */
 export const sandboxZh = {
+  "sandbox.sessions.enterpriseUser": "企业用户",
   "sandbox.title": "OpenSandbox 基座",
   "sandbox.description":
     "由平台超管统一审批与管理的共享沙箱运行基座（docs/08）",
@@ -9,6 +10,10 @@ export const sandboxZh = {
   "sandbox.tabs.quotas": "企业配额",
   "sandbox.tabs.sessions": "活动会话",
   "sandbox.tabs.usage": "平台用量",
+  "sandbox.form.required": "此字段不能为空",
+  "sandbox.form.digestInvalid": "请输入 sha256: 开头的 64 位十六进制 Digest",
+  "sandbox.form.urlInvalid": "请输入合法的 http(s) 地址",
+  "sandbox.form.saveFailed": "保存失败",
 
   "sandbox.backends.add": "新建 Backend",
   "sandbox.backends.edit": "编辑 Backend",
@@ -131,6 +136,7 @@ export const sandboxZh = {
 };
 
 export const sandboxEn = {
+  "sandbox.sessions.enterpriseUser": "Enterprise user",
   "sandbox.title": "OpenSandbox foundation",
   "sandbox.description":
     "Shared sandbox runtime approved and managed by platform super admins (docs/08)",
@@ -140,6 +146,11 @@ export const sandboxEn = {
   "sandbox.tabs.quotas": "Enterprise quotas",
   "sandbox.tabs.sessions": "Active sessions",
   "sandbox.tabs.usage": "Platform usage",
+  "sandbox.form.required": "This field is required",
+  "sandbox.form.digestInvalid":
+    "Enter a sha256 digest followed by 64 hexadecimal characters",
+  "sandbox.form.urlInvalid": "Enter a valid http(s) URL",
+  "sandbox.form.saveFailed": "Save failed",
 
   "sandbox.backends.add": "New backend",
   "sandbox.backends.edit": "Edit backend",

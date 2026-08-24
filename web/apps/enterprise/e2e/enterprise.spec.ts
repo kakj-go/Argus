@@ -1,5 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+
+const platformOrigin =
+  process.env.ARGUS_E2E_PLATFORM_ORIGIN ?? "http://127.0.0.1:4174";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -28,6 +31,12 @@ async function expectNoSeriousAccessibilityViolations(page: Page) {
         violation.impact === "serious" || violation.impact === "critical",
     ),
   ).toEqual([]);
+}
+
+function fieldFor(control: Locator) {
+  return control.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' argus-field ')][1]",
+  );
 }
 
 for (const locale of ["zh-CN", "en-US"] as const) {
@@ -60,28 +69,61 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await page.goto("/settings/org");
       await expectAppearance();
 
-      await page.goto("http://127.0.0.1:4174/login");
+      await page.goto(`${platformOrigin}/login`);
       await expectAppearance();
       await page.locator('input[autocomplete="username"]').fill("admin");
       await page
         .locator('input[autocomplete="current-password"]')
         .fill("123456");
       await page.locator('form button[type="submit"]').click();
-      await expect(page).toHaveURL("http://127.0.0.1:4174/");
+      await expect(page).toHaveURL(`${platformOrigin}/`);
       await expectAppearance();
 
-      await page.goto("http://127.0.0.1:4175");
+      await page.goto(`${platformOrigin}/?initialized=false&reset=1`);
       await expectAppearance();
     });
   }
 }
 
-test("setup initialized terminal opens the configured platform URL", async ({
+test("initialized platform entry opens the login page", async ({ page }) => {
+  await page.goto(`${platformOrigin}/?initialized=true&reset=1`);
+  await expect(page).toHaveURL(`${platformOrigin}/login`);
+});
+
+test("setup marks required fields and initializes without an admin email", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:4175/?initialized=true");
-  await page.getByRole("button", { name: /前往登录|Go to sign in/ }).click();
-  await expect(page).toHaveURL("http://127.0.0.1:4174/login");
+  await page.goto(`${platformOrigin}/?initialized=false&reset=1`);
+  const token = page.locator('input[name="setupToken"]');
+  await expect(fieldFor(token).locator(".argus-field__required")).toHaveCount(
+    1,
+  );
+  await token.fill("setup-token-e2e");
+  await page.getByRole("button", { name: "下一步" }).click();
+
+  const email = page.getByLabel("邮箱");
+  await expect(fieldFor(email).locator(".argus-field__required")).toHaveCount(
+    0,
+  );
+  const username = page.getByLabel("登录名");
+  await expect(
+    fieldFor(username).locator(".argus-field__required"),
+  ).toHaveCount(1);
+
+  await page.getByLabel("平台显示名称").fill("Argus E2E");
+  await page.getByLabel("外部访问地址").fill("https://argus-e2e.example.com");
+  await username.fill("e2eadmin");
+  await page.locator('input[name="admin.displayName"]').fill("E2E 管理员");
+  await page
+    .locator('input[name="admin.password"]')
+    .fill("StrongSetupPass2026!");
+  await page
+    .locator('input[name="admin.confirmPassword"]')
+    .fill("StrongSetupPass2026!");
+  await page.getByRole("button", { name: "下一步" }).click();
+  await page.getByRole("button", { name: /初始化|提交/ }).click();
+  await expect(page).toHaveURL(`${platformOrigin}/login`);
+  await expect(page.locator('input[autocomplete="username"]')).toBeVisible();
 });
 
 test("card runtime executes a cross-origin bridge and enforces CSP", async ({
@@ -387,6 +429,10 @@ test("chat shell lists conversations and links to the admin console", async ({
   await page.getByRole("link", { name: /企业审计/ }).click();
   await expect(page).toHaveURL(/\/settings\/audit$/);
   await expect(page.getByRole("heading", { name: "企业审计" })).toBeVisible();
+  await expect(page.getByRole("table")).toContainText("确认待执行操作");
+  await expect(page.getByRole("table")).not.toContainText(
+    "pending_action.confirm",
+  );
   await page.getByRole("link", { name: "返回智能会话" }).click();
   await expect(page).toHaveURL(/\/$/);
 });
@@ -401,14 +447,21 @@ test("platform and enterprise accounts stay in their own portals", async ({
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByText(/平台管理域/)).toBeVisible();
 
-  await page.goto("http://127.0.0.1:4174/login");
+  await page.goto(`${platformOrigin}/login`);
   await page.getByLabel("用户名").fill("admin");
   await page.getByLabel("密码").fill("123456");
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page).toHaveURL("http://127.0.0.1:4174/");
+  await expect(page).toHaveURL(`${platformOrigin}/`);
   await expect(page.getByRole("heading", { name: "平台仪表盘" })).toBeVisible();
   await expect(page.getByRole("link", { name: "OpenSandbox" })).toBeVisible();
-  await expect(page.getByText("platform_super_admin")).toBeVisible();
+  await expect(
+    page.locator(".argus-badge").filter({ hasText: /^平台超级管理员$/ }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "平台审计" }).click();
+  await expect(page.getByRole("table")).toContainText("创建企业");
+  await expect(page.getByRole("table")).not.toContainText(
+    "platform.enterprise.create",
+  );
   const platformPadding = await page
     .locator(".argus-page-content")
     .evaluate((element) =>
@@ -422,6 +475,81 @@ test("enterprise identity has no enterprise switcher", async ({ page }) => {
   await page.goto("/hosts");
   await expect(page.getByRole("button", { name: "切换企业" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "主机" })).toBeVisible();
+});
+
+test("credential settings separates secrets, credentials, and managed accounts", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/settings/secrets");
+
+  await expect(
+    page.getByRole("tab", { name: "密钥", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "新建密钥" })).toBeVisible();
+
+  await page.getByRole("button", { name: "选择新建类型" }).click();
+  await expect(page.getByRole("menuitem", { name: "新建密钥" })).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "新建连接凭证" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "新建托管账号" }),
+  ).toBeVisible();
+  await page.getByRole("menuitem", { name: "新建密钥" }).click();
+  const secretDrawer = page.getByRole("dialog", { name: "新建密钥" });
+  await expect(
+    fieldFor(secretDrawer.getByLabel("名称")).locator(".argus-field__required"),
+  ).toHaveCount(1);
+  await expect(
+    fieldFor(secretDrawer.getByLabel("描述")).locator(".argus-field__required"),
+  ).toHaveCount(0);
+  await expect(
+    fieldFor(secretDrawer.getByLabel("值")).locator(".argus-field__required"),
+  ).toHaveCount(1);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "选择新建类型" }).click();
+  await page.getByRole("menuitem", { name: "新建托管账号" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "新建托管账号" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tab", { name: "托管账号" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  await page.getByRole("tab", { name: "连接凭证" }).click();
+  await expect(
+    page.getByRole("button", { name: "新建连接凭证" }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "连接凭证" })).toBeVisible();
+  await page.getByRole("button", { name: "新建连接凭证" }).click();
+  const credentialDrawer = page.getByRole("dialog", { name: "连接凭证" });
+  await expect(credentialDrawer).toBeVisible();
+  await expect(
+    fieldFor(credentialDrawer.getByLabel("名称")).locator(
+      ".argus-field__required",
+    ),
+  ).toHaveCount(1);
+  await expect(
+    fieldFor(credentialDrawer.getByLabel("用户名")).locator(
+      ".argus-field__required",
+    ),
+  ).toHaveCount(0);
+  await expect(
+    fieldFor(credentialDrawer.getByLabel("Secret 引用")).locator(
+      ".argus-field__required",
+    ),
+  ).toHaveCount(1);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("tab", { name: "托管账号" }).click();
+  await expect(
+    page.getByRole("button", { name: "新建托管账号" }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "托管账号" })).toBeVisible();
 });
 
 test("component demo is reachable in dev mode", async ({ page }) => {
@@ -472,11 +600,11 @@ test("add host wizard walks three steps to the confirm card", async ({
   const drawer = page.getByRole("dialog", { name: "添加普通主机" });
   await expect(drawer).toBeVisible();
 
-  // 第 1 步：默认「经堡垒机」，选择一个已激活的 Bastion Scope。
-  await drawer.getByRole("button", { name: /上海机房堡垒机-01/ }).click();
+  // 第 1 步：选择直连；Direct Executor 可连接其部署网络可达的内网目标。
+  await drawer.getByRole("button", { name: /^直连/ }).click();
   await drawer.getByRole("button", { name: "下一步" }).click();
 
-  // 第 2 步：填写主机信息（经堡垒机允许内网地址）。
+  // 第 2 步：填写内网地址，验证直连模式不再要求公网地址。
   await drawer.getByLabel("主机名").fill("web-e2e-01");
   await drawer.getByLabel("地址").fill("10.0.1.5");
   await drawer.getByLabel("登录账号").fill("argus");
@@ -544,6 +672,9 @@ test("ai settings: test and create a model in one step", async ({ page }) => {
     name: "添加 OpenAI Compatible 模型",
   });
   await expect(drawer).toBeVisible();
+  await expect(
+    fieldFor(drawer.getByLabel("API Key")).locator(".argus-field__required"),
+  ).toHaveCount(1);
   await drawer.getByLabel("名称").fill("e2e-推理模型");
   await drawer.getByLabel("API 地址").fill("https://llm-gw.internal/v1");
   await drawer.getByLabel("API Key").fill("sk-e2e-test");
@@ -556,6 +687,15 @@ test("ai settings: test and create a model in one step", async ({ page }) => {
   const row = page.getByRole("row", { name: /e2e-推理模型/ });
   await expect(row).toBeVisible();
   await expect(row.getByText("健康")).toBeVisible();
+  await row.getByRole("button", { name: "编辑" }).click();
+  const editDrawer = page.getByRole("dialog", { name: "编辑模型" });
+  await expect(
+    fieldFor(editDrawer.getByLabel("API Key")).locator(
+      ".argus-field__required",
+    ),
+  ).toHaveCount(0);
+  await editDrawer.getByRole("button", { name: "保存" }).click();
+  await expect(editDrawer).not.toBeVisible();
 });
 
 test("host and bastion collector statuses expose contract-backed actions", async ({
@@ -624,7 +764,7 @@ test("online Bastion gates replacement and deletion while members remain", async
   });
   await expect(drawer).toBeVisible();
   await expect(drawer.getByLabel("名称")).toHaveValue("上海机房堡垒机-01");
-  await expect(drawer.getByText("环境", { exact: true })).toBeVisible();
+  await expect(drawer.getByLabel("环境")).toBeVisible();
   await expect(drawer.getByLabel("标签")).toBeVisible();
   await expect(drawer.getByLabel("地址")).toHaveCount(0);
   await expect(drawer.getByLabel("端口")).toHaveCount(0);
@@ -752,28 +892,47 @@ test("telemetry query builder and DSL editor execute all three language models",
   await page.goto("/kubernetes/k8s-prod-east");
 
   await page.getByRole("tab", { name: "指标", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "查询构建器" })).toHaveAttribute("data-state", "active");
+  await expect(page.getByRole("tab", { name: "查询构建器" })).toHaveAttribute(
+    "data-state",
+    "active",
+  );
   await page.getByLabel("指标名").fill("http_requests_total");
-  await expect(page.locator(".argus-telemetry-query-head textarea[readonly]")).toHaveValue(/http_requests_total/);
+  await expect(
+    page.locator(".argus-telemetry-query-head textarea[readonly]"),
+  ).toHaveValue(/http_requests_total/);
   await page.getByRole("button", { name: "执行查询" }).click();
-  await expect(page.locator(".argus-telemetry-query-meta")).toContainText("matrix");
+  await expect(page.locator(".argus-telemetry-query-meta")).toContainText(
+    "matrix",
+  );
 
   await page.getByRole("tab", { name: "DSL 编辑器" }).click();
-  await page.getByLabel("PROMQL DSL").fill('sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))');
+  await page
+    .getByLabel("PROMQL DSL")
+    .fill('sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))');
   await page.getByRole("button", { name: "执行查询" }).click();
-  await expect(page.locator(".argus-telemetry-query-meta")).toContainText("aaaaaaaaaaaa");
+  await expect(page.locator(".argus-telemetry-query-meta")).toContainText(
+    "aaaaaaaaaaaa",
+  );
 
   await page.getByRole("tab", { name: "日志", exact: true }).click();
   await page.getByRole("tab", { name: "DSL 编辑器" }).click();
-  await page.getByLabel("LOGQL DSL").fill('{service_name="argus-demo"} |= "error" | json');
+  await page
+    .getByLabel("KQL DSL")
+    .fill('{service_name="argus-demo"} |= "error" | json');
   await page.getByRole("button", { name: "执行查询" }).click();
-  await expect(page.locator(".argus-telemetry-query-meta")).toContainText("log_entries");
+  await expect(page.locator(".argus-telemetry-query-meta")).toContainText(
+    "log_entries",
+  );
 
   await page.getByRole("tab", { name: "链路", exact: true }).click();
   await page.getByRole("tab", { name: "DSL 编辑器" }).click();
-  await page.getByLabel("TRACEQL DSL").fill('{service.name="argus-demo"} > {service.name="database"}');
+  await page
+    .getByLabel("SKYWALKING_GRAPHQL DSL")
+    .fill('{service.name="argus-demo"} > {service.name="database"}');
   await page.getByRole("button", { name: "执行查询" }).click();
-  await expect(page.locator(".argus-telemetry-query-meta")).toContainText("spansets");
+  await expect(page.locator(".argus-telemetry-query-meta")).toContainText(
+    "traces",
+  );
   await expectNoSeriousAccessibilityViolations(page);
 });
 
@@ -917,22 +1076,22 @@ test("org role drawer: permission matrix uses credential, not secret", async ({
   await expect(drawer).toBeVisible();
 
   const resources = drawer.locator(".argus-perm-matrix__resource");
-  await expect(resources.filter({ hasText: /^credential$/ })).toBeVisible();
-  await expect(resources.filter({ hasText: /^secret$/ })).toHaveCount(0);
+  await expect(resources.filter({ hasText: /^连接凭证$/ })).toBeVisible();
+  await expect(resources.filter({ hasText: /^密钥$/ })).toHaveCount(0);
 
   // has 的内部定位器会以行元素为根重新求值，不能从 drawer 起链。
   const credentialRow = drawer.locator(".argus-perm-matrix__row").filter({
     has: page.locator(".argus-perm-matrix__resource", {
-      hasText: /^credential$/,
+      hasText: /^连接凭证$/,
     }),
   });
   await expect(
-    credentialRow.getByRole("checkbox", { name: "manage" }),
+    credentialRow.getByRole("checkbox", { name: "管理" }),
   ).toBeVisible();
   await expect(
-    credentialRow.getByRole("checkbox", { name: "use" }),
+    credentialRow.getByRole("checkbox", { name: "使用" }),
   ).toBeVisible();
   await expect(
-    credentialRow.getByRole("checkbox", { name: "reveal" }),
+    credentialRow.getByRole("checkbox", { name: "查看原值" }),
   ).toBeVisible();
 });

@@ -263,7 +263,9 @@ func (handler SecretHandler) auth(ctx context.Context, mutation bool, csrf, perm
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &secretapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &secretapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]secretapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func toSecret(value secret.SecretRecord) secretapi.Secret {
@@ -310,7 +312,8 @@ func emptySecretPage() secretapi.CursorPage {
 }
 
 func secretError(ctx context.Context, err error) secretapi.ApiError {
-	base := setupError(ctx, err)
+	base := setupErrorBase(ctx, err)
+	defer func() { logMappedError(ctx, base.Code, err) }()
 	switch {
 	case errors.Is(err, secret.ErrVersionConflict):
 		base.Code, base.MessageKey = "VERSION_CONFLICT", "errors.common.version_conflict"
@@ -323,7 +326,9 @@ func secretError(ctx context.Context, err error) secretapi.ApiError {
 	case errors.Is(err, postgres.ErrIdempotencyConflict):
 		base.Code, base.MessageKey = "IDEMPOTENCY_CONFLICT", "errors.common.idempotency_conflict"
 	}
-	return secretapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	return secretapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]secretapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }
 
 func secretStatus(err error) int {

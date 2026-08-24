@@ -277,7 +277,9 @@ func (handler CardHandler) auth(ctx context.Context, mutation bool, csrf, permis
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &cardapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &cardapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]cardapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func (handler CardHandler) toCardVersion(ctx context.Context, value db.CardVersion) (cardapi.CardVersion, error) {
@@ -399,7 +401,8 @@ func fromJSON[T any](value any) T {
 func pointer[T any](value T) *T { return &value }
 
 func cardError(ctx context.Context, err error) cardapi.ApiError {
-	code, key := "INTERNAL_ERROR", "errors.internal"
+	code, key := "INTERNAL_ERROR", "errors.common.internal"
+	defer func() { logMappedError(ctx, code, err) }()
 	switch {
 	case errors.Is(err, cardservice.ErrNotFound), errors.Is(err, pgx.ErrNoRows):
 		code, key = "CARD_NOT_FOUND", "errors.card.not_found"

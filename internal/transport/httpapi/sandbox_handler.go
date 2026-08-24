@@ -209,7 +209,9 @@ func (handler SandboxHandler) auth(ctx context.Context, mutation bool, csrf stri
 		return nil
 	}
 	value := platformError(ctx, err)
-	return &sandboxapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return &sandboxapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]sandboxapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func backendInput(value sandboxapi.SandboxBackendWrite) sandbox.BackendInput {
@@ -259,11 +261,12 @@ func toSandboxUsage(v db.SandboxUsage) sandboxapi.SandboxUsage {
 
 func sandboxError(ctx context.Context, err error) sandboxapi.ApiError {
 	code, key := "SANDBOX_PROFILE_UNAVAILABLE", "errors.sandbox.profile_unavailable"
+	defer func() { logMappedError(ctx, code, err) }()
 	if errors.Is(err, sandbox.ErrQuotaExceeded) {
 		code, key = "SANDBOX_QUOTA_EXCEEDED", "errors.sandbox.quota_exceeded"
 	}
 	if errors.Is(err, sandbox.ErrVersionConflict) {
-		code, key = "RESOURCE_VERSION_CONFLICT", "errors.resource.version_conflict"
+		code, key = "VERSION_CONFLICT", "errors.common.version_conflict"
 	}
 	return sandboxapi.ApiError{Code: code, MessageKey: key, RequestId: requestID(ctx)}
 }

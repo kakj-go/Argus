@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { useApi } from "@argus/api-client";
+import { presentApiFormError, useApi } from "@argus/api-client";
 import type { Role } from "@argus/api-client";
 import {
+  Alert,
   Badge,
   Button,
   ConfirmDialog,
@@ -192,7 +193,7 @@ export function OrgRolesTab() {
           setDrawerOpen(open);
           if (!open) setEditing(null);
         }}
-        onSubmit={(input) => save.mutate({ ...input, id: editing?.id })}
+        onSubmit={(input) => save.mutateAsync({ ...input, id: editing?.id })}
         open={drawerOpen}
         role={editing}
       />
@@ -225,7 +226,7 @@ function RoleDrawer({
     name: string;
     description?: string;
     permissions: string[];
-  }) => void;
+  }) => Promise<unknown>;
   loading: boolean;
   role: Role | null;
 }) {
@@ -242,9 +243,11 @@ function RoleDrawer({
   type RoleForm = z.infer<typeof roleSchema>;
   const {
     control,
+    clearErrors,
     register,
     reset,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<RoleForm>({
     resolver: zodResolver(roleSchema),
@@ -259,18 +262,37 @@ function RoleDrawer({
       permissions: role?.permissions ?? [],
     });
   }, [open, reset, role]);
+  const submit = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await onSubmit({
+        name: values.name,
+        description: values.description || undefined,
+        permissions: values.permissions,
+      });
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("settings.common.saveFailed"),
+        fieldMap: {
+          description: "description",
+          name: "name",
+          permissions: "permissions",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={handleSubmit((values) =>
-        onSubmit({
-          name: values.name,
-          description: values.description || undefined,
-          permissions: values.permissions,
-        }),
-      )}
+      onSubmit={submit}
       open={open}
       title={
         role
@@ -280,13 +302,25 @@ function RoleDrawer({
       width={640}
     >
       <div className="argus-settings-form">
-        <Field error={errors.name?.message} label={t("settings.common.name")}>
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("settings.common.saveFailed")}
+            tone="danger"
+          />
+        )}
+        <Field
+          requirement="required"
+          error={errors.name?.message}
+          label={t("settings.common.name")}
+        >
           <Input {...register("name")} required />
         </Field>
-        <Field label={t("settings.common.description")}>
+        <Field requirement="optional" label={t("settings.common.description")}>
           <Input {...register("description")} />
         </Field>
         <Field
+          requirement="optional"
           hint={t("settings.org.rolesTab.permissionHint")}
           label={t("settings.org.rolesTab.permissions")}
         >

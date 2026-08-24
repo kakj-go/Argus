@@ -190,7 +190,7 @@ func (a *App) Run(ctx context.Context) error {
 	server := &http.Server{
 		Addr: a.config.Address,
 		Handler: httpapi.NewRouterWithOptions(httpapi.RouterOptions{
-			PostgreSQL: postgresStore, Redis: redisClient, Setup: &setupHandler, M8: &m8Handler, Platform: &platformHandler,
+			Logger: a.logger, PostgreSQL: postgresStore, Redis: redisClient, Setup: &setupHandler, M8: &m8Handler, Platform: &platformHandler,
 			EnterpriseIdentity: &enterpriseIdentityHandler, EnterpriseAuthorization: &enterpriseAuthorizationHandler,
 			Machine: &machineHandler, Audit: &auditHandler, Secret: &secretHandler, Host: &hostHandler, Kubernetes: &kubernetesHandler,
 			Connection: &connectionHandler, ResourceAction: &actionHandler, Workflow: &workflowHandler, Conversation: &conversationHandler, Model: &modelHandler,

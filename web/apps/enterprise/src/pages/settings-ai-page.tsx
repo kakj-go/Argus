@@ -1,6 +1,9 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import {
   Activity,
   CircleDollarSign,
@@ -8,10 +11,18 @@ import {
   Plus,
   RefreshCw,
 } from "lucide-react";
-import { useApi, type AIModel, type ModelQuota } from "@argus/api-client";
+import {
+  apiErrorPresentation,
+  formConstraint,
+  formatApiError,
+  useApi,
+  type AIModel,
+  type ModelQuota,
+} from "@argus/api-client";
 import { useEnterpriseAuthStore } from "@argus/auth";
 import {
   Badge,
+  Alert,
   Button,
   DataTable,
   EmptyState,
@@ -37,6 +48,44 @@ import "../styles/ai-settings.css";
 
 type ModelDrawerState =
   { mode: "create" } | { mode: "edit"; model: AIModel } | null;
+
+type ModelFormValues = {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  modelId: string;
+  apiProtocol: "chat_completions" | "responses";
+  contextWindowTokens: number;
+  maxOutputTokens: number;
+  inputPricePerMillionTokens: number;
+  outputPricePerMillionTokens: number;
+};
+
+const modelConstraints = {
+  name: formConstraint("AIModelTestCreate", "name"),
+  baseUrl: formConstraint("AIModelTestCreate", "base_url"),
+  apiKey: formConstraint("AIModelTestCreate", "api_key"),
+  contextWindowTokens: formConstraint(
+    "AIModelTestCreate",
+    "context_window_tokens",
+  ),
+  maxOutputTokens: formConstraint("AIModelTestCreate", "max_output_tokens"),
+  modelId: formConstraint("AIModelTestCreate", "model_id"),
+  inputPrice: formConstraint("AIModelTestCreate", "input_price_per_million"),
+  outputPrice: formConstraint("AIModelTestCreate", "output_price_per_million"),
+};
+
+const modelFieldByApiName: Record<string, keyof ModelFormValues> = {
+  api_key: "apiKey",
+  api_protocol: "apiProtocol",
+  base_url: "baseUrl",
+  context_window_tokens: "contextWindowTokens",
+  input_price_per_million: "inputPricePerMillionTokens",
+  max_output_tokens: "maxOutputTokens",
+  model_id: "modelId",
+  name: "name",
+  output_price_per_million: "outputPricePerMillionTokens",
+};
 
 export function SettingsAiPage() {
   const { t } = useTranslation();
@@ -156,7 +205,7 @@ function ModelsView({ onDashboard }: { onDashboard: (id: string) => void }) {
             },
             {
               key: "revision",
-              header: "Revision",
+              header: t("aiSettings.model.revisionLabel"),
               render: (model) => <Badge>{model.revision}</Badge>,
             },
             {
@@ -235,52 +284,130 @@ function ModelDrawer({
   const api = useApi();
   const queryClient = useQueryClient();
   const existing = state.mode === "edit" ? state.model : undefined;
-  const [name, setName] = useState(existing?.name ?? "");
-  const [baseUrl, setBaseUrl] = useState(existing?.baseUrl ?? "");
-  const [apiKey, setApiKey] = useState("");
-  const [modelId, setModelId] = useState(existing?.modelId ?? "");
-  const [apiProtocol, setApiProtocol] = useState<
-    "chat_completions" | "responses"
-  >(existing?.apiProtocol ?? "responses");
-  const [contextWindowTokens, setContextWindowTokens] = useState(
-    String(existing?.contextWindowTokens ?? 128_000),
+  const schema = useMemo(
+    () =>
+      z.object({
+        name: z
+          .string()
+          .trim()
+          .min(1, t("aiSettings.validation.required"))
+          .max(
+            modelConstraints.name.maxLength ?? 128,
+            t("aiSettings.validation.maxLength", {
+              max: modelConstraints.name.maxLength ?? 128,
+            }),
+          ),
+        baseUrl: z
+          .string()
+          .trim()
+          .min(1, t("aiSettings.validation.required"))
+          .max(
+            modelConstraints.baseUrl.maxLength ?? 2048,
+            t("aiSettings.validation.maxLength", {
+              max: modelConstraints.baseUrl.maxLength ?? 2048,
+            }),
+          )
+          .refine((value) => {
+            try {
+              const url = new URL(value);
+              return url.protocol === "http:" || url.protocol === "https:";
+            } catch {
+              return false;
+            }
+          }, t("aiSettings.validation.invalidUrl")),
+        apiKey: existing
+          ? z.string().max(
+              modelConstraints.apiKey.maxLength ?? 8192,
+              t("aiSettings.validation.maxLength", {
+                max: modelConstraints.apiKey.maxLength ?? 8192,
+              }),
+            )
+          : z
+              .string()
+              .min(1, t("aiSettings.validation.required"))
+              .max(
+                modelConstraints.apiKey.maxLength ?? 8192,
+                t("aiSettings.validation.maxLength", {
+                  max: modelConstraints.apiKey.maxLength ?? 8192,
+                }),
+              ),
+        modelId: z
+          .string()
+          .trim()
+          .min(1, t("aiSettings.validation.required"))
+          .max(
+            modelConstraints.modelId.maxLength ?? 256,
+            t("aiSettings.validation.maxLength", {
+              max: modelConstraints.modelId.maxLength ?? 256,
+            }),
+          ),
+        apiProtocol: z.enum(["chat_completions", "responses"]),
+        contextWindowTokens: z
+          .number({ error: t("aiSettings.validation.required") })
+          .int(t("aiSettings.validation.integer"))
+          .min(
+            modelConstraints.contextWindowTokens.minimum ?? 8192,
+            t("aiSettings.validation.minimum", {
+              min: modelConstraints.contextWindowTokens.minimum ?? 8192,
+            }),
+          ),
+        maxOutputTokens: z
+          .number({ error: t("aiSettings.validation.required") })
+          .int(t("aiSettings.validation.integer"))
+          .min(
+            modelConstraints.maxOutputTokens.minimum ?? 1,
+            t("aiSettings.validation.minimum", {
+              min: modelConstraints.maxOutputTokens.minimum ?? 1,
+            }),
+          ),
+        inputPricePerMillionTokens: z
+          .number({ error: t("aiSettings.validation.required") })
+          .min(
+            modelConstraints.inputPrice.minimum ?? 0,
+            t("aiSettings.validation.minimum", {
+              min: modelConstraints.inputPrice.minimum ?? 0,
+            }),
+          ),
+        outputPricePerMillionTokens: z
+          .number({ error: t("aiSettings.validation.required") })
+          .min(
+            modelConstraints.outputPrice.minimum ?? 0,
+            t("aiSettings.validation.minimum", {
+              min: modelConstraints.outputPrice.minimum ?? 0,
+            }),
+          ),
+      }),
+    [existing, t],
   );
-  const [maxOutputTokens, setMaxOutputTokens] = useState(
-    String(existing?.maxOutputTokens ?? 8192),
-  );
-  const [inputPrice, setInputPrice] = useState(
-    String(existing?.inputPricePerMillionTokens ?? ""),
-  );
-  const [outputPrice, setOutputPrice] = useState(
-    String(existing?.outputPricePerMillionTokens ?? ""),
-  );
-  const [error, setError] = useState("");
+  const {
+    control,
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors },
+  } = useForm<ModelFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: existing?.name ?? "",
+      baseUrl: existing?.baseUrl ?? "",
+      apiKey: "",
+      modelId: existing?.modelId ?? "",
+      apiProtocol: existing?.apiProtocol ?? "responses",
+      contextWindowTokens: existing?.contextWindowTokens ?? 128_000,
+      maxOutputTokens: existing?.maxOutputTokens ?? 8192,
+      inputPricePerMillionTokens: existing?.inputPricePerMillionTokens,
+      outputPricePerMillionTokens: existing?.outputPricePerMillionTokens,
+    },
+  });
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: ModelFormValues) => {
       if (existing) {
         return api.models.update(existing.id, {
-          name,
-          baseUrl,
-          apiKey: apiKey || undefined,
-          modelId,
-          apiProtocol,
-          contextWindowTokens: Number(contextWindowTokens),
-          maxOutputTokens: Number(maxOutputTokens),
-          inputPricePerMillionTokens: Number(inputPrice),
-          outputPricePerMillionTokens: Number(outputPrice),
+          ...values,
+          apiKey: values.apiKey || undefined,
         });
       }
-      const result = await api.models.testAndCreate({
-        name,
-        baseUrl,
-        apiKey,
-        modelId,
-        apiProtocol,
-        contextWindowTokens: Number(contextWindowTokens),
-        maxOutputTokens: Number(maxOutputTokens),
-        inputPricePerMillionTokens: Number(inputPrice),
-        outputPricePerMillionTokens: Number(outputPrice),
-      });
+      const result = await api.models.testAndCreate(values);
       if (!result.created)
         throw new Error(result.compatibility.diagnostics.join("; "));
       return result.model;
@@ -289,14 +416,35 @@ function ModelDrawer({
       void queryClient.invalidateQueries({ queryKey: ["models"] });
       onClose();
     },
-    onError: () => setError(t("aiSettings.model.compatibilityFailed")),
+    onError: (caught) => {
+      const presentation = apiErrorPresentation(caught);
+      const apiField = presentation?.params?.field;
+      const formField =
+        typeof apiField === "string"
+          ? modelFieldByApiName[apiField]
+          : undefined;
+      const message =
+        presentation?.publicMessage ??
+        t("aiSettings.model.compatibilityFailed");
+      if (formField) {
+        setError(formField, { message, type: "server" }, { shouldFocus: true });
+        return;
+      }
+      setError("root", {
+        message: formatApiError(
+          caught,
+          t("aiSettings.model.compatibilityFailed"),
+          (requestId) => t("common.requestReference", { requestId }),
+        ),
+        type: "server",
+      });
+    },
   });
   return (
     <FormDrawer
-      description={error || undefined}
       loading={mutation.isPending}
       onOpenChange={(open) => !open && onClose()}
-      onSubmit={() => mutation.mutate()}
+      onSubmit={handleSubmit((values) => mutation.mutate(values))}
       open
       submitLabel={
         existing ? t("settings.common.save") : t("aiSettings.model.testCreate")
@@ -308,94 +456,129 @@ function ModelDrawer({
       }
     >
       <div className="argus-settings-form">
-        <Field label={t("aiSettings.model.name")}>
-          <Input
-            onChange={(event) => setName(event.target.value)}
-            required
-            value={name}
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("aiSettings.model.compatibilityFailed")}
+            tone="danger"
           />
-        </Field>
-        <Field label={t("aiSettings.model.baseUrl")}>
+        )}
+        <Field
+          error={errors.name?.message}
+          requirement="required"
+          label={t("aiSettings.model.name")}
+        >
           <Input
-            onChange={(event) => setBaseUrl(event.target.value)}
-            required
-            type="url"
-            value={baseUrl}
+            {...register("name")}
+            maxLength={modelConstraints.name.maxLength}
           />
         </Field>
         <Field
+          error={errors.baseUrl?.message}
+          requirement="required"
+          label={t("aiSettings.model.baseUrl")}
+        >
+          <Input
+            {...register("baseUrl")}
+            maxLength={modelConstraints.baseUrl.maxLength}
+            type="url"
+          />
+        </Field>
+        <Field
+          error={errors.apiKey?.message}
+          requirement={existing ? "optional" : "required"}
           hint={t("aiSettings.model.apiKeyHint")}
           label={t("aiSettings.model.apiKey")}
         >
           <Input
-            onChange={(event) => setApiKey(event.target.value)}
-            required={!existing}
+            {...register("apiKey")}
+            maxLength={modelConstraints.apiKey.maxLength}
             type="password"
-            value={apiKey}
           />
         </Field>
-        <Field label={t("aiSettings.model.modelId")}>
+        <Field
+          error={errors.modelId?.message}
+          requirement="required"
+          label={t("aiSettings.model.modelId")}
+        >
           <Input
-            onChange={(event) => setModelId(event.target.value)}
-            required
-            value={modelId}
+            {...register("modelId")}
+            maxLength={modelConstraints.modelId.maxLength}
           />
         </Field>
-        <Field label={t("aiSettings.model.apiProtocol")}>
-          <Select
-            onValueChange={(value) =>
-              setApiProtocol(
-                value as "chat_completions" | "responses",
-              )
-            }
-            options={[
-              { value: "responses", label: "Responses" },
-              { value: "chat_completions", label: "Chat Completions" },
-            ]}
-            value={apiProtocol}
+        <Field
+          error={errors.apiProtocol?.message}
+          requirement="required"
+          label={t("aiSettings.model.apiProtocol")}
+        >
+          <Controller
+            control={control}
+            name="apiProtocol"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                options={[
+                  { value: "responses", label: "Responses" },
+                  { value: "chat_completions", label: "Chat Completions" },
+                ]}
+                value={field.value}
+              />
+            )}
           />
         </Field>
         <div className="argus-form-row">
-          <Field label={t("aiSettings.model.contextWindowTokens")}>
+          <Field
+            error={errors.contextWindowTokens?.message}
+            requirement="required"
+            label={t("aiSettings.model.contextWindowTokens")}
+          >
             <Input
-              min="4096"
-              onChange={(event) => setContextWindowTokens(event.target.value)}
-              required
+              {...register("contextWindowTokens", { valueAsNumber: true })}
+              min={modelConstraints.contextWindowTokens.minimum}
               step="1"
               type="number"
-              value={contextWindowTokens}
             />
           </Field>
-          <Field label={t("aiSettings.model.maxOutputTokens")}>
+          <Field
+            error={errors.maxOutputTokens?.message}
+            requirement="required"
+            label={t("aiSettings.model.maxOutputTokens")}
+          >
             <Input
-              min="1"
-              onChange={(event) => setMaxOutputTokens(event.target.value)}
-              required
+              {...register("maxOutputTokens", { valueAsNumber: true })}
+              min={modelConstraints.maxOutputTokens.minimum}
               step="1"
               type="number"
-              value={maxOutputTokens}
             />
           </Field>
         </div>
         <div className="argus-form-row">
-          <Field label={t("aiSettings.model.inputPrice")}>
+          <Field
+            error={errors.inputPricePerMillionTokens?.message}
+            requirement="required"
+            label={t("aiSettings.model.inputPrice")}
+          >
             <Input
-              min="0"
-              onChange={(event) => setInputPrice(event.target.value)}
-              required
+              {...register("inputPricePerMillionTokens", {
+                valueAsNumber: true,
+              })}
+              min={modelConstraints.inputPrice.minimum}
               step="0.01"
               type="number"
-              value={inputPrice}
             />
           </Field>
-          <Field label={t("aiSettings.model.outputPrice")}>
+          <Field
+            error={errors.outputPricePerMillionTokens?.message}
+            requirement="required"
+            label={t("aiSettings.model.outputPrice")}
+          >
             <Input
-              min="0"
-              onChange={(event) => setOutputPrice(event.target.value)}
-              required
+              {...register("outputPricePerMillionTokens", {
+                valueAsNumber: true,
+              })}
+              min={modelConstraints.outputPrice.minimum}
               step="0.01"
               type="number"
-              value={outputPrice}
             />
           </Field>
         </div>
@@ -418,81 +601,155 @@ function QuotaDrawer({
   const departments = useOrgDepartments();
   const users = useOrgUsers();
   const queryClient = useQueryClient();
-  const [subjectType, setSubjectType] = useState<"department" | "user">(
-    enterpriseAdmin ? "department" : "user",
+  const schema = useMemo(
+    () =>
+      z.object({
+        subjectType: z.enum(["department", "user"]),
+        subjectId: z.string().min(1, t("aiSettings.validation.required")),
+        amount: z
+          .number({ error: t("aiSettings.validation.nonnegative") })
+          .min(0, t("aiSettings.validation.nonnegative"))
+          .optional(),
+      }),
+    [t],
   );
-  const eligibleUsers = (users.data ?? []).filter(
-    (user) =>
-      enterpriseAdmin || user.department_id === session?.session.department_id,
-  );
-  const subjects =
-    subjectType === "department" ? (departments.data ?? []) : eligibleUsers;
-  const [subjectId, setSubjectId] = useState("");
-  const [amount, setAmount] = useState("");
+  type QuotaFormValues = z.infer<typeof schema>;
+  const {
+    control,
+    handleSubmit,
+    register,
+    setError,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<QuotaFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      subjectType: enterpriseAdmin ? "department" : "user",
+      subjectId: "",
+      amount: undefined,
+    },
+  });
+  const subjectType = watch("subjectType");
+  const subjects = useMemo(() => {
+    if (subjectType === "department") return departments.data ?? [];
+    return (users.data ?? []).filter(
+      (user) =>
+        enterpriseAdmin ||
+        user.department_id === session?.session.department_id,
+    );
+  }, [
+    departments.data,
+    enterpriseAdmin,
+    session?.session.department_id,
+    subjectType,
+    users.data,
+  ]);
+  useEffect(() => {
+    setValue("subjectId", subjects[0]?.id ?? "", { shouldValidate: false });
+  }, [setValue, subjectType, subjects]);
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: (values: QuotaFormValues) =>
       api.models.setQuota({
         modelId: model.id,
-        subjectType,
-        subjectId: subjectId || subjects[0]?.id || "",
-        monthlyAmount: amount === "" ? undefined : Number(amount),
+        subjectType: values.subjectType,
+        subjectId: values.subjectId,
+        monthlyAmount: values.amount,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["model-quotas"] });
       onClose();
+    },
+    onError: (caught) => {
+      setError("root", {
+        message: formatApiError(
+          caught,
+          t("aiSettings.quota.saveFailed"),
+          (requestId) => t("common.requestReference", { requestId }),
+        ),
+        type: "server",
+      });
     },
   });
   return (
     <FormDrawer
       loading={save.isPending}
       onOpenChange={(open) => !open && onClose()}
-      onSubmit={() => save.mutate()}
+      onSubmit={handleSubmit((values) => save.mutate(values))}
       open
       submitLabel={t("aiSettings.quota.save")}
       title={`${t("aiSettings.quota.title")} · ${model.name}`}
     >
       <div className="argus-settings-form">
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("aiSettings.quota.saveFailed")}
+            tone="danger"
+          />
+        )}
         {enterpriseAdmin && (
-          <Field label={t("aiSettings.quota.subjectType")}>
-            <Select
-              onValueChange={(value) => {
-                setSubjectType(value as "department" | "user");
-                setSubjectId("");
-              }}
-              options={[
-                {
-                  value: "department",
-                  label: t("aiSettings.quota.department"),
-                },
-                { value: "user", label: t("aiSettings.quota.user") },
-              ]}
-              value={subjectType}
+          <Field
+            error={errors.subjectType?.message}
+            requirement="required"
+            label={t("aiSettings.quota.subjectType")}
+          >
+            <Controller
+              control={control}
+              name="subjectType"
+              render={({ field }) => (
+                <Select
+                  onValueChange={field.onChange}
+                  options={[
+                    {
+                      value: "department",
+                      label: t("aiSettings.quota.department"),
+                    },
+                    { value: "user", label: t("aiSettings.quota.user") },
+                  ]}
+                  value={field.value}
+                />
+              )}
             />
           </Field>
         )}
-        <Field label={t("aiSettings.quota.subject")}>
-          <Select
-            onValueChange={setSubjectId}
-            options={subjects.map((subject) => ({
-              value: subject.id,
-              label:
-                (subject as { name?: string; displayName?: string }).name ??
-                (subject as { displayName?: string }).displayName ??
-                subject.id,
-            }))}
-            value={subjectId || subjects[0]?.id || ""}
+        <Field
+          error={errors.subjectId?.message}
+          requirement="required"
+          label={t("aiSettings.quota.subject")}
+        >
+          <Controller
+            control={control}
+            name="subjectId"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                options={subjects.map((subject) => ({
+                  value: subject.id,
+                  label:
+                    (subject as { name?: string; displayName?: string }).name ??
+                    (subject as { displayName?: string }).displayName ??
+                    subject.id,
+                }))}
+                value={field.value}
+              />
+            )}
           />
         </Field>
         <Field
+          error={errors.amount?.message}
+          requirement="optional"
           hint={t("aiSettings.quota.unlimited")}
           label={t("aiSettings.quota.amount")}
         >
           <Input
+            {...register("amount", {
+              setValueAs: (value) =>
+                value === "" || value === undefined ? undefined : Number(value),
+            })}
             min="0"
-            onChange={(event) => setAmount(event.target.value)}
             step="0.01"
             type="number"
-            value={amount}
           />
         </Field>
         {!enterpriseAdmin && (

@@ -70,9 +70,9 @@ Bastion Scope 与 Connector 实例分开保存。用户归类标签保存在根 
 | --------------------------- | ------------------------------------------ | -------------------------------- | ---------------------- |
 | `connector_local`           | 执行 Connector 安装命令并完成注册          | Connector 管理本机               | 是，且为根堡垒机       |
 | `via_bastion`               | 手工填写内网地址、Credential 并选择堡垒机  | Argus → Connector → SSH/WinRM    | 是，且为成员主机       |
-| `direct_ssh`/`direct_winrm` | 手工填写公网地址、Credential，不选择堡垒机 | Argus Direct Executor → 公网目标 | 否                     |
+| `direct_ssh`/`direct_winrm` | 手工填写目标地址、Credential，不选择堡垒机 | Argus Direct Executor → 目标主机 | 否                     |
 
-“内网主机”和“公网主机”是接入路径而不是仅根据 IP 字符串自动推导的永久类型。服务端仍必须解析 DNS/IP、校验实际目的地址，并拒绝 Direct Executor 访问私网和平台内部地址。
+“经堡垒机”和“直连”是显式接入路径，不根据 IP 字符串自动推导。服务端必须解析 DNS/IP、校验实际目的地址；Direct Executor 可以连接其部署网络可达的公网或私网目标，但必须拒绝环回、链路本地、云元数据和配置的禁用网段。
 
 ### 2.3 Remote Access Session
 
@@ -273,22 +273,22 @@ Command 保存 command_id、execution_id、企业、Connector、连接代次、�
 
 ## 5. Direct Executor
 
-没有选择堡垒机的公网主机使用受控 Direct Executor。第一版 Direct Executor 作为 `argus-worker` 的受隔离运行角色或独立 Worker Pool，不增加新的业务程序；它不能由普通 HTTP Handler 直接调用任意 Socket。
+没有选择堡垒机的主机使用受控 Direct Executor。第一版 Direct Executor 作为 `argus-worker` 的受隔离运行角色或独立 Worker Pool，不增加新的业务程序；它不能由普通 HTTP Handler 直接调用任意 Socket。
 
 Direct Executor 必须具备：
 
 - 固定、可展示给用户加入防火墙白名单的出口 IP。
 - 仅允许 SSH/WinRM 等版本化协议与端口白名单。
-- DNS 解析前后校验，禁止私网、环回、链路本地、广播、云元数据和 Argus 内部网段。
+- DNS 解析前后校验，允许 Executor 部署网络可达的私网地址，禁止环回、链路本地、广播、云元数据和配置的禁用网段。
 - 防 DNS Rebinding；连接时再次校验最终 IP。
 - SSH Host Key/证书校验和首次信任的显式预览。
 - 企业、用户、目标、Credential、用途、时长和并发绑定。
 - 与 Agent/模型调用隔离的网络策略和 Worker Queue。
 - 所有连接、命令和文件操作审计。
 
-Direct Executor 只解决公网目标管理，不能宣称 SaaS Worker 可以穿透客户内网。若公网主机后来安装 Connector 并注册为堡垒机，它将创建新的 Bastion Scope；原 Host 的身份迁移、Credential 和历史审计必须使用显式预览。
+Direct Executor 只管理其部署网络实际可达的目标，不能宣称 SaaS Worker 可以自动穿透客户内网；需要访问特定私网时，部署方必须把 Executor 放在具备受控路由的位置，或改用 Bastion Scope。若直连主机后来安装 Connector 并注册为堡垒机，它将创建新的 Bastion Scope；原 Host 的身份迁移、Credential 和历史审计必须使用显式预览。
 
-Server 与 Direct Executor 之间使用独立内部 CA 的 mTLS gRPC。Server 只发送绑定 `connection_test_id` 的低延迟派发提示，Executor 从 PostgreSQL 原子 Claim 已冻结计划；PostgreSQL 扫描负责 RPC 丢失和 Pod 重启恢复，因此 Handler 不能把 RPC 当作唯一队列或传入任意目标参数。Direct Kubernetes Reader 同样固定首次解析的公网 IP，每次请求前后重新校验 DNS，并拒绝 HTTP Redirect 和跳过 TLS 校验。
+Server 与 Direct Executor 之间使用独立内部 CA 的 mTLS gRPC。Server 只发送绑定 `connection_test_id` 的低延迟派发提示，Executor 从 PostgreSQL 原子 Claim 已冻结计划；PostgreSQL 扫描负责 RPC 丢失和 Pod 重启恢复，因此 Handler 不能把 RPC 当作唯一队列或传入任意目标参数。Direct Kubernetes Reader 同样固定首次解析的目标 IP，每次请求前后重新校验 DNS，并拒绝 HTTP Redirect 和跳过 TLS 校验。
 
 ## 6. 添加和管理主机
 
@@ -319,13 +319,13 @@ labels
 
 成员主机在主机页面显示在所属堡垒机框内，其连接路径明确为“Argus → 堡垒机 → 内网地址”。移动到另一个 Scope 会改变网络路径和凭证使用边界，必须 Preview/Commit，不能只修改前端分组。
 
-### 6.2 添加公网独立主机
+### 6.2 添加直连独立主机
 
 用户填写：
 
 ```text
 connection_mode = direct_ssh | direct_winrm
-public_address / hostname
+address / hostname
 port
 credential_ref
 labels
@@ -334,7 +334,7 @@ labels
 流程固定为：
 
 ```text
-解析并校验公网地址
+解析并校验目标地址
 → 显示 Argus 固定出口 IP
 → Direct Executor 测试 Host Key、端口和认证
 → 展示资源与连接预览
@@ -342,7 +342,7 @@ labels
 → 创建独立 Host
 ```
 
-服务端不得仅因为用户未选择堡垒机就接受 RFC1918、环回、链路本地、内部 DNS 或重定向后的私网目标。
+服务端允许直连 RFC1918、IPv6 ULA 和内部 DNS 目标，但不得接受环回、链路本地、云元数据、配置的禁用网段，或 DNS 重绑定后超出冻结地址集合的目标。
 
 ConnectionTest 是独立的异步只读资源。服务端创建时冻结目标地址、Credential/Secret 版本、Connector epoch、DNS/IP、Host Key 或 TLS 摘要和过期时间；Host/Kubernetes Preview 只能引用与当前输入完全匹配且未过期的成功测试。创建后的地址、端口、连接模式、Bastion Scope 或 API Server 等网络路径变化同样必须先创建新测试，纯名称、描述等元数据变化才可复用原路径。Confirm 再次校验冻结计划、操作者、DataScope、资源版本、AuthorizationVersion 和网络身份，不能用一个目标的成功结果提交另一个目标。Secret 轮换、Connector 换代或授权变化会立即使相关测试和 Credential Lease 失效。
 
@@ -410,7 +410,7 @@ Browser
 → 内网主机
 ```
 
-公网独立主机使用：
+直连独立主机使用：
 
 ```text
 Browser
@@ -418,7 +418,7 @@ Browser
 → 签发短期票据与 Credential Package
 → Remote Access 入口
 → 受控 Direct Executor
-→ 公网主机
+→ 目标主机
 ```
 
 所有已经完成连接测试并处于可管理状态的 Host 都显示统一的“打开命令行”入口，但底层能力随连接模式变化：
@@ -516,7 +516,7 @@ Collector 概览 | 采集能力 | 数据推送 | 配置版本 | 运行状态
 支持：
 
 - kubeconfig + Bastion Scope Connector 访问私有 API Server。
-- kubeconfig 由受控 Direct Executor 访问经校验的公网 API Server。
+- kubeconfig 由受控 Direct Executor 访问其部署网络可达且经校验的 API Server。
 - 集群内 Connector 使用 ServiceAccount。
 - 后续扩展托管集群身份和临时凭证。
 
@@ -565,7 +565,7 @@ Collector 安装入口位于主机详情。执行路径继承 Host 的连接模�
 ```text
 connector_local  → 本机 Connector 安装本机 Collector
 via_bastion      → 所属堡垒机 Connector 经 SSH/WinRM 安装成员 Collector
-direct_ssh       → Direct Executor 经公网 SSH 安装 Collector
+direct_ssh       → Direct Executor 经 SSH 安装 Collector
 ```
 
 安装 Preview 必须展示完整执行路径、OS/架构/权限、下载或 Tunnel 模式、文件与服务变化、端口、防火墙、版本、Digest、健康检查和回滚计划。

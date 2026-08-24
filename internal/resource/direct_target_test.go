@@ -13,13 +13,28 @@ func (resolver staticResolver) LookupNetIP(_ context.Context, _, host string) ([
 	return resolver[host], nil
 }
 
-func TestDirectTargetRejectsInternalAndMetadataAddresses(t *testing.T) {
+func TestDirectTargetAllowsPrivateAddresses(t *testing.T) {
 	validator := DirectTargetValidator{Resolver: staticResolver{
-		"private.example":  {netip.MustParseAddr("10.0.0.8")},
-		"metadata.example": {netip.MustParseAddr("169.254.169.254")},
-		"mixed.example":    {netip.MustParseAddr("203.0.113.10"), netip.MustParseAddr("fd00::1")},
+		"private.example": {netip.MustParseAddr("10.0.0.8"), netip.MustParseAddr("fd00::1")},
 	}}
-	for _, host := range []string{"127.0.0.1", "::1", "private.example", "metadata.example", "mixed.example"} {
+	for _, host := range []string{"10.0.0.8", "192.168.1.20", "fd00::1", "private.example"} {
+		addresses, err := validator.Resolve(context.Background(), host)
+		if err != nil || len(addresses) == 0 {
+			t.Fatalf("expected %s to be allowed, addresses=%v err=%v", host, addresses, err)
+		}
+	}
+}
+
+func TestDirectTargetRejectsUnsafeAndConfiguredAddresses(t *testing.T) {
+	validator := DirectTargetValidator{
+		Resolver: staticResolver{
+			"metadata.example": {netip.MustParseAddr("100.100.100.200")},
+			"mixed.example":    {netip.MustParseAddr("10.0.0.8"), netip.MustParseAddr("169.254.169.254")},
+			"denied.example":   {netip.MustParseAddr("10.42.0.8")},
+		},
+		DeniedCIDRs: []netip.Prefix{netip.MustParsePrefix("10.42.0.0/16")},
+	}
+	for _, host := range []string{"127.0.0.1", "::1", "169.254.1.1", "metadata.example", "mixed.example", "denied.example"} {
 		if _, err := validator.Resolve(context.Background(), host); !errors.Is(err, ErrDirectTargetDenied) {
 			t.Fatalf("expected %s to be denied, got %v", host, err)
 		}
@@ -45,6 +60,6 @@ func TestDirectKubernetesRequiresHTTPS(t *testing.T) {
 		t.Fatalf("expected HTTP rejection, got %v", err)
 	}
 	if _, addresses, err := validator.ResolveHTTPS(context.Background(), "https://api.example:6443"); err != nil || len(addresses) != 1 {
-		t.Fatalf("expected public HTTPS target, addresses=%v err=%v", addresses, err)
+		t.Fatalf("expected HTTPS target, addresses=%v err=%v", addresses, err)
 	}
 }

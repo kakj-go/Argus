@@ -215,7 +215,7 @@ func (service Service) CompletePasswordChange(ctx context.Context, audience, cha
 	if err != nil {
 		return IssuedSession{}, err
 	}
-	if err := ValidatePassword(newPassword, username, email); err != nil {
+	if err := ValidatePasswordChange(newPassword, temporaryPassword, username, email); err != nil {
 		return IssuedSession{}, err
 	}
 	encoded, err := HashPassword(newPassword)
@@ -310,7 +310,7 @@ func (service Service) ChangePassword(ctx context.Context, principal Principal, 
 	if err != nil {
 		return err
 	}
-	if err := ValidatePassword(newPassword, username, email); err != nil {
+	if err := ValidatePasswordChange(newPassword, currentPassword, username, email); err != nil {
 		return err
 	}
 	encoded, err := HashPassword(newPassword)

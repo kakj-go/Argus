@@ -1,0 +1,40 @@
+{{- if .Values.loader.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: argus-e2e-image-loader
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: argus-e2e-image-loader
+    app.kubernetes.io/part-of: argus-e2e
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+spec:
+  selector: {matchLabels: {app.kubernetes.io/name: argus-e2e-image-loader, argus.io/release-id: {{ .Values.releaseId | quote }}}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: argus-e2e-image-loader, app.kubernetes.io/part-of: argus-e2e, argus.io/release-id: {{ .Values.releaseId | quote }}}}
+    spec:
+      initContainers:
+        - name: load-images
+          image: debian:13-slim
+          securityContext: {privileged: true}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              {{- range .Values.loader.images }}
+              /host/ctr --address /run/containerd/containerd.sock --namespace k8s.io images pull --plain-http {{ . | quote }}
+              {{- end }}
+          volumeMounts:
+            - {name: ctr, mountPath: /host/ctr, readOnly: true}
+            - {name: containerd, mountPath: /run/containerd/containerd.sock}
+      containers:
+        - name: loader
+          image: debian:13-slim
+          command: ["/bin/sh", "-c", "sleep 365d"]
+          securityContext: {privileged: true}
+          volumeMounts:
+            - {name: ctr, mountPath: /host/ctr, readOnly: true}
+            - {name: containerd, mountPath: /run/containerd/containerd.sock}
+      volumes:
+        - {name: ctr, hostPath: {path: /usr/local/bin/ctr, type: File}}
+        - {name: containerd, hostPath: {path: /run/containerd/containerd.sock, type: Socket}}
+{{- end }}

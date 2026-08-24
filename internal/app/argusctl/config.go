@@ -86,7 +86,6 @@ type Exposure struct {
 	IngressClassName string `json:"ingressClassName"`
 	EnterpriseHost   string `json:"enterpriseHost"`
 	PlatformHost     string `json:"platformHost"`
-	SetupHost        string `json:"setupHost"`
 	ConnectorHost    string `json:"connectorHost"`
 }
 
@@ -137,6 +136,11 @@ func (c *InstallConfig) Validate() error {
 			return fmt.Errorf("%s must be a Kubernetes DNS label", name)
 		}
 	}
+	// Chart release names append suffixes such as "-telemetry-pipeline".
+	// Helm limits the resulting name to 53 characters.
+	if len(c.Spec.ReleaseID) > 34 {
+		return fmt.Errorf("spec.releaseId must not exceed 34 characters")
+	}
 	if c.Spec.KubeContext == "" || c.Spec.StorageClass == "" {
 		return fmt.Errorf("spec.kubeContext and spec.storageClass are required")
 	}
@@ -169,7 +173,7 @@ func (c *InstallConfig) Validate() error {
 		return fmt.Errorf("unsupported exposure mode %q", c.Spec.Exposure.Mode)
 	}
 	if c.Spec.Profile == "production" && (c.Spec.Exposure.EnterpriseHost == "" || c.Spec.Exposure.PlatformHost == "" ||
-		c.Spec.Exposure.SetupHost == "" || c.Spec.Exposure.ConnectorHost == "") {
+		c.Spec.Exposure.ConnectorHost == "") {
 		return fmt.Errorf("production exposure hosts, including connectorHost, are required")
 	}
 	return nil

@@ -349,9 +349,12 @@ components:
         enterprise_id: {type: string, format: uuid}
         actor_type: {type: string, enum: [platform_user, enterprise_user, service_account, connector, direct_executor, remote_access_gateway, system]}
         actor_id: {type: string, minLength: 1}
+        actor_display_name: {type: string, minLength: 1, maxLength: 256}
+        actor_username: {type: string, minLength: 1, maxLength: 128}
         action: {type: string, pattern: "^[a-z][a-z0-9_.]+$"}
         resource_type: {type: string, minLength: 1, maxLength: 128}
         resource_id: {type: string, minLength: 1, maxLength: 256}
+        resource_display_name: {type: string, minLength: 1, maxLength: 256}
         result: {type: string, enum: [success, failure, denied]}
         details: {type: object, additionalProperties: true}
         previous_hash: {type: string, pattern: "^[a-f0-9]{64}$"}

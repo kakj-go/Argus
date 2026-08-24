@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 
-const apps = ["enterprise", "platform", "setup"];
+const apps = ["enterprise", "platform"];
 const locales = ["Zh", "En"];
 
 function listFiles(directory) {

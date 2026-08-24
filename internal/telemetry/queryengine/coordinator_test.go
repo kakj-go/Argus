@@ -98,7 +98,7 @@ type auditTransactionStore struct {
 	calls  int
 }
 
-func (store *auditTransactionStore) InTx(_ context.Context, _ func(*postgresdb.Queries) error) error {
+func (store *auditTransactionStore) InReadCommittedTx(_ context.Context, _ func(*postgresdb.Queries) error) error {
 	store.calls++
 	if store.calls <= len(store.errors) {
 		return store.errors[store.calls-1]

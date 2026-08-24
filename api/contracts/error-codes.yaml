@@ -1,6 +1,7 @@
 version: argus.error_codes/v1
 codes:
-  INVALID_ARGUMENT: {http_status: 400, message_key: errors.common.invalid_argument, retryable: false}
+  INTERNAL_ERROR: {http_status: 500, message_key: errors.common.internal, retryable: true}
+  INVALID_ARGUMENT: {http_status: 400, message_key: errors.common.invalid_argument, retryable: false, safe_params: [field, rule, min_length, max_length, minimum, maximum, min_items, max_items, format]}
   AUTHENTICATION_REQUIRED: {http_status: 401, message_key: errors.auth.authentication_required, retryable: false}
   AUTHORIZATION_DENIED: {http_status: 403, message_key: errors.auth.authorization_denied, retryable: false}
   AUTHORIZATION_VERSION_STALE: {http_status: 409, message_key: errors.auth.authorization_version_stale, retryable: false}
@@ -27,9 +28,14 @@ codes:
   SETUP_TOKEN_EXPIRED: {http_status: 403, message_key: errors.setup.token_expired, retryable: false}
   SETUP_TOKEN_UNAVAILABLE: {http_status: 503, message_key: errors.setup.token_unavailable, retryable: true}
   INVALID_CREDENTIALS: {http_status: 401, message_key: errors.auth.invalid_credentials, retryable: false}
-  PASSWORD_WEAK: {http_status: 422, message_key: errors.auth.password_weak, retryable: false}
+  PASSWORD_WEAK: {http_status: 422, message_key: errors.auth.password_weak, retryable: false, safe_params: [field, rule, min_length, max_length]}
   PASSWORD_CHANGE_REQUIRED: {http_status: 403, message_key: errors.auth.password_change_required, retryable: false}
   TEMPORARY_CREDENTIAL_EXPIRED: {http_status: 410, message_key: errors.auth.temporary_credential_expired, retryable: false}
+  MFA_REQUIRED: {http_status: 403, message_key: errors.identity.mfa_required, retryable: false}
+  MFA_ENROLLMENT_REQUIRED: {http_status: 403, message_key: errors.identity.mfa_enrollment_required, retryable: false}
+  MFA_PROOF_INVALID: {http_status: 401, message_key: errors.identity.mfa_proof_invalid, retryable: false}
+  STEP_UP_REQUIRED: {http_status: 403, message_key: errors.identity.step_up_required, retryable: false}
+  BREAK_GLASS_DISABLED: {http_status: 403, message_key: errors.identity.break_glass_disabled, retryable: false}
   CSRF_TOKEN_MISSING: {http_status: 403, message_key: errors.auth.csrf_token_missing, retryable: false}
   CSRF_TOKEN_INVALID: {http_status: 403, message_key: errors.auth.csrf_token_invalid, retryable: false}
   ORIGIN_NOT_ALLOWED: {http_status: 403, message_key: errors.auth.origin_not_allowed, retryable: false}
@@ -74,6 +80,7 @@ codes:
   MODEL_UNAVAILABLE: {http_status: 503, message_key: errors.model.unavailable, retryable: true}
   MODEL_QUOTA_EXCEEDED: {http_status: 429, message_key: errors.model.quota_exceeded, retryable: false}
   RUN_ALREADY_ACTIVE: {http_status: 409, message_key: errors.agent.run_already_active, retryable: false}
+  RUN_STATE_CONFLICT: {http_status: 409, message_key: errors.run.state_conflict, retryable: false}
   RUN_CANCELLED: {http_status: 409, message_key: errors.agent.run_cancelled, retryable: false}
   CONTEXT_TOO_LARGE: {http_status: 422, message_key: errors.agent.context_too_large, retryable: false}
   TOOL_NOT_AVAILABLE: {http_status: 404, message_key: errors.tool.not_available, retryable: false}
@@ -112,6 +119,7 @@ codes:
   REMOTE_ACCESS_GRANT_REQUIRED: {http_status: 403, message_key: errors.remote_access.grant_required, retryable: false}
   REMOTE_ACCESS_SCOPE_DENIED: {http_status: 403, message_key: errors.remote_access.scope_denied, retryable: false}
   REMOTE_ACCESS_APPROVAL_REQUIRED: {http_status: 409, message_key: errors.remote_access.approval_required, retryable: false}
+  REMOTE_ACCESS_APPROVAL_NOT_ELIGIBLE: {http_status: 403, message_key: errors.remote_access.approval_not_eligible, retryable: false}
   REMOTE_ACCESS_MFA_REQUIRED: {http_status: 403, message_key: errors.remote_access.mfa_required, retryable: false}
   REMOTE_ACCESS_LEASE_EXPIRED: {http_status: 410, message_key: errors.remote_access.lease_expired, retryable: false}
   REMOTE_ACCESS_TICKET_EXPIRED: {http_status: 410, message_key: errors.remote_access.ticket_expired, retryable: false}
@@ -122,14 +130,14 @@ codes:
   WINRM_TLS_REQUIRED: {http_status: 422, message_key: errors.remote_access.winrm_tls_required, retryable: false}
   COLLECTOR_DISTRIBUTION_UNSUPPORTED: {http_status: 422, message_key: errors.telemetry.distribution_unsupported, retryable: false}
   COLLECTOR_ARTIFACT_INVALID: {http_status: 422, message_key: errors.telemetry.artifact_invalid, retryable: false}
+  COLLECTOR_NOT_FOUND: {http_status: 404, message_key: errors.telemetry.collector_not_found, retryable: false}
+  COLLECTOR_DISTRIBUTION_VALIDATION_PENDING: {http_status: 400, message_key: errors.telemetry.distribution_validation_pending, retryable: true}
   COLLECTOR_PROFILE_INCOMPATIBLE: {http_status: 422, message_key: errors.telemetry.profile_incompatible, retryable: false}
   COLLECTOR_ALREADY_INSTALLED: {http_status: 409, message_key: errors.telemetry.already_installed, retryable: false}
   COLLECTOR_NOT_INSTALLED: {http_status: 404, message_key: errors.telemetry.not_installed, retryable: false}
   COLLECTOR_CONFIG_INVALID: {http_status: 422, message_key: errors.telemetry.config_invalid, retryable: false}
   COLLECTOR_HEALTH_CHECK_FAILED: {http_status: 503, message_key: errors.telemetry.health_check_failed, retryable: true}
   COLLECTOR_COMMAND_INVALID: {http_status: 422, message_key: errors.telemetry.collector_command_invalid, retryable: false}
-  COLLECTOR_DISTRIBUTION_UNSUPPORTED: {http_status: 422, message_key: errors.telemetry.distribution_unsupported, retryable: false}
-  COLLECTOR_ARTIFACT_INVALID: {http_status: 422, message_key: errors.telemetry.artifact_invalid, retryable: false}
   COLLECTOR_NODE_EVIDENCE_INVALID: {http_status: 422, message_key: errors.telemetry.node_evidence_invalid, retryable: false}
   COLLECTOR_KUBERNETES_FORBIDDEN: {http_status: 403, message_key: errors.telemetry.kubernetes_forbidden, retryable: false}
   COLLECTOR_KUBERNETES_RESOURCE_INVALID: {http_status: 422, message_key: errors.telemetry.kubernetes_resource_invalid, retryable: false}
@@ -147,7 +155,14 @@ codes:
   TELEMETRY_SCHEMA_UNSUPPORTED: {http_status: 422, message_key: errors.telemetry.schema_unsupported, retryable: false}
   TELEMETRY_BACKPRESSURE: {http_status: 503, message_key: errors.telemetry.backpressure, retryable: true}
   QUERY_BUDGET_EXCEEDED: {http_status: 413, message_key: errors.telemetry.query_budget_exceeded, retryable: false}
+  TELEMETRY_QUERY_INVALID: {http_status: 400, message_key: errors.telemetry.query_invalid, retryable: false}
+  QUERY_PARSE_ERROR: {http_status: 400, message_key: errors.telemetry.query_parse, retryable: false, safe_params: [position, token, expected]}
+  QUERY_TYPE_ERROR: {http_status: 400, message_key: errors.telemetry.query_type, retryable: false, safe_params: [field, expected_type, actual_type]}
+  QUERY_FEATURE_UNSUPPORTED: {http_status: 400, message_key: errors.telemetry.query_feature_unsupported, retryable: false, safe_params: [feature]}
+  QUERY_COMPLEXITY_LIMIT: {http_status: 400, message_key: errors.telemetry.query_complexity_limit, retryable: false, safe_params: [limit]}
+  QUERY_SCOPE_DENIED: {http_status: 403, message_key: errors.telemetry.query_scope_denied, retryable: false}
   TELEMETRY_SIGNAL_FORBIDDEN: {http_status: 403, message_key: errors.telemetry.signal_forbidden, retryable: false}
   TELEMETRY_FIELD_FORBIDDEN: {http_status: 403, message_key: errors.telemetry.field_forbidden, retryable: false}
   TELEMETRY_DEPENDENCY_UNAVAILABLE: {http_status: 503, message_key: errors.telemetry.dependency_unavailable, retryable: true}
+  CLIENT_OPERATION_UNAVAILABLE: {http_status: 400, message_key: errors.client.operation_unavailable, retryable: false}
   TELEMETRY_DLQ_REPLAY_CONFLICT: {http_status: 409, message_key: errors.telemetry.dlq_replay_conflict, retryable: false}

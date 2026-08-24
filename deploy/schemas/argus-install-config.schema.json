@@ -6,45 +6,62 @@
   "additionalProperties": false,
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "properties": {
-    "apiVersion": {"const": "install.argus.io/v1alpha1"},
-    "kind": {"const": "ArgusInstallConfig"},
+    "apiVersion": { "const": "install.argus.io/v1alpha1" },
+    "kind": { "const": "ArgusInstallConfig" },
     "metadata": {
       "type": "object",
       "additionalProperties": false,
       "required": ["name"],
       "properties": {
-        "name": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"}
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        }
       }
     },
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profile", "kubeContext", "releaseId", "namespaces", "storageClass", "images", "exposure", "persistence", "cleanup"],
+      "required": [
+        "profile",
+        "kubeContext",
+        "releaseId",
+        "namespaces",
+        "storageClass",
+        "images",
+        "exposure",
+        "persistence",
+        "cleanup"
+      ],
       "properties": {
-        "profile": {"enum": ["evaluation", "local-hardening", "production"]},
-        "kubeContext": {"type": "string", "minLength": 1},
-        "releaseId": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"},
+        "profile": { "enum": ["evaluation", "local-hardening", "production"] },
+        "kubeContext": { "type": "string", "minLength": 1 },
+        "releaseId": {
+          "type": "string",
+          "maxLength": 34,
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        },
         "namespaces": {
           "type": "object",
           "additionalProperties": false,
           "required": ["system", "sandbox", "observability"],
           "properties": {
-            "system": {"type": "string", "minLength": 1},
-            "sandbox": {"type": "string", "minLength": 1},
-            "observability": {"type": "string", "minLength": 1}
+            "system": { "type": "string", "minLength": 1 },
+            "sandbox": { "type": "string", "minLength": 1 },
+            "observability": { "type": "string", "minLength": 1 }
           }
         },
-        "storageClass": {"type": "string", "minLength": 1},
+        "storageClass": { "type": "string", "minLength": 1 },
         "images": {
           "type": "object",
           "additionalProperties": false,
           "required": ["mode", "registry", "tag", "pullPolicy"],
           "properties": {
-            "mode": {"enum": ["local-registry", "oci-registry"]},
-            "registry": {"type": "string", "minLength": 1},
-            "tag": {"type": "string", "minLength": 1},
-            "pullPolicy": {"enum": ["Never", "IfNotPresent", "Always"]},
-            "pullSecretRef": {"type": "string"}
+            "mode": { "enum": ["local-registry", "oci-registry"] },
+            "registry": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "enum": ["Never", "IfNotPresent", "Always"] },
+            "pullSecretRef": { "type": "string" }
           }
         },
         "exposure": {
@@ -52,58 +69,78 @@
           "additionalProperties": false,
           "required": ["mode"],
           "properties": {
-            "mode": {"enum": ["port-forward", "ingress"]},
-            "ingressClassName": {"type": "string"},
-            "enterpriseHost": {"type": "string"},
-            "platformHost": {"type": "string"},
-            "setupHost": {"type": "string"},
-            "connectorHost": {"type": "string"}
+            "mode": { "enum": ["port-forward", "ingress"] },
+            "ingressClassName": { "type": "string" },
+            "enterpriseHost": { "type": "string" },
+            "platformHost": { "type": "string" },
+            "connectorHost": { "type": "string" }
           }
         },
         "security": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "platformMfaRequired": {"type": "boolean", "default": false}
+            "platformMfaRequired": { "type": "boolean", "default": false }
           }
         },
         "openSandbox": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "runtimeClassName": {"type": "string"},
-            "allowSharedRuntime": {"type": "boolean"}
+            "runtimeClassName": { "type": "string" },
+            "allowSharedRuntime": { "type": "boolean" }
           }
         },
         "telemetry": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["collectorVersion", "linuxArm64Uri", "linuxArm64Sha256", "linuxArm64Signature", "linuxArm64ByteSize", "signingKeyId", "signingPublicKey"],
+          "required": [
+            "collectorVersion",
+            "linuxArm64Uri",
+            "linuxArm64Sha256",
+            "linuxArm64Signature",
+            "linuxArm64ByteSize",
+            "signingKeyId",
+            "signingPublicKey"
+          ],
           "properties": {
-            "collectorVersion": {"type": "string", "minLength": 1},
-            "linuxArm64Uri": {"type": "string", "minLength": 1},
-            "linuxArm64Sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
-            "linuxArm64Signature": {"type": "string", "minLength": 1},
-            "linuxArm64ByteSize": {"type": "integer", "minimum": 1},
-            "windowsAmd64Uri": {"type": "string"},
-            "windowsAmd64Sha256": {"type": "string", "pattern": "^$|^[0-9a-fA-F]{64}$"},
-            "windowsAmd64Signature": {"type": "string"},
-            "windowsAmd64ByteSize": {"type": "integer", "minimum": 0},
-            "signingKeyId": {"type": "string", "minLength": 1},
-            "signingPublicKey": {"type": "string", "minLength": 1}
+            "collectorVersion": { "type": "string", "minLength": 1 },
+            "linuxArm64Uri": { "type": "string", "minLength": 1 },
+            "linuxArm64Sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{64}$"
+            },
+            "linuxArm64Signature": { "type": "string", "minLength": 1 },
+            "linuxArm64ByteSize": { "type": "integer", "minimum": 1 },
+            "windowsAmd64Uri": { "type": "string" },
+            "windowsAmd64Sha256": {
+              "type": "string",
+              "pattern": "^$|^[0-9a-fA-F]{64}$"
+            },
+            "windowsAmd64Signature": { "type": "string" },
+            "windowsAmd64ByteSize": { "type": "integer", "minimum": 0 },
+            "signingKeyId": { "type": "string", "minLength": 1 },
+            "signingPublicKey": { "type": "string", "minLength": 1 }
           }
         },
         "persistence": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["postgresql", "redis", "minio", "kafka", "clickhouse", "keeper"],
+          "required": [
+            "postgresql",
+            "redis",
+            "minio",
+            "kafka",
+            "clickhouse",
+            "keeper"
+          ],
           "properties": {
-            "postgresql": {"type": "string"},
-            "redis": {"type": "string"},
-            "minio": {"type": "string"},
-            "kafka": {"type": "string"},
-            "clickhouse": {"type": "string"},
-            "keeper": {"type": "string"}
+            "postgresql": { "type": "string" },
+            "redis": { "type": "string" },
+            "minio": { "type": "string" },
+            "kafka": { "type": "string" },
+            "clickhouse": { "type": "string" },
+            "keeper": { "type": "string" }
           }
         },
         "cleanup": {
@@ -111,8 +148,8 @@
           "additionalProperties": false,
           "required": ["retainData", "deleteOwnedCrds"],
           "properties": {
-            "retainData": {"type": "boolean"},
-            "deleteOwnedCrds": {"type": "boolean"}
+            "retainData": { "type": "boolean" },
+            "deleteOwnedCrds": { "type": "boolean" }
           }
         }
       }

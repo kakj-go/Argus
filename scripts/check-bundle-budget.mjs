@@ -4,8 +4,7 @@ import path from "node:path";
 const root = process.cwd();
 const kib = 1024;
 const apps = {
-  setup: 650 * kib,
-  platform: 750 * kib,
+  platform: 900 * kib,
   enterprise: 900 * kib,
   "card-runtime": 650 * kib,
 };

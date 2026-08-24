@@ -20,6 +20,10 @@ spec:
   isCA: true
   commonName: {{ .Values.releaseId }}-telemetry-root-ca
   secretName: {{ .Values.releaseId }}-telemetry-root-ca
+  secretTemplate:
+    labels:
+      app.kubernetes.io/part-of: argus
+      argus.io/release-id: {{ .Values.releaseId | quote }}
   duration: 87600h
   renewBefore: 8760h
   privateKey: {algorithm: ECDSA, size: 256}

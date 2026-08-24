@@ -2,13 +2,16 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
@@ -70,6 +73,38 @@ type TenantSchemaManager interface {
 	DropTenant(context.Context, uuid.UUID) error
 }
 
+type TenantSchemaStateStore interface {
+	GetEnterpriseTelemetryTables(context.Context, uuid.UUID) (db.EnterpriseTelemetryTable, error)
+	UpsertEnterpriseTelemetryTables(context.Context, db.UpsertEnterpriseTelemetryTablesParams) error
+}
+
+type TenantSchemaLocker interface {
+	WithTenantSchemaLock(context.Context, uuid.UUID, func() error) error
+}
+
+type PostgresTenantSchemaLocker struct{ Pool *pgxpool.Pool }
+
+func (locker PostgresTenantSchemaLocker) WithTenantSchemaLock(ctx context.Context, enterpriseID uuid.UUID, run func() error) error {
+	if locker.Pool == nil || enterpriseID == uuid.Nil || run == nil {
+		return ErrQueryBackend
+	}
+	connection, err := locker.Pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer connection.Release()
+	key := "argus:telemetry-tenant-schema:" + enterpriseID.String()
+	if _, err := connection.Exec(ctx, "SELECT pg_advisory_lock(hashtextextended($1, 0))", key); err != nil {
+		return err
+	}
+	defer func() {
+		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = connection.Exec(unlockCtx, "SELECT pg_advisory_unlock(hashtextextended($1, 0))", key)
+	}()
+	return run()
+}
+
 type ClickHouseTenantSchemaManager struct {
 	Conn   driver.Conn
 	Router TenantTableRouter
@@ -80,45 +115,65 @@ type ClickHouseTenantSchemaManager struct {
 // and writer processes never need ClickHouse DDL credentials.
 type TenantSchemaLifecycle struct {
 	Manager TenantSchemaManager
-	Queries *db.Queries
+	Queries TenantSchemaStateStore
+	Locker  TenantSchemaLocker
 }
 
 func (lifecycle TenantSchemaLifecycle) EnsureTenantSchema(ctx context.Context, enterpriseID uuid.UUID) error {
-	if lifecycle.Manager == nil || lifecycle.Queries == nil || enterpriseID == uuid.Nil {
+	if lifecycle.Manager == nil || lifecycle.Queries == nil || lifecycle.Locker == nil || enterpriseID == uuid.Nil {
 		return ErrQueryBackend
 	}
-	if err := lifecycle.record(ctx, enterpriseID, "pending", pgtype.Timestamptz{}, pgtype.Text{}); err != nil {
-		return err
-	}
-	if err := lifecycle.Manager.EnsureTenant(ctx, enterpriseID); err != nil {
-		lifecycle.recordError(ctx, enterpriseID, err)
-		return err
-	}
-	if err := lifecycle.Manager.VerifyTenant(ctx, enterpriseID); err != nil {
-		_ = lifecycle.Manager.DropTenant(ctx, enterpriseID)
-		lifecycle.recordError(ctx, enterpriseID, err)
-		return err
-	}
-	if err := lifecycle.record(ctx, enterpriseID, "ready", pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}, pgtype.Text{}); err != nil {
-		_ = lifecycle.Manager.DropTenant(ctx, enterpriseID)
-		lifecycle.recordError(ctx, enterpriseID, err)
-		return err
-	}
-	return nil
+	return lifecycle.Locker.WithTenantSchemaLock(ctx, enterpriseID, func() error {
+		current, err := lifecycle.Queries.GetEnterpriseTelemetryTables(ctx, enterpriseID)
+		if err == nil && current.SchemaVersion == int32(TelemetrySchemaVersion) && current.Status == "ready" {
+			if verifyErr := lifecycle.Manager.VerifyTenant(ctx, enterpriseID); verifyErr == nil {
+				return nil
+			}
+		} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if err := lifecycle.record(ctx, enterpriseID, "pending", pgtype.Timestamptz{}, pgtype.Text{}); err != nil {
+			return err
+		}
+		if err := lifecycle.Manager.EnsureTenant(ctx, enterpriseID); err != nil {
+			lifecycle.recordError(ctx, enterpriseID, err)
+			return err
+		}
+		if err := lifecycle.Manager.VerifyTenant(ctx, enterpriseID); err != nil {
+			_ = lifecycle.Manager.DropTenant(ctx, enterpriseID)
+			lifecycle.recordError(ctx, enterpriseID, err)
+			return err
+		}
+		if err := lifecycle.record(ctx, enterpriseID, "ready", pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}, pgtype.Text{}); err != nil {
+			_ = lifecycle.Manager.DropTenant(ctx, enterpriseID)
+			lifecycle.recordError(ctx, enterpriseID, err)
+			return err
+		}
+		return nil
+	})
 }
 
 func (lifecycle TenantSchemaLifecycle) DropTenantSchema(ctx context.Context, enterpriseID uuid.UUID) error {
-	if lifecycle.Manager == nil || lifecycle.Queries == nil || enterpriseID == uuid.Nil {
+	if lifecycle.Manager == nil || lifecycle.Queries == nil || lifecycle.Locker == nil || enterpriseID == uuid.Nil {
 		return ErrQueryBackend
 	}
-	if err := lifecycle.record(ctx, enterpriseID, "deleting", pgtype.Timestamptz{}, pgtype.Text{}); err != nil {
-		return err
-	}
-	if err := lifecycle.Manager.DropTenant(ctx, enterpriseID); err != nil {
-		lifecycle.recordError(ctx, enterpriseID, err)
-		return err
-	}
-	return nil
+	return lifecycle.Locker.WithTenantSchemaLock(ctx, enterpriseID, func() error {
+		current, err := lifecycle.Queries.GetEnterpriseTelemetryTables(ctx, enterpriseID)
+		if err == nil && current.SchemaVersion == int32(TelemetrySchemaVersion) && current.Status == "deleting" {
+			return nil
+		}
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if err := lifecycle.record(ctx, enterpriseID, "deleting", pgtype.Timestamptz{}, pgtype.Text{}); err != nil {
+			return err
+		}
+		if err := lifecycle.Manager.DropTenant(ctx, enterpriseID); err != nil {
+			lifecycle.recordError(ctx, enterpriseID, err)
+			return err
+		}
+		return nil
+	})
 }
 
 func (lifecycle TenantSchemaLifecycle) record(ctx context.Context, enterpriseID uuid.UUID, status string, readyAt pgtype.Timestamptz, lastError pgtype.Text) error {

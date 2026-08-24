@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { TaskStatus, TaskType, TaskViewModel } from "@argus/api-client/provisional";
+import type {
+  TaskStatus,
+  TaskType,
+  TaskViewModel,
+} from "@argus/api-client/provisional";
 import {
+  formatApiError,
   useApi,
   type ActionOneTimeResult,
   type Execution,
@@ -57,7 +62,9 @@ function ExecutionsPage() {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
-  const [claimingExecution, setClaimingExecution] = useState<string | null>(null);
+  const [claimingExecution, setClaimingExecution] = useState<string | null>(
+    null,
+  );
   const [oneTimeResult, setOneTimeResult] =
     useState<ActionOneTimeResult | null>(null);
   const [claimError, setClaimError] = useState("");
@@ -88,7 +95,9 @@ function ExecutionsPage() {
       await queryClient.invalidateQueries({ queryKey: ["executions"] });
     } catch (error) {
       setClaimError(
-        error instanceof Error ? error.message : t("governance.tasks.claimFailed"),
+        formatApiError(error, t("governance.tasks.claimFailed"), (requestId) =>
+          t("common.requestReference", { requestId }),
+        ),
       );
     } finally {
       setClaimingExecution(null);
@@ -100,7 +109,10 @@ function ExecutionsPage() {
       title={t("governance.tasks.title")}
     >
       <div className="argus-gov-stats">
-        <StatCard label={t("governance.tasks.stats.today")} value={items.length} />
+        <StatCard
+          label={t("governance.tasks.stats.today")}
+          value={items.length}
+        />
         <StatCard
           label={t("governance.tasks.stats.successRate")}
           value={successRate === null ? "—" : `${successRate}%`}
@@ -124,8 +136,14 @@ function ExecutionsPage() {
       ) : (
         <DataTable<Execution & Record<string, unknown>>
           columns={[
-            { key: "execution_id", header: "Execution ID" },
-            { key: "action_ref", header: "Action Ref" },
+            {
+              key: "execution_id",
+              header: t("governance.tasks.columns.executionId"),
+            },
+            {
+              key: "action_ref",
+              header: t("governance.tasks.columns.actionRef"),
+            },
             {
               key: "status",
               header: t("governance.tasks.columns.status"),
@@ -138,7 +156,10 @@ function ExecutionsPage() {
                 </StatusBadge>
               ),
             },
-            { key: "result_ref", header: "Result Ref" },
+            {
+              key: "result_ref",
+              header: t("governance.tasks.columns.resultRef"),
+            },
             { key: "error_code", header: t("automations.errorCode") },
             {
               key: "one_time_result_available",
@@ -190,7 +211,9 @@ function ExecutionsPage() {
         </section>
       )}
       <Button
-        onClick={() => queryClient.invalidateQueries({ queryKey: ["executions"] })}
+        onClick={() =>
+          queryClient.invalidateQueries({ queryKey: ["executions"] })
+        }
         variant="secondary"
       >
         {t("governance.tasks.refresh")}

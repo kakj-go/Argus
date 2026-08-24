@@ -6,6 +6,8 @@ export const commonZh = {
   common: {
     loading: "加载中…",
     retry: "重试",
+    cancel: "取消",
+    requestReference: "请求 ID：{{requestId}}",
     underConstruction: {
       title: "建设中",
       description: "该页面正在建设中，敬请期待。",
@@ -68,6 +70,8 @@ export const commonEn = {
   common: {
     loading: "Loading…",
     retry: "Retry",
+    cancel: "Cancel",
+    requestReference: "Request ID: {{requestId}}",
     underConstruction: {
       title: "Under construction",
       description: "This page is under construction. Stay tuned.",
@@ -106,7 +110,7 @@ export const commonEn = {
       eyebrow: "Enterprise governance",
       title: "Enterprise Administration",
       description:
-        "Models, Agents, 交互卡片s, authorization, and audit with immutable configuration revisions.",
+        "Models, agents, interactive cards, authorization, and audit with immutable configuration revisions.",
     },
   },
   demo: {

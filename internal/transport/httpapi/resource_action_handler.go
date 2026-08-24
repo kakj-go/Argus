@@ -40,7 +40,9 @@ func (handler ConnectionHandler) auth(ctx context.Context) (identity.Principal, 
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &connectionapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &connectionapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]connectionapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 type ResourceActionHandler struct {
@@ -155,7 +157,9 @@ func (handler ResourceActionHandler) auth(ctx context.Context, mutation bool, cs
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &actionapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &actionapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]actionapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func emptyActionPage() actionapi.CursorPage {
@@ -163,16 +167,22 @@ func emptyActionPage() actionapi.CursorPage {
 }
 
 func actionError(ctx context.Context, err error) actionapi.ApiError {
-	base := hostError(ctx, err)
+	base := hostErrorBase(ctx, err)
+	defer func() { logMappedError(ctx, base.Code, err) }()
 	if errors.Is(err, resource.ErrActionUnavailable) {
 		base.Code, base.MessageKey = "ACTION_STATE_CONFLICT", "errors.actions.state_conflict"
 	} else if errors.Is(err, actionservice.ErrStepUpRequired) {
 		base.Code, base.MessageKey = "STEP_UP_REQUIRED", "errors.identity.step_up_required"
 	}
-	return actionapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	return actionapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]actionapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }
 
 func connectionError(ctx context.Context, err error) connectionapi.ApiError {
-	base := hostError(ctx, err)
-	return connectionapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	base := hostErrorBase(ctx, err)
+	logMappedError(ctx, base.Code, err)
+	return connectionapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]connectionapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }

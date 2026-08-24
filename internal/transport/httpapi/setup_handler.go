@@ -325,8 +325,16 @@ func sessionCookieName(audience string) string { return "argus_" + audience + "_
 func csrfCookieName(audience string) string    { return "argus_" + audience + "_csrf" }
 
 func setupError(ctx context.Context, err error) setupapi.ApiError {
+	result := setupErrorBase(ctx, err)
+	logMappedError(ctx, result.Code, err)
+	return result
+}
+
+func setupErrorBase(ctx context.Context, err error) setupapi.ApiError {
 	code, key := "INTERNAL_ERROR", "errors.common.internal"
 	retryable := false
+	var message *string
+	var params *map[string]setupapi.ApiError_Params_AdditionalProperties
 	switch {
 	case errors.Is(err, platform.ErrAlreadyInitialized):
 		code, key = "SETUP_ALREADY_INITIALIZED", "errors.setup.already_initialized"
@@ -340,6 +348,9 @@ func setupError(ctx context.Context, err error) setupapi.ApiError {
 		code, key = "INVALID_CREDENTIALS", "errors.auth.invalid_credentials"
 	case errors.Is(err, identity.ErrWeakPassword):
 		code, key = "PASSWORD_WEAK", "errors.auth.password_weak"
+		if rule, ok := identity.PasswordRuleFromError(err); ok {
+			key, message, params = passwordPolicyErrorDetails(ctx, rule)
+		}
 	case errors.Is(err, identity.ErrTemporaryExpired):
 		code, key = "TEMPORARY_CREDENTIAL_EXPIRED", "errors.auth.temporary_credential_expired"
 	case errors.Is(err, identity.ErrLoginRateLimited):
@@ -383,7 +394,47 @@ func setupError(ctx context.Context, err error) setupapi.ApiError {
 	if metadata, ok := RequestFromContext(ctx); ok {
 		requestID = metadata.RequestID
 	}
-	return setupapi.ApiError{Code: code, MessageKey: key, RequestId: requestID, Retryable: &retryable}
+	return setupapi.ApiError{Code: code, Message: message, MessageKey: key, Params: params, RequestId: requestID, Retryable: &retryable}
+}
+
+func passwordPolicyErrorDetails(ctx context.Context, rule identity.PasswordRule) (string, *string, *map[string]setupapi.ApiError_Params_AdditionalProperties) {
+	key := "errors.auth.password_weak"
+	messages := map[identity.PasswordRule][2]string{
+		identity.PasswordRuleMinLength:      {"密码至少需要 12 个字符", "The password must contain at least 12 characters."},
+		identity.PasswordRuleMaxLength:      {"密码不能超过 1024 个字符", "The password must not exceed 1024 characters."},
+		identity.PasswordRuleLetterRequired: {"密码必须包含至少一个字母", "The password must contain at least one letter."},
+		identity.PasswordRuleDigitRequired:  {"密码必须包含至少一个数字", "The password must contain at least one number."},
+		identity.PasswordRuleCommon:         {"该密码过于常见，请使用其他密码", "This password is too common. Choose a different password."},
+		identity.PasswordRuleIdentity:       {"密码不能包含用户名或邮箱账号部分", "The password must not contain the username or email account name."},
+		identity.PasswordRuleReused:         {"新密码不能与当前或临时密码相同", "The new password must differ from the current or temporary password."},
+	}
+	localized := messages[rule][0]
+	if LocaleFromContext(ctx) == "en-US" {
+		localized = messages[rule][1]
+	}
+	values := map[string]setupapi.ApiError_Params_AdditionalProperties{
+		"field": setupStringErrorParam("password"),
+		"rule":  setupStringErrorParam(string(rule)),
+	}
+	if rule == identity.PasswordRuleMinLength {
+		values["min_length"] = setupNumberErrorParam(identity.PasswordMinLength)
+	}
+	if rule == identity.PasswordRuleMaxLength {
+		values["max_length"] = setupNumberErrorParam(identity.PasswordMaxLength)
+	}
+	return key, &localized, &values
+}
+
+func setupStringErrorParam(value string) setupapi.ApiError_Params_AdditionalProperties {
+	var result setupapi.ApiError_Params_AdditionalProperties
+	_ = result.FromApiErrorParams0(value)
+	return result
+}
+
+func setupNumberErrorParam(value int) setupapi.ApiError_Params_AdditionalProperties {
+	var result setupapi.ApiError_Params_AdditionalProperties
+	_ = result.FromApiErrorParams1(float32(value))
+	return result
 }
 
 func authStatus(err error) int {

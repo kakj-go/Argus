@@ -7,6 +7,7 @@ import { dashboardEn, dashboardZh } from "./dashboard";
 import { enterprisesEn, enterprisesZh } from "./enterprises";
 import { loginEn, loginZh } from "./login";
 import { sandboxEn, sandboxZh } from "./sandbox";
+import { setupEn, setupZh } from "./setup";
 import { shellEn, shellZh } from "./shell";
 
 function keys(value: unknown, prefix = ""): string[] {
@@ -26,6 +27,7 @@ const modules = [
   ["sandbox", sandboxZh, sandboxEn],
   ["audit", auditZh, auditEn],
   ["account", accountZh, accountEn],
+  ["setup", setupZh, setupEn],
 ] as const;
 
 describe("platform i18n", () => {

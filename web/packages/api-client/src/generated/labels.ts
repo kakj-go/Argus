@@ -22,8 +22,8 @@ export interface components {
             requirements: components["schemas"]["LabelRequirement"][];
         };
         UserLabelKey: string;
-        SystemLabelKey: string;
         LabelValue: string;
+        SystemLabelKey: string;
         LabelRequirement: {
             key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
             /** @constant */

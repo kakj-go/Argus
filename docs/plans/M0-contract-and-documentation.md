@@ -40,8 +40,8 @@
 
 - OpenAPI、JSON Schema、protobuf 和语义注册表位于 `api/`，生成 Go/TypeScript 以九个领域包拆分，protobuf 按服务域拆分，产物均可独立编译。
 - PendingAction 公共 DTO、生命周期记录、不可变计划记录和私有 Token Record 使用独立权威 Schema；浏览器生成入口不引用后三者。
-- `make contract-lint` 校验 OpenAPI、protobuf、Schema Fixture、安全投影、状态机和旧契约基线。
-- `make contract-check` 验证代码生成幂等，`make contract-breaking` 对比 `origin/main`；首次合并建立基线。
+- `go run ./cmd/argus-dev contracts lint` 校验 OpenAPI、protobuf、Schema Fixture、安全投影、状态机和旧契约基线。
+- `go run ./cmd/argus-dev contracts check` 验证代码生成幂等，`go run ./cmd/argus-dev contracts breaking` 对比 `origin/main`；首次合并建立基线。
 - 公开 TypeScript 契约不包含 PendingAction 私有计划/Token、ActionBinding 内部记录或 Worker Lease/Fence 字段。
 
 ## 测试

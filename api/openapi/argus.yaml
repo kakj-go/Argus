@@ -409,6 +409,10 @@ components:
       $ref: ../schemas/labels/labels.schema.json#/$defs/UserLabelUpdate
     LabelSelector:
       $ref: ../schemas/labels/labels.schema.json#/$defs/LabelSelector
+    UserLabelKey:
+      $ref: ../schemas/labels/labels.schema.json#/$defs/UserLabelKey
+    LabelValue:
+      $ref: ../schemas/labels/labels.schema.json#/$defs/LabelValue
     PendingActionPublic:
       $ref: ../schemas/action/pending-action-public.schema.json
     ActionBinding:

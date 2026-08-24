@@ -70,16 +70,16 @@ components:
       minLength: 1
       maxLength: 63
       pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-    SystemLabelKey:
-      type: string
-      maxLength: 72
-      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-      readOnly: true
     LabelValue:
       type: string
       minLength: 1
       maxLength: 63
       pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
+    SystemLabelKey:
+      type: string
+      maxLength: 72
+      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
+      readOnly: true
     LabelRequirement:
       oneOf:
         - type: object

@@ -125,7 +125,7 @@ func (sink SlogAuditSink) Record(_ context.Context, event AuditEvent) error {
 // only its SHA-256 digest and bounded execution metadata are persisted.
 type PersistentAuditSink struct {
 	Store interface {
-		InTx(context.Context, func(*postgresdb.Queries) error) error
+		InReadCommittedTx(context.Context, func(*postgresdb.Queries) error) error
 	}
 	Logger *slog.Logger
 }
@@ -166,7 +166,7 @@ func (sink PersistentAuditSink) record(ctx context.Context, event AuditEvent) er
 	if !event.Success {
 		result = "failure"
 	}
-	return sink.Store.InTx(ctx, func(queries *postgresdb.Queries) error {
+	return sink.Store.InReadCommittedTx(ctx, func(queries *postgresdb.Queries) error {
 		if err := audit.InitializeChain(ctx, queries, "enterprise", enterpriseID); err != nil {
 			return err
 		}

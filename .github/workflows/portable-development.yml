@@ -1,0 +1,54 @@
+name: Portable development gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.1.0
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: go run ./cmd/argus-dev doctor portable --output json
+      - run: go test ./internal/app/argusdev ./internal/app/argusctl ./cmd/argus-dev
+      - run: go run ./cmd/argus-dev contracts lint
+      - run: go run ./cmd/argus-dev contracts check
+      - run: go run ./cmd/argus-dev check query-parsers
+      - run: go test ./...
+      - run: go run ./cmd/argus-dev web build --api-mode mock
+      - run: go run ./cmd/argus-dev web build --api-mode real
+      - run: go run ./cmd/argusctl plan --config deploy/profiles/evaluation.yaml --output json
+      - run: helm lint deploy/helm/argus-foundation
+      - run: helm lint deploy/helm/argus-data-operators
+      - run: helm lint deploy/helm/argus-data
+      - run: helm lint deploy/helm/argus-sandbox
+      - run: helm lint deploy/helm/argus-platform
+      - run: helm lint deploy/helm/argus-telemetry-pipeline
+      - run: helm lint tests/e2e/helm/argus-e2e-fixtures
+      - run: helm template argus-e2e tests/e2e/helm/argus-e2e-fixtures
+      - run: git diff --check

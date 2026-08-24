@@ -42,19 +42,19 @@
 - PromQL Native Histogram、Summary 已接入 Storage Adapter；QueryMeta 通过 ClickHouse driver progress callback 累积真实 scanned rows/bytes，并同时记录 Engine SamplesRead。
 - KQL 仍是 Argus 受控子集，不承诺 Elasticsearch/Loki 全量兼容；pattern 只提供字面量捕获，不提供脚本和任意正则。
 - SkyWalking GraphQL 仍是固定只读 Trace Schema，不实现 OAP Topology、Metrics Query 和任意关系闭包；当前 SDL 只承诺 Argus 支持的 `queryBasicTraces`、`queryBasicTracesByName`、`queryTraces`、`queryTrace` 以及 bounded spans/edges 投影。
-- Kubernetes 集群环境依赖外部运行时；`scripts/e2e-m10-query-k8s.sh` 同时提供真实路径和显式 `ARGUS_E2E_M10_UNIT_ONLY=1` 的单元门禁路径。
+- Kubernetes 集群环境依赖外部运行时；`go run ./cmd/argus-dev e2e run --suite m10-query` 运行真实路径，`--unit-only` 显式运行不创建集群资源的轻量门禁。
 
 ## 验证
 
 ```text
 go test ./...
-make vet
-make contract-check
-make query-promql-conformance
-make query-kql-check
-make query-skywalking-graphql-check
-make query-tenant-schema-check
-make e2e-m10-query-k8s
+go run ./cmd/argus-dev repo vet
+go run ./cmd/argus-dev contracts check
+go run ./cmd/argus-dev query promql
+go run ./cmd/argus-dev query kql
+go run ./cmd/argus-dev query skywalking
+go run ./cmd/argus-dev query tenant-schema
+go run ./cmd/argus-dev e2e run --suite m10-query
 ```
 
 截至 2026-08-22，代码、契约、Parser lock、语言门禁、全量 Go 测试和锁定版 ClickHouse `26.3.17.110-alpine` 差分测试均已通过。差分覆盖 Instant/Range、`sum by`、vector matching、`group_left`、counter reset、`_over_time`、subquery、`offset` 和 `@`，并验证真实 scanned rows/bytes；Schema 漂移测试验证缺列会阻断 readiness。三种独立 wire format、固定 SDL 和 `MaxSeries` 收口后的 Kubernetes E2E 成功运行号为 `20260822063330-17805`，覆盖 PromQL/KQL/SkyWalking GraphQL、企业同步建表与 readiness、Native Histogram/Summary、Trace spans/edges、Query Audit、租户隔离、Writer backlog/DLQ、Redis/PostgreSQL 恢复、权限/预算/脱敏和四种 locale/theme 的真实 Web 查询。运行结束后三个临时 Namespace、相关 PVC 和 E2E Lease 均为零残留。

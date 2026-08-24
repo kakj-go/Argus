@@ -199,7 +199,9 @@ func (handler ConnectorHandler) auth(ctx context.Context, mutation bool, csrf, p
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &connectorapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &connectorapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]connectorapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 type bastionRow interface {
@@ -277,7 +279,8 @@ func emptyConnectorPage() connectorapi.CursorPage {
 }
 
 func connectorError(ctx context.Context, err error) connectorapi.ApiError {
-	base := hostError(ctx, err)
+	base := hostErrorBase(ctx, err)
+	defer func() { logMappedError(ctx, base.Code, err) }()
 	switch {
 	case errors.Is(err, connector.ErrEnrollmentInvalid):
 		base.Code, base.MessageKey = "CONNECTOR_ENROLLMENT_INVALID", "errors.connector.enrollment_invalid"
@@ -288,7 +291,9 @@ func connectorError(ctx context.Context, err error) connectorapi.ApiError {
 	case errors.Is(err, connector.ErrCommandState), errors.Is(err, connector.ErrBastionState):
 		base.Code, base.MessageKey = "CONNECTOR_COMMAND_STATE_CONFLICT", "errors.connector.state_conflict"
 	}
-	return connectorapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	return connectorapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]connectorapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }
 
 func connectorStatus(err error) int {

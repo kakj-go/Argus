@@ -801,7 +801,7 @@ function CollectorCard({
           )}
           {routeEditing && !routeAction && (
             <>
-              <Field label={t("hosts.components.installed.route")}>
+              <Field requirement="optional" label={t("hosts.components.installed.route")}>
                 <Select
                   onValueChange={(value) => {
                     setRouteChoice(value);

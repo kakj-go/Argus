@@ -3,6 +3,7 @@ package argusctl
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -17,6 +18,21 @@ func TestLoadEvaluationConfig(t *testing.T) {
 	}
 	if cfg.Spec.Profile != "evaluation" || cfg.Image("argus-web") != "host.docker.internal:5001/argus/argus-web:dev" {
 		t.Fatalf("unexpected config: %#v", cfg.Spec)
+	}
+}
+
+func TestConfigRejectsReleaseIDThatCannotFitHelmStageSuffix(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "evaluation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Spec.ReleaseID = strings.Repeat("a", 35)
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "34 characters") {
+		t.Fatalf("Validate() error = %v, want release ID length error", err)
 	}
 }
 

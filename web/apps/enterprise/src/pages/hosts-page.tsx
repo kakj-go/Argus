@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Pencil, TerminalSquare, Trash2 } from "lucide-react";
 import {
+  formatApiError,
   useApi,
   type BastionScope,
   type Connector,
@@ -214,7 +215,9 @@ export function HostsPage() {
     () => connectorsQuery.data?.items ?? [],
     [connectorsQuery.data],
   );
-  const activeSessions = (activeSessionsQuery.data?.items ?? []).filter((session) => session.status === "active");
+  const activeSessions = (activeSessionsQuery.data?.items ?? []).filter(
+    (session) => session.status === "active",
+  );
 
   const invalidateAll = () => {
     void queryClient.invalidateQueries({ queryKey: ["hosts"] });
@@ -308,9 +311,9 @@ export function HostsPage() {
       setDeleteBastion(null);
     } catch (error) {
       setDeleteBastionError(
-        error instanceof Error
-          ? error.message
-          : t("hosts.bastionDelete.failed"),
+        formatApiError(error, t("hosts.bastionDelete.failed"), (requestId) =>
+          t("common.requestReference", { requestId }),
+        ),
       );
     } finally {
       setDeletingBastion(false);
@@ -381,8 +384,8 @@ export function HostsPage() {
           const members = membersOf(scope);
           const bastionHost = bastionHostOf(scope);
           const connector = connectorOf(scope);
-          const sessionCount = activeSessions.filter(
-            (session) => members.some((host) => host.id === session.host_id),
+          const sessionCount = activeSessions.filter((session) =>
+            members.some((host) => host.id === session.host_id),
           ).length;
 
           if (scope.status === "pending") {

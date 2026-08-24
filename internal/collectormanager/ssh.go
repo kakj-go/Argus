@@ -100,13 +100,18 @@ func (manager Manager) ApplySSH(ctx context.Context, command *connectorv1.Collec
 	if err = runSSH(client, "umask 077; cat > /etc/systemd/system/argus-otelcol.service", unit); err != nil {
 		return Result{}, err
 	}
-	activate := "rm -rf " + directory + "/release/*; tar -xzf " + directory + "/artifact.tar.gz -C " + directory +
-		"/release; test -x " + directory + "/release/argus-otelcol; install -m 0755 " + directory +
-		"/release/argus-otelcol /usr/local/bin/argus-otelcol; systemctl daemon-reload; systemctl enable --now argus-otelcol.service; systemctl is-active --quiet argus-otelcol.service"
+	activate := sshActivateCommand(directory)
 	if err = runSSH(client, activate, nil); err != nil {
 		return Result{}, err
 	}
 	return sshResult(command, "converged"), nil
+}
+
+func sshActivateCommand(directory string) string {
+	return "rm -rf " + directory + "/release/*; tar -xzf " + directory + "/artifact.tar.gz -C " + directory +
+		"/release; test -x " + directory + "/release/argus-otelcol; install -m 0755 " + directory +
+		"/release/argus-otelcol /usr/local/bin/argus-otelcol; systemctl daemon-reload; systemctl enable --now argus-otelcol.service; " +
+		"systemctl is-active --quiet argus-otelcol.service; sleep 2; systemctl is-active --quiet argus-otelcol.service"
 }
 
 func sshAuthentication(value []byte) (ssh.AuthMethod, error) {

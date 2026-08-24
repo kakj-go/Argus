@@ -63,6 +63,9 @@ export const chatZh = {
       success: "执行成功",
       failed: "执行失败",
       action: "卡片操作",
+      actions: {
+        confirm: "确认",
+      },
     },
     composer: {
       placeholder: "询问资源状态，或描述你想完成的运维任务…",
@@ -183,6 +186,9 @@ export const chatEn = {
       success: "Succeeded",
       failed: "Failed",
       action: "Card action",
+      actions: {
+        confirm: "Confirm",
+      },
     },
     composer: {
       placeholder: "Ask about resource health or describe an operations task…",

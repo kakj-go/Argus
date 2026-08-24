@@ -6,19 +6,19 @@ const platformPassword = process.env.ARGUS_M2_PLATFORM_PASSWORD ?? "";
 const platformMfaCode = process.env.ARGUS_M2_PLATFORM_MFA_CODE ?? "";
 const enterpriseUsername = process.env.ARGUS_M2_ENTERPRISE_USERNAME ?? "";
 const enterprisePassword = process.env.ARGUS_M2_ENTERPRISE_PASSWORD ?? "";
+const enterpriseMfaCode = process.env.ARGUS_M2_ENTERPRISE_MFA_CODE ?? "";
 
 test.describe("M2 real identity flow", () => {
   test.skip(!enabled, "M2 Kubernetes environment is not active");
   test.describe.configure({ mode: "serial" });
 
-  test("setup portal is permanently locked after initialization", async ({
+  test("platform setup route is locked after initialization", async ({
     page,
   }) => {
-    await page.goto("http://127.0.0.1:4175/");
+    await page.goto("http://127.0.0.1:4174/setup");
+    await expect(page).toHaveURL("http://127.0.0.1:4174/login");
     await expect(page.locator('input[type="password"]')).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: /前往登录|Go to sign in/ }),
-    ).toBeVisible();
+    await expect(page.locator('input[autocomplete="username"]')).toBeVisible();
   });
 
   test("platform portal authenticates against the real audience", async ({
@@ -43,6 +43,7 @@ test.describe("M2 real identity flow", () => {
       "http://127.0.0.1:4173/login",
       enterpriseUsername,
       enterprisePassword,
+      enterpriseMfaCode,
     );
     await expect(page).not.toHaveURL(/\/login/);
     await page.reload();
@@ -68,7 +69,9 @@ async function login(
   await page.locator('form button[type="submit"]').click();
   const mfaInput = page.locator('input[autocomplete="one-time-code"]');
   await expect
-    .poll(async () => (await mfaInput.isVisible()) || !/\/login/.test(page.url()))
+    .poll(
+      async () => (await mfaInput.isVisible()) || !/\/login/.test(page.url()),
+    )
     .toBe(true);
   if (await mfaInput.isVisible()) {
     expect(mfaCode).not.toBe("");

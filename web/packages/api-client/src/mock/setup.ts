@@ -39,6 +39,8 @@ export function createSetupDomain(ctx: MockContext): ArgusApiClient["setup"] {
         enterpriseId: null,
         actorUserId: admin.id,
         actorName: admin.displayName,
+        actorType: "platform_user",
+        actorUsername: admin.username,
         action: "setup.initialize",
         origin: "platform_ui",
         summary: "平台初始化完成",

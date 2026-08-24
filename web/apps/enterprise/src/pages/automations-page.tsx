@@ -5,7 +5,12 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { z } from "zod";
-import { useApi, type Automation, type AutomationWrite } from "@argus/api-client";
+import {
+  formConstraint,
+  useApi,
+  type Automation,
+  type AutomationWrite,
+} from "@argus/api-client";
 import {
   Button,
   DataTable,
@@ -36,14 +41,26 @@ const toolIds = [
   "kubernetes.cluster.delete.preview",
 ] as const;
 
+const automationConstraints = {
+  cron: formConstraint("AutomationWrite", "cron"),
+  name: formConstraint("AutomationWrite", "name"),
+  timezone: formConstraint("AutomationWrite", "timezone"),
+};
+
 const automationSchema = z.object({
-  name: z.string().trim().min(1).max(128),
+  name: z
+    .string()
+    .trim()
+    .min(automationConstraints.name.minLength ?? 1)
+    .max(automationConstraints.name.maxLength ?? 128),
   service_account_id: z.string().uuid(),
   tool_id: z.enum(toolIds),
   tool_input: z.string().refine((value) => {
     try {
       const parsed: unknown = JSON.parse(value);
-      return Boolean(parsed) && typeof parsed === "object" && !Array.isArray(parsed);
+      return (
+        Boolean(parsed) && typeof parsed === "object" && !Array.isArray(parsed)
+      );
     } catch {
       return false;
     }
@@ -51,8 +68,14 @@ const automationSchema = z.object({
   cron: z
     .string()
     .trim()
+    .min(automationConstraints.cron.minLength ?? 1)
+    .max(automationConstraints.cron.maxLength ?? 128)
     .refine((value) => value.split(/\s+/).length === 5),
-  timezone: z.string().trim().min(1).max(128),
+  timezone: z
+    .string()
+    .trim()
+    .min(automationConstraints.timezone.minLength ?? 1)
+    .max(automationConstraints.timezone.maxLength ?? 128),
 });
 
 type AutomationForm = z.infer<typeof automationSchema>;
@@ -112,7 +135,9 @@ export function AutomationsPage() {
                 key: "status",
                 header: t("automations.status"),
                 render: (item) => (
-                  <StatusBadge tone={item.status === "enabled" ? "success" : "neutral"}>
+                  <StatusBadge
+                    tone={item.status === "enabled" ? "success" : "neutral"}
+                  >
                     {t(`automations.states.${item.status}`)}
                   </StatusBadge>
                 ),
@@ -122,10 +147,18 @@ export function AutomationsPage() {
                 header: t("automations.actions"),
                 render: (item) => (
                   <span className="argus-ai-actions">
-                    <Button onClick={() => setSelected(item)} size="sm" variant="ghost">
+                    <Button
+                      onClick={() => setSelected(item)}
+                      size="sm"
+                      variant="ghost"
+                    >
                       {t("automations.runs")}
                     </Button>
-                    <Button onClick={() => setEditing(item)} size="sm" variant="ghost">
+                    <Button
+                      onClick={() => setEditing(item)}
+                      size="sm"
+                      variant="ghost"
+                    >
                       {t("automations.edit")}
                     </Button>
                     <Button
@@ -141,7 +174,11 @@ export function AutomationsPage() {
                 ),
               },
             ]}
-            data={(automations.data ?? []) as Array<Automation & Record<string, unknown>>}
+            data={
+              (automations.data ?? []) as Array<
+                Automation & Record<string, unknown>
+              >
+            }
             getRowKey={(item) => item.id}
           />
         )}
@@ -188,7 +225,8 @@ function AutomationDrawer({
     defaultValues: {
       name: automation?.name ?? "",
       service_account_id: automation?.service_account_id ?? "",
-      tool_id: (automation?.tool_id as AutomationForm["tool_id"]) ?? "host.list",
+      tool_id:
+        (automation?.tool_id as AutomationForm["tool_id"]) ?? "host.list",
       tool_input: JSON.stringify(automation?.tool_input ?? {}, null, 2),
       cron: automation?.cron ?? "0 * * * *",
       timezone: automation?.timezone ?? "Asia/Shanghai",
@@ -223,30 +261,46 @@ function AutomationDrawer({
       onSubmit={form.handleSubmit((value) => save.mutate(value))}
       open
       submitLabel={t("automations.save")}
-      title={automation ? t("automations.editTitle") : t("automations.createTitle")}
+      title={
+        automation ? t("automations.editTitle") : t("automations.createTitle")
+      }
     >
       <div className="argus-settings-form">
-        <Field error={errors.name?.message} label={t("automations.name")}>
-          <Input {...form.register("name")} />
+        <Field
+          requirement="required"
+          error={errors.name?.message}
+          label={t("automations.name")}
+        >
+          <Input
+            {...form.register("name")}
+            maxLength={automationConstraints.name.maxLength}
+          />
         </Field>
         <Field
+          requirement="required"
           error={errors.service_account_id?.message}
           label={t("automations.serviceAccount")}
         >
           <Select
             onValueChange={(value) =>
-              form.setValue("service_account_id", value, { shouldValidate: true })
+              form.setValue("service_account_id", value, {
+                shouldValidate: true,
+              })
             }
             options={[
               { value: "", label: t("automations.selectAccount") },
               ...(accounts.data ?? [])
-              .filter((item) => item.status === "active")
-              .map((item) => ({ value: item.id, label: item.name })),
+                .filter((item) => item.status === "active")
+                .map((item) => ({ value: item.id, label: item.name })),
             ]}
             value={form.watch("service_account_id")}
           />
         </Field>
-        <Field error={errors.tool_id?.message} label={t("automations.tool")}>
+        <Field
+          requirement="required"
+          error={errors.tool_id?.message}
+          label={t("automations.tool")}
+        >
           <Select
             onValueChange={(value) =>
               form.setValue("tool_id", value as AutomationForm["tool_id"], {
@@ -257,15 +311,33 @@ function AutomationDrawer({
             value={form.watch("tool_id")}
           />
         </Field>
-        <Field error={errors.tool_input?.message} label={t("automations.input")}>
+        <Field
+          requirement="required"
+          error={errors.tool_input?.message}
+          label={t("automations.input")}
+        >
           <Textarea rows={8} {...form.register("tool_input")} />
         </Field>
         <div className="argus-form-row">
-          <Field error={errors.cron?.message} label={t("automations.schedule")}>
-            <Input {...form.register("cron")} />
+          <Field
+            requirement="required"
+            error={errors.cron?.message}
+            label={t("automations.schedule")}
+          >
+            <Input
+              {...form.register("cron")}
+              maxLength={automationConstraints.cron.maxLength}
+            />
           </Field>
-          <Field error={errors.timezone?.message} label={t("automations.timezone")}>
-            <Input {...form.register("timezone")} />
+          <Field
+            requirement="required"
+            error={errors.timezone?.message}
+            label={t("automations.timezone")}
+          >
+            <Input
+              {...form.register("timezone")}
+              maxLength={automationConstraints.timezone.maxLength}
+            />
           </Field>
         </div>
       </div>

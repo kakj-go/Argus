@@ -1,8 +1,13 @@
-import { useMemo, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { z } from "zod";
 import {
+  formConstraint,
+  presentApiFormError,
   useApi,
   type BastionScope,
   type Environment,
@@ -24,17 +29,33 @@ import {
   Textarea,
   Wizard,
 } from "@argus/ui";
-import {
-  ARGUS_EGRESS_ADDRESSES,
-  isPublicAddress,
-  parseLabels,
-} from "./host-utils";
+import { ARGUS_EGRESS_ADDRESSES, parseLabels } from "./host-utils";
 import { PendingActionConfirm } from "./pending-action-confirm";
 
 type Mode = "via_bastion" | "direct";
 type Protocol = "ssh" | "winrm";
 
 const ENVIRONMENTS: Environment[] = ["development", "staging", "production"];
+const hostConstraints = {
+  address: formConstraint("HostPreviewCreate", "address"),
+  name: formConstraint("HostPreviewCreate", "name"),
+  port: formConstraint("HostPreviewCreate", "port"),
+  username: formConstraint("HostPreviewCreate", "username"),
+};
+
+type HostWizardForm = {
+  mode: Mode;
+  scopeId: string;
+  name: string;
+  address: string;
+  port: string;
+  protocol: Protocol;
+  platform: "linux" | "windows";
+  account: string;
+  credentialId: string;
+  environment: Environment;
+  labelsText: string;
+};
 
 export function AddHostWizard({
   open,
@@ -54,22 +75,95 @@ export function AddHostWizard({
     ARGUS_EGRESS_ADDRESSES.join(", ") || t("hosts.wizard.egressNotConfigured");
 
   const [step, setStep] = useState(0);
-  const [mode, setMode] = useState<Mode>("via_bastion");
-  const [scopeId, setScopeId] = useState("");
-  const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
-  const [port, setPort] = useState("22");
-  const [protocol, setProtocol] = useState<Protocol>("ssh");
-  const [platform, setPlatform] = useState<"linux" | "windows">("linux");
-  const [account, setAccount] = useState("");
-  const [credentialId, setCredentialId] = useState("");
-  const [environment, setEnvironment] = useState<Environment>("production");
-  const [labelsText, setLabelsText] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTest | null>(null);
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const submitIntent = useRef<"preview" | "test">("preview");
+  const schema = useMemo(
+    () =>
+      z
+        .object({
+          mode: z.enum(["via_bastion", "direct"]),
+          scopeId: z.string(),
+          name: z
+            .string()
+            .trim()
+            .min(
+              hostConstraints.name.minLength ?? 1,
+              t("hosts.wizard.required"),
+            )
+            .max(hostConstraints.name.maxLength ?? 128),
+          address: z
+            .string()
+            .trim()
+            .min(
+              hostConstraints.address.minLength ?? 1,
+              t("hosts.wizard.required"),
+            )
+            .max(hostConstraints.address.maxLength ?? 512),
+          port: z.string().refine((value) => {
+            const parsed = Number(value);
+            return (
+              Number.isInteger(parsed) &&
+              parsed >= (hostConstraints.port.minimum ?? 1) &&
+              parsed <= (hostConstraints.port.maximum ?? 65535)
+            );
+          }, t("hosts.wizard.portInvalid")),
+          protocol: z.enum(["ssh", "winrm"]),
+          platform: z.enum(["linux", "windows"]),
+          account: z
+            .string()
+            .trim()
+            .min(
+              hostConstraints.username.minLength ?? 1,
+              t("hosts.wizard.required"),
+            )
+            .max(hostConstraints.username.maxLength ?? 256),
+          credentialId: z.string().min(1, t("hosts.wizard.required")),
+          environment: z.enum(ENVIRONMENTS),
+          labelsText: z.string(),
+        })
+        .superRefine((value, context) => {
+          if (value.mode === "via_bastion" && !value.scopeId) {
+            context.addIssue({
+              code: "custom",
+              message: t("hosts.wizard.scopeRequired"),
+              path: ["scopeId"],
+            });
+          }
+        }),
+    [t],
+  );
+  const form = useForm<HostWizardForm>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      mode: "via_bastion",
+      scopeId: "",
+      name: "",
+      address: "",
+      port: "22",
+      protocol: "ssh",
+      platform: "linux",
+      account: "",
+      credentialId: "",
+      environment: "production",
+      labelsText: "",
+    },
+  });
+  const values = form.watch();
+  const {
+    account,
+    address,
+    credentialId,
+    environment,
+    mode,
+    name,
+    platform,
+    port,
+    protocol,
+    scopeId,
+  } = values;
 
   const credentialsQuery = useQuery({
     queryKey: ["credentials"],
@@ -87,17 +181,7 @@ export function AddHostWizard({
 
   const reset = () => {
     setStep(0);
-    setMode("via_bastion");
-    setScopeId("");
-    setName("");
-    setAddress("");
-    setPort("22");
-    setProtocol("ssh");
-    setPlatform("linux");
-    setAccount("");
-    setCredentialId("");
-    setEnvironment("production");
-    setLabelsText("");
+    form.reset();
     setTestResult(null);
     setPendingAction(null);
   };
@@ -107,9 +191,7 @@ export function AddHostWizard({
     onOpenChange(next);
   };
 
-  const addressValid =
-    address.trim().length > 0 &&
-    (mode === "via_bastion" || isPublicAddress(address));
+  const addressValid = address.trim().length > 0;
   const step1Valid = mode === "direct" || scopeId.length > 0;
   const step2Valid =
     name.trim().length > 0 &&
@@ -118,61 +200,116 @@ export function AddHostWizard({
     account.trim().length > 0 &&
     credentialId.length > 0;
 
-  const runTest = async () => {
+  useEffect(() => {
+    setTestResult(null);
+  }, [account, address, credentialId, mode, platform, port, protocol, scopeId]);
+
+  const runTest = async (value: HostWizardForm) => {
     setTesting(true);
     setTestResult(null);
     const connectionMode =
-      mode === "via_bastion"
+      value.mode === "via_bastion"
         ? "via_bastion"
-        : protocol === "winrm"
+        : value.protocol === "winrm"
           ? "direct_winrm"
           : "direct_ssh";
-    let result = await api.hosts.createConnectionTest({
-      address: address.trim(),
-      port: Number(port),
-      platform,
-      connection_mode: connectionMode,
-      bastion_scope_id: mode === "via_bastion" ? scopeId : undefined,
-      credential_id: credentialId,
-      username: account.trim(),
-    });
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      if (!["queued", "running"].includes(result.status)) break;
-      await new Promise((resolve) => window.setTimeout(resolve, 500));
-      result = await api.hosts.getConnectionTest(result.id);
+    try {
+      let result = await api.hosts.createConnectionTest({
+        address: value.address,
+        port: Number(value.port),
+        platform: value.platform,
+        connection_mode: connectionMode,
+        bastion_scope_id:
+          value.mode === "via_bastion" ? value.scopeId : undefined,
+        credential_id: value.credentialId,
+        username: value.account,
+      });
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        if (!["queued", "running"].includes(result.status)) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        result = await api.hosts.getConnectionTest(result.id);
+      }
+      setTestResult(result);
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("hosts.wizard.testFailed"),
+        fieldMap: {
+          address: "address",
+          bastion_scope_id: "scopeId",
+          credential_id: "credentialId",
+          platform: "platform",
+          port: "port",
+          username: "account",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          form.setError(
+            field,
+            { message, type: "server" },
+            { shouldFocus: true },
+          ),
+        setFormError: (message) =>
+          form.setError("root", { message, type: "server" }),
+      });
+    } finally {
+      setTesting(false);
     }
-    setTestResult(result);
-    setTesting(false);
   };
 
-  const submit = async () => {
-    if (submitting) return;
-    setSubmitting(true);
+  const preview = async (value: HostWizardForm) => {
     try {
       if (!testResult || testResult.status !== "succeeded") return;
       const input: HostPreviewCreate = {
-        name: name.trim(),
-        address: address.trim(),
-        port: Number(port),
-        platform,
+        name: value.name,
+        address: value.address,
+        port: Number(value.port),
+        platform: value.platform,
         connection_mode:
-          mode === "via_bastion"
+          value.mode === "via_bastion"
             ? "via_bastion"
-            : protocol === "winrm"
+            : value.protocol === "winrm"
               ? "direct_winrm"
               : "direct_ssh",
-        bastion_scope_id: mode === "via_bastion" ? scopeId : undefined,
-        credential_id: credentialId,
-        username: account.trim(),
-        environment,
-        labels: parseLabels(labelsText),
+        bastion_scope_id:
+          value.mode === "via_bastion" ? value.scopeId : undefined,
+        credential_id: value.credentialId,
+        username: value.account,
+        environment: value.environment,
+        labels: parseLabels(value.labelsText),
         connection_test_id: testResult.id,
       };
       setPendingAction(await api.hosts.previewCreateResource(input));
-    } finally {
-      setSubmitting(false);
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("hosts.wizard.previewFailed"),
+        fieldMap: {
+          address: "address",
+          bastion_scope_id: "scopeId",
+          credential_id: "credentialId",
+          name: "name",
+          platform: "platform",
+          port: "port",
+          username: "account",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          form.setError(
+            field,
+            { message, type: "server" },
+            { shouldFocus: true },
+          ),
+        setFormError: (message) =>
+          form.setError("root", { message, type: "server" }),
+      });
     }
   };
+  const submit = form.handleSubmit(async (value) => {
+    form.clearErrors();
+    if (submitIntent.current === "test") await runTest(value);
+    else await preview(value);
+  });
 
   const selectedScope = scopes.find((scope) => scope.id === scopeId);
 
@@ -180,6 +317,7 @@ export function AddHostWizard({
     <FormDrawer
       footer={<></>}
       onOpenChange={close}
+      onSubmit={submit}
       open={open}
       title={t("hosts.wizard.title")}
       width={620}
@@ -202,7 +340,9 @@ export function AddHostWizard({
           current={step}
           onBack={() => setStep((value) => Math.max(0, value - 1))}
           onNext={() => setStep((value) => value + 1)}
-          onSubmit={() => void submit()}
+          onSubmit={() => {
+            submitIntent.current = "preview";
+          }}
           steps={[
             {
               id: "mode",
@@ -221,13 +361,25 @@ export function AddHostWizard({
             },
           ]}
           submitLabel={t("hosts.wizard.preview")}
-          submitting={submitting}
+          submitting={form.formState.isSubmitting && !testing}
+          submitType="submit"
         >
+          {form.formState.errors.root?.message && (
+            <Alert
+              description={form.formState.errors.root.message}
+              title={t("hosts.wizard.previewFailed")}
+              tone="danger"
+            />
+          )}
           {step === 0 && (
             <div className="argus-choice-list">
               <button
                 className={`argus-choice ${mode === "via_bastion" ? "is-selected" : ""}`}
-                onClick={() => setMode("via_bastion")}
+                onClick={() =>
+                  form.setValue("mode", "via_bastion", {
+                    shouldValidate: true,
+                  })
+                }
                 type="button"
               >
                 <span className="argus-choice__text">
@@ -241,7 +393,11 @@ export function AddHostWizard({
                     <button
                       className={`argus-choice ${scopeId === scope.id ? "is-selected" : ""}`}
                       key={scope.id}
-                      onClick={() => setScopeId(scope.id)}
+                      onClick={() =>
+                        form.setValue("scopeId", scope.id, {
+                          shouldValidate: true,
+                        })
+                      }
                       type="button"
                     >
                       <span className="argus-choice__text">
@@ -264,7 +420,9 @@ export function AddHostWizard({
                 ))}
               <button
                 className={`argus-choice ${mode === "direct" ? "is-selected" : ""}`}
-                onClick={() => setMode("direct")}
+                onClick={() =>
+                  form.setValue("mode", "direct", { shouldValidate: true })
+                }
                 type="button"
               >
                 <span className="argus-choice__text">
@@ -282,36 +440,48 @@ export function AddHostWizard({
 
           {step === 1 && (
             <>
-              <Field label={t("hosts.wizard.name")}>
+              <Field
+                requirement="required"
+                error={form.formState.errors.name?.message}
+                label={t("hosts.wizard.name")}
+              >
                 <Input
-                  onChange={(event) => setName(event.target.value)}
+                  {...form.register("name")}
+                  maxLength={hostConstraints.name.maxLength}
                   placeholder={t("hosts.wizard.namePlaceholder")}
-                  value={name}
                 />
               </Field>
               <Field
-                error={
-                  address.trim() && !addressValid
-                    ? t("hosts.wizard.publicAddressInvalid")
-                    : undefined
-                }
+                requirement="required"
+                error={form.formState.errors.address?.message}
                 label={t("hosts.wizard.address")}
               >
                 <Input
-                  onChange={(event) => setAddress(event.target.value)}
+                  {...form.register("address")}
+                  maxLength={hostConstraints.address.maxLength}
                   placeholder={t("hosts.wizard.addressPlaceholder")}
-                  value={address}
                 />
               </Field>
               <div className="argus-form-row">
-                <Field label={t("hosts.wizard.protocol")}>
+                <Field
+                  requirement="required"
+                  label={t("hosts.wizard.protocol")}
+                >
                   <Select
                     onValueChange={(value) => {
                       const next = value as Protocol;
-                      setProtocol(next);
-                      setPort(next === "winrm" ? "5986" : "22");
-                      setPlatform(next === "winrm" ? "windows" : "linux");
-                      setCredentialId("");
+                      form.setValue("protocol", next, { shouldValidate: true });
+                      form.setValue("port", next === "winrm" ? "5986" : "22", {
+                        shouldValidate: true,
+                      });
+                      form.setValue(
+                        "platform",
+                        next === "winrm" ? "windows" : "linux",
+                        { shouldValidate: true },
+                      );
+                      form.setValue("credentialId", "", {
+                        shouldValidate: true,
+                      });
                     }}
                     options={[
                       { value: "ssh", label: "SSH" },
@@ -320,19 +490,29 @@ export function AddHostWizard({
                     value={protocol}
                   />
                 </Field>
-                <Field label={t("hosts.wizard.port")}>
+                <Field
+                  requirement="required"
+                  error={form.formState.errors.port?.message}
+                  label={t("hosts.wizard.port")}
+                >
                   <Input
+                    {...form.register("port")}
                     inputMode="numeric"
-                    onChange={(event) => setPort(event.target.value)}
-                    value={port}
+                    max={hostConstraints.port.maximum}
+                    min={hostConstraints.port.minimum}
                   />
                 </Field>
               </div>
               <div className="argus-form-row">
-                <Field label={t("hosts.wizard.platform")}>
+                <Field
+                  requirement="required"
+                  label={t("hosts.wizard.platform")}
+                >
                   <Select
                     onValueChange={(value) =>
-                      setPlatform(value as "linux" | "windows")
+                      form.setValue("platform", value as "linux" | "windows", {
+                        shouldValidate: true,
+                      })
                     }
                     options={[
                       {
@@ -347,10 +527,15 @@ export function AddHostWizard({
                     value={platform}
                   />
                 </Field>
-                <Field label={t("hosts.wizard.environment")}>
+                <Field
+                  requirement="required"
+                  label={t("hosts.wizard.environment")}
+                >
                   <Select
                     onValueChange={(value) =>
-                      setEnvironment(value as Environment)
+                      form.setValue("environment", value as Environment, {
+                        shouldValidate: true,
+                      })
                     }
                     options={ENVIRONMENTS.map((env) => ({
                       value: env,
@@ -360,17 +545,29 @@ export function AddHostWizard({
                   />
                 </Field>
               </div>
-              <Field label={t("hosts.wizard.account")}>
+              <Field
+                requirement="required"
+                error={form.formState.errors.account?.message}
+                label={t("hosts.wizard.account")}
+              >
                 <Input
-                  onChange={(event) => setAccount(event.target.value)}
+                  {...form.register("account")}
+                  maxLength={hostConstraints.username.maxLength}
                   placeholder={t("hosts.wizard.accountPlaceholder")}
-                  value={account}
                 />
               </Field>
-              <Field label={t("hosts.wizard.secret")}>
+              <Field
+                requirement="required"
+                error={form.formState.errors.credentialId?.message}
+                label={t("hosts.wizard.secret")}
+              >
                 <Select
                   ariaLabel={t("hosts.wizard.secret")}
-                  onValueChange={setCredentialId}
+                  onValueChange={(value) =>
+                    form.setValue("credentialId", value, {
+                      shouldValidate: true,
+                    })
+                  }
                   options={[
                     { value: "", label: t("hosts.wizard.secretNone") },
                     ...credentials.map((credential) => ({
@@ -390,14 +587,11 @@ export function AddHostWizard({
                 )}
               </Field>
               <Field
+                requirement="optional"
                 hint={t("hosts.wizard.labelsHint")}
                 label={t("hosts.wizard.labels")}
               >
-                <Textarea
-                  onChange={(event) => setLabelsText(event.target.value)}
-                  rows={3}
-                  value={labelsText}
-                />
+                <Textarea {...form.register("labelsText")} rows={3} />
               </Field>
             </>
           )}
@@ -464,7 +658,10 @@ export function AddHostWizard({
               <div className="argus-form-actions">
                 <Button
                   loading={testing}
-                  onClick={() => void runTest()}
+                  onClick={() => {
+                    submitIntent.current = "test";
+                  }}
+                  type="submit"
                   variant="secondary"
                 >
                   {testing

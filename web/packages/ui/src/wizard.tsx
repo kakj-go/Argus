@@ -26,6 +26,7 @@ export function Wizard({
   nextLabel,
   skipLabel,
   submitLabel,
+  submitType = "button",
   className,
 }: {
   steps: WizardStep[];
@@ -44,6 +45,7 @@ export function Wizard({
   nextLabel?: string;
   skipLabel?: string;
   submitLabel?: string;
+  submitType?: "button" | "submit";
   className?: string;
 }) {
   const text = useUiText();
@@ -61,9 +63,16 @@ export function Wizard({
                 ? "current"
                 : "pending";
           return (
-            <li className={cx("argus-wizard__step", `is-${status}`)} key={item.id}>
+            <li
+              className={cx("argus-wizard__step", `is-${status}`)}
+              key={item.id}
+            >
               <span className="argus-wizard__marker">
-                {status === "done" ? <Check aria-hidden size={12} /> : index + 1}
+                {status === "done" ? (
+                  <Check aria-hidden size={12} />
+                ) : (
+                  index + 1
+                )}
               </span>
               <span className="argus-wizard__step-text">
                 <b>{item.title}</b>
@@ -95,6 +104,7 @@ export function Wizard({
               disabled={!canNext}
               loading={submitting}
               onClick={onSubmit}
+              type={submitType}
               variant="primary"
             >
               {submitLabel ?? text("提交", "Submit")}

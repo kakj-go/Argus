@@ -372,14 +372,18 @@ func emptyAuthzPage() authzapi.CursorPage {
 	return authzapi.CursorPage{NextCursor: nil, HasMore: false, Partial: authzapi.PartialMetadata{Partial: false, Reasons: []authzapi.PartialMetadataReasons{}}}
 }
 func authzError(ctx context.Context, err error) authzapi.ApiError {
-	base := setupError(ctx, err)
+	base := setupErrorBase(ctx, err)
+	defer func() { logMappedError(ctx, base.Code, err) }()
 	if errors.Is(err, authorization.ErrBuiltinRoleImmutable) {
 		base.Code, base.MessageKey = "BUILTIN_ROLE_IMMUTABLE", "errors.role.builtin_immutable"
 	}
-	return authzapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	return authzapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]authzapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }
 
 func authzPaginationError(ctx context.Context, err error) (authzapi.ApiError, int) {
 	code, key, status := paginationError(err)
+	logMappedError(ctx, code, err)
 	return authzapi.ApiError{Code: code, MessageKey: key, RequestId: requestID(ctx), Retryable: retryablePointer(code == "CURSOR_EXPIRED")}, status
 }

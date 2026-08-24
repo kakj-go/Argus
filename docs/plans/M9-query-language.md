@@ -22,7 +22,7 @@ PromQL / LogQL / TraceQL
 - LogQL 改为 Argus KQL 核心过滤语法与受控 Pipeline。
 - TraceQL 改为固定只读的 SkyWalking 风格 GraphQL Schema。
 - 共享 Query IR、`querylang/{promql,logql,traceql}` Adapter、统一 v2 Query Envelope 和 M9 E2E 脚本均已删除。
-- 当前唯一查询发布门禁是 M10 的语言门禁与 `make e2e-m10-query-k8s`。
+- 当前唯一查询发布门禁是 M10 的语言门禁与 `go run ./cmd/argus-dev e2e run --suite m10-query`。
 
 ## 历史验证记录
 

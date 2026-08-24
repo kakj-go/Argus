@@ -255,7 +255,8 @@ func emptyEnterpriseIdentityPage() enterpriseapi.CursorPage {
 }
 
 func enterpriseIdentityError(ctx context.Context, err error) enterpriseapi.ApiError {
-	base := setupError(ctx, err)
+	base := setupErrorBase(ctx, err)
+	defer func() { logMappedError(ctx, base.Code, err) }()
 	if err != nil && err.Error() == "authorization denied" {
 		base.Code, base.MessageKey = "AUTHORIZATION_DENIED", "errors.auth.authorization_denied"
 	}
@@ -265,10 +266,13 @@ func enterpriseIdentityError(ctx context.Context, err error) enterpriseapi.ApiEr
 	if errors.Is(err, identity.ErrDepartmentNotEmpty) {
 		base.Code, base.MessageKey = "DEPARTMENT_NOT_EMPTY", "errors.department.not_empty"
 	}
-	return enterpriseapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	return enterpriseapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]enterpriseapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }
 
 func enterpriseIdentityPaginationError(ctx context.Context, err error) (enterpriseapi.ApiError, int) {
 	code, key, status := paginationError(err)
+	logMappedError(ctx, code, err)
 	return enterpriseapi.ApiError{Code: code, MessageKey: key, RequestId: requestID(ctx), Retryable: retryablePointer(code == "CURSOR_EXPIRED")}, status
 }

@@ -7,23 +7,31 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("all three SPAs serve deep links after refresh", async ({ page }) => {
+test("all Web origins serve deep links after refresh", async ({ page }) => {
   for (const target of [
-    "http://127.0.0.1:4173/hosts",
-    "http://127.0.0.1:4174/sandbox",
-    "http://127.0.0.1:4175/setup/deep-link",
+    { url: "http://127.0.0.1:4173/hosts", root: "#root", populated: true },
+    { url: "http://127.0.0.1:4174/sandbox", root: "#root", populated: true },
+    {
+      url: "http://127.0.0.1:4176/runtime",
+      root: "#card-root",
+      populated: false,
+    },
   ]) {
-    const response = await page.goto(target);
+    const response = await page.goto(target.url);
     expect(response?.status()).toBe(200);
     await page.reload();
-    await expect(page.locator("#root")).not.toBeEmpty();
+    const root = page.locator(target.root);
+    await expect(root).toBeAttached();
+    if (target.populated) await expect(root).not.toBeEmpty();
   }
 });
 
 test("platform login reaches enterprise and sandbox administration", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:4174/login");
+  await page.goto(
+    "http://127.0.0.1:4174/login?initialized=true&reset=1",
+  );
   await page.getByLabel("用户名").fill("admin");
   await page.getByLabel("密码").fill("123456");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -44,27 +52,25 @@ test("platform login reaches enterprise and sandbox administration", async ({
 test("setup completes once and remains permanently locked", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:4175/");
+  await page.goto("http://127.0.0.1:4174/?initialized=false&reset=1");
   await page.getByLabel("Setup Token").fill("stp_e2e_release");
   await page.getByRole("button", { name: "下一步" }).click();
 
   await page.getByLabel("平台显示名称").fill("Argus Evaluation");
   await page.getByLabel("外部访问地址").fill("http://127.0.0.1:4173");
   await page.getByLabel("登录名").fill("e2eadmin");
-  await page.getByLabel("显示名", { exact: true }).fill("E2E 管理员");
+  await page.locator('input[name="admin.displayName"]').fill("E2E 管理员");
   await page.getByLabel("邮箱").fill("e2e@example.com");
-  const passwords = page.locator('input[type="password"]');
-  await passwords.nth(0).fill("ArgusE2Epass123!");
-  await passwords.nth(1).fill("ArgusE2Epass123!");
+  await page.locator('input[name="admin.password"]').fill("SecureRelease2026!");
+  await page
+    .locator('input[name="admin.confirmPassword"]')
+    .fill("SecureRelease2026!");
   await page.getByRole("button", { name: "下一步" }).click();
   await page.getByRole("button", { name: "确认初始化" }).click();
 
-  await expect(
-    page.getByRole("heading", { name: "系统初始化成功" }),
-  ).toBeVisible();
+  await expect(page).toHaveURL("http://127.0.0.1:4174/login");
+  await expect(page.locator('input[autocomplete="username"]')).toBeVisible();
   await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "系统已完成初始化" }),
-  ).toBeVisible();
+  await expect(page).toHaveURL("http://127.0.0.1:4174/login");
   await expect(page.getByLabel("Setup Token")).toHaveCount(0);
 });

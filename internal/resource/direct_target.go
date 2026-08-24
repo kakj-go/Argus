@@ -98,7 +98,7 @@ func (validator DirectTargetValidator) Revalidate(ctx context.Context, host stri
 }
 
 func (validator DirectTargetValidator) denied(address netip.Addr) bool {
-	if !address.IsValid() || !address.IsGlobalUnicast() || address.IsPrivate() || address.IsLoopback() || address.IsLinkLocalUnicast() || address.IsMulticast() || address.IsUnspecified() {
+	if !address.IsValid() || !address.IsGlobalUnicast() || address.IsLoopback() || address.IsLinkLocalUnicast() || address.IsMulticast() || address.IsUnspecified() {
 		return true
 	}
 	for _, metadata := range []netip.Prefix{

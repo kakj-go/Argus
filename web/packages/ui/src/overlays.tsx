@@ -36,7 +36,8 @@ export function ConfirmDialog({
         <DialogPrimitive.Content
           className="argus-dialog argus-dialog--confirm"
           onOpenAutoFocus={() => {
-            returnFocusRef.current = document.activeElement as HTMLElement | null;
+            returnFocusRef.current =
+              document.activeElement as HTMLElement | null;
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
@@ -66,6 +67,7 @@ export function ConfirmDialog({
             <Button
               disabled={loading}
               onClick={() => onOpenChange(false)}
+              type="button"
               variant="secondary"
             >
               {cancelLabel ?? text("取消", "Cancel")}
@@ -73,6 +75,7 @@ export function ConfirmDialog({
             <Button
               loading={loading}
               onClick={onConfirm}
+              type="button"
               variant={danger ? "danger" : "primary"}
             >
               {confirmLabel ?? text("确认", "Confirm")}
@@ -117,63 +120,62 @@ export function FormDrawer({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="argus-dialog__overlay" />
         <DialogPrimitive.Content
+          asChild
           className="argus-drawer"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             returnFocusRef.current?.focus();
           }}
           onOpenAutoFocus={() => {
-            returnFocusRef.current = document.activeElement as HTMLElement | null;
+            returnFocusRef.current =
+              document.activeElement as HTMLElement | null;
           }}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              !event.shiftKey &&
-              onSubmit &&
-              event.target instanceof HTMLElement &&
-              !["BUTTON", "TEXTAREA", "SELECT"].includes(event.target.tagName)
-            ) {
-              event.preventDefault();
-              onSubmit();
-            }
-          }}
-          style={{ width: `min(${width}px, 100vw)` }}
         >
-          <div className="argus-drawer__top">
-            <div>
-              <DialogPrimitive.Title className="argus-dialog__title">
-                {title}
-              </DialogPrimitive.Title>
-              {description && (
-                <DialogPrimitive.Description className="argus-dialog__description">
-                  {description}
-                </DialogPrimitive.Description>
+          <form
+            aria-label={title}
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSubmit?.();
+            }}
+            style={{ width: `min(${width}px, 100vw)` }}
+          >
+            <div className="argus-drawer__top">
+              <div>
+                <DialogPrimitive.Title className="argus-dialog__title">
+                  {title}
+                </DialogPrimitive.Title>
+                {description && (
+                  <DialogPrimitive.Description className="argus-dialog__description">
+                    {description}
+                  </DialogPrimitive.Description>
+                )}
+              </div>
+              <DialogPrimitive.Close
+                aria-label={text("关闭", "Close")}
+                className="argus-dialog__close"
+              >
+                <X size={17} />
+              </DialogPrimitive.Close>
+            </div>
+            <div className="argus-drawer__body">{children}</div>
+            <div className="argus-drawer__footer">
+              {footer ?? (
+                <>
+                  <Button
+                    disabled={loading}
+                    onClick={() => onOpenChange(false)}
+                    type="button"
+                    variant="secondary"
+                  >
+                    {cancelLabel ?? text("取消", "Cancel")}
+                  </Button>
+                  <Button loading={loading} type="submit" variant="primary">
+                    {submitLabel ?? text("提交", "Submit")}
+                  </Button>
+                </>
               )}
             </div>
-            <DialogPrimitive.Close
-              aria-label={text("关闭", "Close")}
-              className="argus-dialog__close"
-            >
-              <X size={17} />
-            </DialogPrimitive.Close>
-          </div>
-          <div className="argus-drawer__body">{children}</div>
-          <div className="argus-drawer__footer">
-            {footer ?? (
-              <>
-                <Button
-                  disabled={loading}
-                  onClick={() => onOpenChange(false)}
-                  variant="secondary"
-                >
-                  {cancelLabel ?? text("取消", "Cancel")}
-                </Button>
-                <Button loading={loading} onClick={onSubmit} variant="primary">
-                  {submitLabel ?? text("提交", "Submit")}
-                </Button>
-              </>
-            )}
-          </div>
+          </form>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

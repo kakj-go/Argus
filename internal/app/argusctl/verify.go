@@ -277,7 +277,19 @@ func minioSmokePod(cfg *InstallConfig) string {
 		"          - name: MINIO_ROOT_USER\n            valueFrom: {secretKeyRef: {name: argus-data-credentials, key: minio-root-user}}",
 		"          - name: MINIO_ROOT_PASSWORD\n            valueFrom: {secretKeyRef: {name: argus-data-credentials, key: minio-root-password}}",
 	}
-	command := `mc alias set argus http://argus-minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; printf argus-e2e >/tmp/value; mc mb --ignore-existing argus/argus-e2e; mc cp /tmp/value argus/argus-e2e/value; test "$(mc cat argus/argus-e2e/value)" = argus-e2e`
+	command := `set -eu
+printf argus-e2e >/tmp/value
+for attempt in $(seq 1 12); do
+  if mc alias set -- argus http://argus-minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1 &&
+     mc mb --ignore-existing argus/argus-e2e >/dev/null 2>&1 &&
+     mc cp /tmp/value argus/argus-e2e/value >/dev/null 2>&1 &&
+     test "$(mc cat argus/argus-e2e/value 2>/dev/null)" = argus-e2e; then
+    exit 0
+  fi
+  sleep 5
+done
+echo "MinIO object roundtrip did not become writable after bounded retries" >&2
+exit 1`
 	return genericSmokePod(name, cfg.Spec.Namespaces.System, "minio/mc:RELEASE.2025-08-13T08-35-41Z", env, command)
 }
 
@@ -289,25 +301,26 @@ func clickHouseSmokePod(cfg *InstallConfig) string {
 }
 
 func openSandboxSmokePod(cfg *InstallConfig, name string) string {
-	env := []string{"          - name: OPENSANDBOX_API_KEY\n            valueFrom: {secretKeyRef: {name: argus-opensandbox-api, key: api-key}}"}
-	// The server API is exercised through its published Python SDK, including create, exec and delete.
-	command := `python - <<'PY'
-import asyncio, os
-from opensandbox.sandbox import Sandbox
-from opensandbox.config import ConnectionConfig
-async def main():
-    config = ConnectionConfig(
-        domain="opensandbox-server",
-        api_key=os.environ["OPENSANDBOX_API_KEY"],
-        use_server_proxy=True,
-    )
-    sandbox = await Sandbox.create("ubuntu:latest", connection_config=config)
-    execution = await sandbox.commands.run("echo argus-e2e")
-    assert "argus-e2e" in execution.logs.stdout[0].text
-    await sandbox.kill()
-asyncio.run(main())
-PY`
-	return genericSmokePod(name, cfg.Spec.Namespaces.Sandbox, "python:3.13-alpine", env, "pip install --no-cache-dir opensandbox==0.1.15 >/dev/null; "+command)
+	image := cfg.Image("argus-backend")
+	return fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: %s
+  namespace: %s
+  labels: {app.kubernetes.io/part-of: argus}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: smoke
+      image: %s
+      imagePullPolicy: %s
+      command: ["/usr/local/bin/argus-sandbox-smoke"]
+      env:
+        - name: OPENSANDBOX_BASE_URL
+          value: http://opensandbox-server
+        - name: OPENSANDBOX_API_KEY
+          valueFrom: {secretKeyRef: {name: argus-opensandbox-api, key: api-key}}
+`, name, cfg.Spec.Namespaces.Sandbox, image, cfg.Spec.Images.PullPolicy)
 }
 
 func (a *App) collectArtifacts(ctx context.Context, cfg *InstallConfig, directory string, report *VerifyReport) error {

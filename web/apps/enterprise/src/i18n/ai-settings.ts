@@ -30,6 +30,7 @@ export const aiSettingsZh = {
       enabled: "已启用",
       disabled: "已停用",
       revision: "Revision {{revision}}",
+      revisionLabel: "版本",
       empty: "暂无模型，添加后即可在会话中选择。",
     },
     quota: {
@@ -42,6 +43,15 @@ export const aiSettingsZh = {
       unlimited: "留空表示无限",
       save: "保存额度",
       departmentOnly: "部门管理员只能配置本部门成员的个人额度。",
+      saveFailed: "保存额度失败",
+    },
+    validation: {
+      required: "此字段不能为空",
+      invalidUrl: "请输入合法的 http(s) 地址",
+      integer: "请输入整数",
+      minimum: "值不能小于 {{min}}",
+      nonnegative: "请输入大于或等于 0 的数值",
+      maxLength: "不能超过 {{max}} 个字符",
     },
     dashboard: {
       allModels: "全部模型",
@@ -120,6 +130,7 @@ export const aiSettingsEn = {
       enabled: "Enabled",
       disabled: "Disabled",
       revision: "Revision {{revision}}",
+      revisionLabel: "Revision",
       empty: "No models yet. Add one to make it available in chat.",
     },
     quota: {
@@ -133,6 +144,15 @@ export const aiSettingsEn = {
       save: "Save budget",
       departmentOnly:
         "Department admins can only configure personal budgets for members of their department.",
+      saveFailed: "Failed to save budget",
+    },
+    validation: {
+      required: "This field is required",
+      invalidUrl: "Enter a valid http(s) URL",
+      integer: "Enter an integer",
+      minimum: "Value must be at least {{min}}",
+      nonnegative: "Enter a value greater than or equal to 0",
+      maxLength: "Must be at most {{max}} characters",
     },
     dashboard: {
       allModels: "All models",

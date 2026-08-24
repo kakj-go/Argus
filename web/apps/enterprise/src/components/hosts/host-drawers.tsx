@@ -1,7 +1,13 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
+import { z } from "zod";
 import {
+  apiErrorField,
+  formConstraint,
+  formatApiError,
   useApi,
   type BastionScope,
   type ConfirmActionResult,
@@ -33,6 +39,31 @@ const HOST_CONNECTION_MODES: EditableHostConnectionMode[] = [
   "direct_ssh",
   "direct_winrm",
 ];
+const bastionConstraints = {
+  name: formConstraint("BastionPreviewCreate", "name"),
+};
+const hostConstraints = {
+  name: formConstraint("HostPreviewUpdate", "name"),
+  address: formConstraint("HostPreviewUpdate", "address"),
+  port: formConstraint("HostPreviewUpdate", "port"),
+};
+
+type BastionFormValues = {
+  name: string;
+  environment: Environment;
+  labelsText: string;
+};
+
+type HostEditFormValues = {
+  name: string;
+  address: string;
+  port: string;
+  connectionMode: EditableHostConnectionMode;
+  bastionScopeId: string;
+  managedAccountId: string;
+  environment: Environment;
+  labelsText: string;
+};
 
 function BastionFields({
   name,
@@ -41,6 +72,7 @@ function BastionFields({
   onNameChange,
   onEnvironmentChange,
   onLabelsTextChange,
+  errors,
   autoFocus = false,
 }: {
   name: string;
@@ -49,20 +81,22 @@ function BastionFields({
   onNameChange: (value: string) => void;
   onEnvironmentChange: (value: Environment) => void;
   onLabelsTextChange: (value: string) => void;
+  errors?: { name?: string };
   autoFocus?: boolean;
 }) {
   const { t } = useTranslation();
   return (
     <>
-      <Field label={t("hosts.bastionForm.name")}>
+      <Field requirement="required" error={errors?.name} label={t("hosts.bastionForm.name")}>
         <Input
           autoFocus={autoFocus}
+          maxLength={bastionConstraints.name.maxLength}
           onChange={(event) => onNameChange(event.target.value)}
           placeholder={t("hosts.bastionForm.namePlaceholder")}
           value={name}
         />
       </Field>
-      <Field label={t("hosts.bastionForm.environment")}>
+      <Field requirement="required" label={t("hosts.bastionForm.environment")}>
         <Select
           onValueChange={(value) => onEnvironmentChange(value as Environment)}
           options={ENVIRONMENTS.map((env) => ({
@@ -73,6 +107,7 @@ function BastionFields({
         />
       </Field>
       <Field
+        requirement="optional"
         hint={t("hosts.bastionForm.labelsHint")}
         label={t("hosts.bastionForm.labels")}
       >
@@ -98,37 +133,74 @@ export function AddBastionDrawer({
 }) {
   const { t } = useTranslation();
   const api = useApi();
-  const [name, setName] = useState("");
-  const [environment, setEnvironment] = useState<Environment>("production");
-  const [labelsText, setLabelsText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
   const [enrollment, setEnrollment] =
     useState<ConfirmActionResult["one_time_result"]>();
+  const schema = useMemo(
+    () =>
+      z.object({
+        name: z
+          .string()
+          .trim()
+          .min(1, t("hosts.bastionForm.name"))
+          .max(bastionConstraints.name.maxLength ?? 128),
+        environment: z.enum(["development", "staging", "production"]),
+        labelsText: z.string(),
+      }),
+    [t],
+  );
+  const {
+    reset,
+    setError,
+    setValue,
+    watch,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<BastionFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      environment: "production",
+      labelsText: "",
+    },
+  });
+  const name = watch("name");
+  const environment = watch("environment");
+  const labelsText = watch("labelsText");
 
   const close = (next: boolean) => {
     if (!next) {
-      setName("");
-      setEnvironment("production");
-      setLabelsText("");
+      reset();
       setPendingAction(null);
       setEnrollment(undefined);
     }
     onOpenChange(next);
   };
 
-  const submit = async () => {
-    if (submitting || !name.trim()) return;
+  const submit = async (values: BastionFormValues) => {
+    if (submitting) return;
     setSubmitting(true);
     try {
       setPendingAction(
         await api.connectors.previewCreateBastionScope({
-          name: name.trim(),
-          environment,
-          labels: parseLabels(labelsText),
+          name: values.name,
+          environment: values.environment,
+          labels: parseLabels(values.labelsText),
         }),
       );
+    } catch (error) {
+      const message = formatApiError(
+        error,
+        t("hosts.bastionForm.commandGenerateFailed"),
+        (requestId) => t("common.requestReference", { requestId }),
+      );
+      if (apiErrorField(error) === "name") {
+        setError("name", { message, type: "server" }, { shouldFocus: true });
+      } else {
+        setError("root", { message, type: "server" });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -139,7 +211,7 @@ export function AddBastionDrawer({
       description={t("hosts.bastionForm.description")}
       loading={submitting}
       onOpenChange={close}
-      onSubmit={() => void submit()}
+      onSubmit={handleSubmit((values) => void submit(values))}
       open={open}
       submitLabel={t("hosts.bastionForm.submit")}
       title={t("hosts.bastionForm.title")}
@@ -169,15 +241,29 @@ export function AddBastionDrawer({
           <span>{formatDateTime(enrollment.expires_at)}</span>
         </div>
       ) : (
-        <BastionFields
-          autoFocus
-          environment={environment}
-          name={name}
-          onEnvironmentChange={setEnvironment}
-          onNameChange={setName}
-          onLabelsTextChange={setLabelsText}
-          labelsText={labelsText}
-        />
+        <>
+          {errors.root?.message && (
+            <Alert
+              description={errors.root.message}
+              title={t("hosts.bastionForm.title")}
+              tone="danger"
+            />
+          )}
+          <BastionFields
+            autoFocus
+            environment={environment}
+            errors={{ name: errors.name?.message }}
+            name={name}
+            onEnvironmentChange={(value) =>
+              setValue("environment", value, { shouldValidate: true })
+            }
+            onNameChange={(value) =>
+              setValue("name", value, { shouldValidate: true })
+            }
+            onLabelsTextChange={(value) => setValue("labelsText", value)}
+            labelsText={labelsText}
+          />
+        </>
       )}
     </FormDrawer>
   );
@@ -197,9 +283,6 @@ export function EditBastionDrawer({
 }) {
   const { t } = useTranslation();
   const api = useApi();
-  const [name, setName] = useState("");
-  const [environment, setEnvironment] = useState<Environment>("production");
-  const [labelsText, setLabelsText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState("");
@@ -210,29 +293,73 @@ export function EditBastionDrawer({
     scope?.status === "pending" ||
     scope?.status === "uninstalled" ||
     connectorStatus === "offline";
+  const schema = useMemo(
+    () =>
+      z.object({
+        name: z
+          .string()
+          .trim()
+          .min(1, t("hosts.bastionForm.name"))
+          .max(bastionConstraints.name.maxLength ?? 128),
+        environment: z.enum(["development", "staging", "production"]),
+        labelsText: z.string(),
+      }),
+    [t],
+  );
+  const {
+    reset,
+    setError,
+    setValue,
+    watch,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<BastionFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      environment: "production",
+      labelsText: "",
+    },
+  });
+  const name = watch("name");
+  const environment = watch("environment");
+  const labelsText = watch("labelsText");
 
   useEffect(() => {
     if (!scope) return;
-    setName(scope.name);
-    setEnvironment(scope.environment);
-    setLabelsText(labelsToText(scope.labels));
+    reset({
+      name: scope.name,
+      environment: scope.environment,
+      labelsText: labelsToText(scope.labels),
+    });
     setGenerationError("");
     setPendingAction(null);
     setInstallCommand(null);
-  }, [scope]);
+  }, [reset, scope]);
 
-  const submit = async () => {
-    if (!scope || submitting || !name.trim()) return;
+  const submit = async (values: BastionFormValues) => {
+    if (!scope || submitting) return;
     setSubmitting(true);
     try {
       setPendingAction(
         await api.connectors.previewUpdateBastionScope(scope.id, {
-          name: name.trim(),
-          environment,
-          labels: parseLabels(labelsText),
+          name: values.name,
+          environment: values.environment,
+          labels: parseLabels(values.labelsText),
           expected_version: scope.resource_version ?? 1,
         }),
       );
+    } catch (error) {
+      const message = formatApiError(
+        error,
+        t("hosts.bastionForm.commandGenerateFailed"),
+        (requestId) => t("common.requestReference", { requestId }),
+      );
+      if (apiErrorField(error) === "name") {
+        setError("name", { message, type: "server" }, { shouldFocus: true });
+      } else {
+        setError("root", { message, type: "server" });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -251,9 +378,11 @@ export function EditBastionDrawer({
       );
     } catch (error) {
       setGenerationError(
-        error instanceof Error
-          ? error.message
-          : t("hosts.bastionForm.commandGenerateFailed"),
+        formatApiError(
+          error,
+          t("hosts.bastionForm.commandGenerateFailed"),
+          (requestId) => t("common.requestReference", { requestId }),
+        ),
       );
     } finally {
       setGenerating(false);
@@ -265,7 +394,7 @@ export function EditBastionDrawer({
       description={t("hosts.bastionForm.editDescription")}
       loading={submitting}
       onOpenChange={onOpenChange}
-      onSubmit={() => void submit()}
+      onSubmit={handleSubmit((values) => void submit(values))}
       open={scope !== null}
       submitLabel={t("hosts.bastionForm.save")}
       title={t("hosts.bastionForm.editTitle", { name: scope?.name ?? "" })}
@@ -290,12 +419,26 @@ export function EditBastionDrawer({
         />
       ) : (
         <>
+          {errors.root?.message && (
+            <Alert
+              description={errors.root.message}
+              title={t("hosts.bastionForm.editTitle", {
+                name: scope?.name ?? "",
+              })}
+              tone="danger"
+            />
+          )}
           <BastionFields
             environment={environment}
+            errors={{ name: errors.name?.message }}
             name={name}
-            onEnvironmentChange={setEnvironment}
-            onNameChange={setName}
-            onLabelsTextChange={setLabelsText}
+            onEnvironmentChange={(value) =>
+              setValue("environment", value, { shouldValidate: true })
+            }
+            onNameChange={(value) =>
+              setValue("name", value, { shouldValidate: true })
+            }
+            onLabelsTextChange={(value) => setValue("labelsText", value)}
             labelsText={labelsText}
           />
 
@@ -359,20 +502,94 @@ export function EditHostDrawer({
 }) {
   const { t } = useTranslation();
   const api = useApi();
-  const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
-  const [port, setPort] = useState("22");
-  const [connectionMode, setConnectionMode] =
-    useState<EditableHostConnectionMode>("via_bastion");
-  const [bastionScopeId, setBastionScopeId] = useState("");
-  const [managedAccountId, setManagedAccountId] = useState("");
-  const [environment, setEnvironment] = useState<Environment>("production");
-  const [labelsText, setLabelsText] = useState("");
-  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
+  const schema = useMemo(
+    () =>
+      z
+        .object({
+          name: z
+            .string()
+            .trim()
+            .min(1, t("hosts.hostForm.pathRequired"))
+            .max(hostConstraints.name.maxLength ?? 128),
+          address: z
+            .string()
+            .trim()
+            .min(1, t("hosts.hostForm.pathRequired"))
+            .max(hostConstraints.address.maxLength ?? 512),
+          port: z.string().refine((value) => {
+            const parsed = Number(value);
+            return (
+              Number.isInteger(parsed) &&
+              parsed >= (hostConstraints.port.minimum ?? 1) &&
+              parsed <= (hostConstraints.port.maximum ?? 65535)
+            );
+          }, t("hosts.hostForm.pathRequired")),
+          connectionMode: z.enum(["via_bastion", "direct_ssh", "direct_winrm"]),
+          bastionScopeId: z.string(),
+          managedAccountId: z.string(),
+          environment: z.enum(["development", "staging", "production"]),
+          labelsText: z.string(),
+        })
+        .superRefine((values, context) => {
+          if (
+            host?.connection_mode !== "connector_local" &&
+            values.connectionMode === "via_bastion" &&
+            !values.bastionScopeId
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: t("hosts.hostForm.pathRequired"),
+              path: ["bastionScopeId"],
+            });
+          }
+          if (!host || host.connection_mode === "connector_local") return;
+          const pathChanged =
+            values.address !== host.address ||
+            Number(values.port) !== host.port ||
+            values.connectionMode !== host.connection_mode ||
+            (values.connectionMode === "via_bastion"
+              ? values.bastionScopeId
+              : "") !== (host.bastion_scope_id ?? "");
+          if (pathChanged && !values.managedAccountId) {
+            context.addIssue({
+              code: "custom",
+              message: t("hosts.hostForm.accountRequired"),
+              path: ["managedAccountId"],
+            });
+          }
+        }),
+    [host, t],
+  );
+  const {
+    register,
+    reset,
+    setError,
+    setValue,
+    watch,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<HostEditFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      address: "",
+      port: "22",
+      connectionMode: "via_bastion",
+      bastionScopeId: "",
+      managedAccountId: "",
+      environment: "production",
+      labelsText: "",
+    },
+  });
+  const address = watch("address");
+  const port = watch("port");
+  const connectionMode = watch("connectionMode");
+  const bastionScopeId = watch("bastionScopeId");
+  const managedAccountId = watch("managedAccountId");
+  const environment = watch("environment");
 
   const scopesQuery = useQuery({
     queryKey: ["connectors", "bastionScopes"],
@@ -397,66 +614,58 @@ export function EditHostDrawer({
     [accountsQuery.data, connectionMode, host?.id],
   );
 
-  // host 变化时同步表单初值（drawer 打开期间 host 固定）。
-  if (host && host.id !== loadedFor) {
-    setLoadedFor(host.id);
-    setName(host.name);
-    setAddress(host.address);
-    setPort(String(host.port));
-    if (host.connection_mode !== "connector_local") {
-      setConnectionMode(host.connection_mode);
-    }
-    setBastionScopeId(host.bastion_scope_id ?? "");
-    setManagedAccountId("");
-    setEnvironment(host.environment);
-    setLabelsText(labelsToText(host.labels));
-    setError("");
+  useEffect(() => {
+    if (!host) return;
+    reset({
+      name: host.name,
+      address: host.address,
+      port: String(host.port),
+      connectionMode:
+        host.connection_mode === "connector_local"
+          ? "via_bastion"
+          : host.connection_mode,
+      bastionScopeId: host.bastion_scope_id ?? "",
+      managedAccountId: "",
+      environment: host.environment,
+      labelsText: labelsToText(host.labels),
+    });
     setPendingAction(null);
-  }
+  }, [host, reset]);
 
-  const submit = async () => {
-    if (
-      !host ||
-      host.connection_mode === "connector_local" ||
-      submitting ||
-      !name.trim()
-    )
-      return;
-    const nextPort = Number(port);
+  const submit = async (values: HostEditFormValues) => {
+    if (!host || submitting) return;
+    const nextPort = Number(values.port);
     const pathChanged =
-      address.trim() !== host.address ||
-      nextPort !== host.port ||
-      connectionMode !== host.connection_mode ||
-      (connectionMode === "via_bastion" ? bastionScopeId : "") !==
-        (host.bastion_scope_id ?? "");
-    if (
-      !address.trim() ||
-      !Number.isInteger(nextPort) ||
-      nextPort < 1 ||
-      (connectionMode === "via_bastion" && !bastionScopeId)
-    ) {
-      setError(t("hosts.hostForm.pathRequired"));
-      return;
-    }
+      host.connection_mode !== "connector_local" &&
+      (values.address !== host.address ||
+        nextPort !== host.port ||
+        values.connectionMode !== host.connection_mode ||
+        (values.connectionMode === "via_bastion"
+          ? values.bastionScopeId
+          : "") !== (host.bastion_scope_id ?? ""));
     setSubmitting(true);
-    setError("");
     try {
       let connectionTestId: string | undefined;
       if (pathChanged) {
         const account = managedAccounts.find(
-          (entry) => entry.id === managedAccountId,
+          (entry) => entry.id === values.managedAccountId,
         );
         if (!account) {
-          setError(t("hosts.hostForm.accountRequired"));
+          setError("managedAccountId", {
+            message: t("hosts.hostForm.accountRequired"),
+            type: "validate",
+          });
           return;
         }
         let connectionTest = await api.hosts.createConnectionTest({
-          address: address.trim(),
+          address: values.address,
           port: nextPort,
           platform: host.platform,
-          connection_mode: connectionMode,
+          connection_mode: values.connectionMode,
           bastion_scope_id:
-            connectionMode === "via_bastion" ? bastionScopeId : undefined,
+            values.connectionMode === "via_bastion"
+              ? values.bastionScopeId
+              : undefined,
           credential_id: account.credential_id,
           username: account.username,
         });
@@ -466,33 +675,53 @@ export function EditHostDrawer({
           connectionTest = await api.hosts.getConnectionTest(connectionTest.id);
         }
         if (connectionTest.status !== "succeeded") {
-          setError(connectionTest.error_code ?? t("hosts.hostForm.testFailed"));
+          setError("root", {
+            message:
+              connectionTest.error_code ?? t("hosts.hostForm.testFailed"),
+            type: "server",
+          });
           return;
         }
         connectionTestId = connectionTest.id;
       }
       setPendingAction(
         await api.hosts.previewUpdateResource(host.id, {
-          name: name.trim(),
-          address: pathChanged ? address.trim() : undefined,
+          name: values.name,
+          address: pathChanged ? values.address : undefined,
           port: pathChanged ? nextPort : undefined,
-          connection_mode: pathChanged ? connectionMode : undefined,
+          connection_mode: pathChanged ? values.connectionMode : undefined,
           bastion_scope_id:
-            pathChanged && connectionMode === "via_bastion"
-              ? bastionScopeId
+            pathChanged && values.connectionMode === "via_bastion"
+              ? values.bastionScopeId
               : undefined,
-          environment,
-          labels: parseLabels(labelsText),
+          environment: values.environment,
+          labels: parseLabels(values.labelsText),
           connection_test_id: connectionTestId,
           expected_version: host.resource_version ?? 1,
         }),
       );
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : t("hosts.hostForm.testFailed"),
+      const field = apiErrorField(caught);
+      const formField =
+        field === "name"
+          ? "name"
+          : field === "address"
+            ? "address"
+            : field === "port"
+              ? "port"
+              : field === "bastion_scope_id"
+                ? "bastionScopeId"
+                : undefined;
+      const message = formatApiError(
+        caught,
+        t("hosts.hostForm.testFailed"),
+        (requestId) => t("common.requestReference", { requestId }),
       );
+      if (formField) {
+        setError(formField, { message, type: "server" }, { shouldFocus: true });
+      } else {
+        setError("root", { message, type: "server" });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -502,7 +731,7 @@ export function EditHostDrawer({
     <FormDrawer
       loading={submitting}
       onOpenChange={onOpenChange}
-      onSubmit={() => void submit()}
+      onSubmit={handleSubmit((values) => void submit(values))}
       open={host !== null}
       submitLabel={t("hosts.hostForm.submit")}
       title={t("hosts.hostForm.editTitle", { name: host?.name ?? "" })}
@@ -518,36 +747,43 @@ export function EditHostDrawer({
         />
       ) : (
         <>
-          {error ? (
-            <p className="argus-field__hint is-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <Field label={t("hosts.wizard.name")}>
+          {errors.root?.message && (
+            <Alert
+              description={errors.root.message}
+              title={t("hosts.hostForm.testFailed")}
+              tone="danger"
+            />
+          )}
+          <Field requirement="required" error={errors.name?.message} label={t("hosts.wizard.name")}>
             <Input
-              onChange={(event) => setName(event.target.value)}
-              value={name}
+              {...register("name")}
+              maxLength={hostConstraints.name.maxLength}
             />
           </Field>
-          <Field label={t("hosts.wizard.address")}>
+          <Field requirement="required" error={errors.address?.message} label={t("hosts.wizard.address")}>
             <Input
+              {...register("address")}
               disabled={host?.connection_mode === "connector_local"}
-              onChange={(event) => setAddress(event.target.value)}
-              value={address}
+              maxLength={hostConstraints.address.maxLength}
             />
           </Field>
           <div className="argus-form-row">
-            <Field label={t("hosts.wizard.port")}>
+            <Field requirement="required" error={errors.port?.message} label={t("hosts.wizard.port")}>
               <Input
+                {...register("port")}
                 disabled={host?.connection_mode === "connector_local"}
                 inputMode="numeric"
-                onChange={(event) => setPort(event.target.value)}
-                value={port}
+                max={hostConstraints.port.maximum}
+                min={hostConstraints.port.minimum}
               />
             </Field>
-            <Field label={t("hosts.wizard.environment")}>
+            <Field requirement="required" label={t("hosts.wizard.environment")}>
               <Select
-                onValueChange={(value) => setEnvironment(value as Environment)}
+                onValueChange={(value) =>
+                  setValue("environment", value as Environment, {
+                    shouldValidate: true,
+                  })
+                }
                 options={ENVIRONMENTS.map((env) => ({
                   value: env,
                   label: t(`hosts.env.${env}`),
@@ -558,11 +794,18 @@ export function EditHostDrawer({
           </div>
           {host?.connection_mode !== "connector_local" ? (
             <>
-              <Field label={t("hosts.hostForm.connectionMode")}>
+              <Field
+                requirement="required"
+                label={t("hosts.hostForm.connectionMode")}
+              >
                 <Select
                   onValueChange={(value) => {
-                    setConnectionMode(value as EditableHostConnectionMode);
-                    setManagedAccountId("");
+                    setValue(
+                      "connectionMode",
+                      value as EditableHostConnectionMode,
+                      { shouldValidate: true },
+                    );
+                    setValue("managedAccountId", "", { shouldValidate: true });
                   }}
                   options={HOST_CONNECTION_MODES.map((mode) => ({
                     value: mode,
@@ -572,9 +815,17 @@ export function EditHostDrawer({
                 />
               </Field>
               {connectionMode === "via_bastion" ? (
-                <Field label={t("hosts.hostForm.bastionScope")}>
+                <Field
+                  requirement="required"
+                  error={errors.bastionScopeId?.message}
+                  label={t("hosts.hostForm.bastionScope")}
+                >
                   <Select
-                    onValueChange={setBastionScopeId}
+                    onValueChange={(value) =>
+                      setValue("bastionScopeId", value, {
+                        shouldValidate: true,
+                      })
+                    }
                     options={[
                       { value: "", label: "-" },
                       ...(scopesQuery.data?.items ?? [])
@@ -589,11 +840,26 @@ export function EditHostDrawer({
                 </Field>
               ) : null}
               <Field
+                requirement={
+                  host &&
+                  (address.trim() !== host.address ||
+                    Number(port) !== host.port ||
+                    connectionMode !== host.connection_mode ||
+                    (connectionMode === "via_bastion" ? bastionScopeId : "") !==
+                      (host.bastion_scope_id ?? ""))
+                    ? "required"
+                    : "optional"
+                }
+                error={errors.managedAccountId?.message}
                 hint={t("hosts.hostForm.accountHint")}
                 label={t("hosts.hostForm.account")}
               >
                 <Select
-                  onValueChange={setManagedAccountId}
+                  onValueChange={(value) =>
+                    setValue("managedAccountId", value, {
+                      shouldValidate: true,
+                    })
+                  }
                   options={[
                     { value: "", label: t("hosts.hostForm.accountSelect") },
                     ...managedAccounts.map((account) => ({
@@ -607,13 +873,13 @@ export function EditHostDrawer({
             </>
           ) : null}
           <Field
+            requirement="optional"
             hint={t("hosts.wizard.labelsHint")}
             label={t("hosts.wizard.labels")}
           >
             <Textarea
-              onChange={(event) => setLabelsText(event.target.value)}
+              {...register("labelsText")}
               rows={3}
-              value={labelsText}
             />
           </Field>
         </>

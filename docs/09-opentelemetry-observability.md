@@ -222,7 +222,7 @@ OTLP 收集器
 [安装 OTLP 收集器]
 ```
 
-独立公网主机显示 `Argus Direct Executor → public-web-01`。安装完成后显示状态、版本、角色、Desired/Effective Revision、启用的 Collection Profile、Telemetry Route、最后成功发送和升级/修复/卸载操作。
+直连独立主机显示 `Argus Direct Executor → web-01`。安装完成后显示状态、版本、角色、Desired/Effective Revision、启用的 Collection Profile、Telemetry Route、最后成功发送和升级/修复/卸载操作。
 
 OTLP 收集器详情使用：
 

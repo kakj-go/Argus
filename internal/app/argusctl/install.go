@@ -282,11 +282,9 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 	allowedOrigins := []any{
 		"http://localhost:4173",
 		"http://localhost:4174",
-		"http://localhost:4175",
 		"http://localhost:4176",
 		"http://127.0.0.1:4173",
 		"http://127.0.0.1:4174",
-		"http://127.0.0.1:4175",
 		"http://127.0.0.1:4176",
 	}
 	secureCookies := false
@@ -294,7 +292,6 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		allowedOrigins = []any{
 			"https://" + cfg.Spec.Exposure.EnterpriseHost,
 			"https://" + cfg.Spec.Exposure.PlatformHost,
-			"https://" + cfg.Spec.Exposure.SetupHost,
 		}
 		secureCookies = true
 	}
@@ -316,6 +313,9 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"telemetryClickhouseMigrationPassword": credentials["telemetry-clickhouse-migration-password"],
 		"telemetryClickhouseWriterPassword":    credentials["telemetry-clickhouse-writer-password"],
 		"telemetryClickhouseQueryPassword":     credentials["telemetry-clickhouse-query-password"],
+		"telemetryIngestGrpcEndpoint":          fmt.Sprintf("grpcs://argus-telemetry-ingest.%s.svc:4317", cfg.Spec.Namespaces.Observability),
+		"telemetryIngestHttpEndpoint":          fmt.Sprintf("https://argus-telemetry-ingest.%s.svc:4318", cfg.Spec.Namespaces.Observability),
+		"telemetryEnrollmentEndpoint":          fmt.Sprintf("https://argus-telemetry-ingest.%s.svc:4318/v1/identity/enroll", cfg.Spec.Namespaces.Observability),
 		"telemetryToolCatalogEnabled":          true,
 		"otelcolVersion":                       cfg.Spec.Telemetry.CollectorVersion, "otelcolLinuxArm64Uri": cfg.Spec.Telemetry.LinuxARM64URI,
 		"otelcolLinuxArm64Sha256": cfg.Spec.Telemetry.LinuxARM64SHA256, "otelcolLinuxArm64Signature": cfg.Spec.Telemetry.LinuxARM64Signature,
@@ -350,7 +350,7 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"images":  map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
 		"runtime": runtimeValues,
 		"production": map[string]any{"hosts": map[string]any{"enterprise": cfg.Spec.Exposure.EnterpriseHost,
-			"platform": cfg.Spec.Exposure.PlatformHost, "setup": cfg.Spec.Exposure.SetupHost, "connector": cfg.Spec.Exposure.ConnectorHost}},
+			"platform": cfg.Spec.Exposure.PlatformHost, "connector": cfg.Spec.Exposure.ConnectorHost}},
 	}
 }
 

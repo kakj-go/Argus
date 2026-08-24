@@ -126,6 +126,35 @@ describe("ChatMessageItem", () => {
     );
     expect(screen.getByTestId("tool-trace")).toBeInTheDocument();
   });
+
+  it("将卡片动作 key 显示为本地化名称", () => {
+    const client = createMockApiClient({ persist: false, delay: 0 });
+    const wrapper = createWrapper(client);
+    render(
+      <ChatMessageItem
+        message={makeMessage({
+          id: "msg-result",
+          event: {
+            type: "card_action_result",
+            origin: "user_interaction",
+            actorUserId: "user-1",
+            cardInstanceId: "card-1",
+            action: "confirm",
+            tool: "host.create",
+            status: "success",
+          },
+        })}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByTestId("card-action-result")).toHaveTextContent(
+      "卡片操作 · 确认 · 执行成功",
+    );
+    expect(screen.getByTestId("card-action-result")).not.toHaveTextContent(
+      "confirm",
+    );
+  });
 });
 
 describe("ChatMessageList", () => {

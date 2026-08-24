@@ -182,7 +182,10 @@ function auditEvent(value: AuditEventContract): AuditEvent {
     id: value.id,
     enterpriseId: value.enterprise_id ?? null,
     actorUserId: value.actor_id,
-    actorName: value.actor_id,
+    actorName:
+      value.actor_display_name ?? value.actor_username ?? value.actor_id,
+    actorType: value.actor_type,
+    actorUsername: value.actor_username,
     action: value.action,
     origin:
       value.actor_type === "system"
@@ -192,6 +195,7 @@ function auditEvent(value: AuditEventContract): AuditEvent {
           : "admin_ui",
     resourceType: value.resource_type,
     resourceId: value.resource_id,
+    resourceName: value.resource_display_name,
     summary:
       typeof value.details.summary === "string"
         ? value.details.summary

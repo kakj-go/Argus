@@ -4,7 +4,13 @@ import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { useApi, type EnterpriseAdmin } from "@argus/api-client";
+import {
+  apiErrorField,
+  formConstraint,
+  formatApiError,
+  useApi,
+  type EnterpriseAdmin,
+} from "@argus/api-client";
 import {
   Alert,
   Button,
@@ -35,6 +41,12 @@ type AdminRow = {
 
 type AdminAction = "resetAuth" | "disable";
 
+const adminCreateConstraints = {
+  username: formConstraint("EnterpriseAdminCreate", "username"),
+  displayName: formConstraint("EnterpriseAdminCreate", "display_name"),
+  email: formConstraint("EnterpriseAdminCreate", "email"),
+};
+
 function credentialTone(status: EnterpriseAdmin["credentialStatus"]) {
   if (status === "active") return "success" as const;
   if (status === "temporary_password") return "warning" as const;
@@ -61,8 +73,32 @@ export function AdminsPage() {
     () =>
       z.object({
         enterpriseId: z.string().min(1, t("admins.form.required")),
-        username: z.string().trim().min(3, t("admins.form.usernameInvalid")),
-        displayName: z.string().trim().min(1, t("admins.form.required")),
+        username: z
+          .string()
+          .trim()
+          .min(
+            adminCreateConstraints.username.minLength ?? 3,
+            t("admins.form.usernameInvalid"),
+          )
+          .max(
+            adminCreateConstraints.username.maxLength ?? 128,
+            t("admins.form.tooLong", {
+              max: adminCreateConstraints.username.maxLength ?? 128,
+            }),
+          ),
+        displayName: z
+          .string()
+          .trim()
+          .min(
+            adminCreateConstraints.displayName.minLength ?? 1,
+            t("admins.form.required"),
+          )
+          .max(
+            adminCreateConstraints.displayName.maxLength ?? 128,
+            t("admins.form.tooLong", {
+              max: adminCreateConstraints.displayName.maxLength ?? 128,
+            }),
+          ),
         email: z
           .string()
           .trim()
@@ -78,6 +114,7 @@ export function AdminsPage() {
     control,
     register,
     reset,
+    setError,
     handleSubmit,
     formState: { errors },
   } = useForm<AdminForm>({
@@ -115,6 +152,27 @@ export function AdminsPage() {
       setCreated(admin);
       reset();
       void invalidate();
+    },
+    onError: (error) => {
+      const field = apiErrorField(error);
+      const formField =
+        field === "enterprise_id"
+          ? "enterpriseId"
+          : field === "display_name"
+            ? "displayName"
+            : field === "username" || field === "email"
+              ? field
+              : undefined;
+      const message = formatApiError(
+        error,
+        t("common.saveFailed"),
+        (requestId) => t("common.requestReference", { requestId }),
+      );
+      if (formField) {
+        setError(formField, { message, type: "server" }, { shouldFocus: true });
+      } else {
+        setError("root", { message, type: "server" });
+      }
     },
   });
 
@@ -257,7 +315,14 @@ export function AdminsPage() {
         submitLabel={t("common.create")}
         title={t("admins.form.title")}
       >
-        <Field
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("common.saveFailed")}
+            tone="danger"
+          />
+        )}
+        <Field requirement="required"
           error={errors.enterpriseId?.message}
           label={t("admins.form.enterprise")}
         >
@@ -276,19 +341,19 @@ export function AdminsPage() {
             )}
           />
         </Field>
-        <Field
+        <Field requirement="required"
           error={errors.displayName?.message}
           label={t("admins.form.displayName")}
         >
-          <Input {...register("displayName")} required />
+          <Input {...register("displayName")} maxLength={adminCreateConstraints.displayName.maxLength} required />
         </Field>
-        <Field
+        <Field requirement="required"
           error={errors.username?.message}
           label={t("admins.form.username")}
         >
-          <Input {...register("username")} required />
+          <Input {...register("username")} maxLength={adminCreateConstraints.username.maxLength} required />
         </Field>
-        <Field error={errors.email?.message} label={t("admins.form.email")}>
+        <Field requirement="optional" error={errors.email?.message} label={t("admins.form.email")}>
           <Input {...register("email")} type="email" />
         </Field>
       </FormDrawer>

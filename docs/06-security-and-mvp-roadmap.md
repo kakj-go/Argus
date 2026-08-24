@@ -109,14 +109,14 @@ PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。
 - 主机 `connector_local`、`via_bastion`、公网 `direct_ssh/direct_winrm` 连接模式。
 - 受控 Direct Executor：固定出口、SSRF 防护、Host Key 校验和独立执行池。
 - Secret、Credential、ManagedAccount 和绑定操作/资源/接收者的短期 Credential Lease；不提供原值读取权限。
-- 主机卡片按 Bastion Scope 分组，公网 Direct Host 独立显示。
+- 主机卡片按 Bastion Scope 分组，直连 Host 独立显示。
 - Kubernetes 集群 CRUD、kubeconfig Secret 化和连接测试。
 - Namespace、Node、Pod、Deployment、StatefulSet、DaemonSet、Service 和有界日志读取。
 - Connector 一次性注册、CSR/mTLS、证书轮换/吊销、心跳、Gateway Registry、Drain 和类型化命令。
 - 资源专用 PendingAction/Plan/Token 与 Preview/Confirm；M4 在其上增加 Approval、Execution、Agent 和 Tool。
 - 管理后台和领域服务打通。
 
-完成标准：不使用 AI 也能通过管理后台完成 Secret/ManagedAccount、带标签的堡垒机安装、内网/公网主机和 Kubernetes 接入；Resource Operator 不能使用 DataScope 之外的资源，所有 Secret 不回显，所有接入路径、确认和连接测试可审计。
+完成标准：不使用 AI 也能通过管理后台完成 Secret/ManagedAccount、带标签的堡垒机安装、经堡垒机/直连主机和 Kubernetes 接入；Resource Operator 不能使用 DataScope 之外的资源，所有 Secret 不回显，所有接入路径、确认和连接测试可审计。
 
 M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证了 Connector 注册竞争/证书轮换、双 Gateway 路由、Bastion Replacement、Direct SSRF 边界、Kubernetes 三种接入、DataScope 撤权、Secret 轮换、Redis 清空和 Server/Gateway 重启恢复；M3 Namespace、PVC 与 Lease 均已清理。
 
@@ -158,7 +158,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 - 录像采用 asciicast v2 NDJSON、AES-256-GCM 分片和 SHA-256 Hash Chain；ObjectStore 连续不可用 30 秒或内存缓冲超过 4 MiB 时终止会话。
 - Gateway 外部 WSS、内部 peer mTLS、Connector gRPC 和 Direct Executor RPC 使用独立端口与身份；Redis 丢失后从 PostgreSQL 和 Connector 心跳恢复。
 
-完成标准：已于 2026-08-18 达成。最终 `make e2e-m6-k8s` 运行号为 `20260818072400-79219`，验证真实 SSH、TLS WinRS 模拟器、跨 Gateway Drain、Ticket 重放、AuthorizationVersion 撤权、MinIO fail closed、录像和 real Playwright，清理后 Namespace、PVC 与 Lease 零残留。M8 本地加固补齐 MFA/Step-up 与本地录像恢复；Production 录像不可变保留、真实 Windows、容量和安全审计仍在 Production Validation 清单。
+完成标准：已于 2026-08-18 达成。旧 Shell Harness 最终运行号为 `20260818072400-79219`，验证真实 SSH、TLS WinRS 模拟器、跨 Gateway Drain、Ticket 重放、AuthorizationVersion 撤权、MinIO fail closed、录像和 real Playwright，清理后 Namespace、PVC 与 Lease 零残留。当前官方入口为 `go run ./cmd/argus-dev e2e run --suite m6`。M8 本地加固补齐 MFA/Step-up 与本地录像恢复；Production 录像不可变保留、真实 Windows、容量和安全审计仍在 Production Validation 清单。
 
 ## 10. 第六阶段：OpenTelemetry 监控链路（M7）
 

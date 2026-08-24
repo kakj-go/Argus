@@ -61,7 +61,7 @@ export function collectorTone(status: CollectorStatus): Tone {
   }
 }
 
-/** 连接路径文案：Argus → 堡垒机 → 内网地址 / Direct Executor → 公网地址。 */
+/** 连接路径文案：Argus → 堡垒机 → 目标地址 / Direct Executor → 目标地址。 */
 export function connectionPathKey(
   host: Host,
 ): "viaBastion" | "connectorLocal" | "direct" {
@@ -111,23 +111,6 @@ export function labelsToText(labels: Record<string, string>): string {
   return Object.entries(labels)
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
-}
-
-/** 直连模式仅接受公网地址（docs/03 §6.2：拒绝 RFC1918/环回/链路本地）。 */
-export function isPublicAddress(address: string): boolean {
-  const trimmed = address.trim();
-  if (!trimmed) return false;
-  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(trimmed)) {
-    // 域名形式：演示环境不做 DNS 解析，排除明显的内部后缀。
-    return !/\.(internal|local|lan|corp)$/.test(trimmed);
-  }
-  const [a, b] = trimmed.split(".").map(Number);
-  if (a === 10 || a === 127 || a === 0) return false;
-  if (a === 192 && b === 168) return false;
-  if (a === 172 && b !== undefined && b >= 16 && b <= 31) return false;
-  if (a === 169 && b === 254) return false;
-  if (a !== undefined && a >= 224) return false;
-  return true;
 }
 
 /** 由字符串种子生成确定性伪随机序列（概览页指标演示数据）。 */

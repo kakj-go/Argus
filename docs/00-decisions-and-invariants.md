@@ -94,7 +94,7 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 - Connector 只建立出站 mTLS 长连接，处理控制命令、批准 Artifact、端口/协议隧道和经授权的人工远程会话；Collector 不复用 Connector 通道发送遥测。
 - Connector 命令必须具有持久化状态、幂等键、连接代次 `connection_epoch`、过期时间和结果未知状态，不能把断连直接视为执行失败。
 - 安装 Connector 并注册为堡垒机时必须创建稳定的 Bastion Scope 和对应 Host；经堡垒机接入的内网主机只能归属一个 Bastion Scope。Bastion Scope 不能与可轮换、可重装的 Connector 实例共用同一主键和生命周期。
-- 主机连接模式第一版固定为 `connector_local`、`via_bastion`、`direct_ssh` 和 `direct_winrm`。Direct 模式只能由受控 Direct Executor 访问经校验的公网目标，必须执行固定出口、协议/端口白名单、Host Key/目标身份校验和 SSRF/私网地址拦截。
+- 主机连接模式第一版固定为 `connector_local`、`via_bastion`、`direct_ssh` 和 `direct_winrm`。Direct 模式由受控 Direct Executor 访问其部署网络可达且经过校验的目标，不以公网/私网划分；必须执行出口身份、协议/端口白名单、Host Key/目标身份校验、DNS Rebinding 防护，并拦截环回、链路本地、云元数据及配置的禁用网段。
 - Remote Access Session 是人工操作边界，不等同于 MCP Tool Commit。它必须使用短期一次性会话票据，并校验 Enterprise、Host、ManagedAccount、协议、动作、Grant、DataScope、授权版本、MFA/审批、最长时长、录像与审计；AI、Card、Automation 和 OpenSandbox 不得获得交互式会话票据。
 - 所有已建立管理连接的 Host 都提供统一的“命令行”入口；人工命令行与自动化任务可以复用底层连接适配器，但必须使用不同的票据、API、队列、状态机和审计类型。
 - Bastion Scope 成员的 Telemetry Route 只能是直接推送 Argus 或推送到所属堡垒机上已启用 Gateway 模式的 Collector；独立主机不得选择任何 Bastion Scope 内成员作为上游。

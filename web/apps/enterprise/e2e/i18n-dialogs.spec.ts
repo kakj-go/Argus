@@ -6,7 +6,11 @@ const platformOrigin =
   process.env.ARGUS_E2E_PLATFORM_ORIGIN ?? "http://127.0.0.1:4174";
 
 async function login(page: Page, origin: string, username: string) {
-  await page.goto(`${origin}/login`);
+  const url =
+    origin === platformOrigin
+      ? `${origin}/login?initialized=true&reset=1`
+      : `${origin}/login`;
+  await page.goto(url);
   await page.locator('input[autocomplete="username"]').fill(username);
   await page.locator('input[autocomplete="current-password"]').fill("123456");
   await page.locator('form button[type="submit"]').click();
@@ -40,11 +44,9 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     const drawer = page.getByRole("dialog");
     await expect(drawer).toBeVisible();
     await expect(
-      drawer.getByText(locale === "zh-CN" ? "接入方式" : "Connection mode", {
-        exact: true,
-      }),
+      drawer.getByLabel(locale === "zh-CN" ? "接入方式" : "Connection mode"),
     ).toBeVisible();
-    await expect(drawer.getByText("API Server", { exact: true })).toBeVisible();
+    await expect(drawer.getByLabel("API Server")).toBeVisible();
     await expect(drawer).not.toContainText("kubernetes.form.");
   });
 }
@@ -55,15 +57,16 @@ test("Platform quota drawer resolves shared Sandbox keys", async ({ page }) => {
     window.localStorage.setItem("argus.theme", "light");
   });
   await login(page, platformOrigin, "admin");
-  await page.goto(`${platformOrigin}/sandbox`);
+  await page.getByRole("link", { name: "OpenSandbox" }).click();
+  await expect(page).toHaveURL(`${platformOrigin}/sandbox`);
   await page.getByRole("tab", { name: "企业配额" }).click();
   await page.getByRole("button", { name: "编辑配额" }).first().click();
 
   const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible();
   await expect(
-    drawer.getByText("允许的 Profile", { exact: true }),
+    drawer.getByRole("group", { name: "允许的 Profile" }),
   ).toBeVisible();
-  await expect(drawer.getByText("并发会话", { exact: true })).toBeVisible();
+  await expect(drawer.getByLabel("并发会话")).toBeVisible();
   await expect(drawer).not.toContainText("enterprises.quota.");
 });

@@ -9,7 +9,6 @@ spec:
   ports:
     - {name: enterprise, port: 8080, targetPort: 8080}
     - {name: platform, port: 8081, targetPort: 8081}
-    - {name: setup, port: 8082, targetPort: 8082}
     - {name: cards, port: 8083, targetPort: 8083}
 ---
 apiVersion: apps/v1
@@ -47,7 +46,6 @@ spec:
           ports:
             - {name: enterprise, containerPort: 8080}
             - {name: platform, containerPort: 8081}
-            - {name: setup, containerPort: 8082}
             - {name: cards, containerPort: 8083}
           readinessProbe:
             httpGet: {path: /healthz, port: enterprise}
@@ -56,17 +54,3 @@ spec:
           resources:
             requests: {cpu: 50m, memory: 64Mi}
             limits: {cpu: 500m, memory: 256Mi}
-          {{- if ne .Values.profile "production" }}
-          volumeMounts:
-            - name: setup-token
-              mountPath: /var/run/secrets/argus/setup
-              readOnly: true
-          {{- end }}
-      {{- if ne .Values.profile "production" }}
-      volumes:
-        - name: setup-token
-          secret:
-            secretName: {{ .Values.setupTokenSecretName }}
-            items:
-              - {key: setup-token, path: token}
-      {{- end }}

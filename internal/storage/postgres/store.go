@@ -41,7 +41,17 @@ func (store *Store) Close() { store.Pool.Close() }
 func (store *Store) Ready(ctx context.Context) error { return store.Pool.Ping(ctx) }
 
 func (store *Store) InTx(ctx context.Context, fn func(*db.Queries) error) error {
-	tx, err := store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	return store.inTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, fn)
+}
+
+// InReadCommittedTx is reserved for workflows that explicitly serialize their
+// own writes with row locks, such as the append-only audit hash chain.
+func (store *Store) InReadCommittedTx(ctx context.Context, fn func(*db.Queries) error) error {
+	return store.inTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
+}
+
+func (store *Store) inTx(ctx context.Context, options pgx.TxOptions, fn func(*db.Queries) error) error {
+	tx, err := store.Pool.BeginTx(ctx, options)
 	if err != nil {
 		return err
 	}

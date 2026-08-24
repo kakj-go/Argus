@@ -24,6 +24,10 @@ type SessionRow = {
   lastActivityAt?: string;
 };
 
+function shortReference(value: string): string {
+  return value.length <= 12 ? value : `${value.slice(0, 8)}…${value.slice(-4)}`;
+}
+
 function statusTone(status: SandboxSessionMeta["status"]) {
   if (status === "running") return "success" as const;
   if (status === "idle" || status === "starting" || status === "requested")
@@ -112,7 +116,12 @@ export function SessionsTab() {
             {
               key: "userId",
               header: t("sandbox.sessions.table.user"),
-              render: (row) => <code className="argus-mono">{row.userId}</code>,
+              render: (row) => (
+                <span title={row.userId}>
+                  {t("sandbox.sessions.enterpriseUser")} ·{" "}
+                  <code className="argus-mono">{shortReference(row.userId)}</code>
+                </span>
+              ),
             },
             {
               key: "purpose",

@@ -5,7 +5,14 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { MfaRequiredError, PasswordChangeRequiredError, useApi } from "@argus/api-client";
+import {
+  apiErrorRequestId,
+  MfaRequiredError,
+  PasswordChangeRequiredError,
+  passwordPolicyRuleFromError,
+  validatePasswordPolicy,
+  useApi,
+} from "@argus/api-client";
 import { useEnterpriseAuthStore } from "@argus/auth";
 import { AppearanceControls, Button, Field, Input } from "@argus/ui";
 import "../styles/auth.css";
@@ -59,11 +66,15 @@ export function LoginPage() {
               context.addIssue({ code: "custom", path: ["mfaCode"], message: t("login.mfaInvalid") });
             return;
           }
-          if (values.newPassword.length < 12)
+          const passwordRule = validatePasswordPolicy(values.newPassword, {
+            username: values.username,
+            previousPassword: values.password,
+          });
+          if (passwordRule)
             context.addIssue({
               code: "custom",
               path: ["newPassword"],
-              message: t("login.passwordTooShort"),
+              message: t(`login.passwordPolicy.${passwordRule}`),
             });
           if (values.newPassword !== values.confirmPassword)
             context.addIssue({
@@ -129,13 +140,20 @@ export function LoginPage() {
         setMfaChallengeId(reason.challenge.challenge_id);
         setValue("mode", "mfa", { shouldValidate: false });
         setError(null);
-      } else
-        setError(
-          reason instanceof Error &&
-            reason.message.includes("Unexpected enterprise")
+      } else {
+        const passwordRule = passwordPolicyRuleFromError(reason);
+        const message = passwordRule
+          ? t(`login.passwordPolicy.${passwordRule}`)
+          : reason instanceof Error && reason.message.includes("Unexpected enterprise")
             ? t("login.wrongPortal")
-            : t("login.failed"),
+            : t("login.failed");
+        const requestId = apiErrorRequestId(reason);
+        setError(
+          requestId
+            ? `${message} ${t("login.requestReference", { requestId })}`
+            : message,
         );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -166,7 +184,7 @@ export function LoginPage() {
           </p>
         )}
         {!challengeId && !mfaChallengeId && (
-          <Field error={errors.username?.message} label={t("login.username")}>
+          <Field requirement="required" error={errors.username?.message} label={t("login.username")}>
             <Input
               {...register("username")}
               autoComplete="username"
@@ -176,7 +194,7 @@ export function LoginPage() {
           </Field>
         )}
         {!challengeId && !mfaChallengeId && (
-          <Field error={errors.password?.message} label={t("login.password")}>
+          <Field requirement="required" error={errors.password?.message} label={t("login.password")}>
             <Input
               {...register("password")}
               autoComplete="current-password"
@@ -187,7 +205,7 @@ export function LoginPage() {
         )}
         {challengeId && (
           <>
-            <Field
+            <Field requirement="required"
               error={errors.newPassword?.message}
               label={t("login.newPassword")}
             >
@@ -197,7 +215,7 @@ export function LoginPage() {
                 type="password"
               />
             </Field>
-            <Field
+            <Field requirement="required"
               error={errors.confirmPassword?.message}
               label={t("login.confirmPassword")}
             >
@@ -210,7 +228,7 @@ export function LoginPage() {
           </>
         )}
         {mfaChallengeId && (
-          <Field error={errors.mfaCode?.message} label={t("login.mfaCode")}>
+          <Field requirement="required" error={errors.mfaCode?.message} label={t("login.mfaCode")}>
             <Input {...register("mfaCode")} autoComplete="one-time-code" autoFocus inputMode="numeric" />
           </Field>
         )}

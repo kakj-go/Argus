@@ -95,19 +95,6 @@ function profile(
   };
 }
 
-function meta(resourceIds: string[]) {
-  const partial = resourceIds.includes("k8s-prod-east");
-  const partialReasons: Array<"row_limit"> = partial ? ["row_limit"] : [];
-  return {
-    schema_version: "argus.telemetry_result/v1" as const,
-    partial,
-    partial_reasons: partialReasons,
-    applied_resource_count: resourceIds.length,
-    scanned_bytes: 4096,
-    elapsed_ms: 8,
-  };
-}
-
 export function createTelemetryDomain(ctx: MockContext): ArgusApiClient["telemetry"] {
   return {
     async listDistributions() {

@@ -56,7 +56,7 @@ function profileView(value: SandboxProfileContract): SandboxProfile {
     description: value.task_kinds.join(", "),
     imageId: value.image_id,
     resources: {
-      cpu: value.cpu_millis,
+      cpu: value.cpu_millis / 1000,
       memoryMb: value.memory_mib,
       diskMb: 0,
       pids: 0,
@@ -109,7 +109,9 @@ function sessionView(value: SandboxSession): SandboxSessionMeta {
     status,
     startedAt: value.created_at,
     lastActivityAt: value.updated_at,
-    ...(value.status === "terminated" ? { terminatedAt: value.updated_at } : {}),
+    ...(value.status === "terminated"
+      ? { terminatedAt: value.updated_at }
+      : {}),
   };
 }
 
@@ -156,7 +158,8 @@ export function installSandboxDomains(context: RealDomainContext): void {
         await client.platform.sandboxBackends.list();
         current = backends.get(id);
       }
-      if (!current) throw new ClientOperationUnavailableError("sandbox.backend");
+      if (!current)
+        throw new ClientOperationUnavailableError("sandbox.backend");
       const value = await http.request<SandboxBackendContract>(
         `platform/sandbox/backends/${id}`,
         {
@@ -222,7 +225,9 @@ export function installSandboxDomains(context: RealDomainContext): void {
     },
     async create(input) {
       if (backends.size === 0) await client.platform.sandboxBackends.list();
-      const backend = [...backends.values()].find((item) => item.status === "enabled");
+      const backend = [...backends.values()].find(
+        (item) => item.status === "enabled",
+      );
       if (!backend) {
         throw new ClientOperationUnavailableError("sandbox.image.backend");
       }
@@ -302,10 +307,11 @@ export function installSandboxDomains(context: RealDomainContext): void {
             backend_id: image.backend_id,
             image_id: input.imageId,
             task_kinds: ["attachment_processing"],
-            cpu_millis: input.resources.cpu,
+            cpu_millis: Math.round(input.resources.cpu * 1000),
             memory_mib: input.resources.memoryMb,
             timeout_seconds: input.timeouts.lifetimeSeconds,
-            network_mode: input.network.mode === "deny_all" ? "none" : "restricted",
+            network_mode:
+              input.network.mode === "deny_all" ? "none" : "restricted",
             status: "enabled",
             expected_version: 0,
           },
@@ -321,7 +327,8 @@ export function installSandboxDomains(context: RealDomainContext): void {
         await client.platform.profiles.list();
         current = profiles.get(id);
       }
-      if (!current) throw new ClientOperationUnavailableError("sandbox.profile");
+      if (!current)
+        throw new ClientOperationUnavailableError("sandbox.profile");
       const imageId = patch.imageId ?? current.image_id;
       if (images.size === 0) await client.platform.images.list();
       const image = images.get(imageId);
@@ -338,9 +345,13 @@ export function installSandboxDomains(context: RealDomainContext): void {
             backend_id: image.backend_id,
             image_id: imageId,
             task_kinds: current.task_kinds,
-            cpu_millis: patch.resources?.cpu ?? current.cpu_millis,
+            cpu_millis:
+              patch.resources?.cpu === undefined
+                ? current.cpu_millis
+                : Math.round(patch.resources.cpu * 1000),
             memory_mib: patch.resources?.memoryMb ?? current.memory_mib,
-            timeout_seconds: patch.timeouts?.lifetimeSeconds ?? current.timeout_seconds,
+            timeout_seconds:
+              patch.timeouts?.lifetimeSeconds ?? current.timeout_seconds,
             network_mode: patch.network
               ? patch.network.mode === "deny_all"
                 ? "none"
@@ -381,8 +392,10 @@ export function installSandboxDomains(context: RealDomainContext): void {
             max_concurrent_sessions:
               patch.maxConcurrentSessions ?? current.maxConcurrentSessions,
             monthly_session_seconds:
-              (patch.maxDailySessionMinutes ?? current.maxDailySessionMinutes) * 60,
-            expected_version: versions.get(`sandbox-quota:${enterpriseId}`) ?? 1,
+              (patch.maxDailySessionMinutes ?? current.maxDailySessionMinutes) *
+              60,
+            expected_version:
+              versions.get(`sandbox-quota:${enterpriseId}`) ?? 1,
           },
         },
       );
@@ -393,12 +406,16 @@ export function installSandboxDomains(context: RealDomainContext): void {
 
   client.platform.sessions = {
     async list(filter) {
-      const values = await http.request<SandboxSession[]>("platform/sandbox/sessions");
+      const values = await http.request<SandboxSession[]>(
+        "platform/sandbox/sessions",
+      );
       return values
         .filter(
           (value) =>
-            (!filter?.enterpriseId || value.enterprise_id === filter.enterpriseId) &&
-            (!filter?.status?.length || filter.status.includes(sessionView(value).status)),
+            (!filter?.enterpriseId ||
+              value.enterprise_id === filter.enterpriseId) &&
+            (!filter?.status?.length ||
+              filter.status.includes(sessionView(value).status)),
         )
         .map(sessionView);
     },

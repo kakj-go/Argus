@@ -22,12 +22,12 @@ func (a *App) imagesBuild(ctx context.Context, cfg *InstallConfig, platform stri
 	if err != nil {
 		return err
 	}
-	if cfg.Spec.Images.Mode == "local-registry" && platform == "linux/arm64" {
+	if cfg.Spec.Images.Mode == "local-registry" && !strings.Contains(platform, ",") {
 		if err := a.ensureRegistry(ctx, cfg); err != nil {
 			return err
 		}
 	}
-	localRegistryPush := cfg.Spec.Images.Mode == "local-registry" && platform == "linux/arm64"
+	localRegistryPush := cfg.Spec.Images.Mode == "local-registry" && !strings.Contains(platform, ",")
 	builder := ""
 	if !localRegistryPush {
 		builder = buildxBuilderName(cfg)
@@ -111,6 +111,11 @@ func (a *App) imagesLoad(ctx context.Context, cfg *InstallConfig) error {
 	loaderName := kubernetesName("argus-image-loader-" + cfg.Spec.ReleaseID)
 	manifest := imageLoaderManifest(loaderName, cfg)
 	if _, err := a.runner.run(ctx, strings.NewReader(manifest), "kubectl", "--context", cfg.Spec.KubeContext, "apply", "--filename", "-"); err != nil {
+		return err
+	}
+	// Tags such as "dev" are intentionally reusable. Restarting the loader
+	// reruns its init container so containerd refreshes those tags on every load.
+	if _, err := a.runner.run(ctx, nil, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", "kube-system", "rollout", "restart", "daemonset/"+loaderName); err != nil {
 		return err
 	}
 	_, err := a.runner.run(ctx, nil, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", "kube-system", "rollout", "status", "daemonset/"+loaderName, "--timeout=10m")

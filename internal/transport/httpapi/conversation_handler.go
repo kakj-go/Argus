@@ -350,7 +350,9 @@ func (handler ConversationHandler) auth(ctx context.Context, mutation bool, csrf
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &conversationapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &conversationapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]conversationapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func toConversation(value db.Conversation) conversationapi.Conversation {
@@ -399,7 +401,8 @@ func toConversationEvent(value db.ConversationEvent) conversationapi.Conversatio
 }
 
 func conversationError(ctx context.Context, err error) conversationapi.ApiError {
-	code, key := "INTERNAL_ERROR", "errors.internal"
+	code, key := "INTERNAL_ERROR", "errors.common.internal"
+	defer func() { logMappedError(ctx, code, err) }()
 	switch {
 	case errors.Is(err, conversation.ErrRunAlreadyActive):
 		code, key = "RUN_ALREADY_ACTIVE", "errors.run.already_active"
@@ -408,7 +411,7 @@ func conversationError(ctx context.Context, err error) conversationapi.ApiError 
 	case errors.Is(err, conversation.ErrConversationClosed), errors.Is(err, conversation.ErrRunNotCancellable):
 		code, key = "RUN_STATE_CONFLICT", "errors.run.state_conflict"
 	case errors.Is(err, pgx.ErrNoRows):
-		code, key = "NOT_FOUND", "errors.not_found"
+		code, key = "RESOURCE_NOT_FOUND", "errors.common.resource_not_found"
 	}
 	requestID := "server-generated-request"
 	if current, ok := RequestFromContext(ctx); ok {

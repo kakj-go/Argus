@@ -7,6 +7,17 @@
   gap: var(--space-px-16);
 }
 
+.argus-settings-create-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-px-6);
+}
+
+.argus-settings-resource-tabs {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
 .argus-settings-section {
   display: flex;
   flex-direction: column;
@@ -93,7 +104,9 @@
 
 .argus-settings-selector-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.45fr) minmax(0, 1fr) auto;
+  grid-template-columns:
+    minmax(0, 1fr) minmax(140px, 0.45fr) minmax(0, 1fr)
+    auto;
   gap: var(--space-px-8);
   align-items: center;
 }
@@ -101,6 +114,31 @@
 @media (max-width: 720px) {
   .argus-settings-selector-row {
     grid-template-columns: 1fr;
+  }
+
+  .argus-audit-table .argus-table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .argus-audit-table .argus-table th:nth-child(n + 4),
+  .argus-audit-table .argus-table td:nth-child(n + 4) {
+    display: none;
+  }
+
+  .argus-audit-table .argus-table th,
+  .argus-audit-table .argus-table td {
+    padding-inline: var(--space-px-8);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .argus-audit-table .argus-table th:first-child {
+    width: 39%;
+  }
+
+  .argus-audit-table .argus-table th:nth-child(2) {
+    width: 30%;
   }
 }
 

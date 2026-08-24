@@ -6,6 +6,7 @@ import type {
 
 export class ApiError extends Error {
   readonly code: string;
+  readonly public_message?: string;
   readonly message_key: string;
   readonly params?: Record<string, string | number | boolean>;
   readonly request_id: string;
@@ -17,6 +18,7 @@ export class ApiError extends Error {
     super(body.message ?? body.message_key);
     this.name = "ApiError";
     this.code = body.code;
+    this.public_message = body.message;
     this.message_key = body.message_key;
     this.params = body.params;
     this.request_id = body.request_id;

@@ -9,3 +9,5 @@ components:
     LabelSet: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSet}
     UserLabelUpdate: {$ref: ../../schemas/labels/labels.schema.json#/$defs/UserLabelUpdate}
     LabelSelector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}
+    UserLabelKey: {$ref: ../../schemas/labels/labels.schema.json#/$defs/UserLabelKey}
+    LabelValue: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelValue}

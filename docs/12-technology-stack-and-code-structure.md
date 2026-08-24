@@ -10,21 +10,21 @@
 
 Argus 主应用统一使用：
 
-| 范围         | 第一版选择                                      | 约束                                                                                                                       |
-| ------------ | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 语言与框架   | React + TypeScript                              | TypeScript 开启 strict；平台门户、企业门户和初始化页共享类型与组件                                                         |
-| 构建         | Vite                                            | 产出静态资源，可嵌入 `argus-server` 或由同一 Release 的静态服务器托管                                                      |
-| 包管理       | pnpm workspace                                  | 统一锁文件，不允许各应用复制并独立修改同名组件                                                                             |
-| 路由         | TanStack Router                                 | 路由必须区分 setup、platform 和 enterprise 身份上下文                                                                      |
-| 服务端状态   | TanStack Query                                  | API 缓存、游标分页、失效和重试；不能作为业务状态事实来源                                                                   |
-| 本地 UI 状态 | Zustand                                         | 只保存草稿、布局和临时交互状态，不保存权限、Pending Action 或 Run 唯一状态                                                 |
-| UI 基础      | Radix UI + Tailwind CSS + CVA                   | 所有颜色、字号、间距、圆角和状态样式来自统一 Design Token                                                                  |
-| 表格         | TanStack Table + TanStack Virtual               | 远程过滤、排序和翻页必须走服务端 Query Binding                                                                             |
-| 表单         | React Hook Form + Zod                           | 前端校验只改善交互，服务端仍执行最终 Schema 和业务校验                                                                     |
-| 图表         | Apache ECharts                                  | 用于 Metrics、Trace、拓扑和时间序列；查询必须经过 Telemetry Query                                                          |
-| 远程命令行   | `@xterm/xterm` + fit addon                      | SSH 使用完整 PTY；WinRM 使用 HTTPS WinRS PowerShell 行模式，不伪装成完整 PTY/PSRP，且不得暴露 Credential 或允许 AI/Card 获取 Ticket |
-| 国际化       | i18next                                         | 第一版必须完整支持 `zh-CN` 与 `en-US`；文案使用稳定 Key，不得散落在不可检索的组件常量中                                    |
-| 实时更新     | SSE 为主、WebSocket 为辅                        | 模型输出、Run 和 Card 状态使用可恢复游标；断线后重新校验 Session、固定企业、DataScope 和 AuthorizationVersion              |
+| 范围         | 第一版选择                        | 约束                                                                                                                                |
+| ------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 语言与框架   | React + TypeScript                | TypeScript 开启 strict；平台门户、企业门户和初始化页共享类型与组件                                                                  |
+| 构建         | Vite                              | 产出静态资源，可嵌入 `argus-server` 或由同一 Release 的静态服务器托管                                                               |
+| 包管理       | pnpm workspace                    | 统一锁文件，不允许各应用复制并独立修改同名组件                                                                                      |
+| 路由         | TanStack Router                   | 路由必须区分 setup、platform 和 enterprise 身份上下文                                                                               |
+| 服务端状态   | TanStack Query                    | API 缓存、游标分页、失效和重试；不能作为业务状态事实来源                                                                            |
+| 本地 UI 状态 | Zustand                           | 只保存草稿、布局和临时交互状态，不保存权限、Pending Action 或 Run 唯一状态                                                          |
+| UI 基础      | Radix UI + Tailwind CSS + CVA     | 所有颜色、字号、间距、圆角和状态样式来自统一 Design Token                                                                           |
+| 表格         | TanStack Table + TanStack Virtual | 远程过滤、排序和翻页必须走服务端 Query Binding                                                                                      |
+| 表单         | React Hook Form + Zod             | 前端校验只改善交互，服务端仍执行最终 Schema 和业务校验                                                                              |
+| 图表         | Apache ECharts                    | 用于 Metrics、Trace、拓扑和时间序列；查询必须经过 Telemetry Query                                                                   |
+| 远程命令行   | `@xterm/xterm` + fit addon        | SSH 使用完整 PTY；WinRM 使用 HTTPS WinRS PowerShell 行模式，不伪装成完整 PTY/PSRP，且不得暴露 Credential 或允许 AI/Card 获取 Ticket |
+| 国际化       | i18next                           | 第一版必须完整支持 `zh-CN` 与 `en-US`；文案使用稳定 Key，不得散落在不可检索的组件常量中                                             |
+| 实时更新     | SSE 为主、WebSocket 为辅          | 模型输出、Run 和 Card 状态使用可恢复游标；断线后重新校验 Session、固定企业、DataScope 和 AuthorizationVersion                       |
 
 不使用 Next.js 作为第一版主框架。Argus 是登录后的控制平面，不依赖 SEO 或服务端页面渲染；Vite 静态构建可以减少运行时和部署复杂度。
 
@@ -35,7 +35,6 @@ Argus 主应用统一使用：
 ```text
 web/
 ├── apps/
-│   ├── setup/
 │   ├── enterprise/
 │   ├── platform/
 │   └── card-runtime/
@@ -48,17 +47,16 @@ web/
     └── observability/
 ```
 
-- `setup` 只承载首次初始化。
-- `platform` 只承载平台超级管理员能力。
+- `platform` 承载首次初始化和平台超级管理员能力；启动时先检查平台状态，未初始化显示向导，初始化后进入登录。
 - `enterprise` 包含 Chatbox 和企业管理后台。
 - `card-runtime` 只承载独立 Origin 的框架无关 Card iframe 运行时，不接入门户认证状态或业务路由。
 - `ui` 是唯一通用组件实现，业务应用不得维护平行组件库。
-- `api-client` 由 OpenAPI 生成基础类型，在其上提供领域 Port、mock/real Adapter 以及 HTTP/SSE/WebSocket Transport；客户端上下文不能替代服务端资源归属检查。三个门户必须显式设置 `VITE_API_MODE=mock|real`，未知模式、real 缺少 Base URL 或调用尚未冻结的领域操作都 fail closed，禁止隐式回退 mock。
+- `api-client` 由 OpenAPI 生成基础类型，在其上提供领域 Port、mock/real Adapter 以及 HTTP/SSE/WebSocket Transport；客户端上下文不能替代服务端资源归属检查。两个门户必须显式设置 `VITE_API_MODE=mock|real`，未知模式、real 缺少 Base URL 或调用尚未冻结的领域操作都 fail closed，禁止隐式回退 mock。
 - `card-host` 只实现 iframe 生命周期、Manifest/RenderPlan 校验、Host Bridge 和受控 Action/Query 调用；`card-runtime` 负责独立 Origin 内的 CSP 和 Card 文档执行，两者共同消费生成的 Bridge 契约。
 
 ### 2.2 主题与国际化契约
 
-三个门户共享 `ThemeProvider`、`LocaleProvider`、语义 Design Token 和语言持久化规则，不允许各应用自行维护另一套浅色/深色变量或语言枚举。
+两个门户及 Platform 内的初始化流程共享 `ThemeProvider`、`LocaleProvider`、语义 Design Token 和语言持久化规则，不允许各应用自行维护另一套浅色/深色变量或语言枚举。
 
 主题规则：
 
@@ -74,6 +72,10 @@ web/
 - 资源名、用户输入、代码、日志原文、ID、枚举和 Tool 字段不翻译；日期、数字、单位和相对时间通过 `Intl` 按当前 Locale 与用户时区格式化。
 - API 客户端在普通 HTTP、SSE 建连和必要的 WebSocket 握手中发送 `Accept-Language`。服务端返回 `Content-Language`，并在语言不受支持时回退而不是改变业务错误码。
 - 后端错误响应使用稳定 `code`、`message_key`、`params` 和可选本地化 `message`。领域层、审计和 Outbox 不能把某一种语言的 `message` 当作唯一事实。
+- `params` 和 `message` 是显式白名单公开面：只有错误注册表允许的字段和服务端构造的安全文案可以返回。任意 Go/JavaScript `error.message`、SQL、堆栈、文件路径、内部 URL、请求正文、密码、Token 和 Secret 都不得直接进入浏览器。
+- 所有 HTTP 响应携带 `request_id`；服务端结构化日志使用相同 ID 记录 method、path、status、duration 和稳定 `error_code`。只有 `INTERNAL_ERROR` 的原始原因进入受控服务端日志，客户端继续收到通用文案。
+- 前端统一通过 `@argus/api-client` 的安全错误展示入口读取显式 `message` 和 `request_id`，不得把任意异常的 `Error.message` 当成可公开业务文案。
+- 前端表单校验只改善交互，不能成为安全边界。密码等跨语言复合不变量使用独立契约生成；普通长度、格式和枚举以 OpenAPI 为源；租户、权限、版本、资源状态和关系约束只由后端判定并返回稳定业务错误。
 - 模型和 Agent Run 固化会话 Locale；Tool 名称、JSON Schema、枚举和机器可读结果保持语言无关，展示层再按 Locale 生成说明。
 
 国际化资源按门户和领域拆分并接受缺失 Key 检查。新增或修改用户可见功能时，中文与英文资源、浅色与深色状态以及键盘/读屏标签必须在同一个变更中完成。
@@ -99,24 +101,24 @@ M1 Runtime 对 Card 脚本暴露的唯一浏览器对象是 `window.argusCard`�
 
 ## 3. 后端技术栈
 
-| 范围                 | 第一版选择                           | 说明                                                                                                                                                                 |
-| -------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 语言                 | Go                                   | 四个服务端程序、Connector 和 `argusctl` 使用同一工具链并固定 Go 版本                                                                                                 |
-| HTTP                 | `net/http` + `chi`                   | 保持传输层轻量，领域复杂度不放入 Web 框架                                                                                                                            |
-| 外部 API             | REST + OpenAPI 3.1                   | 使用 `oapi-codegen` 生成 Go 类型/接口，使用 `openapi-typescript` 生成 TypeScript 契约；前端 Adapter 在生成契约之上封装                                               |
-| 内部 RPC             | gRPC + protobuf                      | 使用 Buf 管理 lint、生成和 breaking change；Connector、Gateway peer 与 Remote Access 使用类型化双向流，Server/Connector Gateway 到 Direct Executor 使用独立 CA 的内部 mTLS RPC |
-| MCP                  | Argus 进程内 Tool Registry/Gateway；独立服务时使用官方 Go MCP SDK | M4 小内核避免额外网络跳；权限、私有 Token 分流、投影和 `.commit` 身份门禁由 Argus 实现。未来拆分后只允许内部 mTLS，不经公共 Ingress |
-| Agent Harness        | Go 小内核，语义参考 Pi agent-core    | Provider-neutral Message/Event、可插拔 ContextAssembler、顺序优先的 Tool Loop；不引入第二套 Workflow Runtime                                                         |
-| PostgreSQL           | `pgx` + `sqlc`                       | 使用显式 SQL 实现事务、条件更新、Lease、Fence Token 和 Outbox，不使用重 ORM；查询与生成文件按领域拆分并遵守 2000 行上限                                              |
-| PostgreSQL Migration | Goose                                | Migration 以独立 Job 运行并持有 PostgreSQL advisory lock，普通 Server 启动不修改 Schema                                                                              |
-| Redis                | `go-redis`                           | 只用于缓存、通知、限流和短期协调                                                                                                                                     |
-| Kafka                | `franz-go`                           | Ingest Producer、必要时的最小 Writer 和管理工具共用                                                                                                                  |
-| ClickHouse           | `clickhouse-go/v2`                   | 只由 Telemetry Query、Schema Migration 和受控 Writer 使用                                                                                                            |
-| Kubernetes           | `client-go` + Helm Go SDK            | 资源管理、Collector 安装和 `argusctl` 安装编排                                                                                                                       |
-| SSH                  | `golang.org/x/crypto/ssh`            | Direct/Connector 共用受控 SSH PTY、Host Key、resize、输入输出和超时边界，不形成任意 Shell Tool                                                                       |
-| WinRS                | `github.com/masterzen/winrm`         | 只允许 HTTPS 443/5986，使用持久 WinRS Shell 承载 PowerShell 行输入输出，不声明完整 PTY、ConPTY 或 PSRP                                                                |
-| 对象存储             | MinIO Go SDK/S3 Adapter              | 上层只依赖 Artifact Store 接口；录像单次调用有短超时，连续不可用超过 30 秒时会话 fail closed                                                                          |
-| 可观测性             | OpenTelemetry Go + `slog`            | Trace、Metric、结构化日志统一携带 enterprise/run/tool/execution 标识                                                                                                 |
+| 范围                 | 第一版选择                                                        | 说明                                                                                                                                                                           |
+| -------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 语言                 | Go                                                                | 四个服务端程序、Connector、`argusctl` 和跨平台仓库工具 `argus-dev` 使用同一工具链并固定 Go 版本                                                                                |
+| HTTP                 | `net/http` + `chi`                                                | 保持传输层轻量，领域复杂度不放入 Web 框架                                                                                                                                      |
+| 外部 API             | REST + OpenAPI 3.1                                                | 使用 `oapi-codegen` 生成 Go 类型/接口，使用 `openapi-typescript` 生成 TypeScript 契约；前端 Adapter 在生成契约之上封装                                                         |
+| 内部 RPC             | gRPC + protobuf                                                   | 使用 Buf 管理 lint、生成和 breaking change；Connector、Gateway peer 与 Remote Access 使用类型化双向流，Server/Connector Gateway 到 Direct Executor 使用独立 CA 的内部 mTLS RPC |
+| MCP                  | Argus 进程内 Tool Registry/Gateway；独立服务时使用官方 Go MCP SDK | M4 小内核避免额外网络跳；权限、私有 Token 分流、投影和 `.commit` 身份门禁由 Argus 实现。未来拆分后只允许内部 mTLS，不经公共 Ingress                                            |
+| Agent Harness        | Go 小内核，语义参考 Pi agent-core                                 | Provider-neutral Message/Event、可插拔 ContextAssembler、顺序优先的 Tool Loop；不引入第二套 Workflow Runtime                                                                   |
+| PostgreSQL           | `pgx` + `sqlc`                                                    | 使用显式 SQL 实现事务、条件更新、Lease、Fence Token 和 Outbox，不使用重 ORM；查询与生成文件按领域拆分并遵守 2000 行上限                                                        |
+| PostgreSQL Migration | Goose                                                             | Migration 以独立 Job 运行并持有 PostgreSQL advisory lock，普通 Server 启动不修改 Schema                                                                                        |
+| Redis                | `go-redis`                                                        | 只用于缓存、通知、限流和短期协调                                                                                                                                               |
+| Kafka                | `franz-go`                                                        | Ingest Producer、必要时的最小 Writer 和管理工具共用                                                                                                                            |
+| ClickHouse           | `clickhouse-go/v2`                                                | 只由 Telemetry Query、Schema Migration 和受控 Writer 使用                                                                                                                      |
+| Kubernetes           | `client-go` + Helm Go SDK                                         | 资源管理、Collector 安装、`argusctl` 正式安装编排，以及 `argus-dev` 临时 Namespace/Fixture/诊断/清理                                                                           |
+| SSH                  | `golang.org/x/crypto/ssh`                                         | Direct/Connector 共用受控 SSH PTY、Host Key、resize、输入输出和超时边界，不形成任意 Shell Tool                                                                                 |
+| WinRS                | `github.com/masterzen/winrm`                                      | 只允许 HTTPS 443/5986，使用持久 WinRS Shell 承载 PowerShell 行输入输出，不声明完整 PTY、ConPTY 或 PSRP                                                                         |
+| 对象存储             | MinIO Go SDK/S3 Adapter                                           | 上层只依赖 Artifact Store 接口；录像单次调用有短超时，连续不可用超过 30 秒时会话 fail closed                                                                                   |
+| 可观测性             | OpenTelemetry Go + `slog`                                         | Trace、Metric、结构化日志统一携带 enterprise/run/tool/execution 标识                                                                                                           |
 
 第一版不引入 Temporal、Celery 或另一套权威工作流系统。Run、Step、Task、Lease 和 Execution 继续以 PostgreSQL 为事实来源，Redis 只降低调度延迟。
 
@@ -140,6 +142,8 @@ Agent Harness 不直接依赖某个 Provider SDK 的 Session/Memory 对象。`in
 ```
 
 `message` 方便非浏览器客户端直接展示，但不是程序判断依据。审计事件保存 `code/message_key/params`、操作者、资源和时间等不可变事实；查询时按请求 Locale 渲染展示文案，导出任务必须记录导出 Locale。
+
+错误公开边界与现状审计见[输入校验与安全错误契约](./17-validation-and-error-contract.md)。
 
 ### 3.2 内部模块组织
 
@@ -197,6 +201,9 @@ Agent Loop、ContextAssembler、Compactor 和 Provider Adapter 保持独立接�
 - 第一版企业级 RoleBinding、DataScope、RemoteAccessGrant、ManagedAccount、AuthorizationVersion 和类型化 Policy 在 Go 领域服务中实现；标签选择器使用独立的版本化白名单语法，受限 Policy 条件可以使用 CEL-Go，二者都不接受用户 SQL。
 - API Key 和 ServiceAccount 凭证只显示一次，数据库只保存哈希，并固定企业、Tool/DataScope 和 AuthorizationVersion。
 - M2 真实写表单统一使用 React Hook Form + Zod，DTO 继续直接消费生成的 `snake_case` 契约；Zod 只改善交互，服务端仍执行权威校验。
+- `@argus/ui` 的 `Field` 强制声明 `required/optional/none`，统一必填星号和控件 ARIA；`FormDrawer` 使用原生 form submit，`Button` 默认 `type=button`。
+- `argus-dev contracts generate/check` 从完整 bundled OpenAPI 生成只读 `form-constraints.ts`，普通字段和 Label 标量约束不在页面复制；密码等复合规则继续使用独立共享契约。
+- `/api/v1` 在 Handler 前执行 bundled OpenAPI 请求校验，错误只返回白名单字段/规则/边界和 request ID；前端把可定位错误回填 Field，其余错误进入表单摘要。
 - 业务对象只保存 `secret_ref`。Secret Store 使用 Envelope Encryption；Evaluation 可用静态本地 KEK，M8 `local-hardening` 强制使用单节点 OpenBao Transit 的版本化 Key Reference，Production KMS/OpenBao HA 另行验证。
 
 ## 5. 测试与质量门禁
@@ -211,6 +218,18 @@ Agent Loop、ContextAssembler、Compactor 和 Provider Adapter 保持独立接�
 → OpenAPI/protobuf/MCP/Preview-Commit 契约测试
 → Kubernetes 临时 Namespace E2E
 ```
+
+仓库门禁的官方跨平台入口是 `argus-dev`。Make target 只保留为兼容别名，Windows 开发机和 GitHub Actions 不要求 Make、Bash、PowerShell、Python、`jq`、`sed`、`curl` 或 `openssl`：
+
+```text
+go run ./cmd/argus-dev doctor portable
+go run ./cmd/argus-dev contracts check
+go run ./cmd/argus-dev check all
+go run ./cmd/argus-dev web build --api-mode mock
+go run ./cmd/argus-dev release local
+```
+
+前端生态逻辑继续保留在 Node `.mjs` 和 Playwright TypeScript 中，由 `argus-dev` 以参数数组和显式环境变量调用。仓库不再执行 `.sh`；完整 Kubernetes E2E 只在 `doctor e2e` 通过的主机和专用干净 Context 上运行。Doctor 会检查固定的 Strimzi/OpenSandbox ClusterRole 是否已由其他 Helm release 持有，避免测试接管正式 Operator；`e2e run --kube-context` 的能力检查与实际运行使用同一 Context。`release local` 在任意开发主机都固定生成 Linux arm64 镜像和二进制，并在离线 Manifest 中只记录相对路径。
 
 E2E 至少覆盖：
 
@@ -257,3 +276,5 @@ Argus/
 ```
 
 前后端单文件仍遵守项目约束，不超过 2000 行；领域、页面和组件应在接近限制前主动拆分。
+
+跨平台开发与 E2E 的官方入口是 Go `argus-dev`：它负责 doctor、契约门禁、生产制品扫描、Web 构建、本地发布和 Kubernetes 编排；Playwright/TypeScript 只保留浏览器生态逻辑。所有外部进程使用参数数组和显式环境，Windows、Linux、macOS 运行相同轻量命令；完整 Kubernetes E2E 由能力检查 fail closed。

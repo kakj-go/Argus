@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
+  presentApiFormError,
   useApi,
   type Role,
   type RoleBinding,
@@ -289,7 +290,7 @@ export function OrgUsersTab() {
         departments={departments.data ?? []}
         loading={invite.isPending}
         onOpenChange={setInviteOpen}
-        onSubmit={(input) => invite.mutate(input)}
+        onSubmit={(input) => invite.mutateAsync(input)}
         open={inviteOpen}
         roles={roles.data ?? []}
       />
@@ -322,11 +323,12 @@ export function OrgUsersTab() {
         loading={save.isPending}
         onOpenChange={(open) => !open && setEditing(null)}
         onSubmit={(input) =>
-          editing &&
-          save.mutate({
-            userId: editing.id,
-            department_id: input.department_id,
-          })
+          editing
+            ? save.mutateAsync({
+                userId: editing.id,
+                department_id: input.department_id,
+              })
+            : Promise.resolve()
         }
         open={editing !== null}
         roles={roles.data ?? []}
@@ -369,7 +371,7 @@ function EnterpriseUserDrawer({
     email?: string;
     role_ids: string[];
     department_id: string;
-  }) => void;
+  }) => Promise<unknown>;
   loading: boolean;
   roles: Role[];
   departments: Array<{ id: string; name: string }>;
@@ -395,10 +397,12 @@ function EnterpriseUserDrawer({
   );
   type UserForm = z.infer<typeof userSchema>;
   const {
+    clearErrors,
     control,
     register,
     reset,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<UserForm>({
     resolver: zodResolver(userSchema),
@@ -421,17 +425,38 @@ function EnterpriseUserDrawer({
       department_id: editing?.department_id ?? departments[0]?.id ?? "",
     });
   }, [departments, editing, open, reset]);
+  const submit = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await onSubmit({
+        ...values,
+        email: values.email || undefined,
+      });
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("settings.common.saveFailed"),
+        fieldMap: {
+          department_id: "department_id",
+          display_name: "display_name",
+          email: "email",
+          role_ids: "role_ids",
+          username: "username",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={handleSubmit((values) =>
-        onSubmit({
-          ...values,
-          email: values.email || undefined,
-        }),
-      )}
+      onSubmit={submit}
       open={open}
       title={
         editing
@@ -440,21 +465,31 @@ function EnterpriseUserDrawer({
       }
     >
       <div className="argus-settings-form">
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("settings.common.saveFailed")}
+            tone="danger"
+          />
+        )}
         {!editing && (
           <>
             <Field
+              requirement="required"
               error={errors.username?.message}
               label={t("settings.org.users.username")}
             >
               <Input {...register("username")} required />
             </Field>
             <Field
+              requirement="required"
               error={errors.display_name?.message}
               label={t("settings.org.users.displayName")}
             >
               <Input {...register("display_name")} required />
             </Field>
             <Field
+              requirement="optional"
               error={errors.email?.message}
               label={t("settings.org.users.email")}
             >
@@ -463,6 +498,7 @@ function EnterpriseUserDrawer({
           </>
         )}
         <Field
+          requirement="required"
           error={errors.department_id?.message}
           label={t("settings.org.users.department")}
         >
@@ -482,7 +518,7 @@ function EnterpriseUserDrawer({
           />
         </Field>
         {!editing && (
-          <Field label={t("settings.org.users.roles")}>
+          <Field requirement="optional" label={t("settings.org.users.roles")}>
             <Controller
               control={control}
               name="role_ids"

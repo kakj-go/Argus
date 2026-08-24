@@ -2,7 +2,11 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { LayoutTemplate, PanelRightClose, ShieldCheck } from "lucide-react";
-import { useApi } from "@argus/api-client";
+import {
+  auditPresentationKey,
+  humanizeAuditCode,
+  useApi,
+} from "@argus/api-client";
 import { Badge, Button, Timeline } from "@argus/ui";
 import { useMyPermissions, useMyRoles } from "../../lib/permissions";
 import { useUiStore } from "../../store/ui";
@@ -57,6 +61,10 @@ export function ChatContextPanel({ messages }: { messages: ChatMessage[] }) {
   // 与 useMyPermissions 相同的绑定解析（user 主体 ∪ 本部门 department 主体）。
   const myRoles = useMyRoles();
   const permissionCount = useMyPermissions().size;
+  const actionLabel = (action: string) =>
+    t(auditPresentationKey("settings.audit", "actions", action), {
+      defaultValue: humanizeAuditCode(action),
+    });
 
   const { data: auditPage } = useQuery({
     queryKey: ["audit", "mine", me?.user.id],
@@ -134,7 +142,7 @@ export function ChatContextPanel({ messages }: { messages: ChatMessage[] }) {
           <Timeline
             items={auditPage.items.map((event) => ({
               title: event.summary,
-              meta: `${event.action} · ${formatRelative(event.createdAt, i18n.language)}`,
+              meta: `${actionLabel(event.action)} · ${formatRelative(event.createdAt, i18n.language)}`,
               status: event.result === "success" ? "done" : "danger",
             }))}
           />

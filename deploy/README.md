@@ -44,19 +44,19 @@ go run ./cmd/argusctl verify --config deploy/.cache/evaluation-<run-id>.yaml --o
 
 `images build` starts a run-owned local registry container. `images load` uses a privileged, run-labelled DaemonSet to import the exact images into the node containerd `k8s.io` namespace. Evaluation workloads use `imagePullPolicy: Never`.
 
-Expose the three SPAs while testing:
+Expose the two portals and internal Card Runtime while testing:
 
 ```bash
 go run ./cmd/argusctl tunnel --config deploy/.cache/evaluation-<run-id>.yaml
 ```
 
 - Enterprise: `http://127.0.0.1:4173`
-- Platform: `http://127.0.0.1:4174`
-- Setup: `http://127.0.0.1:4175`
+- Platform and first-time setup: `http://127.0.0.1:4174`
+- Card Runtime (internal): `http://127.0.0.1:4176`
 
 ## Production Profile
 
-`profiles/production.yaml` renders HA replicas, PDB, HPA, topology spread and three Ingress hosts. Production installation is intentionally blocked with:
+`profiles/production.yaml` renders HA replicas, PDB, HPA, topology spread, two portal hosts and the isolated Card Runtime host. Production installation is intentionally blocked with:
 
 - `POSTGRES_HA_ADR_REQUIRED`
 - `SANDBOX_RUNTIME_ADR_REQUIRED`

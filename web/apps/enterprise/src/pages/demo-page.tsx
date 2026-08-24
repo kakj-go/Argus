@@ -344,7 +344,7 @@ export function DemoPage() {
           <div className="argus-demo-grid argus-two">
             <DemoBlock title={text("输入控件", "Input controls")}>
               <div className="argus-form-demo">
-                <Field
+                <Field requirement="optional"
                   hint={text(
                     "名称在企业内唯一",
                     "Unique within the enterprise",
@@ -358,7 +358,7 @@ export function DemoPage() {
                     )}
                   />
                 </Field>
-                <Field
+                <Field requirement="optional"
                   error={text(
                     "地址必须使用 HTTPS",
                     "The address must use HTTPS",
@@ -367,7 +367,7 @@ export function DemoPage() {
                 >
                   <Input defaultValue="http://gateway.internal" />
                 </Field>
-                <Field
+                <Field requirement="optional"
                   hint={text(
                     "不要在此输入密码或私钥",
                     "Do not enter passwords or private keys here",
@@ -442,10 +442,7 @@ export function DemoPage() {
                 {
                   id: "mode",
                   title: text("连接方式", "Connection"),
-                  description: text(
-                    "经堡垒机或公网直连",
-                    "Via bastion or direct",
-                  ),
+                  description: text("经堡垒机或直连", "Via bastion or direct"),
                 },
                 {
                   id: "info",
@@ -469,7 +466,7 @@ export function DemoPage() {
                 </MenuItem>
               )}
               {wizardStep === 1 && (
-                <Field label={text("地址", "Address")}>
+                <Field requirement="optional" label={text("地址", "Address")}>
                   <Input defaultValue="10.0.1.5" />
                 </Field>
               )}
@@ -557,7 +554,7 @@ export function DemoPage() {
                     }
                   >
                     <div className="argus-form-demo">
-                      <Field label={text("名称", "Name")}>
+                      <Field requirement="optional" label={text("名称", "Name")}>
                         <Input
                           placeholder={text(
                             "例如：上海机房堡垒机-01",
@@ -565,7 +562,7 @@ export function DemoPage() {
                           )}
                         />
                       </Field>
-                      <Field
+                      <Field requirement="optional"
                         label={text("允许注册次数", "Allowed registrations")}
                       >
                         <Input defaultValue="1" type="number" />
@@ -625,10 +622,10 @@ export function DemoPage() {
                   open={drawerOpen}
                   title={text("编辑资源", "Edit resource")}
                 >
-                  <Field label={text("名称", "Name")}>
+                  <Field requirement="optional" label={text("名称", "Name")}>
                     <Input defaultValue="host-web-11" />
                   </Field>
-                  <Field
+                  <Field requirement="optional"
                     hint={text(
                       "每行一个，格式 key=value",
                       "One per line, key=value",

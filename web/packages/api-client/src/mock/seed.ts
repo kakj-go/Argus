@@ -1,7 +1,4 @@
-import type {
-  PendingActionPublic,
-  ModelUsagePoint,
-} from "../types";
+import type { PendingActionPublic, ModelUsagePoint } from "../types";
 import type { TaskViewModel } from "../provisional";
 import { calculateModelAmount } from "../types";
 import { createOrgSeed } from "./seed-org";
@@ -127,7 +124,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       collectorStatus: "converged",
       labels: { region: "cn-north", role: "cache" },
     }),
-    // Independent public hosts
+    // Independent direct hosts
     host({
       id: "host-public-web-01",
       name: "public-web-01",
@@ -1415,6 +1412,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         enterpriseId: "ent-acme",
         actorUserId: "u-chenxi",
         actorName: "陈曦",
+        actorType: "enterprise_user",
         action: "pending_action.confirm",
         origin: "admin_chatbox",
         resourceType: "pending_action",
@@ -1428,6 +1426,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         enterpriseId: "ent-acme",
         actorUserId: "u-chenxi",
         actorName: "陈曦",
+        actorType: "enterprise_user",
         action: "ai_model.update",
         origin: "admin_ui",
         resourceType: "ai_model",
@@ -1441,6 +1440,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         enterpriseId: "ent-acme",
         actorUserId: "u-wanglei",
         actorName: "王磊",
+        actorType: "enterprise_user",
         action: "connector.cert.rotate",
         origin: "admin_ui",
         resourceType: "connector",
@@ -1454,6 +1454,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         enterpriseId: null,
         actorUserId: "u-admin",
         actorName: "平台超级管理员",
+        actorType: "platform_user",
         action: "setup.initialize",
         origin: "platform_ui",
         summary: "平台初始化完成",
@@ -1465,6 +1466,8 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         enterpriseId: null,
         actorUserId: "u-admin",
         actorName: "平台超级管理员",
+        actorType: "platform_user",
+        resourceName: "Globex Ltd",
         action: "platform.enterprise.create",
         origin: "platform_ui",
         resourceType: "enterprise",

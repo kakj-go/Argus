@@ -38,11 +38,12 @@ test.describe("M3 real resource flow", () => {
     page,
   }) => {
     await page.goto("/settings/secrets");
-    const section = page.locator("section.argus-settings-section").filter({
-      has: page.getByRole("heading", { name: /托管账号|Managed accounts/i }),
+    await page.getByRole("tab", { name: /托管账号|Managed accounts/i }).click();
+    const section = page.getByRole("region", {
+      name: /托管账号|Managed accounts/i,
     });
     await expect(section).toBeVisible();
-    await section
+    await page
       .getByRole("button", { name: /新建托管账号|New managed account/i })
       .click();
 
@@ -53,7 +54,7 @@ test.describe("M3 real resource flow", () => {
     await expect(hostSelect).toBeVisible();
     await page.waitForTimeout(250);
     await hostSelect.click({ force: true });
-    await page.getByRole("option", { name: "m3-public-host" }).click();
+    await page.getByRole("option", { name: "m3-direct-host" }).click();
     await drawer.getByRole("textbox").fill("m3-ui-account");
     const credentialSelect = drawer.locator(".argus-select").nth(2);
     await expect(credentialSelect).toBeVisible();
@@ -94,13 +95,15 @@ test.describe("M3 real resource flow", () => {
   }) => {
     await page.goto("/hosts");
     await expect(
-      page.getByText("m3-public-host", { exact: true }),
+      page.getByText("m3-direct-host", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByText("m3-bastion-2", { exact: true })).toBeVisible();
+		await expect(page.getByText("m3-bastion-2")).toBeVisible();
     if (preserveBastion) {
       await expect(page.getByText("m3-bastion", { exact: true })).toBeVisible();
     } else {
-      await expect(page.getByText("m3-bastion", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("m3-bastion", { exact: true })).toHaveCount(
+        0,
+      );
     }
     await expect(
       page.getByText("m3-private-host", { exact: true }),
@@ -114,10 +117,10 @@ test.describe("M3 real resource flow", () => {
     await page.goto("/hosts");
     const tile = page
       .locator(".argus-host-tile")
-      .filter({ hasText: "m3-public-host" });
+      .filter({ hasText: "m3-direct-host" });
     await tile.getByRole("button", { name: /编辑|Edit/i }).click();
     const drawer = page.getByRole("dialog", {
-      name: /编辑主机.*m3-public-host|Edit host.*m3-public-host/i,
+      name: /编辑主机.*m3-direct-host|Edit host.*m3-direct-host/i,
     });
     await expect(drawer).toBeVisible();
     const save = drawer.getByRole("button", { name: /保存|Save/i });

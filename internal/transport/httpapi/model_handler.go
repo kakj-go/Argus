@@ -156,7 +156,9 @@ func (handler ModelHandler) auth(ctx context.Context, mutation bool, csrf, permi
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &modelapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &modelapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]modelapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func modelCreateInput(value modelapi.AIModelTestCreate) modelservice.Input {
@@ -237,7 +239,8 @@ func numericValue(value pgtype.Numeric) float64 {
 	return result.Float64
 }
 func modelError(ctx context.Context, err error) modelapi.ApiError {
-	code, key := "INTERNAL_ERROR", "errors.internal"
+	code, key := "INTERNAL_ERROR", "errors.common.internal"
+	defer func() { logMappedError(ctx, code, err) }()
 	switch {
 	case errors.Is(err, modelservice.ErrEndpointNotAllowed):
 		code, key = "MODEL_ENDPOINT_NOT_ALLOWED", "errors.model.endpoint_not_allowed"
@@ -246,7 +249,7 @@ func modelError(ctx context.Context, err error) modelapi.ApiError {
 	case errors.Is(err, modelservice.ErrQuotaExceeded):
 		code, key = "MODEL_QUOTA_EXCEEDED", "errors.model.quota_exceeded"
 	case errors.Is(err, pgx.ErrNoRows):
-		code, key = "NOT_FOUND", "errors.not_found"
+		code, key = "RESOURCE_NOT_FOUND", "errors.common.resource_not_found"
 	}
 	requestID := "server-generated-request"
 	if current, ok := RequestFromContext(ctx); ok {

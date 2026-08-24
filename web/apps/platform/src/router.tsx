@@ -49,6 +49,14 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
+const setupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/setup",
+  beforeLoad: () => {
+    throw redirect({ to: "/login", search: { redirect: undefined } });
+  },
+});
+
 /**
  * 受保护区域：未登录或登录者不是平台超管时，beforeLoad 阶段
  * 重定向到 /login，并带上 redirect 回跳参数。
@@ -101,6 +109,7 @@ const accountRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  setupRoute,
   authedRoute.addChildren([
     indexRoute,
     enterprisesRoute,

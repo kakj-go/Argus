@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@argus/api-client";
+import {
+  auditPresentationKey,
+  humanizeAuditCode,
+  useApi,
+} from "@argus/api-client";
 import type { AuditEvent, AuditResult } from "@argus/api-client";
 import {
   Badge,
@@ -22,7 +26,7 @@ type AuditRow = {
   id: string;
   createdAt: string;
   actorName: string;
-  action: string;
+  actionLabel: string;
   resource: string;
   origin: AuditEvent["origin"];
   result: AuditResult;
@@ -68,6 +72,34 @@ export function SettingsAuditPage() {
   const [timeRange, setTimeRange] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuditEvent | null>(null);
+  const labelFor = useCallback(
+    (kind: "actions" | "resourceTypes" | "actorTypes", code: string) =>
+      t(auditPresentationKey("settings.audit", kind, code), {
+        defaultValue: humanizeAuditCode(code),
+      }),
+    [t],
+  );
+  const actorLabel = (item: AuditEvent) =>
+    item.actorName !== item.actorUserId
+      ? item.actorUsername && item.actorUsername !== item.actorName
+        ? `${item.actorName} (${item.actorUsername})`
+        : item.actorName
+      : labelFor("actorTypes", item.actorType);
+  const resourceLabel = (item: AuditEvent) => {
+    if (!item.resourceType) return "—";
+    const typeLabel = labelFor("resourceTypes", item.resourceType);
+    return item.resourceName
+      ? `${typeLabel} · ${item.resourceName}`
+      : typeLabel;
+  };
+  const actionLabel = (item: AuditEvent) => labelFor("actions", item.action);
+  const summaryLabel = (item: AuditEvent) =>
+    item.resourceName
+      ? t("settings.audit.summaryWithResource", {
+          action: actionLabel(item),
+          resource: item.resourceName,
+        })
+      : actionLabel(item);
 
   const users = useQuery({
     queryKey: ["org", "users", "facet"],
@@ -96,8 +128,10 @@ export function SettingsAuditPage() {
     for (const item of facets.data?.items ?? []) {
       if (item.resourceType) set.add(item.resourceType);
     }
-    return [...set].sort().map((value) => ({ value, label: value }));
-  }, [facets.data]);
+    return [...set]
+      .sort()
+      .map((value) => ({ value, label: labelFor("resourceTypes", value) }));
+  }, [facets.data, labelFor]);
 
   const filtered = useMemo(() => {
     let items = events.data?.items ?? [];
@@ -120,14 +154,12 @@ export function SettingsAuditPage() {
   const rows: AuditRow[] = filtered.map((item) => ({
     id: item.id,
     createdAt: item.createdAt,
-    actorName: item.actorName,
-    action: item.action,
-    resource: item.resourceType
-      ? `${item.resourceType}${item.resourceId ? ` / ${item.resourceId}` : ""}`
-      : "—",
+    actorName: actorLabel(item),
+    actionLabel: actionLabel(item),
+    resource: resourceLabel(item),
     origin: item.origin,
     result: item.result,
-    summary: item.summary,
+    summary: summaryLabel(item),
   }));
 
   const openDetail = (row: AuditRow) =>
@@ -211,58 +243,57 @@ export function SettingsAuditPage() {
         ) : rows.length === 0 ? (
           <EmptyState description="" title={t("settings.audit.empty")} />
         ) : (
-          <DataTable<AuditRow>
-            columns={[
-              {
-                key: "createdAt",
-                header: t("settings.audit.table.time"),
-                render: (row) => formatDateTime(row.createdAt),
-              },
-              {
-                key: "actorName",
-                header: t("settings.audit.table.actor"),
-              },
-              {
-                key: "action",
-                header: t("settings.audit.table.action"),
-                render: (row) => (
-                  <code className="argus-mono">{row.action}</code>
-                ),
-              },
-              { key: "resource", header: t("settings.audit.table.resource") },
-              {
-                key: "origin",
-                header: t("settings.audit.table.origin"),
-                render: (row) => (
-                  <Badge>{t(`settings.audit.origins.${row.origin}`)}</Badge>
-                ),
-              },
-              {
-                key: "result",
-                header: t("settings.audit.table.result"),
-                render: (row) => (
-                  <StatusBadge tone={resultTone(row.result)}>
-                    {t(`settings.audit.results.${row.result}`)}
-                  </StatusBadge>
-                ),
-              },
-              {
-                key: "id",
-                header: t("settings.audit.table.requestId"),
-                render: (row) => (
-                  <Button
-                    onClick={() => openDetail(row)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <code className="argus-mono">{row.id}</code>
-                  </Button>
-                ),
-              },
-            ]}
-            data={rows}
-            getRowKey={(row) => row.id}
-          />
+          <div className="argus-audit-table">
+            <DataTable<AuditRow>
+              columns={[
+                {
+                  key: "createdAt",
+                  header: t("settings.audit.table.time"),
+                  render: (row) => formatDateTime(row.createdAt),
+                },
+                {
+                  key: "actorName",
+                  header: t("settings.audit.table.actor"),
+                },
+                {
+                  key: "actionLabel",
+                  header: t("settings.audit.table.action"),
+                },
+                { key: "resource", header: t("settings.audit.table.resource") },
+                {
+                  key: "origin",
+                  header: t("settings.audit.table.origin"),
+                  render: (row) => (
+                    <Badge>{t(`settings.audit.origins.${row.origin}`)}</Badge>
+                  ),
+                },
+                {
+                  key: "result",
+                  header: t("settings.audit.table.result"),
+                  render: (row) => (
+                    <StatusBadge tone={resultTone(row.result)}>
+                      {t(`settings.audit.results.${row.result}`)}
+                    </StatusBadge>
+                  ),
+                },
+                {
+                  key: "id",
+                  header: t("settings.audit.table.requestId"),
+                  render: (row) => (
+                    <Button
+                      onClick={() => openDetail(row)}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <code className="argus-mono">{row.id}</code>
+                    </Button>
+                  ),
+                },
+              ]}
+              data={rows}
+              getRowKey={(row) => row.id}
+            />
+          </div>
         )}
       </div>
 
@@ -288,10 +319,24 @@ export function SettingsAuditPage() {
               },
               {
                 label: t("settings.audit.detail.actor"),
-                value: `${selected.actorName} (${selected.actorUserId})`,
+                value: actorLabel(selected),
+              },
+              {
+                label: t("settings.audit.detail.actorType"),
+                value: labelFor("actorTypes", selected.actorType),
+              },
+              {
+                label: t("settings.audit.detail.actorId"),
+                value: (
+                  <code className="argus-mono">{selected.actorUserId}</code>
+                ),
               },
               {
                 label: t("settings.audit.detail.action"),
+                value: actionLabel(selected),
+              },
+              {
+                label: t("settings.audit.detail.actionKey"),
                 value: <code className="argus-mono">{selected.action}</code>,
               },
               {
@@ -300,7 +345,13 @@ export function SettingsAuditPage() {
               },
               {
                 label: t("settings.audit.detail.resourceType"),
-                value: selected.resourceType ?? "—",
+                value: selected.resourceType
+                  ? labelFor("resourceTypes", selected.resourceType)
+                  : "—",
+              },
+              {
+                label: t("settings.audit.detail.resourceName"),
+                value: selected.resourceName ?? "—",
               },
               {
                 label: t("settings.audit.detail.resourceId"),
@@ -316,7 +367,7 @@ export function SettingsAuditPage() {
               },
               {
                 label: t("settings.audit.detail.summary"),
-                value: selected.summary,
+                value: summaryLabel(selected),
               },
               {
                 label: t("settings.audit.detail.createdAt"),

@@ -5,8 +5,13 @@ import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { useApi, type Department } from "@argus/api-client";
 import {
+  presentApiFormError,
+  useApi,
+  type Department,
+} from "@argus/api-client";
+import {
+  Alert,
   Badge,
   Button,
   ConfirmDialog,
@@ -157,7 +162,7 @@ export function OrgDepartmentsTab() {
           department={editing}
           loading={save.isPending}
           onClose={() => setEditing(undefined)}
-          onSubmit={(input) => save.mutate({ ...input, id: editing?.id })}
+          onSubmit={(input) => save.mutateAsync({ ...input, id: editing?.id })}
         />
       )}
       <ConfirmDialog
@@ -190,7 +195,7 @@ function DepartmentDrawer({
   department: Department | null;
   loading: boolean;
   onClose: () => void;
-  onSubmit: (input: { name: string; description?: string }) => void;
+  onSubmit: (input: { name: string; description?: string }) => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const departmentSchema = useMemo(
@@ -203,8 +208,10 @@ function DepartmentDrawer({
   );
   type DepartmentForm = z.infer<typeof departmentSchema>;
   const {
+    clearErrors,
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<DepartmentForm>({
     resolver: zodResolver(departmentSchema),
@@ -213,16 +220,31 @@ function DepartmentDrawer({
       description: department?.description ?? "",
     },
   });
+  const submit = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await onSubmit({
+        name: values.name,
+        description: values.description || undefined,
+      });
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("settings.common.saveFailed"),
+        fieldMap: { description: "description", name: "name" },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={(open) => !open && onClose()}
-      onSubmit={handleSubmit((values) =>
-        onSubmit({
-          name: values.name,
-          description: values.description || undefined,
-        }),
-      )}
+      onSubmit={submit}
       open
       title={
         department
@@ -231,10 +253,21 @@ function DepartmentDrawer({
       }
     >
       <div className="argus-settings-form">
-        <Field error={errors.name?.message} label={t("settings.common.name")}>
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("settings.common.saveFailed")}
+            tone="danger"
+          />
+        )}
+        <Field
+          requirement="required"
+          error={errors.name?.message}
+          label={t("settings.common.name")}
+        >
           <Input {...register("name")} required />
         </Field>
-        <Field label={t("settings.common.description")}>
+        <Field requirement="optional" label={t("settings.common.description")}>
           <Input {...register("description")} />
         </Field>
       </div>

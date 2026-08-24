@@ -35,10 +35,10 @@
 - [x] `M3-BASTION-01` 实现稳定 BastionScope、预分配根 Host、单次安装结果、Replacement、成员关系和删除门禁。
 - [x] `M3-GATEWAY-01` 实现 Connector Gateway Registry、跨副本路由、Redis 重建和 Drain。
 - [x] `M3-COMMAND-01` 实现类型化 ConnectorCommand、幂等、过期、DeliveryUnknown/ResultUnknown 和对账。
-- [x] `M3-DIRECT-01` 实现 Direct Executor 内部 mTLS RPC、持久队列恢复、固定 IP Dial、DNS 前后校验、重定向拒绝、Host Key 与 SSRF/私网阻断。
+- [x] `M3-DIRECT-01` 实现 Direct Executor 内部 mTLS RPC、持久队列恢复、固定 IP Dial、DNS 前后校验、重定向拒绝、Host Key 与高风险地址/禁用网段阻断。
 - [x] `M3-DEPLOY-01` 增加 Connector/Direct Executor PKI、Trust Bundle、RBAC、Service、NetworkPolicy、出口配置和 cert-manager 版本锁。
 - [x] `M3-WEB-01` 将 Host、Kubernetes、Secret 和 Connector 页面接入 real API，使用生成 DTO、统一 Labels 控件和 Preview/Confirm 流程。
-- [x] `M3-E2E-01` 在临时 Namespace 完成 Connector、Bastion、内网/公网 Host、Kubernetes、撤权、Redis 清空、Gateway/Server 重启和 real Playwright，并无条件清理。
+- [x] `M3-E2E-01` 在临时 Namespace 完成 Connector、Bastion、经堡垒机/直连 Host、Kubernetes、撤权、Redis 清空、Gateway/Server 重启和 real Playwright，并无条件清理。
 
 ## 实现证据
 
@@ -46,8 +46,8 @@
 - 领域：`internal/{resource,secret,connector,directexecutor,kubernetesreader}`。
 - 数据：`migrations/postgresql/00002_m3_resources_connectors.sql`、`internal/storage/postgres/queries/{resources,secrets,connectors}.sql`。
 - 部署：`deploy/helm/argus-platform/templates/{connector-pki,direct-executor-pki,m3-network-policies}.yaml`。
-- 前端：`web/packages/api-client/src/generated/*api.ts` 与 Enterprise Host/Kubernetes/Secret/ManagedAccount 页面。
-- E2E：`scripts/e2e-m3-k8s.sh`、`scripts/e2e-m3-flow.sh`、`web/apps/enterprise/e2e/m3-real.spec.ts`。
+- 前端：`web/packages/api-client/src/generated/*api.ts` 与 Enterprise Host/Kubernetes/Secret/ManagedAccount 页面；凭据管理按密钥、连接凭证、托管账号三个 Tab 分区，并由页面头部提供统一创建入口。
+- E2E：`internal/app/argusdev/e2e_scenario_m3*.go` 负责集群与业务编排，`web/apps/enterprise/e2e/m3-real.spec.ts` 保留 Playwright 浏览器验证。
 - 生命周期：Connector 重连恢复 Bastion Scope/Kubernetes 连接状态；Scope 删除只允许已卸载或已 fencing 的离线状态，并逻辑删除根 Host，保留审计与历史引用。
 - 前端一次性结果：`in_cluster` 确认后展示一次安装命令，关闭抽屉后清除，不进入 URL、storage 或日志。
 
@@ -55,20 +55,20 @@
 
 - Labels、DataScope、PendingAction 幂等、Secret 加密/轮换和敏感字段深度扫描。
 - Connector Token 竞争、CSR/设备幂等、证书轮换/吊销、旧 epoch、Gateway 跨副本派发、Drain、Redis 清空、命令超时收敛和未知结果对账。
-- Direct Executor 与 Kubernetes Reader 拒绝环回、RFC1918、IPv6 特殊地址、云元数据、内部 DNS、DNS rebinding、重定向、错误出口、Host Key 变化和 TLS 绕过。
+- Direct Executor 与 Kubernetes Reader 允许部署网络可达的 RFC1918、IPv6 ULA 和内部 DNS，拒绝环回、链路本地、云元数据、配置的禁用网段、DNS rebinding、重定向、错误出口、Host Key 变化和 TLS 绕过。
 - Kubernetes 覆盖三种接入模式、Namespace DataScope、跨企业拒绝、列表边界和 Pod Logs 大小限制。
-- 全量门禁：`make contract-check`、`make contract-breaking`、`go test ./...`、`go vet ./...`、`pnpm typecheck/lint/test/build/check:bundle/check:real-build/e2e`。
-- 临时集群门禁：`make e2e-m3-k8s`，成功或失败均导出脱敏诊断并删除 Namespace/PVC/Lease。
+- 全量门禁：`go run ./cmd/argus-dev contracts check`、`go run ./cmd/argus-dev contracts breaking`、`go test ./...`、`go vet -stdmethods=false ./...`、`pnpm typecheck/lint/test/build/check:bundle/check:real-build/e2e`。
+- 临时集群门禁：`go run ./cmd/argus-dev e2e run --suite m3`，成功或失败均导出脱敏诊断并删除 Namespace/PVC/Lease。
 
 ## 验收记录
 
 - 2026-08-17：契约、Go、前端类型检查/lint/单测/构建、Bundle、real-build 和 mock Playwright 全量门禁通过；mock Playwright 为 32 passed，real 场景按环境开关隔离。
-- 2026-08-17：`make e2e-m3-k8s` 通过 M2 双 Audience 的 3 条 real Playwright 与 M3 的 6 条 real Playwright，并验证 ConnectionTest 冻结计划、Host 跨 Scope 迁移、Connector 证书轮换与 ACK 后卸载、双 Gateway 跨副本派发、Bastion Replacement/fencing/删除、三种 Kubernetes 接入、DataScope 撤权、Secret 轮换失效、Redis 清空、Gateway/Server 重启恢复和敏感值扫描。
+- 2026-08-17：旧 Shell Harness 通过 M2 双 Audience 的 3 条 real Playwright 与 M3 的 6 条 real Playwright，并验证 ConnectionTest 冻结计划、Host 跨 Scope 迁移、Connector 证书轮换与 ACK 后卸载、双 Gateway 跨副本派发、Bastion Replacement/fencing/删除、三种 Kubernetes 接入、DataScope 撤权、Secret 轮换失效、Redis 清空、Gateway/Server 重启恢复和敏感值扫描。
 - 成功运行号为 `20260817060430-49810`，脱敏诊断位于本地 `artifacts/m3-e2e/20260817060430-49810`；验收结束后 M3 临时 Namespace、PVC 和 Lease 均为零残留。
 
 ## 退出标准
 
-- 管理后台可真实完成 Secret、堡垒机、内网 Host、公网 Direct Host 和 Kubernetes 接入。
+- 管理后台可真实完成 Secret、堡垒机、经堡垒机 Host、直连 Host 和 Kubernetes 接入。
 - 所有列表、详情和 Kubernetes 查询遵守企业边界与 DataScope；标签变化正确触发撤权。
 - 浏览器、日志、审计、命令和 Redis 中不存在 Secret 原值。
 - 全量门禁和 M3 临时 Namespace E2E 已通过，以上任务均有代码、测试、部署和清理证据。

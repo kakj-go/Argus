@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
+  presentApiFormError,
   useApi,
   type CreatedApiKey,
   type CreateServiceAccountInput,
@@ -258,7 +259,7 @@ export function OrgAccessTab() {
           setDrawerOpen(open);
           if (!open) setEditing(null);
         }}
-        onSubmit={(input) => save.mutate({ account: editing, input })}
+        onSubmit={(input) => save.mutateAsync({ account: editing, input })}
         open={drawerOpen}
       />
 
@@ -284,7 +285,7 @@ function ServiceAccountDrawer({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: CreateServiceAccountInput) => void;
+  onSubmit: (input: CreateServiceAccountInput) => Promise<unknown>;
   loading: boolean;
   account: ServiceAccount | null;
   dataScopes: DataScope[];
@@ -302,10 +303,12 @@ function ServiceAccountDrawer({
   );
   type ServiceAccountForm = z.infer<typeof serviceAccountSchema>;
   const {
+    clearErrors,
     control,
     register,
     reset,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<ServiceAccountForm>({
     resolver: zodResolver(serviceAccountSchema),
@@ -326,19 +329,39 @@ function ServiceAccountDrawer({
       data_scope_ids: account?.data_scope_ids ?? [],
     });
   }, [account, open, reset]);
+  const submit = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await onSubmit({
+        name: values.name,
+        description: values.description || undefined,
+        allowed_tool_ids: parseList(values.allowed_tools),
+        data_scope_ids: values.data_scope_ids,
+      });
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("settings.common.saveFailed"),
+        fieldMap: {
+          allowed_tool_ids: "allowed_tools",
+          data_scope_ids: "data_scope_ids",
+          description: "description",
+          name: "name",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={handleSubmit((values) =>
-        onSubmit({
-          name: values.name,
-          description: values.description || undefined,
-          allowed_tool_ids: parseList(values.allowed_tools),
-          data_scope_ids: values.data_scope_ids,
-        }),
-      )}
+      onSubmit={submit}
       open={open}
       title={
         account
@@ -347,19 +370,34 @@ function ServiceAccountDrawer({
       }
     >
       <div className="argus-settings-form">
-        <Field error={errors.name?.message} label={t("settings.common.name")}>
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("settings.common.saveFailed")}
+            tone="danger"
+          />
+        )}
+        <Field
+          requirement="required"
+          error={errors.name?.message}
+          label={t("settings.common.name")}
+        >
           <Input {...register("name")} disabled={Boolean(account)} required />
         </Field>
-        <Field label={t("settings.common.description")}>
+        <Field requirement="optional" label={t("settings.common.description")}>
           <Input {...register("description")} />
         </Field>
         <Field
+          requirement="optional"
           hint={t("settings.org.accessTab.allowedToolsHint")}
           label={t("settings.org.accessTab.allowedTools")}
         >
           <Textarea {...register("allowed_tools")} rows={4} />
         </Field>
-        <Field label={t("settings.org.accessTab.dataScopes")}>
+        <Field
+          requirement="optional"
+          label={t("settings.org.accessTab.dataScopes")}
+        >
           <Controller
             control={control}
             name="data_scope_ids"
@@ -407,9 +445,11 @@ function ApiKeysDrawer({
   );
   type KeyForm = z.infer<typeof keySchema>;
   const {
+    clearErrors,
     register,
     reset,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<KeyForm>({
     resolver: zodResolver(keySchema),
@@ -453,15 +493,40 @@ function ApiKeysDrawer({
   });
 
   const activeKeys = (keys.data ?? []).filter((key) => key.status === "active");
+  const submitKey = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await create.mutateAsync(values);
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("settings.common.saveFailed"),
+        fieldMap: { expires_at: "expires_at", name: "name" },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
 
   return (
     <FormDrawer
       footer={<></>}
       onOpenChange={onOpenChange}
+      onSubmit={submitKey}
       open
       title={`${t("settings.org.accessTab.apiKeysTitle")} · ${account.name}`}
     >
       <div className="argus-settings-form">
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("settings.common.saveFailed")}
+            tone="danger"
+          />
+        )}
         {created && (
           <div className="argus-settings-section">
             <Alert
@@ -515,23 +580,23 @@ function ApiKeysDrawer({
           </div>
         )}
         <Field
+          requirement="required"
           error={errors.name?.message}
           label={t("settings.org.accessTab.keyName")}
         >
           <Input {...register("name")} />
         </Field>
-        <Field label={t("settings.org.accessTab.expiresAt")}>
+        <Field
+          requirement="optional"
+          label={t("settings.org.accessTab.expiresAt")}
+        >
           <Input
             {...register("expires_at")}
             min={toDateTimeLocal(new Date().toISOString())}
             type="datetime-local"
           />
         </Field>
-        <Button
-          loading={create.isPending}
-          onClick={handleSubmit((values) => create.mutate(values))}
-          variant="primary"
-        >
+        <Button loading={create.isPending} type="submit" variant="primary">
           {t("settings.org.accessTab.createKey")}
         </Button>
       </div>

@@ -152,19 +152,22 @@ type ApiError_Params_AdditionalProperties struct {
 
 // AuditEvent defines model for AuditEvent.
 type AuditEvent struct {
-	Action       string                 `json:"action"`
-	ActorId      string                 `json:"actor_id"`
-	ActorType    AuditEventActorType    `json:"actor_type"`
-	CreatedAt    time.Time              `json:"created_at"`
-	Details      map[string]interface{} `json:"details"`
-	Domain       AuditEventDomain       `json:"domain"`
-	EnterpriseId *openapi_types.UUID    `json:"enterprise_id,omitempty"`
-	EventHash    string                 `json:"event_hash"`
-	Id           openapi_types.UUID     `json:"id"`
-	PreviousHash string                 `json:"previous_hash"`
-	ResourceId   *string                `json:"resource_id,omitempty"`
-	ResourceType *string                `json:"resource_type,omitempty"`
-	Result       AuditEventResult       `json:"result"`
+	Action              string                 `json:"action"`
+	ActorDisplayName    *string                `json:"actor_display_name,omitempty"`
+	ActorId             string                 `json:"actor_id"`
+	ActorType           AuditEventActorType    `json:"actor_type"`
+	ActorUsername       *string                `json:"actor_username,omitempty"`
+	CreatedAt           time.Time              `json:"created_at"`
+	Details             map[string]interface{} `json:"details"`
+	Domain              AuditEventDomain       `json:"domain"`
+	EnterpriseId        *openapi_types.UUID    `json:"enterprise_id,omitempty"`
+	EventHash           string                 `json:"event_hash"`
+	Id                  openapi_types.UUID     `json:"id"`
+	PreviousHash        string                 `json:"previous_hash"`
+	ResourceDisplayName *string                `json:"resource_display_name,omitempty"`
+	ResourceId          *string                `json:"resource_id,omitempty"`
+	ResourceType        *string                `json:"resource_type,omitempty"`
+	Result              AuditEventResult       `json:"result"`
 }
 
 // AuditEventActorType defines model for AuditEvent.ActorType.

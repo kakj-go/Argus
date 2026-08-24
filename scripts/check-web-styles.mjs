@@ -5,7 +5,6 @@ import ts from "typescript";
 const appRoots = [
   "web/apps/enterprise/src",
   "web/apps/platform/src",
-  "web/apps/setup/src",
 ];
 const styleRoots = [...appRoots, "web/packages/ui/src"];
 const cssFiles = files(styleRoots, ["*.css"]);

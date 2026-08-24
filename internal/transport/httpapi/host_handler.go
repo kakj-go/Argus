@@ -126,7 +126,9 @@ func (handler HostHandler) auth(ctx context.Context, mutation bool, csrf, permis
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &hostapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &hostapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]hostapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func resourceSubject(value identity.Principal) resource.Subject {
@@ -277,7 +279,13 @@ func emptyHostPage() hostapi.CursorPage {
 }
 
 func hostError(ctx context.Context, err error) hostapi.ApiError {
-	base := setupError(ctx, err)
+	base := hostErrorBase(ctx, err)
+	logMappedError(ctx, base.Code, err)
+	return base
+}
+
+func hostErrorBase(ctx context.Context, err error) hostapi.ApiError {
+	base := setupErrorBase(ctx, err)
 	switch {
 	case errors.Is(err, resource.ErrResourceDenied):
 		base.Code, base.MessageKey = "RESOURCE_NOT_FOUND", "errors.common.resource_not_found"
@@ -292,7 +300,9 @@ func hostError(ctx context.Context, err error) hostapi.ApiError {
 	case errors.Is(err, resource.ErrActionInvalidated):
 		base.Code, base.MessageKey = "PENDING_ACTION_INVALIDATED", "errors.actions.pending_action_invalidated"
 	}
-	return hostapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	return hostapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]hostapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }
 
 func resourceStatus(err error) int {

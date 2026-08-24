@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -7,11 +10,17 @@ import type {
   Execution,
   PendingActionPublic,
 } from "@argus/api-client";
-import { useApi } from "@argus/api-client";
+import {
+  formConstraint,
+  formatApiError,
+  humanizeAuditCode,
+  presentApiFormError,
+  useApi,
+} from "@argus/api-client";
 import {
   Alert,
   Button,
-  ConfirmDialog,
+  Dialog,
   Field,
   KeyValueGrid,
   PreviewCommitCard,
@@ -21,6 +30,11 @@ import {
   Textarea,
 } from "@argus/ui";
 import { formatDateTimeFull, pendingStatusTone } from "./utils";
+
+const approvalReasonConstraint = formConstraint(
+  "ApprovalDecisionCreate",
+  "reason",
+);
 
 function diffForCard(action: PendingActionPublic) {
   return action.diff.map((line) => ({
@@ -65,10 +79,28 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
   const queryClient = useQueryClient();
   const locale = i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN";
 
-  const [comment, setComment] = useState("");
   const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const decisionSchema = z.object({
+    reason: z
+      .string()
+      .trim()
+      .max(approvalReasonConstraint.maxLength ?? 4096),
+  });
+  type DecisionForm = z.infer<typeof decisionSchema>;
+  const approvalForm = useForm<DecisionForm>({
+    resolver: zodResolver(decisionSchema),
+    defaultValues: { reason: "" },
+  });
+  const rejectionForm = useForm<DecisionForm>({
+    resolver: zodResolver(
+      decisionSchema.refine((value) => value.reason.length > 0, {
+        message: t("governance.approvals.detail.rejectReasonRequired"),
+        path: ["reason"],
+      }),
+    ),
+    defaultValues: { reason: "" },
+  });
 
   const { data: action } = useQuery({
     queryKey: ["approvals", "detail", actionRef],
@@ -92,6 +124,29 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
         (item) => item.action_ref === actionRef,
       ) ?? null,
   });
+  const { data: users = [] } = useQuery({
+    queryKey: ["org", "users", "approval-detail"],
+    queryFn: () => api.org.listUsers(),
+  });
+  const { data: policies = [] } = useQuery({
+    queryKey: ["org", "approval-policies", "approval-detail"],
+    queryFn: () => api.org.listApprovalPolicies(),
+  });
+  const userLabel = (id: string) => {
+    const user = users.find((item) => item.id === id);
+    return user
+      ? user.displayName === user.username
+        ? user.displayName
+        : `${user.displayName} (${user.username})`
+      : t("governance.approvals.detail.unknownUser");
+  };
+  const policyLabel = (id: string) =>
+    policies.find((item) => item.id === id)?.name ??
+    t("governance.approvals.detail.unknownPolicy");
+  const previewFieldLabel = (key: string) =>
+    t(`governance.approvals.previewFields.${key.replaceAll(".", "_")}`, {
+      defaultValue: humanizeAuditCode(key),
+    });
 
   const invalidate = () => {
     // 前缀失效同时覆盖列表与外壳徽标 ["approvals","awaiting_approval"]。
@@ -104,12 +159,19 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
   const mutationOptions = {
     onSuccess: () => {
       setActionError(null);
-      setComment("");
-      setRejectReason("");
+      approvalForm.reset();
+      rejectionForm.reset();
       setRejectOpen(false);
       invalidate();
     },
-    onError: () => setActionError(t("governance.approvals.actionFailed")),
+    onError: (error: unknown) =>
+      setActionError(
+        formatApiError(
+          error,
+          t("governance.approvals.actionFailed"),
+          (requestId) => t("common.requestReference", { requestId }),
+        ),
+      ),
   };
 
   const confirmMutation = useMutation({
@@ -123,10 +185,10 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
   const approveMutation = useMutation({
     mutationFn: async (value?: string) => {
       if (approvalRequest) {
-        await api.approvalRequests.decide(
-          approvalRequest.approval_request_id,
-          { decision: "approved", ...(value ? { reason: value } : {}) },
-        );
+        await api.approvalRequests.decide(approvalRequest.approval_request_id, {
+          decision: "approved",
+          ...(value ? { reason: value } : {}),
+        });
         return;
       }
       await api.approvals.approve(actionRef, value);
@@ -136,15 +198,59 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
   const rejectMutation = useMutation({
     mutationFn: async (reason: string) => {
       if (approvalRequest) {
-        await api.approvalRequests.decide(
-          approvalRequest.approval_request_id,
-          { decision: "rejected", reason },
-        );
+        await api.approvalRequests.decide(approvalRequest.approval_request_id, {
+          decision: "rejected",
+          reason,
+        });
         return;
       }
       await api.approvals.reject(actionRef, reason);
     },
     ...mutationOptions,
+  });
+  const submitApproval = approvalForm.handleSubmit(async (value) => {
+    setActionError(null);
+    approvalForm.clearErrors();
+    try {
+      await approveMutation.mutateAsync(value.reason || undefined);
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("governance.approvals.actionFailed"),
+        fieldMap: { reason: "reason" },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          approvalForm.setError(
+            field,
+            { message, type: "server" },
+            { shouldFocus: true },
+          ),
+        setFormError: (message) =>
+          approvalForm.setError("root", { message, type: "server" }),
+      });
+    }
+  });
+  const submitRejection = rejectionForm.handleSubmit(async (value) => {
+    setActionError(null);
+    rejectionForm.clearErrors();
+    try {
+      await rejectMutation.mutateAsync(value.reason);
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("governance.approvals.actionFailed"),
+        fieldMap: { reason: "reason" },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          rejectionForm.setError(
+            field,
+            { message, type: "server" },
+            { shouldFocus: true },
+          ),
+        setFormError: (message) =>
+          rejectionForm.setError("root", { message, type: "server" }),
+      });
+    }
   });
 
   if (!action) {
@@ -201,7 +307,7 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
           columns={2}
           items={[
             ...Object.entries(preview).map(([key, value]) => ({
-              label: key,
+              label: previewFieldLabel(key),
               value: String(value),
             })),
             {
@@ -231,7 +337,8 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
             ) : null}
           </div>
           <div className="argus-approval-requirements">
-            {(approvalRequest?.requirements ??
+            {(
+              approvalRequest?.requirements ??
               (approval
                 ? [
                     {
@@ -243,13 +350,14 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
                       status: "pending" as const,
                     },
                   ]
-                : [])).map((requirement) => (
+                : [])
+            ).map((requirement) => (
               <div
                 className="argus-approval-requirement"
                 key={`${requirement.policy_id}:${requirement.policy_version}`}
               >
                 <div className="argus-approval-block__head">
-                  <strong>{requirement.policy_id}</strong>
+                  <strong>{policyLabel(requirement.policy_id)}</strong>
                   <StatusBadge
                     tone={
                       requirement.status === "approved"
@@ -312,12 +420,12 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
                         decision.decision === "approved" ? "success" : "danger"
                       }
                     >
-                      {t(
-                        `governance.approvals.decision.${decision.decision}`,
-                      )}
+                      {t(`governance.approvals.decision.${decision.decision}`)}
                     </StatusBadge>
-                    <span>{decision.actor_user_id}</span>
-                    <time>{formatDateTimeFull(decision.decided_at, locale)}</time>
+                    <span>{userLabel(decision.actor_user_id)}</span>
+                    <time>
+                      {formatDateTimeFull(decision.decided_at, locale)}
+                    </time>
                     {decision.reason && (
                       <p className="argus-approval-decisions__reason">
                         {decision.reason}
@@ -338,15 +446,24 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
 
       {isApprovable && (
         <section className="argus-approval-block">
-          <div className="argus-approval-actions">
-            <Field label={t("governance.approvals.detail.approve")}>
+          <form className="argus-approval-actions" onSubmit={submitApproval}>
+            {approvalForm.formState.errors.root?.message && (
+              <p className="argus-approval-actions__error" role="alert">
+                {approvalForm.formState.errors.root.message}
+              </p>
+            )}
+            <Field
+              requirement="optional"
+              error={approvalForm.formState.errors.reason?.message}
+              label={t("governance.approvals.detail.approve")}
+            >
               <Textarea
-                onChange={(event) => setComment(event.target.value)}
+                {...approvalForm.register("reason")}
+                maxLength={approvalReasonConstraint.maxLength}
                 placeholder={t(
                   "governance.approvals.detail.commentPlaceholder",
                 )}
                 rows={2}
-                value={comment}
               />
             </Field>
             <div className="argus-approval-actions__buttons">
@@ -359,15 +476,13 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
               </Button>
               <Button
                 loading={approveMutation.isPending}
-                onClick={() =>
-                  approveMutation.mutate(comment.trim() || undefined)
-                }
+                type="submit"
                 variant="primary"
               >
                 {t("governance.approvals.detail.approve")}
               </Button>
             </div>
-          </div>
+          </form>
           {actionError && (
             <p className="argus-approval-actions__error" role="alert">
               {actionError}
@@ -376,36 +491,38 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
         </section>
       )}
 
-      {!isConfirmable && !isApprovable && (execution || action.execution_ref) && (
-        <section className="argus-approval-block">
-          {execution && (
-            <Alert
-              description={
-                execution.error_code ??
-                t("governance.approvals.detail.executionStatusDescription")
-              }
-              title={t(
-                `governance.approvals.executionStatus.${execution.status}`,
-              )}
-              tone={
-                execution.status === "succeeded"
-                  ? "success"
-                  : execution.status === "result_unknown"
-                    ? "warning"
-                    : execution.status === "failed"
-                      ? "danger"
-                      : "info"
-              }
-            />
-          )}
-          <Link to="/tasks">
-            <Button variant="secondary">
-              {t("governance.approvals.detail.viewTask")} ·{" "}
-              {execution?.execution_id ?? action.execution_ref}
-            </Button>
-          </Link>
-        </section>
-      )}
+      {!isConfirmable &&
+        !isApprovable &&
+        (execution || action.execution_ref) && (
+          <section className="argus-approval-block">
+            {execution && (
+              <Alert
+                description={
+                  execution.error_code ??
+                  t("governance.approvals.detail.executionStatusDescription")
+                }
+                title={t(
+                  `governance.approvals.executionStatus.${execution.status}`,
+                )}
+                tone={
+                  execution.status === "succeeded"
+                    ? "success"
+                    : execution.status === "result_unknown"
+                      ? "warning"
+                      : execution.status === "failed"
+                        ? "danger"
+                        : "info"
+                }
+              />
+            )}
+            <Link to="/tasks">
+              <Button variant="secondary">
+                {t("governance.approvals.detail.viewTask")} ·{" "}
+                {execution?.execution_id ?? action.execution_ref}
+              </Button>
+            </Link>
+          </section>
+        )}
 
       {isConfirmable && actionError && (
         <p className="argus-approval-actions__error" role="alert">
@@ -413,31 +530,58 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
         </p>
       )}
 
-      <ConfirmDialog
-        danger
-        confirmLabel={t("governance.approvals.detail.rejectConfirm")}
+      <Dialog
         description={t("governance.approvals.detail.rejectDialogDescription")}
-        loading={rejectMutation.isPending}
-        onConfirm={() => {
-          const reason = rejectReason.trim();
-          if (reason) rejectMutation.mutate(reason);
+        footer={
+          <>
+            <Button
+              disabled={rejectMutation.isPending}
+              onClick={() => setRejectOpen(false)}
+              type="button"
+              variant="secondary"
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              form="approval-rejection-form"
+              loading={rejectMutation.isPending}
+              type="submit"
+              variant="danger"
+            >
+              {t("governance.approvals.detail.rejectConfirm")}
+            </Button>
+          </>
+        }
+        onOpenChange={(open) => {
+          setRejectOpen(open);
+          if (!open) rejectionForm.reset();
         }}
-        onOpenChange={setRejectOpen}
         open={rejectOpen}
         title={t("governance.approvals.detail.rejectDialogTitle")}
       >
-        <Field label={t("governance.approvals.detail.reject")}>
-          <Textarea
-            autoFocus
-            onChange={(event) => setRejectReason(event.target.value)}
-            placeholder={t(
-              "governance.approvals.detail.rejectReasonPlaceholder",
-            )}
-            rows={3}
-            value={rejectReason}
-          />
-        </Field>
-      </ConfirmDialog>
+        <form id="approval-rejection-form" onSubmit={submitRejection}>
+          {rejectionForm.formState.errors.root?.message && (
+            <p className="argus-approval-actions__error" role="alert">
+              {rejectionForm.formState.errors.root.message}
+            </p>
+          )}
+          <Field
+            requirement="required"
+            error={rejectionForm.formState.errors.reason?.message}
+            label={t("governance.approvals.detail.reject")}
+          >
+            <Textarea
+              {...rejectionForm.register("reason")}
+              autoFocus
+              maxLength={approvalReasonConstraint.maxLength}
+              placeholder={t(
+                "governance.approvals.detail.rejectReasonPlaceholder",
+              )}
+              rows={3}
+            />
+          </Field>
+        </form>
+      </Dialog>
     </div>
   );
 }

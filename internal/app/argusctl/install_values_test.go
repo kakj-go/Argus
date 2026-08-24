@@ -80,6 +80,16 @@ func TestInstallerProvidesRequiredObjectStoreBootstrapValues(t *testing.T) {
 	if got := runtimeValues["remoteOrigin"]; got != "http://localhost:9445" {
 		t.Fatalf("remoteOrigin = %v", got)
 	}
+	observabilityService := "argus-telemetry-ingest." + cfg.Spec.Namespaces.Observability + ".svc"
+	for key, want := range map[string]string{
+		"telemetryIngestGrpcEndpoint": "grpcs://" + observabilityService + ":4317",
+		"telemetryIngestHttpEndpoint": "https://" + observabilityService + ":4318",
+		"telemetryEnrollmentEndpoint": "https://" + observabilityService + ":4318/v1/identity/enroll",
+	} {
+		if got := runtimeValues[key]; got != want {
+			t.Fatalf("%s = %v, want %s", key, got, want)
+		}
+	}
 }
 
 func TestPlatformMFARequirementIsExplicitAndDefaultsOff(t *testing.T) {
@@ -111,11 +121,9 @@ func TestLocalProfilesAllowBothLoopbackHostnames(t *testing.T) {
 	want := []any{
 		"http://localhost:4173",
 		"http://localhost:4174",
-		"http://localhost:4175",
 		"http://localhost:4176",
 		"http://127.0.0.1:4173",
 		"http://127.0.0.1:4174",
-		"http://127.0.0.1:4175",
 		"http://127.0.0.1:4176",
 	}
 	for _, profile := range []string{"evaluation", "local-hardening"} {
@@ -172,31 +180,34 @@ func TestLocalHardeningPostgreSQLRoleInitIsReadableAfterUserDrop(t *testing.T) {
 	t.Fatal("PostgreSQL role-init volume was not rendered")
 }
 
-func TestSetupTokenIsMountedIntoLocalWebOnly(t *testing.T) {
-	for _, test := range []struct {
-		profile string
-		want    bool
-	}{
-		{profile: "evaluation", want: true},
-		{profile: "local-hardening", want: true},
-		{profile: "production", want: false},
-	} {
-		t.Run(test.profile, func(t *testing.T) {
-			deployments := resourcesByKind(renderPlatformResources(t, test.profile), "Deployment")
+func TestMinIOBucketInitStopsOptionParsingBeforeCredentials(t *testing.T) {
+	resources := renderDataResources(t, "evaluation")
+	job := requireResource(t, resourcesByKind(resources, "Job"), "argus-minio-bucket-init")
+	containers, found, err := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
+	if err != nil || !found || len(containers) != 1 {
+		t.Fatalf("read MinIO bucket init containers: found=%v err=%v", found, err)
+	}
+	container := containers[0].(map[string]any)
+	args := container["args"].([]any)
+	if len(args) != 1 || !strings.Contains(args[0].(string), `mc alias set -- argus`) {
+		t.Fatalf("MinIO bucket init command does not stop option parsing: %#v", args)
+	}
+}
+
+func TestSetupTokenIsNeverMountedIntoWeb(t *testing.T) {
+	for _, profile := range []string{"evaluation", "local-hardening", "production"} {
+		t.Run(profile, func(t *testing.T) {
+			deployments := resourcesByKind(renderPlatformResources(t, profile), "Deployment")
 			web := requireResource(t, deployments, "argus-web")
 			volumes, _, err := unstructured.NestedSlice(web.Object, "spec", "template", "spec", "volumes")
 			if err != nil {
 				t.Fatal(err)
 			}
-			hasSetupToken := false
 			for _, rawVolume := range volumes {
 				volume := rawVolume.(map[string]any)
 				if volume["name"] == "setup-token" {
-					hasSetupToken = true
+					t.Fatal("setup-token must not be exposed to the web container")
 				}
-			}
-			if hasSetupToken != test.want {
-				t.Fatalf("setup-token volume present = %v, want %v", hasSetupToken, test.want)
 			}
 		})
 	}
@@ -238,10 +249,19 @@ func TestPlatformChartAllowsTelemetryToBeDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(accessor.Manifest(), "argus-telemetry-catalog-sync") ||
-		strings.Contains(accessor.Manifest(), "argus-telemetry-ingest") ||
-		strings.Contains(accessor.Manifest(), "argus-server-telemetry-client-tls") {
-		t.Fatal("telemetry resources rendered while telemetry was disabled")
+	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewBufferString(accessor.Manifest()), 4096)
+	for {
+		var object unstructured.Unstructured
+		if err = decoder.Decode(&object); err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch object.GetName() {
+		case "argus-telemetry-catalog-sync", "argus-telemetry-ingest", "argus-server-telemetry-client-tls":
+			t.Fatalf("telemetry resource %s rendered while telemetry was disabled", object.GetName())
+		}
 	}
 }
 

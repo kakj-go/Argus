@@ -1,9 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@argus/api-client";
-import type { ApprovalPolicy, Environment, RiskLevel } from "@argus/api-client";
+import { z } from "zod";
+import { formConstraint, presentApiFormError, useApi } from "@argus/api-client";
+import type { ApprovalPolicy } from "@argus/api-client";
 import {
+  Alert,
   Badge,
   Button,
   CheckItem,
@@ -15,18 +19,23 @@ import {
   Spinner,
   StatusBadge,
   Switch,
-  Textarea,
 } from "@argus/ui";
 import { useOrgRoles } from "./org-users-tab";
 
-const RISK_LEVELS: RiskLevel[] = ["read", "write", "dangerous", "critical"];
-const ENVIRONMENTS: Environment[] = ["development", "staging", "production"];
+type ApprovalRiskLevel = ApprovalPolicy["matchRiskLevels"][number];
+
+const RISK_LEVELS: ApprovalRiskLevel[] = ["write", "dangerous", "critical"];
+const policyConstraints = {
+  name: formConstraint("ApprovalPolicyWrite", "name"),
+  approverRoleIds: formConstraint("ApprovalPolicyWrite", "approver_role_ids"),
+  minimumApprovers: formConstraint("ApprovalPolicyWrite", "minimum_approvers"),
+  risks: formConstraint("ApprovalPolicyWrite", "risks"),
+};
 
 type PolicyRow = {
   id: string;
   name: string;
-  riskLevels: RiskLevel[];
-  environments: Environment[];
+  riskLevels: ApprovalRiskLevel[];
   minApprovers: number;
   approverRoleIds: string[];
   separationOfDuty: boolean;
@@ -68,7 +77,6 @@ export function OrgPoliciesTab() {
     id: policy.id,
     name: policy.name,
     riskLevels: policy.matchRiskLevels,
-    environments: policy.matchEnvironments,
     minApprovers: policy.minApprovers,
     approverRoleIds: policy.approverRoleIds,
     separationOfDuty: policy.separationOfDuty,
@@ -129,16 +137,6 @@ export function OrgPoliciesTab() {
                 ),
             },
             {
-              key: "environments",
-              header: t("settings.org.policiesTab.matchEnvironments"),
-              render: (row) =>
-                row.environments.length === 0
-                  ? t("settings.common.all")
-                  : row.environments
-                      .map((env) => t(`settings.org.env.${env}`))
-                      .join(", "),
-            },
-            {
               key: "minApprovers",
               header: t("settings.org.policiesTab.minApprovers"),
               render: (row) => String(row.minApprovers),
@@ -191,7 +189,7 @@ export function OrgPoliciesTab() {
           setDrawerOpen(open);
           if (!open) setEditing(null);
         }}
-        onSubmit={(input) => save.mutate({ ...input, id: editing?.id })}
+        onSubmit={(input) => save.mutateAsync({ ...input, id: editing?.id })}
         open={drawerOpen}
         policy={editing}
         roles={(roles.data ?? []).map((role) => ({
@@ -209,62 +207,26 @@ function toggleInList<T>(list: T[], item: T): T[] {
     : [...list, item];
 }
 
-function PolicyDrawer({
-  open,
-  onOpenChange,
-  onSubmit,
-  loading,
-  policy,
-  roles,
+function CheckRow<T>({
+  list,
+  onToggle,
+  options,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (
-    input: Omit<ApprovalPolicy, "id" | "enterpriseId" | "createdAt">,
-  ) => void;
-  loading: boolean;
-  policy: ApprovalPolicy | null;
-  roles: Array<{ id: string; label: string }>;
+  list: T[];
+  onToggle: (value: T) => void;
+  options: Array<{ value: T; label: string }>;
 }) {
-  const { t } = useTranslation();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [riskLevels, setRiskLevels] = useState<RiskLevel[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [minApprovers, setMinApprovers] = useState(1);
-  const [approverRoleIds, setApproverRoleIds] = useState<string[]>([]);
-  const [separationOfDuty, setSeparationOfDuty] = useState(false);
-  const [enabled, setEnabled] = useState(true);
-  const [loadedFor, setLoadedFor] = useState<string | null>(null);
-
-  const key = open ? (policy?.id ?? "__new__") : null;
-  if (key && loadedFor !== key) {
-    setLoadedFor(key);
-    setName(policy?.name ?? "");
-    setDescription(policy?.description ?? "");
-    setRiskLevels(policy?.matchRiskLevels ?? []);
-    setEnvironments(policy?.matchEnvironments ?? []);
-    setMinApprovers(policy?.minApprovers ?? 1);
-    setApproverRoleIds(policy?.approverRoleIds ?? []);
-    setSeparationOfDuty(policy?.separationOfDuty ?? false);
-    setEnabled(policy?.enabled ?? true);
-  }
-
-  const checkRow = <T,>(
-    list: T[],
-    setList: (next: T[]) => void,
-    options: Array<{ value: T; label: string }>,
-  ) => (
+  return (
     <div className="argus-settings-check-row">
       {options.map((option) => (
         <span
           aria-checked={list.includes(option.value)}
           key={String(option.value)}
-          onClick={() => setList(toggleInList(list, option.value))}
+          onClick={() => onToggle(option.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
-              setList(toggleInList(list, option.value));
+              onToggle(option.value);
             }
           }}
           role="checkbox"
@@ -277,23 +239,127 @@ function PolicyDrawer({
       ))}
     </div>
   );
+}
+
+function PolicyDrawer({
+  open,
+  onOpenChange,
+  onSubmit,
+  loading,
+  policy,
+  roles,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (
+    input: Omit<ApprovalPolicy, "id" | "enterpriseId" | "createdAt">,
+  ) => Promise<unknown>;
+  loading: boolean;
+  policy: ApprovalPolicy | null;
+  roles: Array<{ id: string; label: string }>;
+}) {
+  const { t } = useTranslation();
+  const schema = useMemo(
+    () =>
+      z.object({
+        name: z
+          .string()
+          .trim()
+          .min(1, t("settings.common.required"))
+          .max(policyConstraints.name.maxLength ?? 128),
+        riskLevels: z
+          .array(z.enum(["write", "dangerous", "critical"]))
+          .min(
+            policyConstraints.risks.minItems ?? 1,
+            t("settings.common.required"),
+          ),
+        minApprovers: z
+          .number()
+          .int()
+          .min(policyConstraints.minimumApprovers.minimum ?? 1)
+          .max(policyConstraints.minimumApprovers.maximum ?? 10),
+        approverRoleIds: z
+          .array(z.string())
+          .min(
+            policyConstraints.approverRoleIds.minItems ?? 1,
+            t("settings.common.required"),
+          )
+          .max(policyConstraints.approverRoleIds.maxItems ?? 32),
+        separationOfDuty: z.boolean(),
+        enabled: z.boolean(),
+      }),
+    [t],
+  );
+  type PolicyForm = z.infer<typeof schema>;
+  const {
+    control,
+    clearErrors,
+    register,
+    reset,
+    setValue,
+    watch,
+    handleSubmit,
+    setError,
+    formState: { errors },
+  } = useForm<PolicyForm>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      riskLevels: [],
+      minApprovers: 1,
+      approverRoleIds: [],
+      separationOfDuty: false,
+      enabled: true,
+    },
+  });
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      name: policy?.name ?? "",
+      riskLevels: policy?.matchRiskLevels ?? [],
+      minApprovers: policy?.minApprovers ?? 1,
+      approverRoleIds: policy?.approverRoleIds ?? [],
+      separationOfDuty: policy?.separationOfDuty ?? false,
+      enabled: policy?.enabled ?? true,
+    });
+  }, [open, policy, reset]);
+  const riskLevels = watch("riskLevels");
+  const approverRoleIds = watch("approverRoleIds");
+  const submit = handleSubmit(async (values) => {
+    clearErrors();
+    try {
+      await onSubmit({
+        name: values.name,
+        matchRiskLevels: values.riskLevels,
+        minApprovers: values.minApprovers,
+        approverRoleIds: values.approverRoleIds,
+        separationOfDuty: values.separationOfDuty,
+        enabled: values.enabled,
+      });
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("settings.common.saveFailed"),
+        fieldMap: {
+          approver_role_ids: "approverRoleIds",
+          minimum_approvers: "minApprovers",
+          name: "name",
+          risks: "riskLevels",
+        },
+        requestReference: (requestId) =>
+          t("common.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          setError(field, { message, type: "server" }, { shouldFocus: true }),
+        setFormError: (message) =>
+          setError("root", { message, type: "server" }),
+      });
+    }
+  });
 
   return (
     <FormDrawer
       loading={loading}
       onOpenChange={onOpenChange}
-      onSubmit={() =>
-        onSubmit({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          matchRiskLevels: riskLevels,
-          matchEnvironments: environments,
-          minApprovers: Math.max(1, minApprovers),
-          approverRoleIds,
-          separationOfDuty,
-          enabled,
-        })
-      }
+      onSubmit={submit}
       open={open}
       title={
         policy
@@ -302,69 +368,103 @@ function PolicyDrawer({
       }
     >
       <div className="argus-settings-form">
-        <Field label={t("settings.common.name")}>
+        {errors.root?.message && (
+          <Alert
+            description={errors.root.message}
+            title={t("settings.common.saveFailed")}
+            tone="danger"
+          />
+        )}
+        <Field
+          requirement="required"
+          error={errors.name?.message}
+          label={t("settings.common.name")}
+        >
           <Input
-            onChange={(event) => setName(event.target.value)}
+            {...register("name")}
+            maxLength={policyConstraints.name.maxLength}
             required
-            value={name}
           />
         </Field>
-        <Field label={t("settings.common.description")}>
-          <Textarea
-            onChange={(event) => setDescription(event.target.value)}
-            rows={2}
-            value={description}
-          />
-        </Field>
-        <Field label={t("settings.org.policiesTab.matchRiskLevels")}>
-          {checkRow(
-            riskLevels,
-            setRiskLevels,
-            RISK_LEVELS.map((level) => ({
+        <Field
+          controlMode="group"
+          requirement="required"
+          error={errors.riskLevels?.message}
+          label={t("settings.org.policiesTab.matchRiskLevels")}
+        >
+          <CheckRow
+            list={riskLevels}
+            onToggle={(value) =>
+              setValue("riskLevels", toggleInList(riskLevels, value), {
+                shouldValidate: true,
+              })
+            }
+            options={RISK_LEVELS.map((level) => ({
               value: level,
               label: t(`settings.org.policiesTab.riskLevels.${level}`),
-            })),
-          )}
+            }))}
+          />
         </Field>
-        <Field label={t("settings.org.policiesTab.matchEnvironments")}>
-          {checkRow(
-            environments,
-            setEnvironments,
-            ENVIRONMENTS.map((env) => ({
-              value: env,
-              label: t(`settings.org.env.${env}`),
-            })),
-          )}
-        </Field>
-        <Field label={t("settings.org.policiesTab.minApprovers")}>
+        <Field
+          requirement="required"
+          error={errors.minApprovers?.message}
+          label={t("settings.org.policiesTab.minApprovers")}
+        >
           <Input
-            min={1}
-            onChange={(event) =>
-              setMinApprovers(Number.parseInt(event.target.value, 10) || 1)
-            }
+            {...register("minApprovers", { valueAsNumber: true })}
+            max={policyConstraints.minimumApprovers.maximum}
+            min={policyConstraints.minimumApprovers.minimum}
             type="number"
-            value={minApprovers}
           />
         </Field>
-        <Field label={t("settings.org.policiesTab.approverRoles")}>
-          {checkRow(
-            approverRoleIds,
-            setApproverRoleIds,
-            roles.map((role) => ({ value: role.id, label: role.label })),
-          )}
-        </Field>
-        <Field label={t("settings.org.policiesTab.separationOfDuty")}>
-          <Switch
-            checked={separationOfDuty}
-            label={t("settings.org.policiesTab.separationOfDuty")}
-            onChange={setSeparationOfDuty}
+        <Field
+          controlMode="group"
+          requirement="required"
+          error={errors.approverRoleIds?.message}
+          label={t("settings.org.policiesTab.approverRoles")}
+        >
+          <CheckRow
+            list={approverRoleIds}
+            onToggle={(value) =>
+              setValue(
+                "approverRoleIds",
+                toggleInList(approverRoleIds, value),
+                { shouldValidate: true },
+              )
+            }
+            options={roles.map((role) => ({
+              value: role.id,
+              label: role.label,
+            }))}
           />
         </Field>
-        <Field label={t("settings.common.enabled")}>
-          <Switch
-            checked={enabled}
-            label={t("settings.common.enabled")}
-            onChange={setEnabled}
+        <Field
+          requirement="required"
+          label={t("settings.org.policiesTab.separationOfDuty")}
+        >
+          <Controller
+            control={control}
+            name="separationOfDuty"
+            render={({ field }) => (
+              <Switch
+                checked={field.value}
+                label={t("settings.org.policiesTab.separationOfDuty")}
+                onChange={field.onChange}
+              />
+            )}
+          />
+        </Field>
+        <Field requirement="optional" label={t("settings.common.enabled")}>
+          <Controller
+            control={control}
+            name="enabled"
+            render={({ field }) => (
+              <Switch
+                checked={field.value}
+                label={t("settings.common.enabled")}
+                onChange={field.onChange}
+              />
+            )}
           />
         </Field>
       </div>

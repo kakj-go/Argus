@@ -45,7 +45,7 @@ M2 固定由 `argusctl` 生成 32 字节随机 Token，保存到独立 Kubernete
 
 首次安装创建新 Token 时，`argusctl install` 必须在终端中明确提示部署者立即复制并安全保存，Token 只显示一次；重复安装不得重新显示仍有效的 Token。遗失时使用 `argusctl setup-token rotate` 生成新 Token。轮换命令更新 Secret 后必须滚动重启并等待 `argus-server` Ready，确认新 Pod 已挂载新值后才能向部署者显示 Token，避免用户拿到尚未生效的凭据。
 
-Evaluation 和 Local Hardening 的 Setup 入口只通过本机 `port-forward` 暴露。安装器生成的 Token 同时以只读 Secret Volume 挂载到 Setup Web，页面从仅存在于 Setup 端口的同源、`no-store` 本地交接地址读取并自动填入表单，提供复制按钮，不要求用户在终端与浏览器之间手工核对。Token 轮换必须同时重启 `argus-server` 和 `argus-web`，确保校验端与交接端读取同一 Secret 版本。Production 不挂载该 Secret，交接地址返回 404，仍要求部署者从受信终端手工输入一次性 Token；禁止在公网 Setup 页面提供无认证 Token 读取能力。
+首次初始化与 Platform 使用同一个入口。Platform 在恢复登录会话前调用公开的初始化状态接口：`uninitialized` 显示向导，`initialized` 进入登录页；初始化成功后浏览器立即切换到 `/login`。Setup Token 只挂载到 `argus-server`，不得挂载到 Web 容器或通过浏览器同源地址读取。部署者必须从 `argusctl install` 的一次性输出、`argusctl setup-token rotate`，或安装器给出的受信 `kubectl` 命令取得 Token，再手工输入初始化向导。
 
 Setup Token 应具有：
 
@@ -76,12 +76,17 @@ Setup Token 应具有：
 - 邮箱。
 - 密码与确认密码。
 
-密码至少要求：
+密码策略由 `api/contracts/password-policy.json` 作为唯一机器可读事实，并生成 Go 与 TypeScript 常量。当前规则为：
 
-- 长度不少于 12 位。
-- 禁止常见弱密码。
+- 按 Unicode code point 计数，长度为 12-1024 个字符。
+- 至少包含一个 Unicode 字母和一个 Unicode 数字；不强制特殊字符或大小写组合。
+- 禁止契约登记的常见弱密码。
+- 大小写不敏感地禁止包含用户名或邮箱账号部分（片段至少 3 个字符）。
+- 首次登录改密不能复用临时密码，账户改密不能复用当前密码。
 - 使用 Argon2id 或等价强密码哈希。
 - 密码明文不写日志、不进入审计详情。
+
+前端校验用于即时反馈，后端必须重复执行同一生成策略。失败响应保持稳定 `PASSWORD_WEAK`，并只公开 `field=password`、失败 `rule` 和适用的长度边界；不返回密码片段、命中内容或哈希细节。
 
 ### 4.3 初始化提交
 
@@ -152,18 +157,18 @@ M1 原型中的 Sandbox 页面在 M2 real 模式保持稳定不可用，不得�
 
 企业状态必须由授权服务在所有入口统一执行，不能只在登录页面判断：
 
-| 能力 | active | suspended | disabled |
-| --- | --- | --- | --- |
-| 企业用户新登录 | 允许 | 拒绝 | 拒绝 |
-| 已登录 Session | 允许 | 立即撤销 | 立即撤销 |
-| 新 Run/Tool/Action | 允许 | 拒绝 | 拒绝 |
-| 未执行 Pending Action/Approval | 允许 | 失效 | 失效 |
-| 正在执行的危险操作 | 正常 | 请求安全停止并审计；不可中断步骤继续到安全点 | 同 suspended |
-| Connector 控制连接 | 允许 | 保持心跳但拒绝新命令 | 吊销设备凭证并断开 |
-| 人工远程会话 | 允许 | 拒绝新会话并请求活动会话安全终止 | 立即吊销票据、终止会话并审计 |
-| Telemetry 摄入 | 允许 | 默认继续短期摄入，按平台策略限额 | 拒绝新数据 |
-| 历史数据查询 | 按权限 | 默认拒绝企业用户；平台不获得正文权限 | 拒绝 |
-| 数据保留 | 套餐策略 | 保留 | 按停用保留策略 |
+| 能力                           | active   | suspended                                    | disabled                     |
+| ------------------------------ | -------- | -------------------------------------------- | ---------------------------- |
+| 企业用户新登录                 | 允许     | 拒绝                                         | 拒绝                         |
+| 已登录 Session                 | 允许     | 立即撤销                                     | 立即撤销                     |
+| 新 Run/Tool/Action             | 允许     | 拒绝                                         | 拒绝                         |
+| 未执行 Pending Action/Approval | 允许     | 失效                                         | 失效                         |
+| 正在执行的危险操作             | 正常     | 请求安全停止并审计；不可中断步骤继续到安全点 | 同 suspended                 |
+| Connector 控制连接             | 允许     | 保持心跳但拒绝新命令                         | 吊销设备凭证并断开           |
+| 人工远程会话                   | 允许     | 拒绝新会话并请求活动会话安全终止             | 立即吊销票据、终止会话并审计 |
+| Telemetry 摄入                 | 允许     | 默认继续短期摄入，按平台策略限额             | 拒绝新数据                   |
+| 历史数据查询                   | 按权限   | 默认拒绝企业用户；平台不获得正文权限         | 拒绝                         |
+| 数据保留                       | 套餐策略 | 保留                                         | 按停用保留策略               |
 
 `suspended` 默认继续接收一段可配置宽限期的遥测，避免因商务或登录问题造成不可恢复监控缺口，但禁止企业用户查询；超过宽限期后 Ingest 按策略拒绝。平台超级管理员只能看到用量和健康元数据，不能借此读取业务正文。
 
@@ -228,7 +233,7 @@ Enterprise 用户名全局大小写不敏感唯一。原因是企业登录只提
 └── 企业审计
 ```
 
-主机页面提供“添加堡垒机”和“添加普通主机”。Connector 注册后自动创建/激活一个 Bastion Scope 分组框；经该堡垒机添加的内网主机显示在框内，未选择堡垒机的公网 Direct Host 显示在“独立主机”。堡垒机、成员和独立主机卡片均在详情中展示连接路径、远程登录和 Collector 状态。
+主机页面提供“添加堡垒机”和“添加普通主机”。Connector 注册后自动创建/激活一个 Bastion Scope 分组框；经该堡垒机添加的成员主机显示在框内，未选择堡垒机的直连 Host 显示在“独立主机”。堡垒机、成员和独立主机卡片均在详情中展示连接路径、远程登录和 Collector 状态。
 
 Collector 不单独占用左侧菜单。未安装时在主机或 Kubernetes 详情显示安装按钮；安装后通过“概览、采集能力、数据推送、配置版本、运行状态”进入配置。Metrics/Logs/Traces 查询、告警和用量大屏后续再加入“可观测性”菜单。
 
@@ -281,3 +286,7 @@ argus admin reset-password
 - 企业审计：Department、用户权限、RoleBinding、DataScope、资源标签、RemoteAccessGrant、ManagedAccount、Connector、资源、OpenTelemetry 安装与配置、监控查询/导出、Chatbox、MCP Tool、Card Action、Break Glass 和 Secret 使用。
 
 超级管理员默认只能查看平台审计；企业管理员只能查看本企业审计。企业审计读取按角色、DataScope 和字段规则裁剪；`security_auditor` 可以查看被授权的企业审计正文，但不能因此获得远程操作、监控敏感字段或 Secret 权限。
+
+两个审计门户共享稳定的动作/资源代码目录，但分别维护中英文展示文案。列表与筛选器显示本地化名称，详情同时保留原始 action key、actor/resource ID。服务端审计读模型只在已授权域内尽力解析操作者和资源当前名称；平台活动 Sandbox 会话不得为显示企业用户名而新增企业成员查询，只显示“企业用户”和缩短的技术引用。
+
+企业 IAM、Secret/Credential、RemoteAccessGrant/Policy 和审批页面不得要求管理员手工输入 UUID：用户、部门、主机、ManagedAccount、Role、Policy 等引用通过已授权列表选择并以 ID 提交。列表展示名称或账号，引用失效时显示不可用状态；技术 ID 放入详情或复制入口。

@@ -3,7 +3,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { useApi } from "@argus/api-client";
+import {
+  apiErrorRequestId,
+  formConstraint,
+  formatApiError,
+  passwordPolicyRuleFromError,
+  presentApiFormError,
+  validatePasswordPolicy,
+  useApi,
+} from "@argus/api-client";
 import { usePlatformAuthStore } from "@argus/auth";
 import {
   Alert,
@@ -20,6 +28,9 @@ import {
   PageShell,
 } from "@argus/ui";
 import { formatDateTime } from "../lib/format";
+
+const enrollmentCodeConstraint = formConstraint("TotpVerifyRequest", "code");
+const proofCodeConstraint = formConstraint("MfaCodeRequest", "code");
 
 type LoginSessionRow = {
   id: string;
@@ -38,27 +49,40 @@ export function AccountPage() {
   const restoreAuth = usePlatformAuthStore((state) => state.restore);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [mfaError, setMfaError] = useState<string | null>(null);
-  const [enrollment, setEnrollment] = useState<Awaited<ReturnType<typeof api.auth.enrollTotp>> | null>(null);
-  const [mfaCode, setMfaCode] = useState("");
-  const [proofCode, setProofCode] = useState("");
+  const [enrollment, setEnrollment] = useState<Awaited<
+    ReturnType<typeof api.auth.enrollTotp>
+  > | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const passwordSchema = useMemo(
     () =>
       z
         .object({
           currentPassword: z.string().min(1, t("account.password.required")),
-          nextPassword: z
-            .string()
-            .min(12, t("account.password.weak"))
-            .regex(/[a-zA-Z]/, t("account.password.weak"))
-            .regex(/\d/, t("account.password.weak")),
+          nextPassword: z.string().min(1, t("account.password.required")),
           confirmPassword: z.string().min(1, t("account.password.required")),
         })
-        .refine((value) => value.nextPassword === value.confirmPassword, {
-          message: t("account.password.mismatch"),
-          path: ["confirmPassword"],
+        .superRefine((value, context) => {
+          const rule = validatePasswordPolicy(value.nextPassword, {
+            username: session?.user.username,
+            email: session?.user.email,
+            previousPassword: value.currentPassword,
+          });
+          if (rule) {
+            context.addIssue({
+              code: "custom",
+              path: ["nextPassword"],
+              message: t(`account.passwordPolicy.${rule}`),
+            });
+          }
+          if (value.nextPassword !== value.confirmPassword) {
+            context.addIssue({
+              code: "custom",
+              path: ["confirmPassword"],
+              message: t("account.password.mismatch"),
+            });
+          }
         }),
-    [t],
+    [session?.user.email, session?.user.username, t],
   );
   type PasswordForm = z.infer<typeof passwordSchema>;
   const {
@@ -72,6 +96,47 @@ export function AccountPage() {
       nextPassword: "",
       confirmPassword: "",
     },
+  });
+  const enrollmentSchema = useMemo(
+    () =>
+      z.object({
+        code: z
+          .string()
+          .trim()
+          .min(1, t("account.mfa.codeRequired"))
+          .regex(
+            new RegExp(enrollmentCodeConstraint.pattern ?? "^[0-9]{6}$"),
+            t("account.mfa.codeInvalid"),
+          ),
+      }),
+    [t],
+  );
+  type EnrollmentForm = z.infer<typeof enrollmentSchema>;
+  const enrollmentForm = useForm<EnrollmentForm>({
+    resolver: zodResolver(enrollmentSchema),
+    defaultValues: { code: "" },
+  });
+  const proofSchema = useMemo(
+    () =>
+      z.object({
+        code: z
+          .string()
+          .trim()
+          .min(
+            proofCodeConstraint.minLength ?? 6,
+            t("account.mfa.proofInvalid"),
+          )
+          .max(
+            proofCodeConstraint.maxLength ?? 64,
+            t("account.mfa.proofInvalid"),
+          ),
+      }),
+    [t],
+  );
+  type ProofForm = z.infer<typeof proofSchema>;
+  const proofForm = useForm<ProofForm>({
+    resolver: zodResolver(proofSchema),
+    defaultValues: { code: "" },
   });
 
   if (!session) return null;
@@ -87,8 +152,17 @@ export function AccountPage() {
       });
       clearAuth();
       window.location.assign("/login");
-    } catch {
-      setSubmitError(t("account.password.failed"));
+    } catch (reason) {
+      const rule = passwordPolicyRuleFromError(reason);
+      const message = rule
+        ? t(`account.passwordPolicy.${rule}`)
+        : t("account.password.failed");
+      const requestId = apiErrorRequestId(reason);
+      setSubmitError(
+        requestId
+          ? `${message} ${t("account.requestReference", { requestId })}`
+          : message,
+      );
     }
   });
 
@@ -106,46 +180,82 @@ export function AccountPage() {
     setMfaError(null);
     try {
       setEnrollment(await api.auth.enrollTotp());
-      setMfaCode("");
-    } catch {
-      setMfaError(t("account.mfa.failed"));
+      enrollmentForm.reset();
+    } catch (error) {
+      setMfaError(
+        formatApiError(error, t("account.mfa.failed"), (requestId) =>
+          t("account.requestReference", { requestId }),
+        ),
+      );
     }
   };
 
-  const verifyEnrollment = async () => {
+  const verifyEnrollment = enrollmentForm.handleSubmit(async (value) => {
     if (!enrollment?.enrollment_id) return;
-    setMfaError(null);
+    enrollmentForm.clearErrors();
     try {
-      const result = await api.auth.verifyTotpEnrollment({ enrollment_id: enrollment.enrollment_id, code: mfaCode.trim() });
+      const result = await api.auth.verifyTotpEnrollment({
+        enrollment_id: enrollment.enrollment_id,
+        code: value.code,
+      });
       setRecoveryCodes(result.codes);
       setEnrollment(null);
+      enrollmentForm.reset();
       await restoreAuth(api);
-    } catch {
-      setMfaError(t("account.mfa.invalid"));
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("account.mfa.invalid"),
+        fieldMap: { code: "code" },
+        requestReference: (requestId) =>
+          t("account.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          enrollmentForm.setError(
+            field,
+            { message, type: "server" },
+            { shouldFocus: true },
+          ),
+        setFormError: (message) =>
+          enrollmentForm.setError("root", { message, type: "server" }),
+      });
     }
-  };
+  });
 
-  const regenerateCodes = async () => {
-    setMfaError(null);
+  const prove = proofForm.handleSubmit(async (value, event) => {
+    proofForm.clearErrors();
+    const submitter = (event?.nativeEvent as SubmitEvent | undefined)
+      ?.submitter;
+    const operation =
+      submitter instanceof HTMLButtonElement && submitter.value === "regenerate"
+        ? "regenerate"
+        : "step-up";
     try {
-      const result = await api.auth.regenerateRecoveryCodes({ code: proofCode.trim() });
-      setRecoveryCodes(result.codes);
-      setProofCode("");
-    } catch {
-      setMfaError(t("account.mfa.invalid"));
+      if (operation === "regenerate") {
+        const result = await api.auth.regenerateRecoveryCodes({
+          code: value.code,
+        });
+        setRecoveryCodes(result.codes);
+      } else {
+        await api.auth.stepUp({ code: value.code });
+        await restoreAuth(api);
+      }
+      proofForm.reset();
+    } catch (error) {
+      presentApiFormError(error, {
+        fallback: t("account.mfa.invalid"),
+        fieldMap: { code: "code" },
+        requestReference: (requestId) =>
+          t("account.requestReference", { requestId }),
+        setFieldError: (field, message) =>
+          proofForm.setError(
+            field,
+            { message, type: "server" },
+            { shouldFocus: true },
+          ),
+        setFormError: (message) =>
+          proofForm.setError("root", { message, type: "server" }),
+      });
     }
-  };
-
-  const stepUp = async () => {
-    setMfaError(null);
-    try {
-      await api.auth.stepUp({ code: proofCode.trim() });
-      setProofCode("");
-      await restoreAuth(api);
-    } catch {
-      setMfaError(t("account.mfa.invalid"));
-    }
-  };
+  });
 
   return (
     <PageShell
@@ -193,27 +303,80 @@ export function AccountPage() {
 
         <Card>
           <CardHeader
-            action={<Badge tone={session.mfa_state === "enabled" ? "success" : "warning"}>{t(`account.mfa.state.${session.mfa_state}`)}</Badge>}
+            action={
+              <Badge
+                tone={session.mfa_state === "enabled" ? "success" : "warning"}
+              >
+                {t(`account.mfa.state.${session.mfa_state}`)}
+              </Badge>
+            }
             title={t("account.mfa.title")}
           />
           <CardContent>
             <div className="argus-account-mfa">
-              {mfaError && <Alert description={mfaError} title={t("account.mfa.title")} tone="danger" />}
+              {mfaError && (
+                <Alert
+                  description={mfaError}
+                  title={t("account.mfa.title")}
+                  tone="danger"
+                />
+              )}
               <p>{t("account.mfa.description")}</p>
               {session.mfa_state !== "enabled" ? (
-                <Button onClick={() => void beginEnrollment()} variant="primary">{t("account.mfa.enroll")}</Button>
+                <Button
+                  onClick={() => void beginEnrollment()}
+                  variant="primary"
+                >
+                  {t("account.mfa.enroll")}
+                </Button>
               ) : (
-                <div className="argus-account-mfa__proof">
-                  <Field label={t("account.mfa.proof")}>
-                    <Input autoComplete="one-time-code" inputMode="numeric" onChange={(event) => setProofCode(event.target.value)} value={proofCode} />
+                <form className="argus-account-mfa__proof" onSubmit={prove}>
+                  {proofForm.formState.errors.root?.message && (
+                    <Alert
+                      description={proofForm.formState.errors.root.message}
+                      title={t("account.mfa.title")}
+                      tone="danger"
+                    />
+                  )}
+                  <Field
+                    requirement="required"
+                    error={proofForm.formState.errors.code?.message}
+                    label={t("account.mfa.proof")}
+                  >
+                    <Input
+                      autoComplete="one-time-code"
+                      {...proofForm.register("code")}
+                    />
                   </Field>
                   <div className="argus-account-mfa__actions">
-                    <Button disabled={!proofCode.trim()} onClick={() => void stepUp()}>{t("account.mfa.stepUp")}</Button>
-                    <Button disabled={!proofCode.trim()} onClick={() => void regenerateCodes()} variant="secondary">{t("account.mfa.regenerate")}</Button>
+                    <Button
+                      disabled={proofForm.formState.isSubmitting}
+                      type="submit"
+                      value="step-up"
+                    >
+                      {t("account.mfa.stepUp")}
+                    </Button>
+                    <Button
+                      disabled={proofForm.formState.isSubmitting}
+                      type="submit"
+                      value="regenerate"
+                      variant="secondary"
+                    >
+                      {t("account.mfa.regenerate")}
+                    </Button>
                   </div>
-                </div>
+                </form>
               )}
-              {session.step_up_expires_at && <Alert description={formatDateTime(session.step_up_expires_at, i18n.language)} title={t("account.mfa.stepUpActive")} tone="success" />}
+              {session.step_up_expires_at && (
+                <Alert
+                  description={formatDateTime(
+                    session.step_up_expires_at,
+                    i18n.language,
+                  )}
+                  title={t("account.mfa.stepUpActive")}
+                  tone="success"
+                />
+              )}
             </div>
           </CardContent>
         </Card>
@@ -233,6 +396,7 @@ export function AccountPage() {
                 />
               )}
               <Field
+                requirement="required"
                 error={errors.currentPassword?.message}
                 label={t("account.password.current")}
               >
@@ -243,6 +407,7 @@ export function AccountPage() {
                 />
               </Field>
               <Field
+                requirement="required"
                 error={errors.nextPassword?.message}
                 hint={t("account.password.rule")}
                 label={t("account.password.next")}
@@ -254,6 +419,7 @@ export function AccountPage() {
                 />
               </Field>
               <Field
+                requirement="required"
                 error={errors.confirmPassword?.message}
                 label={t("account.password.confirm")}
               >
@@ -311,25 +477,78 @@ export function AccountPage() {
       </div>
       <Dialog
         description={t("account.mfa.enrollmentDescription")}
-        onOpenChange={(open) => { if (!open) setEnrollment(null); }}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEnrollment(null);
+            enrollmentForm.reset();
+          }
+        }}
         open={Boolean(enrollment)}
         title={t("account.mfa.enrollmentTitle")}
-        footer={<Button disabled={mfaCode.trim().length !== 6} onClick={() => void verifyEnrollment()} variant="primary">{t("account.mfa.verify")}</Button>}
+        footer={
+          <Button
+            disabled={enrollmentForm.formState.isSubmitting}
+            form="platform-mfa-enrollment-form"
+            type="submit"
+            variant="primary"
+          >
+            {t("account.mfa.verify")}
+          </Button>
+        }
       >
-        {enrollment && <div className="argus-account-mfa__enrollment">
-          <Field label={t("account.mfa.secret")}><code className="argus-mono argus-account-mfa__secret">{enrollment.secret}</code></Field>
-          <Field label={t("account.mfa.code")}><Input autoComplete="one-time-code" autoFocus inputMode="numeric" maxLength={6} onChange={(event) => setMfaCode(event.target.value)} value={mfaCode} /></Field>
-        </div>}
+        {enrollment && (
+          <form
+            className="argus-account-mfa__enrollment"
+            id="platform-mfa-enrollment-form"
+            onSubmit={verifyEnrollment}
+          >
+            {enrollmentForm.formState.errors.root?.message && (
+              <Alert
+                description={enrollmentForm.formState.errors.root.message}
+                title={t("account.mfa.enrollmentTitle")}
+                tone="danger"
+              />
+            )}
+            <Field requirement="none" label={t("account.mfa.secret")}>
+              <code className="argus-mono argus-account-mfa__secret">
+                {enrollment.secret}
+              </code>
+            </Field>
+            <Field
+              requirement="required"
+              error={enrollmentForm.formState.errors.code?.message}
+              label={t("account.mfa.code")}
+            >
+              <Input
+                autoComplete="one-time-code"
+                autoFocus
+                inputMode="numeric"
+                maxLength={6}
+                {...enrollmentForm.register("code")}
+              />
+            </Field>
+          </form>
+        )}
       </Dialog>
       <Dialog
         description={t("account.mfa.recoveryDescription")}
-        onOpenChange={(open) => { if (!open) setRecoveryCodes(null); }}
+        onOpenChange={(open) => {
+          if (!open) setRecoveryCodes(null);
+        }}
         open={Boolean(recoveryCodes)}
         title={t("account.mfa.recoveryTitle")}
-        footer={<Button onClick={() => setRecoveryCodes(null)} variant="primary">{t("common.close")}</Button>}
+        footer={
+          <Button onClick={() => setRecoveryCodes(null)} variant="primary">
+            {t("common.close")}
+          </Button>
+        }
       >
         <div className="argus-account-mfa__codes" role="list">
-          {recoveryCodes?.map((code) => <code className="argus-mono" key={code} role="listitem">{code}</code>)}
+          {recoveryCodes?.map((code) => (
+            <code className="argus-mono" key={code} role="listitem">
+              {code}
+            </code>
+          ))}
         </div>
       </Dialog>
     </PageShell>

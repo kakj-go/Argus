@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 func (a *App) tunnel(ctx context.Context, cfg *InstallConfig) error {
@@ -15,9 +17,8 @@ func (a *App) tunnel(ctx context.Context, cfg *InstallConfig) error {
 	}
 	_, _ = fmt.Fprintln(a.stdout, "Enterprise http://127.0.0.1:4173")
 	_, _ = fmt.Fprintln(a.stdout, "Platform   http://127.0.0.1:4174")
-	_, _ = fmt.Fprintln(a.stdout, "Setup      http://127.0.0.1:4175")
 	_, _ = fmt.Fprintln(a.stdout, "Cards      http://127.0.0.1:4176")
-	_, err := a.runner.run(ctx, nil, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.System, "port-forward", "service/argus-web", "4173:8080", "4174:8081", "4175:8082", "4176:8083")
+	_, err := a.runner.run(ctx, nil, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.System, "port-forward", "service/argus-web", "4173:8080", "4174:8081", "4176:8083")
 	return err
 }
 
@@ -44,6 +45,9 @@ func (a *App) uninstall(ctx context.Context, cfg *InstallConfig, deleteCRDs bool
 	}
 	clients, clientErr := clientsFor(cfg.Spec.KubeContext)
 	if clientErr == nil {
+		if err := deleteTelemetryRootCASecret(ctx, clients.typed, cfg.Spec.ReleaseID); err != nil {
+			return err
+		}
 		for _, namespace := range []string{cfg.Spec.Namespaces.System, cfg.Spec.Namespaces.Sandbox, cfg.Spec.Namespaces.Observability} {
 			if current, getErr := clients.typed.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{}); getErr == nil && current.Labels["argus.io/release-id"] == cfg.Spec.ReleaseID {
 				_ = clients.typed.CoreV1().Namespaces().Delete(ctx, namespace, metav1.DeleteOptions{})
@@ -62,6 +66,25 @@ func (a *App) uninstall(ctx context.Context, cfg *InstallConfig, deleteCRDs bool
 		return err
 	}
 	_, _ = fmt.Fprintf(a.stdout, "Argus %s removed\n", cfg.Spec.ReleaseID)
+	return nil
+}
+
+func deleteTelemetryRootCASecret(ctx context.Context, client kubernetes.Interface, releaseID string) error {
+	const namespace = "cert-manager"
+	name := releaseID + "-telemetry-root-ca"
+	secret, err := client.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect telemetry root CA Secret %s/%s: %w", namespace, name, err)
+	}
+	if owner := secret.Labels["argus.io/release-id"]; owner != "" && owner != releaseID {
+		return fmt.Errorf("refusing to delete telemetry root CA Secret %s/%s owned by release %q", namespace, name, owner)
+	}
+	if err := client.CoreV1().Secrets(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete telemetry root CA Secret %s/%s: %w", namespace, name, err)
+	}
 	return nil
 }
 

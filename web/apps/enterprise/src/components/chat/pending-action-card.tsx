@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import type { PendingActionPublic } from "@argus/api-client";
 import type { CardInstance } from "./chat-view-model";
-import { useApi } from "@argus/api-client";
+import { formatApiError, useApi } from "@argus/api-client";
 import {
   PreviewCommitCard,
   Skeleton,
@@ -91,7 +91,9 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
       await refresh();
     } catch (error) {
       setFailedMessage(
-        error instanceof Error ? error.message : t("chat.action.failed"),
+        formatApiError(error, t("chat.action.failed"), (requestId) =>
+          t("common.requestReference", { requestId }),
+        ),
       );
     } finally {
       setConfirming(false);
@@ -105,7 +107,9 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
       await refresh();
     } catch (error) {
       setFailedMessage(
-        error instanceof Error ? error.message : t("chat.action.failed"),
+        formatApiError(error, t("chat.action.failed"), (requestId) =>
+          t("common.requestReference", { requestId }),
+        ),
       );
     } finally {
       setConfirming(false);

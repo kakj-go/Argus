@@ -19,14 +19,15 @@ M6 只达到 Evaluation 完成标准。M8 已补齐本地 TOTP/Step-up、OpenBao
 - [x] `M6-GATEWAY-01` 实现外部 WSS `9445`、内部 peer mTLS `9446`、Kubernetes Pod owner 解析、跨副本路由、Redis/PostgreSQL 恢复和 30 秒 Drain。
 - [x] `M6-RECORD-01` 实现 asciicast v2 NDJSON `i/o/r/m` 事件、AES-256-GCM 分片、DEK 包裹、SHA-256 Hash Chain、授权增量读取和 90 天默认保留。
 - [x] `M6-REVOKE-01` 实现 Grant、Policy、DataScope、标签、ManagedAccount、用户和企业变化后的票据/Lease/Session 撤权。
-- [x] `M6-WEB-01` 使用 `@xterm/xterm` 和 fit addon 实现 SSH 终端、WinRS 行模式、Grant/Policy、审批、终止与录像播放器。
+- [x] `M6-WEB-01` 使用 `@xterm/xterm` 和 fit addon 实现 SSH 终端、WinRS 行模式、Grant/Policy、审批、终止与录像播放器；命中 `REMOTE_ACCESS_MFA_REQUIRED` 时通过正式 Step-up 对话框获取 fresh MFA proof，成功后自动重试原 AccessRequest。
 - [x] `M6-DEPLOY-01` 增加 Remote WSS Service/Ingress/Certificate、ObjectStore、Origin、并发限制、NetworkPolicy、PDB、Gateway peer RBAC 和独立 Direct Executor 客户端身份。
-- [x] `M6-E2E-01` 增加 `make e2e-m6-k8s`，覆盖真实 SSH、TLS WinRS 模拟器、跨 Gateway、Drain、Redis 清空、MinIO 中断、录像、撤权和 real Playwright。
+- [x] `M6-E2E-01` 增加 `go run ./cmd/argus-dev e2e run --suite m6`，覆盖真实 SSH、TLS WinRS 模拟器、跨 Gateway、Drain、Redis 清空、MinIO 中断、录像、撤权和 real Playwright。
 
 ## 已冻结实现语义
 
 - AccessLease 有效 15 分钟，可重复创建 Session；每次创建都重新校验权限、DataScope、Grant、Policy 和 AuthorizationVersion。
 - Ticket 有效 60 秒且只能消费一次；URL 不携带 Ticket，浏览器只在终端组件内存中持有。
+- 登录阶段的 MFA 只证明登录会话，不能替代远程访问策略要求的 fresh Step-up；浏览器必须调用 `/enterprise/auth/step-up`，不得直接绕过或由 Playwright 代调 API。
 - SSH 是完整 PTY。WinRM 路径固定为 HTTPS WinRS PowerShell 行输入输出，不提供完整 PTY/PSRP。
 - Gateway 停止新连接后等待 30 秒，再终止剩余会话；显式跟踪升级后的 WebSocket，Session 和 Recording 落盘完成后才关闭 peer gRPC 和 PostgreSQL。
 - Gateway peer 通过 Kubernetes API 获取 Ready owner Pod IP；ServiceAccount 只有同 Namespace Pod `get` 权限，peer 使用固定 mTLS 服务身份。
@@ -36,7 +37,7 @@ M6 只达到 Evaluation 完成标准。M8 已补齐本地 TOTP/Step-up、OpenBao
 
 ## 验收证据
 
-2026-08-18 的最终 `make e2e-m6-k8s` 成功运行号为 `20260818072400-79219`，脱敏诊断位于 `artifacts/m6-e2e/20260818072400-79219`。
+2026-08-18 的旧 Shell Harness 最终成功运行号为 `20260818072400-79219`，脱敏诊断位于 `artifacts/m6-e2e/20260818072400-79219`。
 
 该运行验证：
 
@@ -50,7 +51,7 @@ M6 只达到 Evaluation 完成标准。M8 已补齐本地 TOTP/Step-up、OpenBao
 
 退出清理确认三个临时 Namespace、PVC 和集群 Lease 均已删除。
 
-同日最终全量门禁通过：`make contract-check contract-breaking`、`go test ./...`、`go vet ./...`、`pnpm typecheck lint test build check:bundle check:real-build e2e`、`make check-production-artifacts` 和 `git diff --check`。Remote Access sqlc 查询按治理、授权和运行时拆分，项目内 Go/TypeScript/TSX 单文件均低于 2000 行。
+同日最终全量门禁通过：`go run ./cmd/argus-dev contracts check`、`go run ./cmd/argus-dev contracts breaking`、`go test ./...`、`go vet -stdmethods=false ./...`、`pnpm typecheck lint test build check:bundle check:real-build e2e`、`go run ./cmd/argus-dev check production-artifacts` 和 `git diff --check`。Remote Access sqlc 查询按治理、授权和运行时拆分，项目内 Go/TypeScript/TSX 单文件均低于 2000 行。
 
 ## 不包含
 

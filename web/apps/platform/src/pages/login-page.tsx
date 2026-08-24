@@ -6,8 +6,11 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
+  apiErrorRequestId,
   MfaRequiredError,
   PasswordChangeRequiredError,
+  passwordPolicyRuleFromError,
+  validatePasswordPolicy,
   useApi,
 } from "@argus/api-client";
 import { usePlatformAuthStore } from "@argus/auth";
@@ -67,11 +70,15 @@ export function LoginPage() {
               context.addIssue({ code: "custom", path: ["mfaCode"], message: t("login.mfaInvalid") });
             return;
           }
-          if (values.newPassword.length < 12)
+          const passwordRule = validatePasswordPolicy(values.newPassword, {
+            username: values.username,
+            previousPassword: values.password,
+          });
+          if (passwordRule)
             context.addIssue({
               code: "custom",
               path: ["newPassword"],
-              message: t("login.passwordTooShort"),
+              message: t(`login.passwordPolicy.${passwordRule}`),
             });
           if (values.newPassword !== values.confirmPassword)
             context.addIssue({
@@ -140,7 +147,16 @@ export function LoginPage() {
         setValue("mode", "mfa", { shouldValidate: false });
         setError(null);
       } else {
-        setError(t("login.failed"));
+        const passwordRule = passwordPolicyRuleFromError(reason);
+        const message = passwordRule
+          ? t(`login.passwordPolicy.${passwordRule}`)
+          : t("login.failed");
+        const requestId = apiErrorRequestId(reason);
+        setError(
+          requestId
+            ? `${message} ${t("login.requestReference", { requestId })}`
+            : message,
+        );
       }
     } finally {
       setSubmitting(false);
@@ -174,7 +190,7 @@ export function LoginPage() {
           </p>
         )}
         {!challengeId && !mfaChallengeId && (
-          <Field error={errors.username?.message} label={t("login.username")}>
+          <Field requirement="required" error={errors.username?.message} label={t("login.username")}>
             <Input
               {...register("username")}
               autoComplete="username"
@@ -184,7 +200,7 @@ export function LoginPage() {
           </Field>
         )}
         {!challengeId && !mfaChallengeId && (
-          <Field error={errors.password?.message} label={t("login.password")}>
+          <Field requirement="required" error={errors.password?.message} label={t("login.password")}>
             <Input
               {...register("password")}
               autoComplete="current-password"
@@ -195,7 +211,7 @@ export function LoginPage() {
         )}
         {challengeId && (
           <>
-            <Field
+            <Field requirement="required"
               error={errors.newPassword?.message}
               label={t("login.newPassword")}
             >
@@ -205,7 +221,7 @@ export function LoginPage() {
                 type="password"
               />
             </Field>
-            <Field
+            <Field requirement="required"
               error={errors.confirmPassword?.message}
               label={t("login.confirmPassword")}
             >
@@ -218,7 +234,7 @@ export function LoginPage() {
           </>
         )}
         {mfaChallengeId && (
-          <Field error={errors.mfaCode?.message} label={t("login.mfaCode")}>
+          <Field requirement="required" error={errors.mfaCode?.message} label={t("login.mfaCode")}>
             <Input {...register("mfaCode")} autoComplete="one-time-code" autoFocus inputMode="numeric" />
           </Field>
         )}

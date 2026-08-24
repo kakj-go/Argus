@@ -203,7 +203,11 @@ func runQuery(ctx context.Context, cfg config.Telemetry, store *postgres.Store, 
 		return nil, err
 	}
 	manager := telemetryservice.ClickHouseTenantSchemaManager{Conn: schemaConn, Router: telemetryservice.TenantTableRouter{}}
-	lifecycle := telemetryservice.TenantSchemaLifecycle{Manager: manager, Queries: store.Queries}
+	lifecycle := telemetryservice.TenantSchemaLifecycle{
+		Manager: manager,
+		Queries: store.Queries,
+		Locker:  telemetryservice.PostgresTenantSchemaLocker{Pool: store.Pool},
+	}
 	if err := reconcileTenantSchemas(ctx, store, lifecycle); err != nil {
 		_ = schemaConn.Close()
 		_ = clickhouse.Close()

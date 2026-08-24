@@ -30,16 +30,15 @@ make vet
 
 ## 前端开发
 
-前端采用 pnpm workspace，按设计文档拆分为初始化、平台管理和企业三个门户，并共享唯一的 UI 组件与 Design Token：
+前端采用 pnpm workspace，提供 Enterprise 与 Platform 两个用户入口，并共享唯一的 UI 组件与 Design Token。首次初始化已经并入 Platform：未初始化时显示向导，初始化完成后同一地址进入登录页。
 
 ```bash
 corepack pnpm install
 corepack pnpm dev           # 企业门户 http://localhost:4173
-corepack pnpm dev:platform  # 平台门户 http://localhost:4174
-corepack pnpm dev:setup     # 初始化门户 http://localhost:4175
+corepack pnpm dev:platform  # 平台管理及首次初始化 http://localhost:4174
 ```
 
-企业门户默认进入 AI 会话工作台；`/demo` 为共享组件与业务卡片展厅。三个门户和共享组件均支持浅色/深色主题及 `zh-CN`/`en-US` 切换，偏好会保存在本地启动缓存中。正式接入用户 Profile 后由服务端偏好负责跨设备同步；API 客户端会随请求发送 `Accept-Language`。
+企业门户默认进入 AI 会话工作台；`/demo` 为共享组件与业务卡片展厅。两个门户和共享组件均支持浅色/深色主题及 `zh-CN`/`en-US` 切换，偏好会保存在本地启动缓存中。正式接入用户 Profile 后由服务端偏好负责跨设备同步；API 客户端会随请求发送 `Accept-Language`。
 
 前端质量检查：
 

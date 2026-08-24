@@ -382,7 +382,9 @@ func (handler RemoteAccessHandler) actorAny(ctx context.Context, mutation bool, 
 	for _, permission := range permissions {
 		principal, value := handler.Identity.enterprisePrincipal(ctx, mutation, csrf, permission)
 		if value != nil {
-			converted := remoteaccessapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+			converted := remoteaccessapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+				Params: copyErrorParams[map[string]remoteaccessapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+				Retryable: value.Retryable, TraceId: value.TraceId}
 			last = &converted
 			continue
 		}
@@ -438,7 +440,8 @@ func emptyRemoteAccessPage() remoteaccessapi.CursorPage {
 }
 
 func remoteAccessError(ctx context.Context, err error) remoteaccessapi.ApiError {
-	base := setupError(ctx, err)
+	base := setupErrorBase(ctx, err)
+	defer func() { logMappedError(ctx, base.Code, err) }()
 	switch {
 	case errors.Is(err, remoteaccess.ErrGrantRequired):
 		base.Code, base.MessageKey = "REMOTE_ACCESS_GRANT_REQUIRED", "errors.remote_access.grant_required"
@@ -465,7 +468,9 @@ func remoteAccessError(ctx context.Context, err error) remoteaccessapi.ApiError 
 	case errors.Is(err, postgres.ErrIdempotencyConflict):
 		base.Code, base.MessageKey = "IDEMPOTENCY_CONFLICT", "errors.common.idempotency_conflict"
 	}
-	return remoteaccessapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	return remoteaccessapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]remoteaccessapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }
 
 func remoteAccessStatus(err error) int {

@@ -6,15 +6,14 @@ import { expect, type Page } from "@playwright/test";
 type Audience = "enterprise" | "platform";
 
 export function createMfaLogin(audience: Audience) {
-  const prefix = `ARGUS_E2E_${audience.toUpperCase()}_TOTP`;
-  const secret = process.env[`${prefix}_SECRET`] ?? "";
-  let lastCode = process.env[`${prefix}_LAST_CODE`] ?? "";
-  const artifactDir = process.env.ARGUS_E2E_ARTIFACTS ?? "";
-  const stateFile = artifactDir
-    ? join(artifactDir, `.argus-${audience}-totp-last-code`)
-    : "";
+  const nextProof = createMfaProof(audience);
 
-  return async (page: Page, url: string, username: string, password: string) => {
+  return async (
+    page: Page,
+    url: string,
+    username: string,
+    password: string,
+  ) => {
     expect(username).not.toBe("");
     expect(password).not.toBe("");
     await page.goto(url);
@@ -24,17 +23,33 @@ export function createMfaLogin(audience: Audience) {
 
     const mfaInput = page.locator('input[autocomplete="one-time-code"]');
     await expect
-      .poll(async () => (await mfaInput.isVisible()) || !/\/login/.test(page.url()))
+      .poll(
+        async () => (await mfaInput.isVisible()) || !/\/login/.test(page.url()),
+      )
       .toBe(true);
     if (await mfaInput.isVisible()) {
-      expect(secret, `${audience} TOTP secret is required`).not.toBe("");
-      const code = await nextCode(secret, readLastCode(stateFile) || lastCode);
-      lastCode = code;
-      writeLastCode(stateFile, code);
-      await mfaInput.fill(code);
+      await mfaInput.fill(await nextProof());
       await page.locator('form button[type="submit"]').click();
     }
     await expect(page).not.toHaveURL(/\/login/);
+  };
+}
+
+export function createMfaProof(audience: Audience) {
+  const prefix = `ARGUS_E2E_${audience.toUpperCase()}_TOTP`;
+  const secret = process.env[`${prefix}_SECRET`] ?? "";
+  let lastCode = process.env[`${prefix}_LAST_CODE`] ?? "";
+  const artifactDir = process.env.ARGUS_E2E_ARTIFACTS ?? "";
+  const stateFile = artifactDir
+    ? join(artifactDir, `.argus-${audience}-totp-last-code`)
+    : "";
+
+  return async () => {
+    expect(secret, `${audience} TOTP secret is required`).not.toBe("");
+    const code = await nextCode(secret, readLastCode(stateFile) || lastCode);
+    lastCode = code;
+    writeLastCode(stateFile, code);
+    return code;
   };
 }
 

@@ -6,10 +6,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/kakj-go/Argus/internal/buildinfo"
 	actionapi "github.com/kakj-go/Argus/internal/gen/openapi/actionapi"
@@ -50,6 +53,7 @@ const DefaultLocale = "zh-CN"
 type Readiness interface{ Ready(context.Context) error }
 
 type RouterOptions struct {
+	Logger                  *slog.Logger
 	PostgreSQL              Readiness
 	Redis                   Readiness
 	Setup                   *SetupHandler
@@ -81,9 +85,11 @@ func NewRouter() http.Handler { return NewRouterWithOptions(RouterOptions{}) }
 func NewRouterWithOptions(options RouterOptions) http.Handler {
 	router := chi.NewRouter()
 	router.Use(requestIDMiddleware)
+	router.Use(requestLoggingMiddleware(options.Logger))
 	router.Use(corsMiddleware(options.AllowedOrigins))
 	router.Use(localeMiddleware)
 	router.Use(bodyLimitMiddleware)
+	router.Use(openAPIRequestValidationMiddleware)
 	router.Get("/", serviceInfo)
 	router.Get("/healthz", health)
 	router.Get("/readyz", ready(options))
@@ -408,6 +414,35 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 		writer.Header().Set("X-Request-ID", requestID)
 		next.ServeHTTP(writer, request)
 	})
+}
+
+func requestLoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if logger == nil {
+			return next
+		}
+		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			started := time.Now()
+			requestID := request.Header.Get("X-Request-ID")
+			requestLogger := logger.With("request_id", requestID)
+			wrapped := chimiddleware.NewWrapResponseWriter(writer, request.ProtoMajor)
+			ctx := context.WithValue(request.Context(), requestLoggerContextKey{}, requestLogger)
+			next.ServeHTTP(wrapped, request.WithContext(ctx))
+			status := wrapped.Status()
+			if status == 0 {
+				status = http.StatusOK
+			}
+			if status < http.StatusBadRequest && (request.URL.Path == "/healthz" || request.URL.Path == "/readyz") {
+				return
+			}
+			requestLogger.Info("HTTP request completed",
+				"method", request.Method,
+				"path", request.URL.Path,
+				"status", status,
+				"duration_ms", time.Since(started).Milliseconds(),
+			)
+		})
+	}
 }
 
 func bodyLimitMiddleware(next http.Handler) http.Handler {

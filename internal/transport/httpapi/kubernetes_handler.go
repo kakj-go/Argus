@@ -178,7 +178,9 @@ func (handler KubernetesHandler) auth(ctx context.Context, mutation bool, csrf, 
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &kubernetesapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &kubernetesapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]kubernetesapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func kubernetesUpdateInput(value kubernetesapi.KubernetesPreviewUpdate) resource.KubernetesInput {
@@ -249,9 +251,12 @@ func emptyKubernetesPage() kubernetesapi.CursorPage {
 }
 
 func kubernetesError(ctx context.Context, err error) kubernetesapi.ApiError {
-	base := hostError(ctx, err)
+	base := hostErrorBase(ctx, err)
 	if errors.Is(err, resource.ErrKubernetesUnavailable) {
 		base.Code, base.MessageKey = "KUBERNETES_QUERY_UNAVAILABLE", "errors.kubernetes.query_unavailable"
 	}
-	return kubernetesapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	logMappedError(ctx, base.Code, err)
+	return kubernetesapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]kubernetesapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }

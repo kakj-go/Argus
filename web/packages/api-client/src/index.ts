@@ -95,6 +95,33 @@ export type { RealAdapter } from "./adapters/real";
 export { createConfiguredApiClient } from "./factory";
 export type { ApiClientFactoryOptions } from "./factory";
 export { HttpTransport } from "./transport/http";
+export {
+  apiErrorField,
+  apiErrorPresentation,
+  formatApiError,
+  presentApiFormError,
+} from "./error-presentation";
+export type {
+  ApiErrorPresentation,
+  ApiFormErrorOptions,
+} from "./error-presentation";
+export {
+  FORM_CONSTRAINTS,
+  FORM_VALUE_CONSTRAINTS,
+  formConstraint,
+  formValueConstraint,
+} from "./generated/form-constraints";
+export type { FormConstraint } from "./generated/form-constraints";
+export {
+  PASSWORD_POLICY,
+  apiErrorRequestId,
+  passwordPolicyRuleFromError,
+  validatePasswordPolicy,
+} from "./password-policy";
+export type {
+  PasswordPolicyContext,
+  PasswordPolicyRule,
+} from "./password-policy";
 export type {
   HttpRequestOptions,
   HttpTransportOptions,
@@ -118,3 +145,12 @@ export {
 } from "./transport/errors";
 export { ApiProvider, useApi } from "./react";
 export type { ApiProviderProps } from "./react";
+export {
+  AUDIT_ACTION_CODES,
+  AUDIT_ACTOR_TYPE_CODES,
+  AUDIT_RESOURCE_TYPE_CODES,
+  auditCodeKey,
+  auditPresentationKey,
+  humanizeAuditCode,
+} from "./audit-presentation";
+export type { AuditPresentationKind } from "./audit-presentation";

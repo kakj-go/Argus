@@ -82,14 +82,28 @@ func main() {
 			return err
 		},
 	} {
-		connection, err := grpc.NewClient(*endpoint, grpc.WithTransportCredentials(transport))
-		if err != nil {
+		if err := exportWithRetry(ctx, *endpoint, transport, 500*time.Millisecond, export); err != nil {
 			log.Fatal(err)
 		}
-		err = export(connection)
-		_ = connection.Close()
-		if err != nil {
-			log.Fatal(err)
+	}
+}
+
+func exportWithRetry(ctx context.Context, endpoint string, transport credentials.TransportCredentials, retryDelay time.Duration, export func(grpc.ClientConnInterface) error) error {
+	var lastErr error
+	for {
+		connection, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(transport))
+		if err == nil {
+			err = export(connection)
+			_ = connection.Close()
+		}
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		select {
+		case <-ctx.Done():
+			return lastErr
+		case <-time.After(retryDelay):
 		}
 	}
 }

@@ -20,7 +20,7 @@
 - [x] `M2-AUTH-02` 实现列表/详情/批量/游标的统一企业与 DataScope 过滤。
 - [x] `M2-MACHINE-01` 实现 ServiceAccount/APIKey 单次显示、哈希、Tool/DataScope Scope、轮换与撤销。
 - [x] `M2-AUDIT-01` 实现平台/企业审计分域、字段脱敏和审计查询授权。
-- [x] `M2-WEB-01` 在 M1 real Adapter 上补充冻结后的 Setup/Identity/IAM Path，将三个门户核心流程切到真实 API；禁止复制 DTO、重写 Transport 或回退 mock。
+- [x] `M2-WEB-01` 在 M1 real Adapter 上补充冻结后的 Setup/Identity/IAM Path，将两个门户及 Platform 初始化流程切到真实 API；禁止复制 DTO、重写 Transport 或回退 mock。
 - [x] `M2-OUTBOX-01` 建立授权变化 Outbox 和 Redis 快速失效，不让 Redis 成为事实来源。
 
 ## 固定实现边界
@@ -46,13 +46,14 @@
 - 契约：`api/openapi/paths/m2.yaml`、`api/openapi/components/m2.yaml`、错误码和状态机注册表，以及按领域生成的 Go/TypeScript 契约。
 - 数据与服务：`migrations/postgresql/00001_m2_identity_authorization.sql`、`internal/{platform,identity,authorization,audit,outbox,pagination}`、`internal/storage/{postgres,redis}`；sqlc 查询按 platform、identity、authorization、machine、audit、idempotency 分域生成，单文件均低于 2000 行。
 - 前端：Setup、Platform、Enterprise real Adapter，双 Audience 登录/首次改密，企业/IAM/ServiceAccount/APIKey 页面；M2 真实写表单统一使用 React Hook Form + Zod，EnterpriseUser 与 Department 均提供可审计、可撤权的启停闭环。
-- 部署：独立 Goose Migration Job、Setup Token Secret Volume、`argusctl setup-token rotate` 和 `argusctl admin reset-password`。
-- 自动化：Migration 真实 PostgreSQL 测试、密码/授权/游标/审计单测、契约门禁、四 Origin real Playwright 和 `make e2e-m2-k8s`。
+- 审计展示：OpenAPI 读模型在不可变 actor/resource ID 之外尽力返回当前显示名；企业与平台门户通过统一代码目录展示中英文动作/资源名称，原始 key/UUID 保留在详情。企业引用字段使用名称选择器提交 ID，平台域不跨边界查询企业成员姓名。
+- 部署：独立 Goose Migration Job、仅 Server 可见的 Setup Token Secret Volume、`argusctl setup-token rotate` 和 `argusctl admin reset-password`。
+- 自动化：Migration 真实 PostgreSQL 测试、密码/授权/游标/审计单测、契约门禁、三 Origin real Playwright 和 `go run ./cmd/argus-dev e2e run --suite m2`。
 - 2026-08-16 的临时 Namespace 验收已完成 Setup、双 Audience、跨企业拒绝、DataScope、APIKey 创建/幂等/轮换/撤销、审计、撤权、Redis 停止、Server 重启和无条件清理；验收运行 `20260816110652-35870` 通过后确认无残留 Namespace 与 Lease。
 
 ## 退出标准
 
-- 三个门户核心身份流程完全脱离 mock。
+- 两个门户及 Platform 初始化流程完全脱离 mock。
 - 企业隔离、功能权限和资源范围由同一授权服务执行。
 - 平台管理员无法读取企业业务正文，企业管理员不因 IAM 权限获得 Secret/远程执行权限。
 - 完成状态仅代表 Evaluation 身份授权闭环，不代表 Production 身份安全就绪；M8 本地 MFA 完成后 Production Profile 仍由环境验证清单阻断。

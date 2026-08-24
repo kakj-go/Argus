@@ -70,6 +70,10 @@
 
 ### 3.4 E2E 资源纪律
 
+统一入口为 `go run ./cmd/argus-dev e2e run --suite <m2|m3|m4|m5|m6|m7|m8|m10-query>`。Harness 使用真实 `argusctl` 子进程安装和验证正式 Helm Release；client-go 只管理 Lease、临时 Namespace、Fixture、等待、日志、exec、port-forward 和清理。Playwright 继续执行现有 TypeScript spec。
+
+轻量门禁在 Windows、Linux、macOS 使用相同命令；完整 E2E 由 `doctor e2e` 检查容器、集群、节点架构、StorageClass、端口、25 GiB 磁盘能力，以及 Strimzi/OpenSandbox 固定 ClusterRole 未被其他 Helm release 占用。完整 E2E 使用专用干净 Context，不与正式 Argus release 共用集群；能力不足属于明确的环境错误，不得伪装成测试通过或静默跳过。
+
 全链路测试使用唯一 Run ID 创建临时 Namespace；必要时记录并缩容常驻无状态服务。无论成功或失败都必须导出脱敏诊断信息、删除临时 Namespace/PVC/测试 Topic/Bucket，并恢复常驻服务副本数。
 
 ## 4. 里程碑总览
@@ -157,7 +161,7 @@ M8 结束时至少通过以下全链路场景：
 1. 全新 Namespace 安装后用 Setup Token 创建平台超级管理员，Setup 永久锁定。
 2. 平台管理员创建企业和初始管理员，但无法读取企业业务正文。
 3. 企业管理员创建 Department、用户、RoleBinding 和基于 `environment=staging` 的 DataScope。
-4. 接入带标签的堡垒机、内网 Host、公网 Direct Host 和 KubernetesCluster。
+4. 接入带标签的堡垒机、经堡垒机 Host、直连 Host 和 KubernetesCluster。
 5. 范围内用户可以列表/详情/Tool 查询资源，范围外资源通过直接 ID、批量、游标、Card 和遥测查询均不可见。
 6. 修改授权敏感标签使 Host 离开 DataScope，旧游标、PendingAction 和票据失效，活动订阅重新鉴权。
 7. Agent 发起变更 Preview，可信 `run_id` 贯穿 PendingAction、Execution 和 Verify；浏览器只持有 ActionBinding，用户确认后 Action Executor 确定性 Commit，重复点击不产生重复副作用。
@@ -169,6 +173,8 @@ M8 结束时至少通过以下全链路场景：
 13. 删除 Server/Worker/Gateway/Writer Pod、清空 Redis、制造 Kafka 积压和 ClickHouse Replica 故障后，事实状态可恢复且无重复危险执行。
 14. 备份恢复到新 Namespace 后关键业务、审计索引和遥测查询符合恢复目标。
 15. E2E 无论成功失败都清理临时 Namespace 和测试资源，并恢复被缩容的常驻服务。
+16. 诊断必须先脱敏再落盘；Ticket、Token、Cookie、Authorization、Secret 和一次性安装命令不得进入日志或发布包。
+17. 每个 Suite 使用固定依赖闭包，M8 先运行 M6/M7 baseline，再执行 Local Hardening、备份和恢复。
 
 ## 8. 进度管理
 
@@ -191,3 +197,7 @@ M8 本地实现重点：
 - 保持 Production Profile 阻断，把 HA、容量、真实出口、AMD64/Windows 和跨集群灾备移入 Production Validation。
 
 M1 完成后进入 M2，建立第一条真实 Setup → Platform → Enterprise 授权垂直闭环。这条路径是后续 Connector、Agent、Card、远程访问和遥测的共同根基。
+
+## 10. M8 退出证据
+
+`fv-20260824-m8-final13` 是当前最终证据运行：M6/M7 baseline、Local Hardening、故障后验证、7 文件加密备份、删除源 Namespace、全新 Namespace Restore 和恢复后 17 项 `argusctl verify` 均通过。运行产物位于 `artifacts/m8-e2e/fv-20260824-m8-final13`，恢复专项产物位于 `artifacts/k8s-e2e/m8r-fv-20260824-m8-final13`。完整 E2E 的退出码只由业务验证或不可恢复清理错误决定；已删除 Service 导致的端口转发 NotFound 属于幂等清理。

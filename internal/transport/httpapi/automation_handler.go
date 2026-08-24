@@ -117,7 +117,9 @@ func (handler AutomationHandler) auth(ctx context.Context, mutation bool, csrf, 
 	if value == nil {
 		return p, nil
 	}
-	return identity.Principal{}, &automationapi.ApiError{Code: value.Code, MessageKey: value.MessageKey, RequestId: value.RequestId, Retryable: value.Retryable}
+	return identity.Principal{}, &automationapi.ApiError{Code: value.Code, Message: value.Message, MessageKey: value.MessageKey,
+		Params: copyErrorParams[map[string]automationapi.ApiError_Params_AdditionalProperties](value.Params), RequestId: value.RequestId,
+		Retryable: value.Retryable, TraceId: value.TraceId}
 }
 
 func automationInput(value automationapi.AutomationWrite) automation.Input {
@@ -155,8 +157,9 @@ func toAutomationRun(value db.AutomationRun) automationapi.AutomationRun {
 func automationError(ctx context.Context, err error) automationapi.ApiError {
 	code := "CLIENT_OPERATION_UNAVAILABLE"
 	key := "errors.client.operation_unavailable"
+	defer func() { logMappedError(ctx, code, err) }()
 	if errors.Is(err, automation.ErrVersionConflict) {
-		code, key = "RESOURCE_VERSION_CONFLICT", "errors.resource.version_conflict"
+		code, key = "VERSION_CONFLICT", "errors.common.version_conflict"
 	}
 	return automationapi.ApiError{Code: code, MessageKey: key, RequestId: requestID(ctx)}
 }

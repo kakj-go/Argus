@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@argus/api-client";
+import {
+  auditPresentationKey,
+  humanizeAuditCode,
+  useApi,
+} from "@argus/api-client";
 import type { PlatformAuditEvent } from "@argus/api-client";
 import {
   Card,
@@ -21,7 +25,7 @@ type AuditRow = {
   id: string;
   createdAt: string;
   actorName: string;
-  action: string;
+  actionLabel: string;
   summary: string;
   result: PlatformAuditEvent["result"];
 };
@@ -36,6 +40,10 @@ function resultTone(result: PlatformAuditEvent["result"]) {
 export function DashboardPage() {
   const { t, i18n } = useTranslation();
   const api = useApi();
+  const actionLabel = (item: PlatformAuditEvent) =>
+    t(auditPresentationKey("audit", "actions", item.action), {
+      defaultValue: humanizeAuditCode(item.action),
+    });
 
   const enterprises = useQuery({
     queryKey: ["platform", "enterprises"],
@@ -80,8 +88,13 @@ export function DashboardPage() {
       id: item.id,
       createdAt: item.createdAt,
       actorName: item.actorName,
-      action: item.action,
-      summary: item.summary,
+      actionLabel: actionLabel(item),
+      summary: item.resourceName
+        ? t("audit.summaryWithResource", {
+            action: actionLabel(item),
+            resource: item.resourceName,
+          })
+        : actionLabel(item),
       result: item.result,
     }));
 
@@ -157,11 +170,8 @@ export function DashboardPage() {
                   },
                   { key: "actorName", header: t("dashboard.recent.actor") },
                   {
-                    key: "action",
+                    key: "actionLabel",
                     header: t("dashboard.recent.action"),
-                    render: (row) => (
-                      <code className="argus-mono">{row.action}</code>
-                    ),
                   },
                   { key: "summary", header: t("dashboard.recent.summary") },
                   {

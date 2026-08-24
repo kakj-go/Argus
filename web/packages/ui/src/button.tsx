@@ -26,13 +26,23 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
-    { className, variant, size, loading, disabled, children, ...props },
+    {
+      className,
+      variant,
+      size,
+      loading,
+      disabled,
+      children,
+      type = "button",
+      ...props
+    },
     ref,
   ) => (
     <button
       ref={ref}
       className={cx(buttonVariants({ variant, size }), className)}
       disabled={disabled || loading}
+      type={type}
       {...props}
     >
       {loading && <LoaderCircle aria-hidden className="argus-spin" size={15} />}

@@ -222,7 +222,8 @@ func toM8BreakGlassSession(row db.BreakGlassSession) m8api.BreakGlassSession {
 }
 
 func m8Error(ctx context.Context, err error) m8api.ApiError {
-	base := setupError(ctx, err)
+	base := setupErrorBase(ctx, err)
+	defer func() { logMappedError(ctx, base.Code, err) }()
 	return m8api.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey, RequestId: base.RequestId,
 		Retryable: base.Retryable, TraceId: base.TraceId}
 }

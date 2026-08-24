@@ -1,7 +1,11 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/kakj-go/Argus/internal/identity"
@@ -59,5 +63,59 @@ func TestSetupErrorMapsInvalidEnterpriseCode(t *testing.T) {
 	}
 	if response.MessageKey != "errors.common.invalid_argument" {
 		t.Fatalf("message key = %q, want errors.common.invalid_argument", response.MessageKey)
+	}
+}
+
+func TestSetupErrorPublishesSafePasswordPolicyDetails(t *testing.T) {
+	ctx := context.WithValue(context.Background(), localeContextKey{}, "en-US")
+	response := setupError(ctx, identity.PasswordPolicyError{Rule: identity.PasswordRuleIdentity})
+	if response.Code != "PASSWORD_WEAK" || response.MessageKey != "errors.auth.password_weak" {
+		t.Fatalf("password error = %#v", response)
+	}
+	if response.Message == nil || *response.Message != "The password must not contain the username or email account name." {
+		t.Fatalf("message = %#v", response.Message)
+	}
+	if response.Params == nil {
+		t.Fatal("password error params are missing")
+	}
+	rule, err := (*response.Params)["rule"].AsApiErrorParams0()
+	if err != nil || rule != "contains_identity" {
+		t.Fatalf("rule = %q, err=%v", rule, err)
+	}
+}
+
+func TestMappedErrorsLogStableCodeWithoutPublishingBusinessErrorText(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	ctx := context.WithValue(context.Background(), requestLoggerContextKey{}, logger)
+
+	response := enterpriseIdentityError(ctx, identity.ErrDepartmentNotEmpty)
+	if response.Code != "DEPARTMENT_NOT_EMPTY" {
+		t.Fatalf("code = %q", response.Code)
+	}
+	logLine := output.String()
+	if !strings.Contains(logLine, `"error_code":"DEPARTMENT_NOT_EMPTY"`) {
+		t.Fatalf("log = %q", logLine)
+	}
+	if strings.Contains(logLine, identity.ErrDepartmentNotEmpty.Error()) {
+		t.Fatalf("expected business rejection log to omit raw error text: %q", logLine)
+	}
+}
+
+func TestInternalErrorsKeepDetailsOnlyInControlledServerLog(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	ctx := context.WithValue(context.Background(), requestLoggerContextKey{}, logger)
+	internal := errors.New("database connection failed")
+
+	response := setupError(ctx, internal)
+	if response.Code != "INTERNAL_ERROR" || response.Message != nil || response.Params != nil {
+		t.Fatalf("unsafe internal response = %#v", response)
+	}
+	logLine := output.String()
+	for _, fragment := range []string{`"error_code":"INTERNAL_ERROR"`, `"error":"database connection failed"`} {
+		if !strings.Contains(logLine, fragment) {
+			t.Fatalf("log %q does not contain %q", logLine, fragment)
+		}
 	}
 }

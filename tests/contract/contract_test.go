@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/url"
 	"os"
 	"os/exec"
@@ -206,8 +209,9 @@ func TestRegistries(t *testing.T) {
 	var errors struct {
 		Version string `json:"version"`
 		Codes   map[string]struct {
-			HTTPStatus int    `json:"http_status"`
-			MessageKey string `json:"message_key"`
+			HTTPStatus int      `json:"http_status"`
+			MessageKey string   `json:"message_key"`
+			SafeParams []string `json:"safe_params"`
 		} `json:"codes"`
 	}
 	readYAML(t, filepath.Join(root, "api/contracts/error-codes.yaml"), &errors)
@@ -224,6 +228,17 @@ func TestRegistries(t *testing.T) {
 			t.Fatalf("message_key %s reused by %s and %s", item.MessageKey, previous, code)
 		}
 		messageKeys[item.MessageKey] = code
+		seenSafeParams := map[string]bool{}
+		for _, parameter := range item.SafeParams {
+			if !regexp.MustCompile(`^[a-z][a-z0-9_]*$`).MatchString(parameter) || seenSafeParams[parameter] {
+				t.Fatalf("invalid or duplicate safe parameter %q for %s", parameter, code)
+			}
+			seenSafeParams[parameter] = true
+		}
+	}
+	passwordError := errors.Codes["PASSWORD_WEAK"]
+	if !reflect.DeepEqual(passwordError.SafeParams, []string{"field", "rule", "min_length", "max_length"}) {
+		t.Fatalf("PASSWORD_WEAK safe params = %#v", passwordError.SafeParams)
 	}
 
 	var machines stateMachineRegistry
@@ -255,6 +270,85 @@ func TestRegistries(t *testing.T) {
 	} {
 		if transitionAllowed(machines, transition[0], transition[1], transition[2]) {
 			t.Fatalf("illegal transition accepted: %s %s -> %s", transition[0], transition[1], transition[2])
+		}
+	}
+}
+
+func TestPasswordPolicyContract(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	var policy struct {
+		Version         string   `json:"version"`
+		MinLength       int      `json:"min_length"`
+		MaxLength       int      `json:"max_length"`
+		Rules           []string `json:"rules"`
+		CommonPasswords []string `json:"common_passwords"`
+	}
+	data, err := os.ReadFile(filepath.Join(root, "api/contracts/password-policy.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &policy); err != nil {
+		t.Fatal(err)
+	}
+	if policy.Version != "argus.password_policy/v1" || policy.MinLength != 12 || policy.MaxLength != 1024 {
+		t.Fatalf("unexpected password policy boundary: %#v", policy)
+	}
+	wantRules := []string{"min_length", "max_length", "letter_required", "digit_required", "common_password", "contains_identity", "reused_password"}
+	if !reflect.DeepEqual(policy.Rules, wantRules) {
+		t.Fatalf("password rules = %#v, want %#v", policy.Rules, wantRules)
+	}
+	for name, values := range map[string][]string{"rules": policy.Rules, "common_passwords": policy.CommonPasswords} {
+		seen := map[string]bool{}
+		for _, value := range values {
+			if value == "" || seen[value] {
+				t.Fatalf("%s contains an empty or duplicate value %q", name, value)
+			}
+			seen[value] = true
+		}
+	}
+}
+
+func TestHTTPAPIErrorCodesAreRegistered(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	var registry struct {
+		Codes map[string]any `json:"codes"`
+	}
+	readYAML(t, filepath.Join(root, "api/contracts/error-codes.yaml"), &registry)
+
+	used := map[string]string{}
+	fset := token.NewFileSet()
+	files, err := filepath.Glob(filepath.Join(root, "internal/transport/httpapi/*_handler.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range files {
+		file, parseErr := parser.ParseFile(fset, path, nil, 0)
+		if parseErr != nil {
+			t.Fatal(parseErr)
+		}
+		for _, declaration := range file.Decls {
+			function, ok := declaration.(*ast.FuncDecl)
+			if !ok || function.Body == nil || !strings.HasSuffix(function.Name.Name, "Error") {
+				continue
+			}
+			ast.Inspect(function.Body, func(node ast.Node) bool {
+				literal, ok := node.(*ast.BasicLit)
+				if !ok || literal.Kind != token.STRING {
+					return true
+				}
+				value, unquoteErr := strconv.Unquote(literal.Value)
+				if unquoteErr == nil && regexp.MustCompile(`^[A-Z][A-Z0-9_]+$`).MatchString(value) {
+					used[value] = path
+				}
+				return true
+			})
+		}
+	}
+	for code, path := range used {
+		if _, ok := registry.Codes[code]; !ok {
+			t.Errorf("HTTP API error code %s in %s is not registered", code, path)
 		}
 	}
 }

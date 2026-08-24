@@ -67,6 +67,7 @@ export function PermissionMatrix({
   const { t } = useTranslation();
   const selected = new Set(value);
   const fullAccess = selected.has("*");
+  const labelKey = (value: string) => value.replaceAll(".", "_");
 
   const toggle = (permission: string) => {
     if (disabled) return;
@@ -112,7 +113,9 @@ export function PermissionMatrix({
         {PERMISSION_CATALOG.map((group) => (
           <div className="argus-perm-matrix__row" key={group.resource}>
             <span className="argus-perm-matrix__resource">
-              {group.resource}
+              {t(
+                `settings.org.rolesTab.permissionResources.${labelKey(group.resource)}`,
+              )}
             </span>
             <div className="argus-perm-matrix__cells">
               {group.actions.map((action) => {
@@ -132,7 +135,9 @@ export function PermissionMatrix({
                     tabIndex={disabled ? -1 : 0}
                   >
                     <CheckItem checked={selected.has(permission)}>
-                      {action}
+                      {t(
+                        `settings.org.rolesTab.permissionActions.${labelKey(action)}`,
+                      )}
                     </CheckItem>
                   </span>
                 );

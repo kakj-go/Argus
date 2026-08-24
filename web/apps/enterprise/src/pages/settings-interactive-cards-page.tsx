@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import {
   CheckCircle2,
   ChevronDown,
@@ -9,7 +12,7 @@ import {
   Link2,
   LockKeyhole,
 } from "lucide-react";
-import { useApi } from "@argus/api-client";
+import { formatApiError, useApi } from "@argus/api-client";
 import type {
   CardDemo,
   CardValidationRun,
@@ -22,6 +25,7 @@ import type {
 import { SandboxCard } from "@argus/card-host";
 import {
   Badge,
+  Alert,
   Button,
   EmptyState,
   Field,
@@ -227,7 +231,9 @@ function CardDetailDrawer({
                   disabled={!selectedCanActivate}
                   loading={changeState.isPending}
                   onClick={() =>
-                    changeState.mutate(selectedIsRollback ? "rollback" : "activate")
+                    changeState.mutate(
+                      selectedIsRollback ? "rollback" : "activate",
+                    )
                   }
                   variant="primary"
                 >
@@ -388,7 +394,9 @@ function ValidationRunner({
   const [reports, setReports] = useState<CardRuntimeValidationReport[]>([]);
   const submitted = useRef(false);
   const validationCase = VALIDATION_CASES[index];
-  const demo = version.demos.find((item) => item.scenario === validationCase?.scenario);
+  const demo = version.demos.find(
+    (item) => item.scenario === validationCase?.scenario,
+  );
   const submit = useMutation({
     mutationFn: () =>
       api.interactiveCards.submitValidationEvidence(run.id, {
@@ -432,10 +440,18 @@ function ValidationRunner({
         locale={validationCase.locale}
         manifest={version.manifest}
         onValidationReport={(report) => {
-          setReports((current) => current.some((item) => item.scenario === report.scenario) ? current : [...current, report]);
+          setReports((current) =>
+            current.some((item) => item.scenario === report.scenario)
+              ? current
+              : [...current, report],
+          );
           setIndex((value) => value + 1);
         }}
-        render_plan={previewPlan(version, validationCase.locale, validationCase.color_scheme)}
+        render_plan={previewPlan(
+          version,
+          validationCase.locale,
+          validationCase.color_scheme,
+        )}
         title={`Validation ${validationCase.scenario}`}
         validation={{
           nonce: run.nonce,
@@ -470,25 +486,53 @@ function BindingDrawer({
   const existing = version.slot_bindings.find(
     (binding) => binding.slot_name === slotName,
   );
-  const [mode, setMode] = useState<"strict" | "preferred">(
-    existing?.mode ?? "strict",
-  );
-  const [toolId, setToolId] = useState(existing?.tool_id ?? "");
-  const tools = catalog.data?.items ?? [];
+  const tools = useMemo(() => catalog.data?.items ?? [], [catalog.data?.items]);
+  const schema = z.object({
+    mode: z.enum(["strict", "preferred"]),
+    toolId: z.string().min(1, t("settings.common.required")),
+    path: z.string().min(1, t("settings.common.required")),
+  });
+  type BindingFormValues = z.infer<typeof schema>;
+  const {
+    control,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<BindingFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      mode: existing?.mode ?? "strict",
+      toolId: existing?.tool_id ?? "",
+      path: existing?.path ?? "",
+    },
+  });
+  const toolId = watch("toolId");
   const tool = tools.find((item) => item.tool_id === toolId) ?? tools[0];
-  const [path, setPath] = useState(existing?.path ?? "");
+  useEffect(() => {
+    if (!toolId && tools[0]) setValue("toolId", tools[0].tool_id);
+  }, [setValue, toolId, tools]);
+  useEffect(() => {
+    const currentPath = watch("path");
+    if (tool && !tool.fields.some((field) => field.path === currentPath)) {
+      setValue("path", tool.fields[0]?.path ?? "");
+    }
+  }, [setValue, tool, watch]);
   const save = useMutation({
-    mutationFn: () => {
-      if (!tool) throw new Error("Tool Schema required");
-      const field = tool.fields.find((item) => item.path === path) ?? tool.fields[0];
+    mutationFn: (values: BindingFormValues) => {
+      const selectedTool = tools.find((item) => item.tool_id === values.toolId);
+      if (!selectedTool) throw new Error("Tool Schema required");
+      const field = selectedTool.fields.find(
+        (item) => item.path === values.path,
+      );
       if (!field) throw new Error("Tool field required");
       const binding: SlotBinding = {
         slot_name: slotName,
         slot_kind: existing?.slot_kind ?? "data",
-        mode,
-        tool_id: tool.tool_id,
-        output_schema_version: tool.output_schema_version,
-        schema_hash: tool.schema_hash,
+        mode: values.mode,
+        tool_id: selectedTool.tool_id,
+        output_schema_version: selectedTool.output_schema_version,
+        schema_hash: selectedTool.schema_hash,
         path: field.path,
         value_type: field.value_type,
         semantic_type: field.semantic_type,
@@ -513,40 +557,81 @@ function BindingDrawer({
     <FormDrawer
       loading={save.isPending}
       onOpenChange={(open) => !open && onClose()}
-      onSubmit={() => save.mutate()}
+      onSubmit={handleSubmit((values) => save.mutate(values))}
       open
       submitLabel={t("aiSettings.cards.saveBinding")}
       title={`${t("aiSettings.cards.bindingTitle")} · ${slotName}`}
     >
       <div className="argus-settings-form">
-        <Field label={t("aiSettings.cards.bindingMode")}>
-          <Select
-            onValueChange={(value) => setMode(value as typeof mode)}
-            options={[
-              { value: "strict", label: "strict" },
-              { value: "preferred", label: "preferred" },
-            ]}
-            value={mode}
+        {save.isError && (
+          <Alert
+            description={formatApiError(
+              save.error,
+              t("aiSettings.cards.validationFailed"),
+              (requestId) => t("common.requestReference", { requestId }),
+            )}
+            title={t("aiSettings.cards.validationFailed")}
+            tone="danger"
+          />
+        )}
+        <Field
+          error={errors.mode?.message}
+          requirement="required"
+          label={t("aiSettings.cards.bindingMode")}
+        >
+          <Controller
+            control={control}
+            name="mode"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                options={[
+                  { value: "strict", label: "strict" },
+                  { value: "preferred", label: "preferred" },
+                ]}
+                value={field.value}
+              />
+            )}
           />
         </Field>
-        <Field label={t("aiSettings.cards.tool")}>
-          <Select
-            onValueChange={(value) => {
-              setToolId(value);
-              setPath("");
-            }}
-            options={tools.map(toolOption)}
-            value={tool?.tool_id ?? ""}
+        <Field
+          error={errors.toolId?.message}
+          requirement="required"
+          label={t("aiSettings.cards.tool")}
+        >
+          <Controller
+            control={control}
+            name="toolId"
+            render={({ field }) => (
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  setValue("path", "");
+                }}
+                options={tools.map(toolOption)}
+                value={field.value}
+              />
+            )}
           />
         </Field>
-        <Field label={t("aiSettings.cards.field")}>
-          <Select
-            onValueChange={setPath}
-            options={(tool?.fields ?? []).map((field) => ({
-              value: field.path,
-              label: `${field.path} · ${String(field.value_type)}`,
-            }))}
-            value={path || tool?.fields[0]?.path || ""}
+        <Field
+          error={errors.path?.message}
+          requirement="required"
+          label={t("aiSettings.cards.field")}
+        >
+          <Controller
+            control={control}
+            name="path"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                options={(tool?.fields ?? []).map((option) => ({
+                  value: option.path,
+                  label: `${option.path} · ${String(option.value_type)}`,
+                }))}
+                value={field.value}
+              />
+            )}
           />
         </Field>
       </div>

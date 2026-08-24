@@ -21,7 +21,6 @@ function policyView(value: ApprovalPolicyContract): ApprovalPolicy {
     enterpriseId: "",
     name: value.name,
     matchRiskLevels: value.risks,
-    matchEnvironments: [],
     toolIds: value.tool_ids,
     resourceTypes: value.resource_types,
     labelSelector: value.label_selector,
@@ -48,9 +47,7 @@ export function installWorkflowDomains(context: RealDomainContext): void {
       name: policy.name,
       enabled: policy.enabled,
       tool_ids: policy.toolIds ?? [],
-      risks: policy.matchRiskLevels.filter(
-        (risk): risk is "write" | "dangerous" | "critical" => risk !== "read",
-      ),
+      risks: policy.matchRiskLevels,
       resource_types: policy.resourceTypes ?? [],
       label_selector: policy.labelSelector,
       minimum_approvers: policy.minApprovers,

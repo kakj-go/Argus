@@ -246,6 +246,9 @@ func emptyPlatformPage() platformapi.CursorPage {
 }
 
 func platformError(ctx context.Context, err error) platformapi.ApiError {
-	base := setupError(ctx, err)
-	return platformapi.ApiError{Code: base.Code, MessageKey: base.MessageKey, RequestId: base.RequestId, Retryable: base.Retryable}
+	base := setupErrorBase(ctx, err)
+	defer func() { logMappedError(ctx, base.Code, err) }()
+	return platformapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
+		Params: copyErrorParams[map[string]platformapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
+		Retryable: base.Retryable, TraceId: base.TraceId}
 }

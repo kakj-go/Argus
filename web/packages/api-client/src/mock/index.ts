@@ -102,11 +102,11 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
 
   const nowIso = () => new Date().toISOString();
 
-  function actor(): Pick<User, "id" | "displayName"> {
+  function actor(): Pick<User, "id" | "displayName" | "username"> {
     const user = db.users.find((entry) => entry.id === db.session.userId);
     return user
-      ? { id: user.id, displayName: user.displayName }
-      : { id: "system", displayName: "system" };
+      ? { id: user.id, displayName: user.displayName, username: user.username }
+      : { id: "system", displayName: "system", username: "system" };
   }
 
   function enterpriseId(): string {
@@ -139,6 +139,8 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
       enterpriseId: entry.platform ? null : (db.session.enterpriseId ?? null),
       actorUserId: who.id,
       actorName: who.displayName,
+      actorType: entry.platform ? "platform_user" : "enterprise_user",
+      actorUsername: who.username,
       action,
       origin: entry.origin ?? (entry.platform ? "platform_ui" : "admin_ui"),
       resourceType: entry.resourceType,

@@ -2,7 +2,7 @@
 export const shellZh = {
   "shell.brand.domain": "platform",
   "shell.domainBadge": "平台管理域",
-  "shell.roleBadge": "platform_super_admin",
+  "shell.roleBadge": "平台超级管理员",
   "shell.group.platform": "平台管理",
   "shell.nav.dashboard": "仪表盘",
   "shell.nav.enterprises": "企业管理",
@@ -19,7 +19,7 @@ export const shellZh = {
 export const shellEn = {
   "shell.brand.domain": "platform",
   "shell.domainBadge": "Platform domain",
-  "shell.roleBadge": "platform_super_admin",
+  "shell.roleBadge": "Platform super administrator",
   "shell.group.platform": "Platform",
   "shell.nav.dashboard": "Dashboard",
   "shell.nav.enterprises": "Enterprises",
