@@ -98,6 +98,9 @@ func (a *App) contractGenerate(ctx context.Context) error {
 		"web/packages/api-client/src/generated/password-policy.ts"); err != nil {
 		return err
 	}
+	if err := a.runner.Run(ctx, nil, "gofmt", "-w", "internal/gen/openapi/passwordpolicy/policy.gen.go"); err != nil {
+		return err
+	}
 	matches, err := filepath.Glob(filepath.Join(generatedBundles, "*.bundle.*"))
 	if err != nil {
 		return err

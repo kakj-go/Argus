@@ -22,19 +22,25 @@ func (a *App) runM4Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if err != nil {
 		return err
 	}
-	resourceAdmin, err := findItem(objectItems(roles), func(item map[string]any) bool { return item["name"] == "Resource Admin" && item["builtin"] == true })
+	resourceAdmin, err := findItem(objectItems(roles), func(item map[string]any) bool {
+		return item["builtin_key"] == "resource_admin" && item["builtin"] == true
+	})
 	if err != nil {
 		return err
 	}
 	roleID, _ := stringField(resourceAdmin, "id")
 	env.State.Values["m4_resource_admin_role_id"] = roleID
-	resourceViewer, err := findItem(objectItems(roles), func(item map[string]any) bool { return item["name"] == "Resource Viewer" && item["builtin"] == true })
+	resourceViewer, err := findItem(objectItems(roles), func(item map[string]any) bool {
+		return item["builtin_key"] == "resource_viewer" && item["builtin"] == true
+	})
 	if err != nil {
 		return err
 	}
 	viewerRoleID, _ := stringField(resourceViewer, "id")
 	env.State.Values["m4_resource_viewer_role_id"] = viewerRoleID
-	resourceApprover, err := findItem(objectItems(roles), func(item map[string]any) bool { return item["name"] == "Resource Approver" && item["builtin"] == true })
+	resourceApprover, err := findItem(objectItems(roles), func(item map[string]any) bool {
+		return item["builtin_key"] == "resource_approver" && item["builtin"] == true
+	})
 	if err != nil {
 		return err
 	}

@@ -158,7 +158,7 @@ M1 与 M2 可以在 M0 契约稳定后部分并行，但真实页面接入必须
 
 M8 结束时至少通过以下全链路场景：
 
-1. 全新 Namespace 安装后用 Setup Token 创建平台超级管理员，Setup 永久锁定。
+1. 全新 Namespace 安装后使用 `argusctl` 输出的一次性初始化链接创建平台超级管理员；页面无 Token 输入框、Fragment 被立即清除，Setup 随后永久锁定。
 2. 平台管理员创建企业和初始管理员，但无法读取企业业务正文。
 3. 企业管理员创建 Department、用户、RoleBinding 和基于 `environment=staging` 的 DataScope。
 4. 接入带标签的堡垒机、经堡垒机 Host、直连 Host 和 KubernetesCluster。

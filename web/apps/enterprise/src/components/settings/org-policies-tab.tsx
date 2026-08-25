@@ -20,6 +20,7 @@ import {
   StatusBadge,
   Switch,
 } from "@argus/ui";
+import { roleDisplayName } from "../../lib/role-presentation";
 import { useOrgRoles } from "./org-users-tab";
 
 type ApprovalRiskLevel = ApprovalPolicy["matchRiskLevels"][number];
@@ -70,8 +71,10 @@ export function OrgPoliciesTab() {
     },
   });
 
-  const roleName = (id: string) =>
-    roles.data?.find((role) => role.id === id)?.name ?? id;
+  const roleName = (id: string) => {
+    const role = roles.data?.find((item) => item.id === id);
+    return role ? roleDisplayName(role, t) : id;
+  };
 
   const rows: PolicyRow[] = (policies.data ?? []).map((policy) => ({
     id: policy.id,
@@ -194,7 +197,7 @@ export function OrgPoliciesTab() {
         policy={editing}
         roles={(roles.data ?? []).map((role) => ({
           id: role.id,
-          label: role.name,
+          label: roleDisplayName(role, t),
         }))}
       />
     </div>

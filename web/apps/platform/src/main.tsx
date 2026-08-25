@@ -16,6 +16,10 @@ import "./styles.css";
 import { AuthProvider } from "./components/auth-provider";
 import { router } from "./router";
 import { PlatformSetupGate } from "./setup/setup-gate";
+import {
+  listenForSetupTokenFragments,
+  setupCredentialStore,
+} from "./setup/setup-credential";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,6 +74,11 @@ function handleAuthenticationInvalidated() {
 }
 
 async function bootstrap() {
+  setupCredentialStore.consumeFromFragment(
+    window.location,
+    window.history,
+  );
+  listenForSetupTokenFragments(window, setupCredentialStore);
   const apiClient = await createApi();
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

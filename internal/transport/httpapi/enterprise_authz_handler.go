@@ -316,6 +316,9 @@ func toAuthzRole(value authorization.RoleRecord) authzapi.Role {
 	permissions := make([]authzapi.Permission, len(value.Permissions))
 	copy(permissions, value.Permissions)
 	r := authzapi.Role{Id: value.Role.ID.String(), EnterpriseId: value.Role.EnterpriseID.String(), Name: value.Role.Name, Builtin: value.Role.Builtin, Permissions: permissions, Status: authzapi.RoleStatus(value.Role.Status), Version: value.Role.Version, CreatedAt: value.Role.CreatedAt.Time, UpdatedAt: value.Role.UpdatedAt.Time}
+	if value.Role.IdentityKey.Valid {
+		r.BuiltinKey = &value.Role.IdentityKey.String
+	}
 	if value.Role.Description != "" {
 		r.Description = &value.Role.Description
 	}

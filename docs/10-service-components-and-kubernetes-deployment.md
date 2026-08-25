@@ -430,13 +430,11 @@ Writer 的 Kafka Receiver 配置 `message_marking.after: true`、`on_error: fals
 安装器完成后生成或引用一次性 Setup Token，并只输出：
 
 ```text
-初始化 URL
-Setup Token 所在 Secret 名称
-读取 Token 的 kubectl 命令
+包含 Token Fragment 的一次性 Platform 初始化 URL
 Token 过期时间
 ```
 
-部署者使用 Token 打开初始化页，设置平台超级管理员账号和密码。初始化完成后 Token 立即失效。安装器不能通过 Values 预置长期管理员明文密码，也不能自动创建默认弱密码。
+部署者打开该链接设置平台超级管理员账号和密码。Platform 读取 Fragment 后立即清除地址栏，页面不显示 Token 输入框，也不持久化 Token；缺少链接时拒绝显示初始化表单。初始化完成后 Token 立即失效。安装器不能通过 Values 预置长期管理员明文密码，也不能自动创建默认弱密码。
 
 平台超级管理员首次进入后可以：
 

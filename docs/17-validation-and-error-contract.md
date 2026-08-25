@@ -46,7 +46,7 @@ Argus 必须同时满足两个要求：用户能知道输入为什么失败，�
 
 前端已完成：
 
-- Enterprise、Platform（含初始化流程）的 217 个可见 `Field` 全部显式声明 `required/optional/none`，必填只显示红色 `*`。
+- Enterprise、Platform（含初始化流程）的 216 个可见 `Field` 全部显式声明 `required/optional/none`，必填只显示红色 `*`；Setup Token 改由一次性初始化链接在内存中提供，不再属于可见输入 Field。
 - `Input`、`Textarea`、`Select` 和复合字段统一 label、description、error、required 与 invalid ARIA 关系。
 - `FormDrawer` 使用真实 `<form>`；写表单以 React Hook Form `handleSubmit` 和 Zod 为提交边界。
 - `form-constraints.ts` 从 bundled OpenAPI 生成对象字段和标量 Schema 约束，覆盖 required、长度、格式、枚举、pattern、数组和数值边界；密码继续使用独立共享契约。

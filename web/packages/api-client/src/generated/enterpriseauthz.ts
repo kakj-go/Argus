@@ -235,6 +235,7 @@ export interface components {
             name: string;
             description?: string;
             builtin: boolean;
+            builtin_key?: string;
             permissions: components["schemas"]["Permission"][];
             /** @enum {string} */
             status: "active" | "disabled";

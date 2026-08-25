@@ -46,6 +46,9 @@ components:
           maxLength: 1024
         builtin:
           type: boolean
+        builtin_key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
         permissions:
           type: array
           uniqueItems: true

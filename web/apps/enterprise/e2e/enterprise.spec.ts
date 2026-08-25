@@ -1,8 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+const enterpriseOrigin =
+  process.env.ARGUS_E2E_ENTERPRISE_ORIGIN ?? "http://127.0.0.1:4173";
 const platformOrigin =
   process.env.ARGUS_E2E_PLATFORM_ORIGIN ?? "http://127.0.0.1:4174";
+const cardOrigin = process.env.ARGUS_E2E_CARD_ORIGIN ?? "http://127.0.0.1:4176";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -93,13 +96,17 @@ test("initialized platform entry opens the login page", async ({ page }) => {
 test("setup marks required fields and initializes without an admin email", async ({
   page,
 }) => {
-  await page.goto(`${platformOrigin}/?initialized=false&reset=1`);
-  const token = page.locator('input[name="setupToken"]');
-  await expect(fieldFor(token).locator(".argus-field__required")).toHaveCount(
-    1,
+  await page.goto(`${platformOrigin}/login?initialized=false&reset=1`);
+  await expect(page.getByText("缺少初始化凭据")).toBeVisible();
+  await expect(page.getByLabel("Setup Token")).toHaveCount(0);
+
+  await page.goto(
+    `${platformOrigin}/login?initialized=false&reset=1#argus_setup_token=setup-token-e2e`,
   );
-  await token.fill("setup-token-e2e");
-  await page.getByRole("button", { name: "下一步" }).click();
+  await expect(page).toHaveURL(
+    `${platformOrigin}/login?initialized=false&reset=1`,
+  );
+  await expect(page.getByLabel("Setup Token")).toHaveCount(0);
 
   const email = page.getByLabel("邮箱");
   await expect(fieldFor(email).locator(".argus-field__required")).toHaveCount(
@@ -130,8 +137,9 @@ test("card runtime executes a cross-origin bridge and enforces CSP", async ({
   page,
 }) => {
   await page.goto("/login");
-  await page.evaluate(async () => {
-    const html = `
+  await page.evaluate(
+    async ({ cardOrigin, enterpriseOrigin }) => {
+      const html = `
       <button id="query" type="button">Query</button>
       <button id="action" type="button">Action</button>
       <output id="result"></output>
@@ -145,114 +153,121 @@ test("card runtime executes a cross-origin bridge and enforces CSP", async ({
           const result = await window.argusCard.action("action-1");
           document.getElementById("result").textContent = result.status;
         };
-        fetch("http://127.0.0.1:4173/csp-probe")
+        fetch("${enterpriseOrigin}/csp-probe")
           .then(() => document.getElementById("network").textContent = "escaped")
           .catch(() => document.getElementById("network").textContent = "blocked");
       </script>`;
-    const digest = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(html),
-    );
-    const hash = Array.from(new Uint8Array(digest), (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("");
-    const iframe = document.createElement("iframe");
-    iframe.id = "bridge-card";
-    iframe.sandbox.add("allow-scripts");
-    iframe.sandbox.add("allow-same-origin");
-    iframe.src =
-      "http://127.0.0.1:4176/?parent_origin=" +
-      encodeURIComponent(window.location.origin);
-    document.body.append(iframe);
-    await new Promise<void>((resolve) =>
-      iframe.addEventListener("load", () => resolve(), { once: true }),
-    );
-    const channel = new MessageChannel();
-    const nonce = "nonce-1234567890";
-    let hostSequence = 1;
-    const messages: unknown[] = [];
-    await new Promise<void>((resolve) => {
-      channel.port1.onmessage = (event) => {
-        const message = event.data as {
-          type: string;
-          payload: Record<string, unknown>;
+      const digest = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(html),
+      );
+      const hash = Array.from(new Uint8Array(digest), (byte) =>
+        byte.toString(16).padStart(2, "0"),
+      ).join("");
+      const iframe = document.createElement("iframe");
+      iframe.id = "bridge-card";
+      iframe.sandbox.add("allow-scripts");
+      iframe.sandbox.add("allow-same-origin");
+      iframe.src = `${cardOrigin}/?parent_origin=${encodeURIComponent(window.location.origin)}`;
+      document.body.append(iframe);
+      await new Promise<void>((resolve) =>
+        iframe.addEventListener("load", () => resolve(), { once: true }),
+      );
+      const channel = new MessageChannel();
+      const nonce = "nonce-1234567890";
+      let hostSequence = 1;
+      const messages: unknown[] = [];
+      await new Promise<void>((resolve) => {
+        channel.port1.onmessage = (event) => {
+          const message = event.data as {
+            type: string;
+            payload: Record<string, unknown>;
+          };
+          messages.push(message);
+          if (
+            message.type === "query.invoke" ||
+            message.type === "action.invoke"
+          ) {
+            hostSequence += 1;
+            channel.port1.postMessage({
+              bridge_version: "argus.card_bridge/v1",
+              message_id: `host-${hostSequence}`,
+              nonce,
+              sequence: hostSequence,
+              type: "binding.result",
+              payload: {
+                request_id: message.payload.request_id,
+                ok: true,
+                data:
+                  message.type === "query.invoke"
+                    ? { answer: "query-ok" }
+                    : { status: "action-ok" },
+              },
+            });
+          }
+          if (
+            message.type === "card.ready" ||
+            message.type === "bridge.error"
+          ) {
+            resolve();
+          }
         };
-        messages.push(message);
-        if (
-          message.type === "query.invoke" ||
-          message.type === "action.invoke"
-        ) {
-          hostSequence += 1;
-          channel.port1.postMessage({
+        channel.port1.start();
+        iframe.contentWindow!.postMessage(
+          {
             bridge_version: "argus.card_bridge/v1",
-            message_id: `host-${hostSequence}`,
+            message_id: "hello-1",
             nonce,
-            sequence: hostSequence,
-            type: "binding.result",
+            sequence: 1,
+            type: "host.hello",
             payload: {
-              request_id: message.payload.request_id,
-              ok: true,
-              data:
-                message.type === "query.invoke"
-                  ? { answer: "query-ok" }
-                  : { status: "action-ok" },
-            },
-          });
-        }
-        if (message.type === "card.ready" || message.type === "bridge.error") {
-          resolve();
-        }
-      };
-      channel.port1.start();
-      iframe.contentWindow!.postMessage(
-        {
-          bridge_version: "argus.card_bridge/v1",
-          message_id: "hello-1",
-          nonce,
-          sequence: 1,
-          type: "host.hello",
-          payload: {
-            html,
-            entrypoint_hash: hash,
-            allowed_resources: ["inline_script"],
-            max_message_bytes: 1024 * 1024,
-            locale: "zh-CN",
-            color_scheme: "dark",
-            render_plan: {
-              schema_version: "argus.render_plan/v1",
-              card_id: "card-e2e",
-              card_revision: 1,
-              card_instance_id: "instance-e2e",
-              data_bindings: [],
-              query_binding_ids: { list: "query-1" },
-              action_binding_ids: { commit: "action-1" },
+              html,
+              entrypoint_hash: hash,
+              allowed_resources: ["inline_script"],
+              max_message_bytes: 1024 * 1024,
               locale: "zh-CN",
               color_scheme: "dark",
+              render_plan: {
+                schema_version: "argus.render_plan/v1",
+                card_id: "card-e2e",
+                card_revision: 1,
+                card_instance_id: "instance-e2e",
+                data_bindings: [],
+                query_binding_ids: { list: "query-1" },
+                action_binding_ids: { commit: "action-1" },
+                locale: "zh-CN",
+                color_scheme: "dark",
+              },
+              initial_data: {},
             },
-            initial_data: {},
           },
-        },
-        "http://127.0.0.1:4176",
-        [channel.port2],
-      );
-    });
-    const state = window as typeof window & {
-      __cardMessages?: unknown[];
-      __sendCardContext?: () => void;
-    };
-    state.__cardMessages = messages;
-    state.__sendCardContext = () => {
-      hostSequence += 1;
-      channel.port1.postMessage({
-        bridge_version: "argus.card_bridge/v1",
-        message_id: `host-${hostSequence}`,
-        nonce,
-        sequence: hostSequence,
-        type: "host.context",
-        payload: { locale: "en-US", color_scheme: "light", design_tokens: {} },
+          cardOrigin,
+          [channel.port2],
+        );
       });
-    };
-  });
+      const state = window as typeof window & {
+        __cardMessages?: unknown[];
+        __sendCardContext?: () => void;
+      };
+      state.__cardMessages = messages;
+      state.__sendCardContext = () => {
+        hostSequence += 1;
+        channel.port1.postMessage({
+          bridge_version: "argus.card_bridge/v1",
+          message_id: `host-${hostSequence}`,
+          nonce,
+          sequence: hostSequence,
+          type: "host.context",
+          payload: {
+            locale: "en-US",
+            color_scheme: "light",
+            design_tokens: {},
+          },
+        });
+      };
+    },
+    { cardOrigin, enterpriseOrigin },
+  );
 
   const card = page.frameLocator("#bridge-card");
   const handshakeMessages = await page.evaluate(
@@ -300,15 +315,13 @@ test("card runtime rejects a wrong parent origin and entrypoint hash", async ({
   page,
 }) => {
   await page.goto("/login");
-  const result = await page.evaluate(async () => {
+  const result = await page.evaluate(async (cardOrigin) => {
     const makeFrame = async (id: string, parentOrigin: string) => {
       const iframe = document.createElement("iframe");
       iframe.id = id;
       iframe.sandbox.add("allow-scripts");
       iframe.sandbox.add("allow-same-origin");
-      iframe.src =
-        "http://127.0.0.1:4176/?parent_origin=" +
-        encodeURIComponent(parentOrigin);
+      iframe.src = `${cardOrigin}/?parent_origin=${encodeURIComponent(parentOrigin)}`;
       document.body.append(iframe);
       await new Promise<void>((resolve) =>
         iframe.addEventListener("load", () => resolve(), { once: true }),
@@ -353,11 +366,9 @@ test("card runtime rejects a wrong parent origin and entrypoint hash", async ({
       originMessage = true;
     };
     ignoredChannel.port1.start();
-    wrongOrigin.contentWindow!.postMessage(
-      hello("0".repeat(64)),
-      "http://127.0.0.1:4176",
-      [ignoredChannel.port2],
-    );
+    wrongOrigin.contentWindow!.postMessage(hello("0".repeat(64)), cardOrigin, [
+      ignoredChannel.port2,
+    ]);
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     const wrongHash = await makeFrame(
@@ -378,14 +389,12 @@ test("card runtime rejects a wrong parent origin and entrypoint hash", async ({
         }
       };
       hashChannel.port1.start();
-      wrongHash.contentWindow!.postMessage(
-        hello("0".repeat(64)),
-        "http://127.0.0.1:4176",
-        [hashChannel.port2],
-      );
+      wrongHash.contentWindow!.postMessage(hello("0".repeat(64)), cardOrigin, [
+        hashChannel.port2,
+      ]);
     });
     return { originMessage, hashError };
-  });
+  }, cardOrigin);
   expect(result).toEqual({
     originMessage: false,
     hashError: "ENTRYPOINT_HASH_MISMATCH",
@@ -589,6 +598,28 @@ test("theme and locale preferences switch and persist", async ({ page }) => {
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+});
+
+test("built-in role names follow the active locale", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/org");
+  await page.getByRole("tab", { name: "角色", exact: true }).click();
+  await expect(
+    page.getByRole("cell", { name: "企业管理员 内置", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "资源查看者 内置", exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "切换语言" }).click();
+  await page.getByRole("menuitem", { name: "English" }).click();
+
+  await expect(
+    page.getByRole("cell", { name: "Enterprise Admin Built-in", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Resource Viewer Built-in", exact: true }),
+  ).toBeVisible();
 });
 
 test("add host wizard walks three steps to the confirm card", async ({
@@ -1016,31 +1047,31 @@ test("org bindings tab: grant, reflect on users tab, and revoke", async ({
   // 主体（主体类型默认为用户）：李娜。
   await drawer.getByRole("combobox").nth(1).click();
   await page.getByRole("option", { name: /李娜/ }).click();
-  // 角色：resource_operator，并绑定非生产资源数据范围。
+  // 角色：资源操作员，并绑定非生产资源数据范围。
   await drawer.getByRole("combobox").nth(2).click();
-  await page.getByRole("option", { name: "resource_operator" }).click();
+  await page.getByRole("option", { name: "资源操作员" }).click();
   await drawer.getByRole("button", { name: "提交" }).click();
   await expect(drawer).not.toBeVisible();
 
-  const row = page.getByRole("row", { name: /李娜.*resource_operator/ });
+  const row = page.getByRole("row", { name: /李娜.*资源操作员/ });
   await expect(row).toBeVisible();
 
   // 用户 tab 的角色 Badge 由 RoleBinding 派生，应同步出现。
   await page.getByRole("tab", { name: "用户" }).click();
   const userRow = page.getByRole("row", { name: /李娜/ });
-  await expect(userRow.getByText("resource_operator")).toBeVisible();
+  await expect(userRow.getByText("资源操作员")).toBeVisible();
 
   // 回到授权 tab 删除该绑定。
   await page.getByRole("tab", { name: "授权绑定" }).click();
   await page
-    .getByRole("row", { name: /李娜.*resource_operator/ })
+    .getByRole("row", { name: /李娜.*资源操作员/ })
     .getByRole("button", { name: "删除" })
     .click();
   const dialog = page.getByRole("dialog", { name: "删除授权绑定" });
   await dialog.getByRole("button", { name: "确认" }).click();
-  await expect(
-    page.getByRole("row", { name: /李娜.*resource_operator/ }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /李娜.*资源操作员/ })).toHaveCount(
+    0,
+  );
 });
 
 test("org data scopes persist structured label requirements", async ({

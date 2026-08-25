@@ -46,6 +46,16 @@ export const settingsZh = {
         remote_access: "远程访问",
         telemetry: "遥测",
       },
+      builtinRoles: {
+        enterprise_admin: "企业管理员",
+        iam_admin: "身份与权限管理员",
+        security_auditor: "安全审计员",
+        resource_admin: "资源管理员",
+        resource_operator: "资源操作员",
+        resource_viewer: "资源查看者",
+        resource_approver: "资源审批员",
+        department_admin: "部门管理员",
+      },
       users: {
         invite: "邀请用户",
         inviteTitle: "邀请用户",
@@ -608,6 +618,16 @@ export const settingsEn = {
         access: "ServiceAccount / APIKey",
         remote_access: "Remote access",
         telemetry: "Telemetry",
+      },
+      builtinRoles: {
+        enterprise_admin: "Enterprise Admin",
+        iam_admin: "IAM Admin",
+        security_auditor: "Security Auditor",
+        resource_admin: "Resource Admin",
+        resource_operator: "Resource Operator",
+        resource_viewer: "Resource Viewer",
+        resource_approver: "Resource Approver",
+        department_admin: "Department Admin",
       },
       users: {
         invite: "Invite user",

@@ -46,7 +46,9 @@ func (a *App) runM3Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if err != nil {
 		return err
 	}
-	role, err := findItem(objectItems(roles), func(item map[string]any) bool { return item["name"] == "Resource Admin" && item["builtin"] == true })
+	role, err := findItem(objectItems(roles), func(item map[string]any) bool {
+		return item["builtin_key"] == "resource_admin" && item["builtin"] == true
+	})
 	if err != nil {
 		return err
 	}

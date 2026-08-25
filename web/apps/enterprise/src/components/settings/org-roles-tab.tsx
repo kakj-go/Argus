@@ -19,6 +19,7 @@ import {
   Spinner,
   Tooltip,
 } from "@argus/ui";
+import { roleDisplayName } from "../../lib/role-presentation";
 import { formatDateTime, PermissionMatrix } from "./shared";
 import { useOrgRoles } from "./org-users-tab";
 
@@ -78,7 +79,7 @@ export function OrgRolesTab() {
 
   const rows: RoleRow[] = (roles.data ?? []).map((role) => ({
     id: role.id,
-    name: role.name,
+    name: roleDisplayName(role, t),
     description: role.description ?? "",
     builtin: role.builtin,
     permissionCount: role.permissions.includes("*")

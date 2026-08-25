@@ -22,6 +22,7 @@ import {
   StatusBadge,
   Switch,
 } from "@argus/ui";
+import { roleDisplayName } from "../../lib/role-presentation";
 
 type Option = { value: string; label: string };
 type GrantForm = {
@@ -164,7 +165,7 @@ export function OrgRemoteAccessTab() {
   }));
   const roleOptions = (roles.data ?? []).map((item) => ({
     value: item.id,
-    label: item.name,
+    label: roleDisplayName(item, t),
   }));
   const hostOptions = (hosts.data?.items ?? []).map((item) => ({
     value: item.id,

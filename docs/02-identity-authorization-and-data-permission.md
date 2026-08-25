@@ -59,6 +59,8 @@ resource_viewer
 resource_approver
 ```
 
+内置角色使用稳定的 `identity_key` 作为授权、API、审计和自动化识别依据，规范英文 `name` 仅作为兼容回退值。Role API 通过 `builtin_key` 暴露该稳定标识，Web 根据当前 `zh-CN` / `en-US` 语言在展示层解析名称；自定义角色始终显示企业录入的原始名称，不自动翻译。任何客户端和 E2E 均不得依赖内置角色的可见名称进行身份判断。
+
 `enterprise_admin` 是企业控制面管理员，可以管理用户、部门、角色、策略、模型和资源配置，但不自动获得生产 Shell、目标账号、Secret 原值或 AI 生产执行权限。管理员扩大自己的 DataScope 或 RemoteAccessGrant 必须经过 Step-up Authentication 并写入高优先级审计。
 
 M2 的 Evaluation 闭环以本地密码和 `ALLOW | DENY` 为基础。M8 已增加 TOTP、恢复码、登录 Challenge、五分钟 Step-up 和短期 Break Glass，并要求平台超级管理员完成 Enrollment；这些能力只构成本地加固，不把 Evaluation 或 `local-hardening` 声明为 Production 身份安全就绪。

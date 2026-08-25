@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -66,7 +67,7 @@ func (a *App) runSetupTokenRotate(ctx context.Context, args []string) error {
 			return fmt.Errorf("activate rotated setup token in %s: %w", deployment, err)
 		}
 	}
-	printSetupToken(a.stdout, token, expiresAt)
+	printSetupInitializationLink(a.stdout, cfg, token, expiresAt)
 	return nil
 }
 
@@ -90,10 +91,22 @@ func restartDeployment(ctx context.Context, clients *kubeClients, namespace, nam
 	return waitForDeployment(ctx, clients, namespace, name, 5*time.Minute)
 }
 
-func printSetupToken(writer io.Writer, token string, expiresAt time.Time) {
-	_, _ = fmt.Fprintln(writer, "Setup Token (copy and store it now; shown only once):")
-	_, _ = fmt.Fprintln(writer, token)
+func printSetupInitializationLink(writer io.Writer, cfg *InstallConfig, token string, expiresAt time.Time) {
+	_, _ = fmt.Fprintln(writer, "Platform initialization URL (copy and open it now; shown only once):")
+	_, _ = fmt.Fprintln(writer, setupInitializationURL(cfg, token))
 	_, _ = fmt.Fprintf(writer, "Expires at: %s\n", expiresAt.UTC().Format(time.RFC3339))
+}
+
+func setupInitializationURL(cfg *InstallConfig, token string) string {
+	baseURL := "http://127.0.0.1:4174"
+	if cfg.Spec.Exposure.Mode == "ingress" {
+		baseURL = strings.TrimSpace(cfg.Spec.Exposure.PlatformHost)
+		if !strings.Contains(baseURL, "://") {
+			baseURL = "https://" + baseURL
+		}
+	}
+	baseURL = strings.TrimRight(baseURL, "/") + "/login"
+	return baseURL + "#argus_setup_token=" + url.QueryEscape(token)
 }
 
 func (a *App) runAdminResetPassword(ctx context.Context, args []string) error {

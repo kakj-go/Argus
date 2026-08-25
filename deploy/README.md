@@ -54,6 +54,12 @@ go run ./cmd/argusctl tunnel --config deploy/.cache/evaluation-<run-id>.yaml
 - Platform and first-time setup: `http://127.0.0.1:4174`
 - Card Runtime (internal): `http://127.0.0.1:4176`
 
+首次安装成功时，`argusctl install` 会在最终摘要中只显示一次包含 Setup Token Fragment 的 Platform 初始化链接。初始化者直接打开该链接，无需手工输入 Token；Platform 会立即从地址栏移除 Fragment，Token 只在当前页面内存中保留。链接遗失或过期时，在系统仍未初始化的前提下运行：
+
+```bash
+go run ./cmd/argusctl setup-token rotate --config deploy/.cache/evaluation-<run-id>.yaml
+```
+
 ## Production Profile
 
 `profiles/production.yaml` renders HA replicas, PDB, HPA, topology spread, two portal hosts and the isolated Card Runtime host. Production installation is intentionally blocked with:

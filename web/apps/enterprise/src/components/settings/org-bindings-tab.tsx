@@ -26,6 +26,7 @@ import {
   StatusBadge,
   Switch,
 } from "@argus/ui";
+import { roleDisplayName } from "../../lib/role-presentation";
 import {
   CheckList,
   useOrgDepartments,
@@ -111,8 +112,10 @@ export function OrgBindingsTab() {
       )?.name ?? binding.subject_id
     );
   };
-  const roleName = (id: string) =>
-    (roles.data ?? []).find((role) => role.id === id)?.name ?? id;
+  const roleName = (id: string) => {
+    const role = (roles.data ?? []).find((item) => item.id === id);
+    return role ? roleDisplayName(role, t) : id;
+  };
   const scopeName = (binding: RoleBinding) =>
     binding.data_scope_ids.length === 0
       ? t("settings.org.bindingsTab.scopeTypes.enterprise")
@@ -462,7 +465,7 @@ function BindingDrawer({
                 onValueChange={field.onChange}
                 options={(roles.data ?? []).map((role) => ({
                   value: role.id,
-                  label: role.name,
+                  label: roleDisplayName(role, t),
                 }))}
                 value={field.value}
               />

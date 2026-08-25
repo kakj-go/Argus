@@ -28,6 +28,7 @@ import {
   Spinner,
   StatusBadge,
 } from "@argus/ui";
+import { roleDisplayName } from "../../lib/role-presentation";
 import { formatDateTime } from "./shared";
 
 export type UserRow = {
@@ -191,8 +192,10 @@ export function OrgUsersTab() {
     },
   });
 
-  const roleName = (id: string, list?: Role[]) =>
-    list?.find((role) => role.id === id)?.name ?? id;
+  const roleName = (id: string, list?: Role[]) => {
+    const role = list?.find((item) => item.id === id);
+    return role ? roleDisplayName(role, t) : id;
+  };
   const departmentName = (id: string) =>
     departments.data?.find((department) => department.id === id)?.name ?? id;
 
@@ -527,7 +530,7 @@ function EnterpriseUserDrawer({
                   onChange={field.onChange}
                   options={roles.map((role) => ({
                     id: role.id,
-                    label: role.name,
+                    label: roleDisplayName(role, t),
                   }))}
                   value={field.value}
                 />

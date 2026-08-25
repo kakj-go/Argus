@@ -7,7 +7,6 @@ export function StepReview({ draft }: { draft: SetupDraft }) {
   const { t } = useTranslation();
 
   const items: KeyValueItem[] = [
-    { label: t("setup.token.label"), value: t("setup.review.tokenMasked") },
     {
       label: t("setup.system.platformName.label"),
       value: draft.platformName.trim(),

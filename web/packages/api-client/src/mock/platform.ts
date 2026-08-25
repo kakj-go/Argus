@@ -56,6 +56,7 @@ export function createPlatformDomain(
           db.roles.push({
             id: nextId(db, "role"),
             enterprise_id: enterprise.id,
+            builtin_key: template.key,
             name: template.name,
             description: template.description,
             builtin: true,

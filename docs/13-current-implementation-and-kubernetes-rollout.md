@@ -55,7 +55,7 @@
 
 | 应用                    | 主要职责         | 当前主要页面                                                              |
 | ----------------------- | ---------------- | ------------------------------------------------------------------------- |
-| `web/apps/platform`     | 初始化与平台管理 | Setup Token、超级管理员初始化、登录、平台概览、企业、管理员、Sandbox、审计、账号 |
+| `web/apps/platform`     | 初始化与平台管理 | 一次性初始化链接、超级管理员初始化、登录、平台概览、企业、管理员、Sandbox、审计、账号 |
 | `web/apps/enterprise`   | 企业业务域       | Chatbox、主机、Kubernetes、任务、审批、组织权限、模型、Card、Secret、审计 |
 | `web/apps/card-runtime` | 独立 Card Origin | CSP 下加载并运行已校验的 Card 文档，通过 MessagePort 与 Host 通信         |
 
@@ -270,7 +270,7 @@ Operator 是集群级或共享能力时，`argusctl` 必须检测兼容版本和
 6. **Schema**：先完成 PostgreSQL Migration；ClickHouse Migration 独立执行并记录 Schema Version。
 7. **Control Plane**：发布 Web、Server、Worker、Direct Executor 和 Connector Gateway。
 8. **Telemetry**：先发布 Ingest，再发布 Writer 和 Query；Ingest 依赖窄身份控制数据 Adapter、Redis 和 Kafka，但不依赖 ClickHouse，Writer/Query 依赖 ClickHouse Schema Ready。
-9. **Bootstrap**：生成短期 Setup Token Secret，只输出 Secret 名称、读取命令、URL 和过期时间。
+9. **Bootstrap**：生成短期 Setup Token Secret；安装成功或轮换完成后只输出包含 Token Fragment 的一次性 Platform 初始化 URL 和过期时间，浏览器消费后立即清除 Fragment。
 10. **Verify**：完成控制面、Sandbox、Connector、Direct Egress 和 OTLP 写入/查询的安装验证。
 
 每一阶段必须幂等并写入安装状态。失败后再次执行应从未完成阶段恢复，而不是删除整个 Release 重装。

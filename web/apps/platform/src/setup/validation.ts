@@ -19,9 +19,9 @@ export const TIMEZONE_OPTIONS = [
   "UTC",
 ] as const;
 
-export function createInitialDraft(): SetupDraft {
+export function createInitialDraft(setupToken: string): SetupDraft {
   return {
-    setupToken: "",
+    setupToken,
     platformName: "",
     defaultLocale: "zh-CN",
     timezone: "Asia/Shanghai",
@@ -60,12 +60,8 @@ const setupConstraints = {
 export type Translator = (key: string) => string;
 
 export function createSetupSchemas(t: Translator) {
-  const token = z.object({
-    setupToken: z
-      .string()
-      .trim()
-      .min(1, t("setup.token.required"))
-      .min(8, t("setup.token.tooShort")),
+  const credential = z.object({
+    setupToken: z.string().trim().min(8),
   });
   const admin = z
     .object({
@@ -143,7 +139,7 @@ export function createSetupSchemas(t: Translator) {
       .refine(isValidHttpUrl, t("setup.system.externalUrl.invalid")),
     admin,
   });
-  return { token, system, setup: token.merge(system) };
+  return { credential, system, setup: credential.merge(system) };
 }
 
 export type SetupDraft = z.infer<

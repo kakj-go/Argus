@@ -27,7 +27,7 @@
 
 - M2 只提供本地密码和 24 小时临时密码首次改密，不提供激活链接、邮件、SMTP 或重发邀请。
 - Enterprise 用户名全局大小写不敏感唯一，因为企业登录请求只提交 `username + password`，没有可用于消歧的企业参数。
-- Setup Token 由 `argusctl` 生成到独立 Kubernetes Secret，Server 每次从只读 Volume 读取；初始化后禁止轮换。
+- Setup Token 由 `argusctl` 生成到独立 Kubernetes Secret，Server 每次从只读 Volume 读取；CLI 只通过一次性 Platform 初始化链接的 Fragment 交付，初始化后禁止轮换。
 - Setup 不收集 OpenSandbox 配置。OpenSandbox 仍由 Helm 部署，治理 API 是 M4 Agent/Sandbox 接入前置任务。
 - PostgreSQL 保存 Session、授权版本、审计、Outbox 和幂等事实；Redis 不可用时 Server 以 degraded 状态运行，已有 Session 继续校验，新登录 fail closed。
 - M2 的授权决策只产生 `ALLOW` 或 `DENY`。平台超级管理员 MFA、恢复码和 Step-up 已由 M8 本地加固补齐，不改变 M2 的完成边界。
@@ -47,7 +47,7 @@
 - 数据与服务：`migrations/postgresql/00001_m2_identity_authorization.sql`、`internal/{platform,identity,authorization,audit,outbox,pagination}`、`internal/storage/{postgres,redis}`；sqlc 查询按 platform、identity、authorization、machine、audit、idempotency 分域生成，单文件均低于 2000 行。
 - 前端：Setup、Platform、Enterprise real Adapter，双 Audience 登录/首次改密，企业/IAM/ServiceAccount/APIKey 页面；M2 真实写表单统一使用 React Hook Form + Zod，EnterpriseUser 与 Department 均提供可审计、可撤权的启停闭环。
 - 审计展示：OpenAPI 读模型在不可变 actor/resource ID 之外尽力返回当前显示名；企业与平台门户通过统一代码目录展示中英文动作/资源名称，原始 key/UUID 保留在详情。企业引用字段使用名称选择器提交 ID，平台域不跨边界查询企业成员姓名。
-- 部署：独立 Goose Migration Job、仅 Server 可见的 Setup Token Secret Volume、`argusctl setup-token rotate` 和 `argusctl admin reset-password`。
+- 部署：独立 Goose Migration Job、仅 Server 可见的 Setup Token Secret Volume、输出一次性初始化链接的 `argusctl setup-token rotate` 和 `argusctl admin reset-password`。
 - 自动化：Migration 真实 PostgreSQL 测试、密码/授权/游标/审计单测、契约门禁、三 Origin real Playwright 和 `go run ./cmd/argus-dev e2e run --suite m2`。
 - 2026-08-16 的临时 Namespace 验收已完成 Setup、双 Audience、跨企业拒绝、DataScope、APIKey 创建/幂等/轮换/撤销、审计、撤权、Redis 停止、Server 重启和无条件清理；验收运行 `20260816110652-35870` 通过后确认无残留 Namespace 与 Lease。
 

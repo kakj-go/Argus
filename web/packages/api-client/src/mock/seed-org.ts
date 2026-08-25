@@ -15,6 +15,7 @@ const HOUR = 3_600_000;
 const MINUTE = 60_000;
 
 export interface BuiltinRoleTemplate {
+  key: string;
   name: string;
   description?: string;
   permissions: string[];
@@ -26,22 +27,26 @@ export interface BuiltinRoleTemplate {
  */
 export const BUILTIN_ROLE_TEMPLATES: BuiltinRoleTemplate[] = [
   {
-    name: "enterprise_admin",
+    key: "enterprise_admin",
+    name: "Enterprise Admin",
     description: "企业管理员",
     permissions: ["*"],
   },
   {
-    name: "iam_admin",
+    key: "iam_admin",
+    name: "IAM Admin",
     description: "身份与授权管理员",
     permissions: ["identity.user.manage", "audit.read"],
   },
   {
-    name: "security_auditor",
+    key: "security_auditor",
+    name: "Security Auditor",
     description: "安全审计员",
     permissions: ["audit.read", "remote_access.recording.read"],
   },
   {
-    name: "resource_admin",
+    key: "resource_admin",
+    name: "Resource Admin",
     description: "项目管理员",
     permissions: [
       "host.read",
@@ -85,7 +90,8 @@ export const BUILTIN_ROLE_TEMPLATES: BuiltinRoleTemplate[] = [
     ],
   },
   {
-    name: "resource_operator",
+    key: "resource_operator",
+    name: "Resource Operator",
     description: "项目操作员",
     permissions: [
       "host.read",
@@ -110,7 +116,8 @@ export const BUILTIN_ROLE_TEMPLATES: BuiltinRoleTemplate[] = [
     ],
   },
   {
-    name: "resource_viewer",
+    key: "resource_viewer",
+    name: "Resource Viewer",
     description: "项目只读成员",
     permissions: [
       "host.read",
@@ -124,7 +131,8 @@ export const BUILTIN_ROLE_TEMPLATES: BuiltinRoleTemplate[] = [
     ],
   },
   {
-    name: "resource_approver",
+    key: "resource_approver",
+    name: "Resource Approver",
     description: "项目审批人",
     permissions: [
       "host.read",
@@ -135,7 +143,8 @@ export const BUILTIN_ROLE_TEMPLATES: BuiltinRoleTemplate[] = [
     ],
   },
   {
-    name: "department_admin",
+    key: "department_admin",
+    name: "Department Admin",
     description: "部门管理员（模型配额）",
     permissions: ["model_quota.manage", "model_usage.read"],
   },
@@ -157,23 +166,27 @@ export interface OrgSeed {
 
 export function createOrgSeed(now: number): OrgSeed {
   const ago = (offsetMs: number) => new Date(now - offsetMs).toISOString();
-  const template = (name: string): BuiltinRoleTemplate => {
-    const found = BUILTIN_ROLE_TEMPLATES.find((entry) => entry.name === name);
-    if (!found) throw new Error(`unknown builtin role template: ${name}`);
+  const template = (key: string): BuiltinRoleTemplate => {
+    const found = BUILTIN_ROLE_TEMPLATES.find((entry) => entry.key === key);
+    if (!found) throw new Error(`unknown builtin role template: ${key}`);
     return found;
   };
-  const acmeRole = (id: string, name: string): Role => ({
-    id,
-    enterprise_id: "ent-acme",
-    name,
-    description: template(name).description,
-    builtin: true,
-    permissions: [...template(name).permissions],
-    status: "active",
-    version: 1,
-    created_at: ago(120 * DAY),
-    updated_at: ago(120 * DAY),
-  });
+  const acmeRole = (id: string, key: string): Role => {
+    const roleTemplate = template(key);
+    return {
+      id,
+      enterprise_id: "ent-acme",
+      builtin_key: roleTemplate.key,
+      name: roleTemplate.name,
+      description: roleTemplate.description,
+      builtin: true,
+      permissions: [...roleTemplate.permissions],
+      status: "active",
+      version: 1,
+      created_at: ago(120 * DAY),
+      updated_at: ago(120 * DAY),
+    };
+  };
 
   return {
     users: [
@@ -310,7 +323,8 @@ export function createOrgSeed(now: number): OrgSeed {
       {
         id: "role-g-ea",
         enterprise_id: "ent-globex",
-        name: "enterprise_admin",
+        builtin_key: "enterprise_admin",
+        name: template("enterprise_admin").name,
         description: template("enterprise_admin").description,
         builtin: true,
         permissions: ["*"],
@@ -322,7 +336,8 @@ export function createOrgSeed(now: number): OrgSeed {
       {
         id: "role-g-pv",
         enterprise_id: "ent-globex",
-        name: "resource_viewer",
+        builtin_key: "resource_viewer",
+        name: template("resource_viewer").name,
         description: template("resource_viewer").description,
         builtin: true,
         permissions: [...template("resource_viewer").permissions],

@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -23,7 +29,7 @@ import {
 import { usePlatformAuthStore } from "@argus/auth";
 import { StepReview } from "./step-review";
 import { StepSystem } from "./step-system";
-import { StepToken } from "./step-token";
+import { setupCredentialStore } from "./setup-credential";
 import {
   createInitialDraft,
   createSetupSchemas,
@@ -35,10 +41,19 @@ import {
  * 一次性系统初始化向导（docs/07 §2-4）。
  * 仅平台 `uninitialized` 状态可进入；提交为单事务，成功后向导永久关闭。
  */
-export function PlatformSetupGate({ children }: { children: ReactNode }) {
+export function PlatformSetupGate({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const { t } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
+  const setupToken = useSyncExternalStore(
+    setupCredentialStore.subscribe,
+    setupCredentialStore.getSnapshot,
+    setupCredentialStore.getSnapshot,
+  );
 
   const statusQuery = useQuery({
     queryKey: ["setup", "status"],
@@ -51,14 +66,20 @@ export function PlatformSetupGate({ children }: { children: ReactNode }) {
   const schemas = useMemo(() => createSetupSchemas(t), [t]);
   const form = useForm<SetupDraft>({
     resolver: zodResolver(schemas.setup),
-    defaultValues: createInitialDraft(),
+    defaultValues: createInitialDraft(setupToken),
     mode: "onTouched",
   });
   const draft = useWatch({ control: form.control }) as SetupDraft;
 
+  useEffect(() => {
+    if (!setupToken || form.getValues("setupToken") === setupToken) return;
+    form.setValue("setupToken", setupToken, { shouldValidate: true });
+  }, [form, setupToken]);
+
   const submitMutation = useMutation({
     mutationFn: (input: SetupDraft) => api.setup.submit(toSubmission(input)),
     onSuccess: (_result, input) => {
+      setupCredentialStore.clear();
       window.history.replaceState(null, "", "/login");
       queryClient.setQueryData(["setup", "status"], {
         state: "initialized",
@@ -88,17 +109,10 @@ export function PlatformSetupGate({ children }: { children: ReactNode }) {
 
   const canNext =
     step === 0
-      ? schemas.token.safeParse(draft).success
-      : step === 1
-        ? schemas.system.safeParse(draft).success
-        : !submitMutation.isPending;
+      ? schemas.system.safeParse(draft).success
+      : !submitMutation.isPending;
 
   const steps: WizardStep[] = [
-    {
-      id: "token",
-      title: t("setup.steps.token.title"),
-      description: t("setup.steps.token.description"),
-    },
     {
       id: "system",
       title: t("setup.steps.system.title"),
@@ -155,6 +169,18 @@ export function PlatformSetupGate({ children }: { children: ReactNode }) {
         </CardContent>
       </Card>
     );
+  } else if (!schemas.credential.safeParse({ setupToken }).success) {
+    content = (
+      <Card className="argus-setup-card">
+        <CardContent>
+          <Alert
+            description={t("setup.credentialMissing.description")}
+            title={t("setup.credentialMissing.title")}
+            tone="danger"
+          />
+        </CardContent>
+      </Card>
+    );
   } else {
     content = (
       <Card className="argus-setup-card">
@@ -174,9 +200,8 @@ export function PlatformSetupGate({ children }: { children: ReactNode }) {
               submitLabel={t("setup.review.submit")}
               submitting={submitMutation.isPending}
             >
-              {step === 0 && <StepToken />}
-              {step === 1 && <StepSystem />}
-              {step === 2 && (
+              {step === 0 && <StepSystem />}
+              {step === 1 && (
                 <div className="argus-setup-fields">
                   <StepReview draft={draft} />
                   {submitMutation.isError && (

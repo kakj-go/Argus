@@ -183,9 +183,6 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err != nil {
 		return err
 	}
-	if setupToken.Created {
-		printSetupToken(a.stdout, setupToken.Token, setupToken.ExpiresAt)
-	}
 	idempotencyKey, err := ensureSecretValue(ctx, clients, cfg.Spec.Namespaces.System, setupSecret, "idempotency-encryption-key", 32)
 	if err != nil {
 		return err
@@ -229,6 +226,12 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(a.stdout, "Argus %s %s installed successfully\n", cfg.Spec.Profile, cfg.Spec.ReleaseID)
+	if setupToken.Created {
+		printSetupInitializationLink(a.stdout, cfg, setupToken.Token, setupToken.ExpiresAt)
+	} else {
+		_, _ = fmt.Fprintln(a.stdout, "Setup credential already exists and was not displayed again.")
+		_, _ = fmt.Fprintf(a.stdout, "Run argusctl setup-token rotate --config %s if the initialization link was not saved.\n", cfg.path)
+	}
 	return nil
 }
 

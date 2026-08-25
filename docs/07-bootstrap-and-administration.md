@@ -43,9 +43,9 @@ stateDiagram-v2
 
 M2 固定由 `argusctl` 生成 32 字节随机 Token，保存到独立 Kubernetes Secret，并设置 24 小时过期时间。Server 通过只读 Secret Volume 每次重新读取 Token 与过期时间；为消除 Kubernetes Secret 投影的传播延迟，轮换流程会主动滚动重启 Server Pod。
 
-首次安装创建新 Token 时，`argusctl install` 必须在终端中明确提示部署者立即复制并安全保存，Token 只显示一次；重复安装不得重新显示仍有效的 Token。遗失时使用 `argusctl setup-token rotate` 生成新 Token。轮换命令更新 Secret 后必须滚动重启并等待 `argus-server` Ready，确认新 Pod 已挂载新值后才能向部署者显示 Token，避免用户拿到尚未生效的凭据。
+首次安装创建新 Token 时，`argusctl install` 必须在安装成功摘要中生成一次性 Platform 初始化链接，Token 只作为 URL Fragment 出现在该链接中并只显示一次；重复安装不得重新显示仍有效的 Token。遗失时使用 `argusctl setup-token rotate` 生成新链接。轮换命令更新 Secret 后必须滚动重启并等待 `argus-server` Ready，确认新 Pod 已挂载新值后才能向部署者显示链接，避免用户拿到尚未生效的凭据。
 
-首次初始化与 Platform 使用同一个入口。Platform 在恢复登录会话前调用公开的初始化状态接口：`uninitialized` 显示向导，`initialized` 进入登录页；初始化成功后浏览器立即切换到 `/login`。Setup Token 只挂载到 `argus-server`，不得挂载到 Web 容器或通过浏览器同源地址读取。部署者必须从 `argusctl install` 的一次性输出、`argusctl setup-token rotate`，或安装器给出的受信 `kubectl` 命令取得 Token，再手工输入初始化向导。
+首次初始化与 Platform 使用同一个入口。Platform 在恢复登录会话前调用公开的初始化状态接口：`uninitialized` 显示向导，`initialized` 进入登录页；初始化成功后浏览器立即切换到 `/login`。Setup Token 只挂载到 `argus-server`，不得挂载到 Web 容器或通过浏览器同源地址读取。部署者从 `argusctl install` 或 `argusctl setup-token rotate` 的一次性输出取得初始化链接；Platform 启动时从 `#argus_setup_token=...` Fragment 消费 Token，立即使用 `history.replaceState` 清除地址栏，并只在当前页面内存中保留到最终提交。初始化界面不提供 Token 输入框；缺少 Fragment 时只提示重新打开部署者生成的链接。
 
 Setup Token 应具有：
 
@@ -53,7 +53,8 @@ Setup Token 应具有：
 - 短有效期。
 - 单次使用。
 - 只允许调用初始化接口。
-- 不写应用日志、审计或错误详情；只向部署者调用终端显示一次。
+- 不写应用日志、审计或错误详情；只作为一次性初始化链接的 Fragment 向部署者终端显示一次。
+- 不进入 Query、Referer、localStorage、sessionStorage 或持久化表单草稿；页面刷新后必须重新打开原链接。
 
 初始化成功后 PlatformState 使该 Token 永久失去认证能力并关闭初始化接口；Secret 的后续清理由部署流程负责，Server 不需要写入其只读 Volume。
 

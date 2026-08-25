@@ -412,6 +412,7 @@ type RequestId = string
 // Role defines model for Role.
 type Role struct {
 	Builtin      bool         `json:"builtin"`
+	BuiltinKey   *string      `json:"builtin_key,omitempty"`
 	CreatedAt    time.Time    `json:"created_at"`
 	Description  *string      `json:"description,omitempty"`
 	EnterpriseId string       `json:"enterprise_id"`

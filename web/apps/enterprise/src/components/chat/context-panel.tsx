@@ -9,6 +9,7 @@ import {
 } from "@argus/api-client";
 import { Badge, Button, Timeline } from "@argus/ui";
 import { useMyPermissions, useMyRoles } from "../../lib/permissions";
+import { roleDisplayName } from "../../lib/role-presentation";
 import { useUiStore } from "../../store/ui";
 import type { ChatMessage } from "./chat-view-model";
 
@@ -118,7 +119,7 @@ export function ChatContextPanel({ messages }: { messages: ChatMessage[] }) {
           {myRoles.map((role) => (
             <Badge key={role.id} tone="accent">
               <ShieldCheck aria-hidden size={11} />
-              {role.name}
+              {roleDisplayName(role, t)}
             </Badge>
           ))}
         </div>

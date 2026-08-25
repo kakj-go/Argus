@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+test.skip(
+  !process.env.ARGUS_E2E_EXTERNAL,
+  "requires a deployed Kubernetes release",
+);
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("argus.locale", "zh-CN");
@@ -29,9 +34,7 @@ test("all Web origins serve deep links after refresh", async ({ page }) => {
 test("platform login reaches enterprise and sandbox administration", async ({
   page,
 }) => {
-  await page.goto(
-    "http://127.0.0.1:4174/login?initialized=true&reset=1",
-  );
+  await page.goto("http://127.0.0.1:4174/login?initialized=true&reset=1");
   await page.getByLabel("用户名").fill("admin");
   await page.getByLabel("密码").fill("123456");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -52,9 +55,13 @@ test("platform login reaches enterprise and sandbox administration", async ({
 test("setup completes once and remains permanently locked", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:4174/?initialized=false&reset=1");
-  await page.getByLabel("Setup Token").fill("stp_e2e_release");
-  await page.getByRole("button", { name: "下一步" }).click();
+  await page.goto(
+    "http://127.0.0.1:4174/login?initialized=false&reset=1#argus_setup_token=stp_e2e_release",
+  );
+  await expect(page).toHaveURL(
+    "http://127.0.0.1:4174/login?initialized=false&reset=1",
+  );
+  await expect(page.getByLabel("Setup Token")).toHaveCount(0);
 
   await page.getByLabel("平台显示名称").fill("Argus Evaluation");
   await page.getByLabel("外部访问地址").fill("http://127.0.0.1:4173");
