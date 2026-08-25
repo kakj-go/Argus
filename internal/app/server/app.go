@@ -12,7 +12,6 @@ import (
 	"github.com/kakj-go/Argus/internal/action"
 	"github.com/kakj-go/Argus/internal/agent"
 	"github.com/kakj-go/Argus/internal/authorization"
-	"github.com/kakj-go/Argus/internal/automation"
 	cardservice "github.com/kakj-go/Argus/internal/card"
 	"github.com/kakj-go/Argus/internal/config"
 	connectorservice "github.com/kakj-go/Argus/internal/connector"
@@ -133,7 +132,7 @@ func (a *App) Run(ctx context.Context) error {
 	hostHandler := httpapi.HostHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
 	kubernetesHandler := httpapi.KubernetesHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
 	connectionHandler := httpapi.ConnectionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
-	actionHandler := httpapi.ResourceActionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain, Workflow: workflowDomain}
+	actionHandler := httpapi.ResourceActionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain, Workflow: workflowDomain, Cursor: cursorSigner}
 	workflowHandler := httpapi.WorkflowHandler{Identity: enterpriseIdentityHandler, Service: workflowDomain}
 	conversationHandler := httpapi.ConversationHandler{Identity: enterpriseIdentityHandler,
 		Service: conversation.Service{Store: postgresStore, Idempotency: idempotency}}
@@ -149,8 +148,6 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 	cardHandler := httpapi.CardHandler{Identity: enterpriseIdentityHandler, Service: cardDomain, Workflow: workflowDomain}
-	automationHandler := httpapi.AutomationHandler{Identity: enterpriseIdentityHandler,
-		Service: automation.Service{Store: postgresStore, Idempotency: idempotency, Tools: toolRegistry}}
 	sandboxHandler := httpapi.SandboxHandler{Auth: setupHandler, Service: sandbox.Service{Store: postgresStore, Keyring: secretKeyring}}
 	connectorHandler := httpapi.ConnectorHandler{Identity: enterpriseIdentityHandler, Service: connectorDomain, Bastion: bastionDomain}
 	remoteWebsocketURL, err := websocketURL(a.config.RemoteOrigin)
@@ -194,7 +191,6 @@ func (a *App) Run(ctx context.Context) error {
 			EnterpriseIdentity: &enterpriseIdentityHandler, EnterpriseAuthorization: &enterpriseAuthorizationHandler,
 			Machine: &machineHandler, Audit: &auditHandler, Secret: &secretHandler, Host: &hostHandler, Kubernetes: &kubernetesHandler,
 			Connection: &connectionHandler, ResourceAction: &actionHandler, Workflow: &workflowHandler, Conversation: &conversationHandler, Model: &modelHandler,
-			Automation:     &automationHandler,
 			Sandbox:        &sandboxHandler,
 			AllowedOrigins: a.config.AllowedOrigins,
 			Connector:      &connectorHandler,

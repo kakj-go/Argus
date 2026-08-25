@@ -30,6 +30,7 @@ export const governanceZh = {
         executionId: "执行 ID",
         actionRef: "操作引用",
         resultRef: "结果引用",
+        errorCode: "错误码",
       },
       status: {
         pending: "等待中",
@@ -56,7 +57,6 @@ export const governanceZh = {
         admin_chatbox: "Chatbox 会话",
         card_action: "卡片操作",
         openapi: "OpenAPI",
-        automation: "自动化",
         platform_ui: "平台后台",
         system: "系统",
       },
@@ -128,8 +128,13 @@ export const governanceZh = {
       scope: {
         all: "全部状态",
         mine: "待我审批",
+        created: "我发起的",
+        done: "已处理",
         confirmation: "待确认",
-        done: "已完成",
+      },
+      primary: {
+        operation: "操作审批",
+        remote: "远程访问审批",
       },
       risk: {
         read: "只读",
@@ -228,7 +233,7 @@ export const governanceEn = {
     tasks: {
       title: "Task History",
       description:
-        "Execution records of two-phase operations and automation tasks; running tasks update live.",
+        "Execution records for governed operations; running tasks update live.",
       searchPlaceholder: "Search task title…",
       allStatuses: "All statuses",
       allTypes: "All types",
@@ -252,6 +257,7 @@ export const governanceEn = {
         executionId: "Execution ID",
         actionRef: "Action reference",
         resultRef: "Result reference",
+        errorCode: "Error code",
       },
       status: {
         pending: "Pending",
@@ -278,7 +284,6 @@ export const governanceEn = {
         admin_chatbox: "Chatbox session",
         card_action: "Card action",
         openapi: "OpenAPI",
-        automation: "Automation",
         platform_ui: "Platform console",
         system: "System",
       },
@@ -352,8 +357,13 @@ export const governanceEn = {
       scope: {
         all: "All states",
         mine: "Awaiting my approval",
+        created: "Created by me",
+        done: "Handled",
         confirmation: "Awaiting confirmation",
-        done: "Completed",
+      },
+      primary: {
+        operation: "Operation approvals",
+        remote: "Remote access approvals",
       },
       risk: {
         read: "Read",

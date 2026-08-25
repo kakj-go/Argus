@@ -31,10 +31,10 @@ Argus 同时连接模型、不可信用户输入、生成代码、基础设施�
 | 卡片伪造 Tool 数据来源                     | 使用 tool_call_id + path，服务端解析，禁止受限 Slot 使用 literal                                                                                     |
 | Connector 被冒用                           | 一次性注册、mTLS、证书轮换、设备吊销和本地策略                                                                                                       |
 | Direct Executor 被用于 SSRF/内网扫描       | 固定出口、协议/端口白名单、DNS 前后校验、私网/元数据/内部地址拒绝和独立 Worker Pool                                                                  |
-| 远程会话票据泄漏或被 AI 使用               | 一次性短期票据绑定用户/浏览器/企业/Host/ManagedAccount/动作/DataScope/授权版本；AI、Card、Automation、Sandbox 不可获取；MFA/JIT/审批、录像与强制终止 |
+| 远程会话票据泄漏或被 AI 使用               | 一次性短期票据绑定用户/浏览器/企业/Host/ManagedAccount/动作/DataScope/授权版本；AI、Card、Sandbox 不可获取；MFA/JIT/审批、录像与强制终止 |
 | 功能权限被误当作 root/任意账号访问         | RoleBinding 只授予功能能力；DataScope 和 RemoteAccessGrant 独立限定 Host、ManagedAccount、协议、动作和有效期                                         |
 | 交互式 Shell 绕过 Tool 两阶段确认          | 明确划分人工堡垒会话与 AI Tool；人工会话使用独立权限、理由、审批、时长、剪贴板/文件策略、录像和命令审计                                              |
-| 平台自动化借人工终端执行未审计命令         | RemoteAccessSession 与 Execution/ConnectorCommand 使用不同票据、API、队列和审计；安装配置只执行不可变计划和版本化模板，禁止向人工终端注入命令        |
+| 后台任务借人工终端执行未审计命令           | RemoteAccessSession 与 Execution/ConnectorCommand 使用不同票据、API、队列和审计；安装配置只执行不可变计划和版本化模板，禁止向人工终端注入命令        |
 | Sandbox 横向访问生产环境                   | 默认断网或受限出网，生产访问必须通过受控 Tool 和 Connector                                                                                           |
 | 用户双击或网络重试                         | 幂等键、Action Binding 状态机、按钮即时禁用                                                                                                          |
 | Leaf Collector 伪造其他主机身份            | Leaf 独立凭证或 mTLS，Edge Gateway 根据认证结果写入可信资源 ID                                                                                       |
@@ -184,7 +184,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 - 长任务、重试、暂停和恢复。
 - 企业级 交互卡片 发布和治理。
 - 高危生产操作的增强审批。
-- ServiceAccount 绑定企业、Tool 与 DataScope 的定时自动化、AuthorizationVersion 撤权和单管理员受控 Break Glass。
+- ServiceAccount、Tool 与 DataScope 的受控后台执行、AuthorizationVersion 撤权和单管理员受控 Break Glass；当前版本不提供定时无人值守任务。
 
 完成标准：AI 能够在受控范围内完成“发现问题—获取证据—生成计划—用户批准—执行—验证”的完整闭环。
 
@@ -223,5 +223,5 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 6. 生产 Tool 完成 Preview 后撤销 RoleBinding/DataScope、修改授权敏感标签或递增 AuthorizationVersion，Commit 必须失败并要求重新 Preview。
 7. 远程会话票据签发后撤销 Grant，未使用票据立即失败，活动会话按策略终止并产生审计。
 8. Approval 不能补齐缺失的 Role/DataScope/Tool/资源权限；创建人不能满足非本人审批，Break Glass 必须绑定单个操作并完整审计。
-9. Automation 以 ServiceAccount 当前 Tool/DataScope 权限执行，创建人后续权限不影响其身份边界，也不能消费人工会话票据。
+9. ServiceAccount 仅能按当前 Tool/DataScope 权限调用受控服务；审批不能补齐缺失权限，也不能消费人工会话票据。
 10. Collector 自报伪造 EnterpriseId、ResourceId 或 CollectorId 时被覆盖或拒绝，超出授权资源范围的遥测查询不返回记录。

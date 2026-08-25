@@ -19,7 +19,6 @@ var splitWorkerDeployments = []string{
 	"argus-worker-agent",
 	"argus-worker-action",
 	"argus-worker-compaction",
-	"argus-worker-automation",
 	"argus-worker-sandbox",
 }
 
@@ -365,7 +364,7 @@ func TestSplitWorkerNetworkPoliciesRemainProfileSpecific(t *testing.T) {
 				t.Fatal("sandbox Worker lost OpenSandbox egress")
 			}
 			telemetry := requireResource(t, policies, "argus-telemetry-query")
-			for _, name := range []string{"argus-worker-agent", "argus-worker-automation"} {
+			for _, name := range []string{"argus-worker-agent"} {
 				if !networkPolicyIngressAllowsPod(telemetry, name) {
 					t.Fatalf("Telemetry Query ingress does not allow %s", name)
 				}

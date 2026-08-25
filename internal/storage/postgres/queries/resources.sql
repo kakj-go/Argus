@@ -125,6 +125,28 @@ WHERE a.action_ref = $1 AND t.enterprise_id = $2 FOR UPDATE;
 -- name: ListPendingActions :many
 SELECT * FROM pending_actions WHERE enterprise_id = $1 ORDER BY created_at DESC, id DESC;
 
+-- name: ListPendingActionsByCreator :many
+SELECT * FROM pending_actions
+WHERE enterprise_id = $1 AND creator_subject_type = 'user' AND creator_subject_id = $2
+ORDER BY created_at DESC, id DESC;
+
+-- name: ListPendingActionsForApprover :many
+SELECT DISTINCT action.* FROM pending_actions action
+JOIN approval_requests request ON request.pending_action_id = action.id
+JOIN approval_requirement_snapshots requirement ON requirement.approval_request_id = request.id
+JOIN role_bindings binding ON binding.enterprise_id = action.enterprise_id
+  AND binding.subject_type = 'user' AND binding.subject_id = $2
+  AND binding.status = 'active' AND binding.role_id = ANY(requirement.approver_role_ids)
+WHERE action.enterprise_id = $1
+  AND action.status = 'awaiting_approval'
+  AND request.status = 'pending'
+  AND requirement.status = 'pending'
+  AND (binding.valid_from IS NULL OR binding.valid_from <= now())
+  AND (binding.valid_until IS NULL OR binding.valid_until > now())
+  AND (requirement.separation_of_duty = false OR action.creator_subject_id <> $2)
+  AND request.expires_at > now()
+ORDER BY action.created_at DESC, action.id DESC;
+
 -- name: MarkPendingActionExecuting :one
 UPDATE pending_actions SET status = 'executing', updated_at = now()
 WHERE id = $1 AND enterprise_id = $2 AND status = 'awaiting_confirmation' AND expires_at > now() RETURNING *;

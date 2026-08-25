@@ -2,11 +2,35 @@ import { describe, expect, it } from "vitest";
 import {
   apiErrorField,
   formatApiError,
+  formatErrorCode,
   presentApiFormError,
+  setApiErrorTranslator,
 } from "./error-presentation";
 import { ApiError } from "./transport/errors";
 
 describe("API error presentation", () => {
+  it("translates stable error codes before using the fallback", () => {
+    setApiErrorTranslator((code) =>
+      code === "REMOTE_ACCESS_GRANT_REQUIRED" ? "Remote access grant is required." : undefined,
+    );
+    const error = new ApiError(
+      {
+        code: "REMOTE_ACCESS_GRANT_REQUIRED",
+        message_key: "errors.remote_access.grant_required",
+        request_id: "request-grant",
+        retryable: false,
+      },
+      403,
+    );
+    expect(formatApiError(error, "Fallback", (id) => `Request ID: ${id}`)).toBe(
+      "Remote access grant is required. Request ID: request-grant",
+    );
+    expect(formatErrorCode("REMOTE_ACCESS_GRANT_REQUIRED", "Fallback")).toBe(
+      "Remote access grant is required.",
+    );
+    setApiErrorTranslator(undefined);
+  });
+
   it("uses only the public server message and request reference", () => {
     const error = new ApiError(
       {

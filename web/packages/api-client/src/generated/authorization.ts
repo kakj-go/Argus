@@ -50,6 +50,7 @@ export interface components {
             description?: string;
             resource_types: ("host" | "kubernetes_cluster" | "kubernetes_namespace")[];
             explicit_resource_ids: string[];
+            match_all?: boolean;
             label_selector?: components["schemas"]["LabelSelector"];
             /** @enum {string} */
             status: "active" | "disabled";

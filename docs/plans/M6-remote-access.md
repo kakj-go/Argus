@@ -2,7 +2,7 @@
 
 ## 目标
 
-交付与 Agent、Card、Automation、PendingAction 和 Execution 完全隔离的人工远程访问闭环：
+交付与 Agent、Card、PendingAction 和 Execution 完全隔离的人工远程访问闭环：
 
 `RemoteAccessGrant → AccessRequest/Approval → AccessLease → Session/Ticket → SSH/WinRS → 录像/终止/撤权`
 
@@ -33,7 +33,7 @@ M6 只达到 Evaluation 完成标准。M8 已补齐本地 TOTP/Step-up、OpenBao
 - Gateway peer 通过 Kubernetes API 获取 Ready owner Pod IP；ServiceAccount 只有同 Namespace Pod `get` 权限，peer 使用固定 mTLS 服务身份。
 - ObjectStore 单次调用有 3 秒边界；连续不可用 30 秒或缓冲超过 4 MiB 时会话 fail closed。
 - 录像只在内存中短暂缓冲，密文分片写入 S3-compatible ObjectStore；PostgreSQL 保存索引、Hash Chain 和命令哈希，不保存终端明文。
-- 剪贴板、文件、分享和端口转发均关闭；RemoteAccessTicket 永不提供给 Agent、Card、Automation 或 Sandbox。
+- 剪贴板、文件、分享和端口转发均关闭；RemoteAccessTicket 永不提供给 Agent、Card 或 Sandbox。
 
 ## 验收证据
 

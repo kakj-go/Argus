@@ -20,7 +20,8 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if cfg.Spec.Profile == "production" {
 		return fmt.Errorf("production install blocked: POSTGRES_HA_ADR_REQUIRED; SANDBOX_RUNTIME_ADR_REQUIRED")
 	}
-	if _, err := a.buildPreflight(ctx, cfg); err != nil {
+	preflight, err := a.buildPreflight(ctx, cfg)
+	if err != nil {
 		return err
 	}
 	root, err := findRepoRoot(filepath.Dir(cfg.path))
@@ -37,10 +38,13 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err != nil {
 		return err
 	}
-	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-foundation", "default", foundation, foundationValues(cfg)); err != nil {
+	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-foundation", "default", foundation, foundationValues(cfg, preflight.Network)); err != nil {
 		return err
 	}
 	if err := clients.setStage(ctx, cfg, "foundation", "complete", "namespaces and baseline policies installed"); err != nil {
+		return err
+	}
+	if err := clients.setNetworkProfile(ctx, cfg, preflight.Network); err != nil {
 		return err
 	}
 	if err := ensureCertManager(ctx, clients, helm); err != nil {
@@ -116,7 +120,7 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err := clients.setStage(ctx, cfg, "data", "running", "installing PostgreSQL, Redis, MinIO, Kafka, Keeper and ClickHouse"); err != nil {
 		return err
 	}
-	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-data", cfg.Spec.Namespaces.System, dataChart, dataValues(cfg, credentials)); err != nil {
+	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-data", cfg.Spec.Namespaces.System, dataChart, dataValues(cfg, credentials, preflight.Network)); err != nil {
 		return err
 	}
 	if err := waitForData(ctx, clients, cfg); err != nil {
@@ -168,7 +172,7 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err := clients.setStage(ctx, cfg, "telemetry-pipeline", "running", "installing ClickHouse migration and Kafka topics"); err != nil {
 		return err
 	}
-	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-telemetry-pipeline", cfg.Spec.Namespaces.Observability, telemetryChart, telemetryValues(cfg)); err != nil {
+	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-telemetry-pipeline", cfg.Spec.Namespaces.Observability, telemetryChart, telemetryValues(cfg, preflight.Network)); err != nil {
 		return err
 	}
 	if err := waitForJob(ctx, clients, cfg.Spec.Namespaces.Observability, "argus-clickhouse-telemetry-migration", 10*time.Minute); err != nil {
@@ -209,7 +213,7 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err := clients.setStage(ctx, cfg, "platform", "running", "installing migrations and platform roles"); err != nil {
 		return err
 	}
-	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-platform", cfg.Spec.Namespaces.System, platformChart, platformValues(cfg, credentials, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK)); err != nil {
+	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-platform", cfg.Spec.Namespaces.System, platformChart, platformValues(cfg, credentials, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK, preflight.Network)); err != nil {
 		return err
 	}
 	if err := waitForPlatform(ctx, clients, cfg); err != nil {
@@ -235,17 +239,26 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	return nil
 }
 
-func foundationValues(cfg *InstallConfig) map[string]any {
-	return map[string]any{"releaseId": cfg.Spec.ReleaseID, "namespaces": namespacesValues(cfg)}
+func foundationValues(cfg *InstallConfig, profiles ...NetworkProfile) map[string]any {
+	network := NetworkProfile{}
+	if len(profiles) > 0 {
+		network = profiles[0]
+	}
+	return map[string]any{"releaseId": cfg.Spec.ReleaseID, "namespaces": namespacesValues(cfg), "network": networkValues(network)}
 }
 
 func namespacesValues(cfg *InstallConfig) map[string]any {
 	return map[string]any{"system": cfg.Spec.Namespaces.System, "sandbox": cfg.Spec.Namespaces.Sandbox, "observability": cfg.Spec.Namespaces.Observability}
 }
 
-func dataValues(cfg *InstallConfig, secrets map[string]string) map[string]any {
+func dataValues(cfg *InstallConfig, secrets map[string]string, profiles ...NetworkProfile) map[string]any {
+	network := NetworkProfile{}
+	if len(profiles) > 0 {
+		network = profiles[0]
+	}
 	return map[string]any{
 		"releaseId":    cfg.Spec.ReleaseID,
+		"network":      networkValues(network),
 		"namespaces":   map[string]any{"system": cfg.Spec.Namespaces.System, "observability": cfg.Spec.Namespaces.Observability},
 		"storageClass": cfg.Spec.StorageClass,
 		"images": map[string]any{
@@ -281,7 +294,11 @@ func dataValues(cfg *InstallConfig, secrets map[string]string) map[string]any {
 	}
 }
 
-func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK string) map[string]any {
+func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK string, profiles ...NetworkProfile) map[string]any {
+	network := NetworkProfile{}
+	if len(profiles) > 0 {
+		network = profiles[0]
+	}
 	allowedOrigins := []any{
 		"http://localhost:4173",
 		"http://localhost:4174",
@@ -329,6 +346,7 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"otelcolKubernetesImage": cfg.Image("argus-otelcol"),
 		"allowedOrigins":         allowedOrigins, "secureCookies": secureCookies,
 		"keyWrappingMode": "local_test", "breakGlassEnabled": false, "platformMfaRequired": cfg.Spec.Security.PlatformMFARequired, "databaseRolesEnabled": false,
+		"directDeniedCidrs": protectedPrefixes(network),
 	}
 	if cfg.Spec.Profile == "local-hardening" {
 		runtimeValues["keyWrappingMode"] = "openbao_transit"
@@ -352,8 +370,25 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"releaseId": cfg.Spec.ReleaseID, "profile": cfg.Spec.Profile, "namespaces": namespacesValues(cfg), "replicas": 1, "setupTokenSecretName": setupSecret,
 		"images":  map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
 		"runtime": runtimeValues,
+		"network": networkValues(network),
 		"production": map[string]any{"hosts": map[string]any{"enterprise": cfg.Spec.Exposure.EnterpriseHost,
 			"platform": cfg.Spec.Exposure.PlatformHost, "connector": cfg.Spec.Exposure.ConnectorHost}},
+	}
+}
+
+func networkValues(profile NetworkProfile) map[string]any {
+	policySupported := profile.Policy.APISupported
+	if profile.Policy.Enforcement == "" {
+		policySupported = true
+	}
+	return map[string]any{
+		"policyApiSupported": policySupported,
+		"policyEnforcement":  profile.Policy.Enforcement,
+		"egressMode":         profile.Egress.Mode,
+		"egressStatus":       profile.Egress.Status,
+		"egressProvider":     profile.Egress.DetectedProvider,
+		"protectedCidrs":     protectedPrefixes(profile),
+		"protectedAddresses": profile.ProtectedTargets.Addresses,
 	}
 }
 
@@ -428,9 +463,14 @@ func sandboxValues(cfg *InstallConfig, apiKey string) map[string]any {
 	}
 }
 
-func telemetryValues(cfg *InstallConfig) map[string]any {
+func telemetryValues(cfg *InstallConfig, profiles ...NetworkProfile) map[string]any {
+	network := NetworkProfile{}
+	if len(profiles) > 0 {
+		network = profiles[0]
+	}
 	return map[string]any{
 		"releaseId": cfg.Spec.ReleaseID, "namespace": cfg.Spec.Namespaces.Observability,
+		"network":    networkValues(network),
 		"images":     map[string]any{"clickhouse": "clickhouse/clickhouse-server:26.3.17.110-alpine"},
 		"clickhouse": map[string]any{"endpoint": "tcp://argus-clickhouse-client:9000"},
 		"kafka":      map[string]any{"brokers": "argus-kafka-kafka-bootstrap:9092"},
@@ -651,7 +691,6 @@ func expectedWorkerDeployments(profile string) []string {
 		"argus-worker-agent",
 		"argus-worker-action",
 		"argus-worker-compaction",
-		"argus-worker-automation",
 		"argus-worker-sandbox",
 	}
 }

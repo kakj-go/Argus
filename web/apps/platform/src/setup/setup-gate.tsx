@@ -26,7 +26,6 @@ import {
   Wizard,
   type WizardStep,
 } from "@argus/ui";
-import { usePlatformAuthStore } from "@argus/auth";
 import { StepReview } from "./step-review";
 import { StepSystem } from "./step-system";
 import { setupCredentialStore } from "./setup-credential";
@@ -237,22 +236,9 @@ export function PlatformSetupGate({
 }
 
 function InitializedPlatformEntry({ children }: { children: ReactNode }) {
-  const session = usePlatformAuthStore.getState().session;
-  const shouldOpenLogin = !session && window.location.pathname !== "/login";
-  const [ready, setReady] = useState(!shouldOpenLogin);
-
-  useEffect(() => {
-    if (!shouldOpenLogin) return;
-    window.history.replaceState(null, "", "/login");
-    setReady(true);
-  }, [shouldOpenLogin]);
-
-  if (!ready) {
-    return (
-      <main className="argus-auth-state">
-        <LoaderCircle aria-hidden className="argus-spin" size={20} />
-      </main>
-    );
-  }
+  // AuthProvider must restore the persisted session before the router decides
+  // whether the current URL needs a login redirect. Rewriting the URL here
+  // would race that restore on a hard refresh and strand authenticated users
+  // on /login.
   return <>{children}</>;
 }

@@ -252,7 +252,13 @@ pending_action_collection:
   get:
     operationId: listPendingActions
     summary: List resource-management Pending Actions.
-    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
+    parameters:
+      - {$ref: "#/components/parameters/Cursor"}
+      - {$ref: "#/components/parameters/Limit"}
+      - {name: scope, in: query, required: false, schema: {type: string, enum: [mine, created, all], default: all}}
+      - {name: status, in: query, required: false, style: form, explode: true, schema: {type: array, items: {type: string, enum: [prepared, awaiting_confirmation, awaiting_approval, ready, executing, succeeded, failed, result_unknown, cancelled, expired, rejected, invalidated]}}}
+      - {name: risk, in: query, required: false, style: form, explode: true, schema: {type: array, items: {type: string, enum: [read, write, dangerous, critical]}}}
+      - {name: query, in: query, required: false, schema: {type: string, maxLength: 256}}
     responses:
       "200":
         description: Pending Action page.

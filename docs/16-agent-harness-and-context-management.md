@@ -330,12 +330,11 @@ OpenAI Responses Compaction、Anthropic Server-side Compaction 或 Context Editi
 - Token 预算、自动/手动 Compaction 和恢复。
 - Provider-neutral ContextAssembler。
 - OpenAI Compatible `chat_completions` 与 `responses` 双 Adapter，模型 Revision 固定协议且不自动回退。
-- `agent`、`action`、`compaction`、`automation`、`sandbox` 五个 PostgreSQL Task Worker Pool。
+- `agent`、`action`、`compaction`、`sandbox` 四个 PostgreSQL Task Worker Pool。
 - Worker 进程内可信 Tool Registry/Gateway；`.commit` 仅注册到隐藏 Catalog 并要求 `action_executor` 身份。
 - 首批 Catalog 覆盖 Host、Connector、PendingAction、Kubernetes Cluster/Namespace/Node/Pod/Deployment/StatefulSet/DaemonSet/Service/Pod Logs 查询，以及 Host/Kubernetes create/update/delete Preview；所有输入先通过严格 Schema 和权限门禁。
 - Agent 注入可信 `run_id` 并贯穿 PendingAction/Execution；Action 终态只恢复同一 Run 的 Verify Task，浏览器和模型不能自报该关联。
-- MCP 内部调用将真实 Agent `run_id` 与可信 `invocation_id` 分开：前者只用于 Agent Run 归属和恢复，后者用于 Tool 调用幂等。Automation 使用 AutomationRun ID 作为 `invocation_id`，不得伪造 Agent Run。
-- Automation 使用不可变 Revision，AutomationRun 固定绑定触发时版本，后续编辑不改变已创建 Run。
+- MCP 内部调用将真实 Agent `run_id` 与可信 `invocation_id` 分开：前者只用于 Agent Run 归属和恢复，后者用于 Tool 调用幂等。PendingAction 与 Execution 必须可信关联到真实 Agent Run。
 
 延后：
 
@@ -359,7 +358,7 @@ OpenAI Responses Compaction、Anthropic Server-side Compaction 或 Context Editi
 9. 授权变化后旧 Snapshot 不能恢复已撤销 Tool 或资源权限。
 10. 同一输入状态生成稳定 Projection Hash，不同 Provider Adapter 获得等价业务语义。
 11. 公开 Run 返回终止 `stop_reason` 和稳定 `error_code`；额度耗尽必须可从 API 观察为 `MODEL_QUOTA_EXCEEDED`。
-12. AutomationRevision、AutomationRun、PendingAction 和 Execution 状态一致；ResultUnknown 未获得外部终态前不得重放副作用。
+12. Agent Run、PendingAction 和 Execution 状态一致；ResultUnknown 未获得外部终态前不得重放副作用。
 
 当前实现将 `length`、`max_tokens`、Responses `incomplete`、内容过滤、失败和取消统一视为不可执行 Tool 的停止原因。流式参数即使已部分拼接，也只能在完整 JSON、通过 Tool Schema/领域校验且停止原因允许时进入 Registry。
 

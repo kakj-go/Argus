@@ -2,8 +2,11 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -11,6 +14,7 @@ import (
 	actionapi "github.com/kakj-go/Argus/internal/gen/openapi/actionapi"
 	connectionapi "github.com/kakj-go/Argus/internal/gen/openapi/connectionapi"
 	"github.com/kakj-go/Argus/internal/identity"
+	"github.com/kakj-go/Argus/internal/pagination"
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
@@ -49,22 +53,91 @@ type ResourceActionHandler struct {
 	Identity EnterpriseIdentityHandler
 	Service  resource.Service
 	Workflow actionservice.Service
+	Cursor   pagination.Signer
 }
 
-func (handler ResourceActionHandler) ListPendingActions(ctx context.Context, _ actionapi.ListPendingActionsRequestObject) (actionapi.ListPendingActionsResponseObject, error) {
+func (handler ResourceActionHandler) ListPendingActions(ctx context.Context, request actionapi.ListPendingActionsRequestObject) (actionapi.ListPendingActionsResponseObject, error) {
 	p, apiError := handler.auth(ctx, false, "", "pending_action.read")
 	if apiError != nil {
 		return actionapi.ListPendingActionsdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
 	}
-	items, err := handler.Service.Actions.List(ctx, p.EnterpriseIDValue())
+	var items []db.PendingAction
+	var err error
+	if request.Params.Scope != nil {
+		switch *request.Params.Scope {
+		case actionapi.Created:
+			items, err = handler.Service.Actions.ListCreated(ctx, p.EnterpriseIDValue(), p.ActorID())
+		case actionapi.Mine:
+			items, err = handler.Service.Actions.ListMine(ctx, p.EnterpriseIDValue(), p.ActorID())
+		default:
+			items, err = handler.Service.Actions.List(ctx, p.EnterpriseIDValue())
+		}
+	} else {
+		items, err = handler.Service.Actions.List(ctx, p.EnterpriseIDValue())
+	}
+	if err == nil {
+		if request.Params.Status != nil && len(*request.Params.Status) > 0 {
+			allowed := make(map[string]struct{}, len(*request.Params.Status))
+			for _, value := range *request.Params.Status {
+				allowed[string(value)] = struct{}{}
+			}
+			filtered := items[:0]
+			for _, item := range items {
+				if _, ok := allowed[item.Status]; ok {
+					filtered = append(filtered, item)
+				}
+			}
+			items = filtered
+		}
+		if request.Params.Risk != nil && len(*request.Params.Risk) > 0 {
+			allowed := make(map[string]struct{}, len(*request.Params.Risk))
+			for _, value := range *request.Params.Risk {
+				allowed[string(value)] = struct{}{}
+			}
+			filtered := items[:0]
+			for _, item := range items {
+				if _, ok := allowed[item.Risk]; ok {
+					filtered = append(filtered, item)
+				}
+			}
+			items = filtered
+		}
+		if request.Params.Query != nil && strings.TrimSpace(*request.Params.Query) != "" {
+			needle := strings.ToLower(strings.TrimSpace(*request.Params.Query))
+			filtered := items[:0]
+			for _, item := range items {
+				if strings.Contains(strings.ToLower(item.Title), needle) || strings.Contains(strings.ToLower(item.Summary), needle) {
+					filtered = append(filtered, item)
+				}
+			}
+			items = filtered
+		}
+	}
 	if err != nil {
 		return actionapi.ListPendingActionsdefaultJSONResponse{Body: actionError(ctx, err), StatusCode: resourceStatus(err)}, nil
+	}
+	items, err = handler.filterVisiblePendingActions(ctx, p, items)
+	if err != nil {
+		return actionapi.ListPendingActionsdefaultJSONResponse{Body: actionError(ctx, err), StatusCode: http.StatusInternalServerError}, nil
+	}
+	binding := enterpriseCursorBinding(p, map[string]any{
+		"scope":  request.Params.Scope,
+		"status": request.Params.Status,
+		"risk":   request.Params.Risk,
+		"query":  request.Params.Query,
+	}, "created_at_desc")
+	items, next, hasMore, err := paginate(handler.Cursor, items, cursorValue(request.Params.Cursor), listLimit(request.Params.Limit), binding, func(value db.PendingAction) pageKey {
+		return pageKey{Time: value.CreatedAt.Time, ID: value.ID.String()}
+	})
+	if err != nil {
+		code, key, status := paginationError(err)
+		return actionapi.ListPendingActionsdefaultJSONResponse{Body: actionapi.ApiError{Code: code, MessageKey: key, RequestId: requestID(ctx), Retryable: retryablePointer(code == "CURSOR_EXPIRED")}, StatusCode: status}, nil
 	}
 	converted := make([]actionapi.PendingActionPublicSchema, 0, len(items))
 	for _, item := range items {
 		converted = append(converted, convertPending[actionapi.PendingActionPublicSchema](item))
 	}
-	return actionapi.ListPendingActions200JSONResponse{Items: converted, Page: emptyActionPage()}, nil
+	return actionapi.ListPendingActions200JSONResponse{Items: converted, Page: actionapi.CursorPage{NextCursor: next, HasMore: hasMore, Partial: emptyActionPage().Partial}}, nil
 }
 
 func (handler ResourceActionHandler) GetPendingAction(ctx context.Context, request actionapi.GetPendingActionRequestObject) (actionapi.GetPendingActionResponseObject, error) {
@@ -76,7 +149,73 @@ func (handler ResourceActionHandler) GetPendingAction(ctx context.Context, reque
 	if err != nil {
 		return actionapi.GetPendingActiondefaultJSONResponse{Body: actionError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}
+	visible, visibilityErr := handler.pendingActionVisible(ctx, p, value)
+	if visibilityErr != nil {
+		return actionapi.GetPendingActiondefaultJSONResponse{Body: actionError(ctx, visibilityErr), StatusCode: http.StatusInternalServerError}, nil
+	}
+	if !visible {
+		return actionapi.GetPendingActiondefaultJSONResponse{Body: actionapi.ApiError{Code: "RESOURCE_NOT_FOUND", MessageKey: "errors.common.resource_not_found", RequestId: requestID(ctx)}, StatusCode: http.StatusNotFound}, nil
+	}
 	return actionapi.GetPendingAction200JSONResponse(convertPending[actionapi.PendingActionPublicSchema](value)), nil
+}
+
+func (handler ResourceActionHandler) filterVisiblePendingActions(ctx context.Context, principal identity.Principal, items []db.PendingAction) ([]db.PendingAction, error) {
+	visible := make([]db.PendingAction, 0, len(items))
+	for _, item := range items {
+		ok, err := handler.pendingActionVisible(ctx, principal, item)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			visible = append(visible, item)
+		}
+	}
+	return visible, nil
+}
+
+func (handler ResourceActionHandler) pendingActionVisible(ctx context.Context, principal identity.Principal, item db.PendingAction) (bool, error) {
+	if slices.Contains(principal.Permissions, "*") ||
+		(item.CreatorSubjectType == "user" && item.CreatorSubjectID.String() == principal.ActorID()) {
+		return true, nil
+	}
+	if !item.ResourceID.Valid || item.ResourceType == "" {
+		return false, nil
+	}
+	labels := map[string]string{}
+	var err error
+	switch item.ResourceType {
+	case "host":
+		value, getErr := handler.Service.Store.Queries.GetHost(ctx, db.GetHostParams{ID: item.ResourceID.UUID, EnterpriseID: principal.EnterpriseIDValue()})
+		err = getErr
+		if err == nil {
+			labels, err = resource.DecodeLabels(value.Labels)
+		}
+	case "kubernetes_cluster":
+		value, getErr := handler.Service.Store.Queries.GetKubernetesCluster(ctx, db.GetKubernetesClusterParams{ID: item.ResourceID.UUID, EnterpriseID: principal.EnterpriseIDValue()})
+		err = getErr
+		if err == nil {
+			labels, err = resource.DecodeLabels(value.Labels)
+		}
+	default:
+		return false, nil
+	}
+	if err != nil {
+		var preview map[string]any
+		if json.Unmarshal(item.Preview, &preview) == nil {
+			if raw, ok := preview["labels"].(map[string]any); ok {
+				labels = make(map[string]string, len(raw))
+				for key, value := range raw {
+					if text, ok := value.(string); ok {
+						labels[key] = text
+					}
+				}
+			}
+		} else {
+			return false, err
+		}
+	}
+	allowed, _, accessErr := handler.Service.Access.CanAccess(ctx, principal.EnterpriseIDValue(), principal.DataScopeIDs, item.ResourceType, item.ResourceID.UUID.String(), labels)
+	return allowed, accessErr
 }
 
 func (handler ResourceActionHandler) CancelPendingAction(ctx context.Context, request actionapi.CancelPendingActionRequestObject) (actionapi.CancelPendingActionResponseObject, error) {

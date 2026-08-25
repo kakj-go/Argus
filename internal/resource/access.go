@@ -75,7 +75,7 @@ func (service AccessService) loadScopes(ctx context.Context, enterpriseID uuid.U
 			selector = append(selector, scope.LabelSelector...)
 		}
 		result = append(result, authorization.Scope{ID: scope.ID.String(), EnterpriseID: scope.EnterpriseID.String(), ResourceTypes: scope.ResourceTypes,
-			ExplicitResourceIDs: scope.ExplicitResourceIds, LabelSelector: selector, Status: scope.Status})
+			ExplicitResourceIDs: scope.ExplicitResourceIds, LabelSelector: selector, MatchAll: scope.MatchAll, Status: scope.Status})
 	}
 	return result, nil
 }

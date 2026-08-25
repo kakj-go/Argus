@@ -1197,6 +1197,138 @@ func (q *Queries) ListPendingActions(ctx context.Context, enterpriseID uuid.UUID
 	return items, nil
 }
 
+const listPendingActionsByCreator = `-- name: ListPendingActionsByCreator :many
+SELECT id, action_ref, enterprise_id, creator_subject_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at, creator_subject_type, run_id, confirmation_required, policy_snapshot_hash FROM pending_actions
+WHERE enterprise_id = $1 AND creator_subject_type = 'user' AND creator_subject_id = $2
+ORDER BY created_at DESC, id DESC
+`
+
+type ListPendingActionsByCreatorParams struct {
+	EnterpriseID     uuid.UUID `json:"enterprise_id"`
+	CreatorSubjectID uuid.UUID `json:"creator_subject_id"`
+}
+
+func (q *Queries) ListPendingActionsByCreator(ctx context.Context, arg ListPendingActionsByCreatorParams) ([]PendingAction, error) {
+	rows, err := q.db.Query(ctx, listPendingActionsByCreator, arg.EnterpriseID, arg.CreatorSubjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PendingAction{}
+	for rows.Next() {
+		var i PendingAction
+		if err := rows.Scan(
+			&i.ID,
+			&i.ActionRef,
+			&i.EnterpriseID,
+			&i.CreatorSubjectID,
+			&i.AuthorizationVersion,
+			&i.ActionType,
+			&i.Title,
+			&i.Summary,
+			&i.Risk,
+			&i.Preview,
+			&i.Diff,
+			&i.Status,
+			&i.ResourceType,
+			&i.ResourceID,
+			&i.ExpectedResourceVersion,
+			&i.ImpactHash,
+			&i.ResultResourceType,
+			&i.ResultResourceID,
+			&i.ResultResourceVersion,
+			&i.ResultSummary,
+			&i.ErrorCode,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CreatorSubjectType,
+			&i.RunID,
+			&i.ConfirmationRequired,
+			&i.PolicySnapshotHash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingActionsForApprover = `-- name: ListPendingActionsForApprover :many
+SELECT DISTINCT action.id, action.action_ref, action.enterprise_id, action.creator_subject_id, action.authorization_version, action.action_type, action.title, action.summary, action.risk, action.preview, action.diff, action.status, action.resource_type, action.resource_id, action.expected_resource_version, action.impact_hash, action.result_resource_type, action.result_resource_id, action.result_resource_version, action.result_summary, action.error_code, action.expires_at, action.created_at, action.updated_at, action.creator_subject_type, action.run_id, action.confirmation_required, action.policy_snapshot_hash FROM pending_actions action
+JOIN approval_requests request ON request.pending_action_id = action.id
+JOIN approval_requirement_snapshots requirement ON requirement.approval_request_id = request.id
+JOIN role_bindings binding ON binding.enterprise_id = action.enterprise_id
+  AND binding.subject_type = 'user' AND binding.subject_id = $2
+  AND binding.status = 'active' AND binding.role_id = ANY(requirement.approver_role_ids)
+WHERE action.enterprise_id = $1
+  AND action.status = 'awaiting_approval'
+  AND request.status = 'pending'
+  AND requirement.status = 'pending'
+  AND (binding.valid_from IS NULL OR binding.valid_from <= now())
+  AND (binding.valid_until IS NULL OR binding.valid_until > now())
+  AND (requirement.separation_of_duty = false OR action.creator_subject_id <> $2)
+  AND request.expires_at > now()
+ORDER BY action.created_at DESC, action.id DESC
+`
+
+type ListPendingActionsForApproverParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	SubjectID    uuid.UUID `json:"subject_id"`
+}
+
+func (q *Queries) ListPendingActionsForApprover(ctx context.Context, arg ListPendingActionsForApproverParams) ([]PendingAction, error) {
+	rows, err := q.db.Query(ctx, listPendingActionsForApprover, arg.EnterpriseID, arg.SubjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PendingAction{}
+	for rows.Next() {
+		var i PendingAction
+		if err := rows.Scan(
+			&i.ID,
+			&i.ActionRef,
+			&i.EnterpriseID,
+			&i.CreatorSubjectID,
+			&i.AuthorizationVersion,
+			&i.ActionType,
+			&i.Title,
+			&i.Summary,
+			&i.Risk,
+			&i.Preview,
+			&i.Diff,
+			&i.Status,
+			&i.ResourceType,
+			&i.ResourceID,
+			&i.ExpectedResourceVersion,
+			&i.ImpactHash,
+			&i.ResultResourceType,
+			&i.ResultResourceID,
+			&i.ResultResourceVersion,
+			&i.ResultSummary,
+			&i.ErrorCode,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CreatorSubjectType,
+			&i.RunID,
+			&i.ConfirmationRequired,
+			&i.PolicySnapshotHash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markConnectorConnectionTestRunning = `-- name: MarkConnectorConnectionTestRunning :one
 UPDATE connection_tests SET status = 'running', updated_at = now()
 WHERE id = $1 AND enterprise_id = $2 AND path = 'connector' AND status = 'queued' AND expires_at > now()

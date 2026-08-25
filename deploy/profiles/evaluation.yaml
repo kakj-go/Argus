@@ -20,6 +20,11 @@ spec:
     mode: port-forward
   security:
     platformMfaRequired: false
+  network:
+    mode: auto
+    egress:
+      expectedIPs: []
+      verificationURL: ""
   openSandbox:
     runtimeClassName: ""
     allowSharedRuntime: true

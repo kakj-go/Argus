@@ -14,14 +14,14 @@ Policy：当前环境、风险和上下文是否允许，或需要满足哪些�
 示例：用户拥有主机操作能力，DataScope 只包含 `environment=staging` 的 Host；生产重启仍需要显式资源授权和 Step-up MFA 或审批。
 
 ```text
-permission = automation.host.restart
+permission = host.update.preview
 enterprise_id = current_user.enterprise_id
 resource.labels["environment"] = "staging"
 resource in effective_data_scope
 policy obligations satisfied
 ```
 
-权限必须覆盖管理后台、Chatbox、MCP Tool、Card Action、OpenAPI、自动化任务和 Telemetry Query，不能只控制菜单或按钮。
+权限必须覆盖管理后台、Chatbox、MCP Tool、Card Action、OpenAPI、PendingAction 和 Telemetry Query，不能只控制菜单或按钮。
 
 ## 2. 身份和企业隔离
 
@@ -59,7 +59,7 @@ resource_viewer
 resource_approver
 ```
 
-内置角色使用稳定的 `identity_key` 作为授权、API、审计和自动化识别依据，规范英文 `name` 仅作为兼容回退值。Role API 通过 `builtin_key` 暴露该稳定标识，Web 根据当前 `zh-CN` / `en-US` 语言在展示层解析名称；自定义角色始终显示企业录入的原始名称，不自动翻译。任何客户端和 E2E 均不得依赖内置角色的可见名称进行身份判断。
+内置角色使用稳定的 `identity_key` 作为授权、API、审计和系统识别依据，规范英文 `name` 仅作为兼容回退值。Role API 通过 `builtin_key` 暴露该稳定标识，Web 根据当前 `zh-CN` / `en-US` 语言在展示层解析名称；自定义角色始终显示企业录入的原始名称，不自动翻译。任何客户端和 E2E 均不得依赖内置角色的可见名称进行身份判断。
 
 `enterprise_admin` 是企业控制面管理员，可以管理用户、部门、角色、策略、模型和资源配置，但不自动获得生产 Shell、目标账号、Secret 原值或 AI 生产执行权限。管理员扩大自己的 DataScope 或 RemoteAccessGrant 必须经过 Step-up Authentication 并写入高优先级审计。
 
@@ -85,12 +85,15 @@ DataScope
 ├── name / description
 ├── resource_types: host | kubernetes_cluster | ...
 ├── explicit_resource_ids[]
+├── match_all
 ├── label_selector
 ├── status / version
 └── created_by / created_at / updated_at
 ```
 
 DataScope 可以直接绑定 User、Department、ServiceAccount，或由 RoleBinding 引用。最终资源范围取有效允许范围的并集，再与 Policy 拒绝和请求过滤做逻辑与。第一版不实现任意层级资产树、跨企业资源共享或通用 ReBAC。
+
+`match_all` 是显式的高权限范围开关。启用后，DataScope 匹配其 `resource_types` 下的全部资源，包括创建预览阶段尚未生成持久化 ID 的资源；它不能通过“显式 ID 为空”或“标签选择器为空”隐式触发。`match_all=false` 且没有显式 ID/标签选择器时表示匹配零资源，这也是普通空范围的安全默认值。企业创建时生成的初始企业管理员范围明确设置 `match_all=true`，用于避免资源创建与授权之间的循环依赖；企业管理员仍不因此自动获得生产 Shell、目标账号或 Secret 原值权限。
 
 标签变化可能让资源进入或离开授权范围。只要资源命中任何生效中的授权选择器，标签变更就是授权敏感操作，必须：
 
@@ -151,8 +154,8 @@ host.update
 host.labels.update
 host.connection.test
 host.direct_connect
-automation.command.execute
-automation.template.execute
+host.update.preview
+kubernetes.change.preview
 
 remote_access.request
 remote_access.session.create
@@ -185,7 +188,7 @@ interactive_card.create
 interactive_card.publish
 ```
 
-`remote_access.*` 只面向人工管理 UI/OpenAPI，不注册为 Model Agent 可发现的 MCP Tool。`automation.command.execute` 与 `remote_access.session.create` 是不同能力。
+`remote_access.*` 只面向人工管理 UI/OpenAPI，不注册为 Model Agent 可发现的 MCP Tool。资源写操作统一通过 PendingAction、Approval 和 Execution 链路，不能获得人工远程会话票据。
 
 ## 5. 远程访问授权和 Managed Account
 
@@ -241,7 +244,7 @@ AND time_range_and_query_budget
 
 标签选择器在查询前由授权服务解析为资源范围；ClickHouse 不直接把用户提供的标签表达式当作授权条件。Logs/Traces 中的命令行、环境变量、HTTP Header、SQL 和业务字段在进入模型上下文、浏览器或 Card 前完成字段级脱敏。
 
-## 7. AI、Conversation 和自动化权限
+## 7. AI、Conversation 和操作审批权限
 
 Conversation 和 Run 只绑定服务端确认的 `enterprise_id`，不保存 `project_id`。每次 ToolCall、Run Step、PendingAction 和 Execution 保存目标资源引用、授权版本和资源范围快照。
 
@@ -255,7 +258,7 @@ Model Agent 的有效能力满足：
 
 模型生成的资源 ID 或标签选择器只是候选参数。Tool 返回值必须在进入模型上下文和卡片渲染前完成数据裁剪与字段脱敏；结果因权限被裁剪时可以返回稳定的 `partial` 标记，但不得泄露未授权资源名称和属性。
 
-定时和无人值守 Automation 绑定固定企业的 ServiceAccount、允许 Tool 与 DataScope。每次执行重新检查 ServiceAccount 状态、Tool、目标资源、AuthorizationVersion 和 Policy，不能长期继承创建人的旧权限快照，也不能使用人工 RemoteAccessSession 票据。
+当前版本不提供定时和无人值守任务。ServiceAccount 仅作为受控调用主体，资源写操作仍须经过 PendingAction、Approval 和 Execution 状态机。
 
 ## 8. 统一授权决策
 
@@ -269,7 +272,7 @@ Model Agent 的有效能力满足：
     "user_id": "user-1",
     "authorization_version": 37
   },
-  "action": "automation.host.restart",
+  "action": "host.update.preview",
   "resource": {
     "type": "host",
     "id": "host-1",
@@ -338,7 +341,7 @@ Access Request 与 Action Approval 必须分离。创建人确认不能满足“
 | 已审批未 Commit 操作 | Commit 重新鉴权并拒绝 |
 | 新 Telemetry Query | 立即拒绝 |
 | SSE/WebSocket/Live Tail | 建立、恢复和周期性检查时拒绝并断开 |
-| Automation | 下次执行按 ServiceAccount 当前权限重新判断 |
+| PendingAction | Commit 前重新校验主体、授权版本、审批快照和资源范围 |
 | APIKey | Key 的 AuthorizationVersion 与当前 ServiceAccount 不一致时立即拒绝 |
 
 Redis 可以缓存授权结果和版本，但 PostgreSQL 保存权威授权状态。Redis 不可用时已有 Session 仍从 PostgreSQL 校验，新登录因限流依赖不可用而保守拒绝。短期 Token、APIKey、ActionBinding、游标和会话票据必须绑定 AuthorizationVersion；仅依赖 TTL 不满足生产撤权要求。

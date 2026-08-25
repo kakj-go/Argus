@@ -23,7 +23,6 @@ export type { components as ConnectorapiComponents, paths as ConnectorapiPaths }
 export type { components as ConversationapiComponents, paths as ConversationapiPaths } from "./conversationapi.js";
 export type { components as ModelapiComponents, paths as ModelapiPaths } from "./modelapi.js";
 export type { components as WorkflowapiComponents, paths as WorkflowapiPaths } from "./workflowapi.js";
-export type { components as AutomationapiComponents, paths as AutomationapiPaths } from "./automationapi.js";
 export type { components as SandboxapiComponents, paths as SandboxapiPaths } from "./sandboxapi.js";
 export type { components as CardapiComponents, paths as CardapiPaths } from "./cardapi.js";
 export type { components as RemoteaccessapiComponents, paths as RemoteaccessapiPaths } from "./remoteaccessapi.js";
@@ -165,9 +164,6 @@ export type ApprovalRequestView = import("./workflowapi.js").components["schemas
 export type ApprovalDecisionCreate = import("./workflowapi.js").components["schemas"]["ApprovalDecisionCreate"];
 export type ExecutionPage = import("./workflowapi.js").components["schemas"]["ExecutionPage"];
 export type ActionOneTimeResult = import("./workflowapi.js").components["schemas"]["ActionOneTimeResult"];
-export type Automation = import("./automationapi.js").components["schemas"]["Automation"];
-export type AutomationWrite = import("./automationapi.js").components["schemas"]["AutomationWrite"];
-export type AutomationRun = import("./automationapi.js").components["schemas"]["AutomationRun"];
 export type SandboxBackend = import("./sandboxapi.js").components["schemas"]["SandboxBackend"];
 export type SandboxImage = import("./sandboxapi.js").components["schemas"]["SandboxImage"];
 export type SandboxProfile = import("./sandboxapi.js").components["schemas"]["SandboxProfile"];

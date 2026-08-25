@@ -20,8 +20,6 @@ export const PERMISSION_CATALOG: Array<{
     resource: "host",
     actions: ["read", "create", "update", "connection.test", "direct_connect"],
   },
-  { resource: "automation.command", actions: ["execute"] },
-  { resource: "automation.template", actions: ["execute"] },
   { resource: "remote_access", actions: ["request"] },
   {
     resource: "remote_access.session",

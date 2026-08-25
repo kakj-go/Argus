@@ -46,10 +46,6 @@ const ApprovalsPage = lazyRouteComponent(
   () => import("./pages/approvals-page"),
   "ApprovalsPage",
 );
-const AutomationsPage = lazyRouteComponent(
-  () => import("./pages/automations-page"),
-  "AutomationsPage",
-);
 const SettingsOrgPage = lazyRouteComponent(
   () => import("./pages/settings-org-page"),
   "SettingsOrgPage",
@@ -154,12 +150,13 @@ const tasksRoute = createRoute({
 const approvalsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "/approvals",
+  validateSearch: (search: Record<string, unknown>) => ({
+    approval: search.approval === "remote" ? "remote" : "operation",
+    scope: ["mine", "created", "done"].includes(String(search.scope))
+      ? (String(search.scope) as "mine" | "created" | "done")
+      : "mine",
+  }),
   component: ApprovalsPage,
-});
-const automationsRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: "/automations",
-  component: AutomationsPage,
 });
 const accountRoute = createRoute({
   getParentRoute: () => adminRoute,
@@ -212,7 +209,6 @@ const routeTree = rootRoute.addChildren([
       kubernetesClusterRoute,
       tasksRoute,
       approvalsRoute,
-      automationsRoute,
       accountRoute,
       settingsOrgRoute,
       settingsAiRoute,

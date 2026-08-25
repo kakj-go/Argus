@@ -16,7 +16,7 @@ Argus 必须同时满足两个要求：用户能知道输入为什么失败，�
 | 权限/跨租户拒绝 | `AUTHORIZATION_DENIED` 或对外 404、`request_id`                      | 真实内部判定和主体上下文          | 不泄露目标资源存在性                     |
 | 内部错误        | `INTERNAL_ERROR`、通用文案、`request_id`                             | 原始 error 与相同 request ID      | 不向客户端返回 SQL、堆栈、路径或内部 URL |
 
-`api/contracts/error-codes.yaml` 登记稳定错误码和允许公开的 `safe_params`。未登记的错误码不能从 HTTP handler 发出。前端只展示服务端显式 `message`；任意 JavaScript `Error.message` 只能用于本地启动配置错误等不来自 API 的开发诊断。
+`api/contracts/error-codes.yaml` 登记稳定错误码和允许公开的 `safe_params`。未登记的错误码不能从 HTTP handler 发出。前端优先展示服务端显式安全 `message`；缺少该消息时按已登记稳定 `code` 使用本地化资源，未知码只显示安全兜底并保留请求 ID。任意 JavaScript `Error.message` 只能用于本地启动配置错误等不来自 API 的开发诊断。
 
 ## 3. 校验事实来源
 
@@ -66,6 +66,7 @@ Argus 必须同时满足两个要求：用户能知道输入为什么失败，�
 - `error-codes.yaml` 的错误码、消息键和 `safe_params` 形状由 contract test 检查。
 - HTTP error mapper 中出现的稳定错误码必须已登记。
 - 前端用户可见 API 错误不得直接渲染任意 `Error.message`。
+- 前端用户可见 API 错误统一经过 `@argus/api-client` 的 `formatApiError` / `formatErrorCode`；Enterprise 与 Platform 分别注册完整的 `errors.codes.*` 中英文资源。服务端未返回安全 `message` 时按稳定 `code` 翻译，未知码只显示业务兜底文案并保留 `request_id`，不得原样显示大写错误码。
 - AST 门禁要求每个 `Field` 显式声明 requirement，禁止手写星号、可编辑控件使用 `none`、缺少 submit 边界，以及按钮直接或间接绕过 RHF/Zod 调用写 API；checker 自身有正反例单测。
 - E2E 失败诊断只保存脱敏响应、请求 ID、稳定错误码和受控服务端日志。
 

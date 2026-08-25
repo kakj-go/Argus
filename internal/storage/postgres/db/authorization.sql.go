@@ -45,9 +45,9 @@ func (q *Queries) AddRolePermission(ctx context.Context, arg AddRolePermissionPa
 const createDataScope = `-- name: CreateDataScope :one
 INSERT INTO data_scopes (
   id, enterprise_id, name, description, resource_types, explicit_resource_ids,
-  label_selector, selector_hash
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at
+  label_selector, selector_hash, match_all
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at, match_all
 `
 
 type CreateDataScopeParams struct {
@@ -59,6 +59,7 @@ type CreateDataScopeParams struct {
 	ExplicitResourceIds []string  `json:"explicit_resource_ids"`
 	LabelSelector       []byte    `json:"label_selector"`
 	SelectorHash        []byte    `json:"selector_hash"`
+	MatchAll            bool      `json:"match_all"`
 }
 
 func (q *Queries) CreateDataScope(ctx context.Context, arg CreateDataScopeParams) (DataScope, error) {
@@ -71,6 +72,7 @@ func (q *Queries) CreateDataScope(ctx context.Context, arg CreateDataScopeParams
 		arg.ExplicitResourceIds,
 		arg.LabelSelector,
 		arg.SelectorHash,
+		arg.MatchAll,
 	)
 	var i DataScope
 	err := row.Scan(
@@ -86,6 +88,7 @@ func (q *Queries) CreateDataScope(ctx context.Context, arg CreateDataScopeParams
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MatchAll,
 	)
 	return i, err
 }
@@ -210,7 +213,7 @@ func (q *Queries) GetBuiltinRole(ctx context.Context, arg GetBuiltinRoleParams) 
 }
 
 const getDataScope = `-- name: GetDataScope :one
-SELECT id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at FROM data_scopes WHERE id = $1 AND enterprise_id = $2
+SELECT id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at, match_all FROM data_scopes WHERE id = $1 AND enterprise_id = $2
 `
 
 type GetDataScopeParams struct {
@@ -234,6 +237,7 @@ func (q *Queries) GetDataScope(ctx context.Context, arg GetDataScopeParams) (Dat
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MatchAll,
 	)
 	return i, err
 }
@@ -294,7 +298,7 @@ func (q *Queries) GetRoleBinding(ctx context.Context, arg GetRoleBindingParams) 
 }
 
 const listDataScopes = `-- name: ListDataScopes :many
-SELECT id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at FROM data_scopes WHERE enterprise_id = $1 ORDER BY created_at, id
+SELECT id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at, match_all FROM data_scopes WHERE enterprise_id = $1 ORDER BY created_at, id
 `
 
 func (q *Queries) ListDataScopes(ctx context.Context, enterpriseID uuid.UUID) ([]DataScope, error) {
@@ -319,6 +323,7 @@ func (q *Queries) ListDataScopes(ctx context.Context, enterpriseID uuid.UUID) ([
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MatchAll,
 		); err != nil {
 			return nil, err
 		}
@@ -577,9 +582,10 @@ const updateDataScope = `-- name: UpdateDataScope :one
 UPDATE data_scopes SET
   name = $3, description = $4, resource_types = $5,
   explicit_resource_ids = $6, label_selector = $7, selector_hash = $8,
-  status = COALESCE($9, status), version = version + 1, updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND version = $10
-RETURNING id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at
+  match_all = COALESCE($9, match_all),
+  status = COALESCE($10, status), version = version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND version = $11
+RETURNING id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at, match_all
 `
 
 type UpdateDataScopeParams struct {
@@ -591,6 +597,7 @@ type UpdateDataScopeParams struct {
 	ExplicitResourceIds []string    `json:"explicit_resource_ids"`
 	LabelSelector       []byte      `json:"label_selector"`
 	SelectorHash        []byte      `json:"selector_hash"`
+	MatchAll            pgtype.Bool `json:"match_all"`
 	Status              pgtype.Text `json:"status"`
 	ExpectedVersion     int64       `json:"expected_version"`
 }
@@ -605,6 +612,7 @@ func (q *Queries) UpdateDataScope(ctx context.Context, arg UpdateDataScopeParams
 		arg.ExplicitResourceIds,
 		arg.LabelSelector,
 		arg.SelectorHash,
+		arg.MatchAll,
 		arg.Status,
 		arg.ExpectedVersion,
 	)
@@ -622,6 +630,7 @@ func (q *Queries) UpdateDataScope(ctx context.Context, arg UpdateDataScopeParams
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MatchAll,
 	)
 	return i, err
 }

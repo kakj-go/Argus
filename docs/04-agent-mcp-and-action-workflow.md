@@ -20,7 +20,7 @@ MCP Tool 和领域服务负责：
 - 返回结构化结果和结构化错误。
 - 写入审计。
 
-人工 RemoteAccessSession 不属于 Model Agent 或 MCP Tool 能力。创建 SSH Web Terminal 使用管理 UI/OpenAPI 的独立授权接口、MFA/JIT/审批和短期一次性票据；AI、交互卡片、Automation 和 OpenSandbox 不能获得该票据。交互式会话中的人工命令不逐条走 Tool Preview/Commit，必须由会话级权限、时长、录像、剪贴板/文件传输策略和审计约束。
+人工 RemoteAccessSession 不属于 Model Agent 或 MCP Tool 能力。创建 SSH Web Terminal 使用管理 UI/OpenAPI 的独立授权接口、MFA/JIT/审批和短期一次性票据；AI、交互卡片和 OpenSandbox 不能获得该票据。当前版本不提供定时无人值守任务。交互式会话中的人工命令不逐条走 Tool Preview/Commit，必须由会话级权限、时长、录像、剪贴板/文件传输策略和审计约束。
 
 Conversation 和 Run 只绑定服务端确认的 `enterprise_id`。模型生成的企业、标签选择器、Host 或 Kubernetes ID 只是候选参数，不能切换当前身份域或扩大 DataScope；每个 ToolCall、Run、PendingAction 和 Execution 保存实际目标资源引用和授权范围快照。
 
@@ -397,23 +397,9 @@ Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为
 
 Execution 如果产生 Bastion 或 Kubernetes Connector Enrollment，公开对象只返回 `one_time_result_available`。原发起人使用独立幂等接口领取 AES-GCM 加密保存、最长五分钟有效的一次性结果；同一 Idempotency-Key 可以重放同一响应，新 Key 二次领取稳定失败。明文安装命令不得进入 PendingAction、Execution、ConversationEvent、审计、日志或 Redis。
 
-### 11.1 Automation 身份
+### 11.1 当前版本的执行边界
 
-定时和无人值守 Automation 必须绑定固定企业、Tool 和 DataScope 的 ServiceAccount：
-
-```text
-Automation
-├── enterprise_id
-├── service_account_id
-├── allowed_tool_ids
-├── resource_scope
-├── approval_policy_id
-└── authorization_version
-```
-
-每次运行都重新检查 ServiceAccount 状态、DataScope、Tool、目标资源、AuthorizationVersion 和 Policy，不能长期继承创建人的权限快照。Automation 只能走 Tool/Execution 路径，不得创建或消费 RemoteAccessSession 票据。
-
-Automation 创建或更新时写入不可变 AutomationRevision；AutomationRun 固定绑定触发时的 Revision 和输入，后续编辑不能改变已排队或待审批 Run。审批拒绝、Execution 成功/失败和 ResultUnknown 对账终态必须同步收敛 AutomationRun。
+当前版本不提供定时或无人值守任务。所有 AI、Chatbox、资源管理页面和受控服务主体的资源写操作，都必须进入通用 `PendingAction -> Approval -> Execution -> Task` 链路；人工远程访问继续使用独立的 Remote Access Approval API。
 
 ## 12. 并发、幂等和错误处理
 
@@ -437,4 +423,4 @@ Automation 创建或更新时写入不可变 AutomationRevision；AutomationRun 
 7. Preview 后修改资源版本/授权敏感标签、DataScope、AuthorizationVersion 或撤销权限，Commit 必须失败并要求重新 Preview。
 8. 双击、超时重试和服务重启不会产生重复副作用。
 9. 审批不能补齐缺失的基础权限；Break Glass 只能用于 Policy 明确允许且绑定单个 Pending Action 的场景。
-10. Model Agent、Card 和 Automation 无法创建或消费人工远程会话票据。
+10. Model Agent、Card 和 OpenSandbox 无法创建或消费人工远程会话票据。

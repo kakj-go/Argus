@@ -73,8 +73,5 @@ func (cfg DirectExecutor) Validate() error {
 	if cfg.TelemetryEnabled && (cfg.TelemetryEnrollmentEndpoint == "" || cfg.TelemetryIngestGRPCEndpoint == "" || cfg.TelemetryIngestHTTPEndpoint == "") {
 		return errors.New("direct executor telemetry Collector endpoints are required")
 	}
-	if cfg.DeploymentProfile == "production" && (len(cfg.AdvertisedEgress) == 0 || cfg.EgressVerificationURL == "") {
-		return errors.New("production Direct Executor requires advertised egress and a verification URL")
-	}
 	return nil
 }

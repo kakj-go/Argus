@@ -20,6 +20,7 @@ type Scope struct {
 	ResourceTypes       []string
 	ExplicitResourceIDs []string
 	LabelSelector       json.RawMessage
+	MatchAll            bool
 	Status              string
 }
 
@@ -90,6 +91,9 @@ func ScopeMatches(scope Scope, resource Resource) bool {
 		return false
 	}
 	if contains(scope.ExplicitResourceIDs, resource.ID) {
+		return true
+	}
+	if scope.MatchAll {
 		return true
 	}
 	if len(scope.LabelSelector) == 0 || string(scope.LabelSelector) == "null" {

@@ -91,7 +91,7 @@ describe("machine credentials", () => {
     const client = makeClient();
     await login(client, "root");
     const created = await client.org.createApiKey("sa-ci", {
-      name: "automation",
+      name: "service-account-key",
     });
     expect(created.secret).toMatch(
       /^argus_ak_[A-Za-z0-9_-]{6,32}\.[A-Za-z0-9_-]{32,256}$/,

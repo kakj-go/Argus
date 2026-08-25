@@ -43,7 +43,6 @@ export const AUDIT_ACTION_CODES = [
   "managed_account.create",
   "managed_account.update",
   "ai_model.update",
-  "automation.pending_action",
   "pending_action.confirm",
   "pending_action.cancel",
   "approval.approve",

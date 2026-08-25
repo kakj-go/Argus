@@ -80,12 +80,15 @@ export const OPEN_PENDING_STATUSES: PendingActionStatus[] = [
 
 /** Terminal-ish statuses shown as read-only results. */
 export const DONE_PENDING_STATUSES: PendingActionStatus[] = [
+  "ready",
   "executing",
   "succeeded",
   "failed",
   "cancelled",
   "expired",
   "rejected",
+  "result_unknown",
+  "invalidated",
 ];
 
 export function isTaskActive(status: TaskStatus): boolean {

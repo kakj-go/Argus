@@ -34,21 +34,23 @@ func repoRoot(t *testing.T) string {
 	return root
 }
 
-func TestM4AutomationRunsBindImmutableRevisions(t *testing.T) {
+func TestAutomationDomainIsRemoved(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	migration, err := os.ReadFile(filepath.Join(root, "migrations/postgresql/00003_m4_action_agent.sql"))
+	migration, err := os.ReadFile(filepath.Join(root, "migrations/postgresql/00014_remove_automation.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(migration)
 	for _, required := range []string{
-		"CREATE TABLE automation_revisions",
-		"automation_revision integer NOT NULL",
-		"REFERENCES automation_revisions(automation_id, enterprise_id, revision)",
+		"DROP TABLE IF EXISTS automation_runs",
+		"DROP TABLE IF EXISTS automation_revisions",
+		"DROP TABLE IF EXISTS automations",
+		"automation.read",
+		"automation.manage",
 	} {
 		if !strings.Contains(text, required) {
-			t.Fatalf("M4 migration lacks immutable Automation revision guard %q", required)
+			t.Fatalf("automation removal migration lacks %q", required)
 		}
 	}
 }
@@ -69,15 +71,6 @@ func TestM4AgentActionsRetainTrustedRunBinding(t *testing.T) {
 	}
 	if !strings.Contains(string(workflow), "RunID: action.RunID") {
 		t.Fatal("Execution contract no longer carries the PendingAction Run binding")
-	}
-	automation, err := os.ReadFile(filepath.Join(root, "internal/storage/postgres/queries/automation.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, required := range []string{"MarkAutomationRunExecuting", "FinishAutomationRunByPendingAction"} {
-		if !strings.Contains(string(automation), required) {
-			t.Fatalf("AutomationRun terminal propagation lacks %s", required)
-		}
 	}
 }
 
@@ -1448,6 +1441,9 @@ func checkLegacyWebBaseline(t *testing.T, root string) {
 }
 
 func compatible(path string, oldValue, newValue any) error {
+	if strings.Contains(strings.ToLower(path), "/enterprise/automations") {
+		return nil
+	}
 	oldMap, oldOK := oldValue.(map[string]any)
 	newMap, newOK := newValue.(map[string]any)
 	if oldOK {
@@ -1464,6 +1460,9 @@ func compatible(path string, oldValue, newValue any) error {
 		}
 		if requiresStableMapKeys(path) {
 			for name := range oldMap {
+				if strings.Contains(strings.ToLower(name), "automation") {
+					continue
+				}
 				if _, exists := newMap[name]; !exists {
 					return fmt.Errorf("%s removed entry %s", path, name)
 				}

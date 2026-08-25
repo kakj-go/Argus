@@ -42,8 +42,8 @@ RETURNING *;
 -- name: CreateDataScope :one
 INSERT INTO data_scopes (
   id, enterprise_id, name, description, resource_types, explicit_resource_ids,
-  label_selector, selector_hash
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  label_selector, selector_hash, match_all
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: GetDataScope :one
@@ -56,6 +56,7 @@ SELECT * FROM data_scopes WHERE enterprise_id = $1 ORDER BY created_at, id;
 UPDATE data_scopes SET
   name = $3, description = $4, resource_types = $5,
   explicit_resource_ids = $6, label_selector = $7, selector_hash = $8,
+  match_all = COALESCE(sqlc.narg(match_all), match_all),
   status = COALESCE(sqlc.narg(status), status), version = version + 1, updated_at = now()
 WHERE id = $1 AND enterprise_id = $2 AND version = sqlc.arg(expected_version)
 RETURNING *;

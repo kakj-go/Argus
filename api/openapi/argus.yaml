@@ -203,14 +203,6 @@ paths:
     $ref: ./paths/m4.yaml#/execution_item
   /enterprise/executions/{id}/one-time-result:
     $ref: ./paths/m4.yaml#/execution_one_time_result
-  /enterprise/automations:
-    $ref: ./paths/m4.yaml#/automation_collection
-  /enterprise/automations/{id}:
-    $ref: ./paths/m4.yaml#/automation_item
-  /enterprise/automations/{id}/{state_action}:
-    $ref: ./paths/m4.yaml#/automation_state
-  /enterprise/automations/{id}/runs:
-    $ref: ./paths/m4.yaml#/automation_runs
   /platform/sandbox/backends:
     $ref: ./paths/m4.yaml#/sandbox_backend_collection
   /platform/sandbox/backends/{id}:
@@ -607,8 +599,6 @@ components:
       $ref: ./components/m4.yaml#/components/schemas/ApprovalPolicy
     ApprovalRequirement:
       $ref: ./components/m4.yaml#/components/schemas/ApprovalRequirement
-    Automation:
-      $ref: ./components/m4.yaml#/components/schemas/Automation
     SandboxProfile:
       $ref: ./components/m4.yaml#/components/schemas/SandboxProfile
   securitySchemes:

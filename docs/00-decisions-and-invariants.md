@@ -11,6 +11,10 @@
 | 后续能力 | 第一版不实现，但当前对象和协议预留兼容边界 |
 | 开放问题 | 实现前必须形成 ADR，不允许在不同模块中分别决定 |
 
+## 1.1 企业门户视口范围
+
+当前版本企业门户以桌面 Web 端为唯一正式支持和验收视口。移动端导航、窄屏布局、移动端专属交互和移动端 E2E 不属于本版本交付目标；相关代码可以作为非阻断的基础适配保留，但不能被文档、菜单或验收标准表述为已支持能力。
+
 ## 2. 企业、身份与资源范围
 
 第一版统一使用 `enterprise_id` 表示企业、租户、安全隔离、计费和数据归属的最高且唯一业务边界。旧讨论中的 Tenant 与 Enterprise 是同一个概念；接口、数据库、Token、审计、Kafka 属性和 ClickHouse 物化列不得同时保留 `tenant_id` 与 `enterprise_id` 两套字段。
@@ -94,9 +98,9 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 - Connector 只建立出站 mTLS 长连接，处理控制命令、批准 Artifact、端口/协议隧道和经授权的人工远程会话；Collector 不复用 Connector 通道发送遥测。
 - Connector 命令必须具有持久化状态、幂等键、连接代次 `connection_epoch`、过期时间和结果未知状态，不能把断连直接视为执行失败。
 - 安装 Connector 并注册为堡垒机时必须创建稳定的 Bastion Scope 和对应 Host；经堡垒机接入的内网主机只能归属一个 Bastion Scope。Bastion Scope 不能与可轮换、可重装的 Connector 实例共用同一主键和生命周期。
-- 主机连接模式第一版固定为 `connector_local`、`via_bastion`、`direct_ssh` 和 `direct_winrm`。Direct 模式由受控 Direct Executor 访问其部署网络可达且经过校验的目标，不以公网/私网划分；必须执行出口身份、协议/端口白名单、Host Key/目标身份校验、DNS Rebinding 防护，并拦截环回、链路本地、云元数据及配置的禁用网段。
-- Remote Access Session 是人工操作边界，不等同于 MCP Tool Commit。它必须使用短期一次性会话票据，并校验 Enterprise、Host、ManagedAccount、协议、动作、Grant、DataScope、授权版本、MFA/审批、最长时长、录像与审计；AI、Card、Automation 和 OpenSandbox 不得获得交互式会话票据。
-- 所有已建立管理连接的 Host 都提供统一的“命令行”入口；人工命令行与自动化任务可以复用底层连接适配器，但必须使用不同的票据、API、队列、状态机和审计类型。
+- 主机连接模式第一版固定为 `connector_local`、`via_bastion`、`direct_ssh` 和 `direct_winrm`。Direct 模式由受控 Direct Executor 访问其部署网络可达且经过校验的目标，不以公网/私网划分；必须执行 Host Key/目标身份校验、DNS Rebinding 防护，并拦截环回、链路本地、云元数据、Argus/集群保护地址及配置的禁用网段。用户私网和自定义端口默认允许；固定出口由用户管理的 Egress Gateway 提供。
+- Remote Access Session 是人工操作边界，不等同于 MCP Tool Commit。它必须使用短期一次性会话票据，并校验 Enterprise、Host、ManagedAccount、协议、动作、Grant、DataScope、授权版本、MFA/审批、最长时长、录像与审计；AI、Card 和 OpenSandbox 不得获得交互式会话票据。当前版本不提供定时无人值守任务。
+- 所有已建立管理连接的 Host 都提供统一的“命令行”入口；人工命令行与后台任务可以复用底层连接适配器，但必须使用不同的票据、API、队列、状态机和审计类型。
 - Bastion Scope 成员的 Telemetry Route 只能是直接推送 Argus 或推送到所属堡垒机上已启用 Gateway 模式的 Collector；独立主机不得选择任何 Bastion Scope 内成员作为上游。
 - 同一物理 Kubernetes Node 上的同一 `CollectionClaim` 默认只能有一个活动采集所有者；迁移期临时重叠必须指定主实例和过期时间。
 - “监控插件”在产品层表示由 Argus 管理的版本化 Collection Profile，不表示运行时下载任意 Collector 插件或向用户暴露任意 YAML。
@@ -113,6 +117,12 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 - 后端固定 Go；外部 API 使用 REST/OpenAPI，内部服务和 Connector 使用 gRPC/protobuf，单文件不超过 2000 行。
 - PostgreSQL Schema 由版本化 Migration 管理，普通服务启动不得隐式修改 Schema。
 - ClickHouse 对产品暴露 Metrics、Logs、Traces 三个查询协议；M10 事实存储按 Enterprise UUID 创建租户物理表。表名只能由受信身份通过 `TenantTableRouter` 生成，物理表内仍保存 `ResourceId` 和 `CollectorId` 供企业内部授权裁剪。
+
+## 网络安全能力说明
+
+NetworkPolicy 是 Argus 内部服务隔离基线，由 `argusctl`/Helm 自动部署并探测真实执行能力；探测失败允许安装但必须记录安全降级。Egress Gateway 是用户管理的可选出口治理能力，不是 Argus 安装依赖。
+
+Direct Executor 默认允许用户私网和自定义端口，只拒绝 Argus/集群保护地址、metadata、loopback 和 link-local 地址；固定出口、NAT 和出口防火墙由用户网络环境提供。
 
 ## 8. 第一版开放问题
 

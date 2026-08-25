@@ -59,7 +59,7 @@
 | `web/apps/enterprise`   | 企业业务域       | Chatbox、主机、Kubernetes、任务、审批、组织权限、模型、Card、Secret、审计 |
 | `web/apps/card-runtime` | 独立 Card Origin | CSP 下加载并运行已校验的 Card 文档，通过 MessagePort 与 Host 通信         |
 
-Enterprise 与 Platform 必须通过 `VITE_API_MODE=mock|real` 显式选择 API 模式。未知模式、real 缺少 `VITE_API_BASE_URL`，或 Enterprise real 缺少 `VITE_CARD_ORIGIN` 时都会停止启动，不会回退到 mock。M2-M7 的身份/IAM、资源/Connector、Conversation/Run、Model、Approval/Execution、Automation、Sandbox、Card、Remote Access 和 Telemetry Path 均已接入 real Adapter；未冻结领域操作继续稳定返回 `CLIENT_OPERATION_UNAVAILABLE`。
+Enterprise 与 Platform 必须通过 `VITE_API_MODE=mock|real` 显式选择 API 模式。未知模式、real 缺少 `VITE_API_BASE_URL`，或 Enterprise real 缺少 `VITE_CARD_ORIGIN` 时都会停止启动，不会回退到 mock。M2-M7 的身份/IAM、资源/Connector、Conversation/Run、Model、Approval/Execution、Sandbox、Card、Remote Access 和 Telemetry Path 均已接入 real Adapter；未冻结领域操作继续稳定返回 `CLIENT_OPERATION_UNAVAILABLE`。当前企业门户只把桌面端作为正式支持与验收视口，移动端不纳入本版本交付承诺。
 
 共享包目录已在 M1 按目标边界收敛；后续领域实现必须继续复用这些包，不能在业务应用内重新建立平行基座：
 
@@ -72,11 +72,11 @@ Enterprise 与 Platform 必须通过 `VITE_API_MODE=mock|real` 显式选择 API 
 | `@argus/card-host`     | Manifest/RenderPlan 与内容哈希校验、精确 Origin 握手、MessagePort Bridge 和受控 Binding 调用 |
 | `@argus/observability` | 前端遥测上下文和事件入口                                                                     |
 
-前端 Playwright 同时支持 Enterprise、Platform 和 Card Runtime 三个 Origin；初始化流程在 Platform Origin 内验证。既有 mock 套件覆盖产品流程、Audience、Labels、Card Bridge/CSP 与 `zh-CN/en-US × light/dark` axe 门禁；real 模式覆盖 M2 身份、M3 资源接入、M4 Chat/Model/Approval/Execution/Automation/Sandbox、M5 Card、M6 Remote Access 和 M7 Telemetry。真实业务证据由各里程碑 Kubernetes E2E 在临时 Namespace 中运行，不以 mock Playwright 替代。
+前端 Playwright 同时支持 Enterprise、Platform 和 Card Runtime 三个 Origin；初始化流程在 Platform Origin 内验证。既有 mock 套件覆盖产品流程、Audience、Labels、Card Bridge/CSP 与 `zh-CN/en-US × light/dark` axe 门禁；real 模式覆盖 M2 身份、M3 资源接入、M4 Chat/Model/Approval/Execution/Sandbox、M5 Card、M6 Remote Access 和 M7 Telemetry。真实业务证据由各里程碑 Kubernetes E2E 在临时 Namespace 中运行，不以 mock Playwright 替代。
 
 M1 已清除 Project、Membership、旧 `tags` 和公开 PendingAction 私有字段。两个门户及初始化流程的全部可见 Field 已显式声明 `required/optional/none`，共享组件统一必填星号、复合字段和 ARIA；真实写表单统一使用 React Hook Form + Zod，普通边界消费 bundled OpenAPI 生成的对象/标量约束。临时密码、APIKey、Bastion 安装结果、Execution 一次性结果和 Secret 原值只按一次性结果边界处理。M2-M7 已冻结领域 DTO 均使用生成的 snake_case 契约。
 
-Agent 运行时已完成 Provider-neutral 单 Agent 小内核：PostgreSQL 持久化不可变 ConversationEvent、Run/Step/Task、ModelCall、ToolResult、ContextSnapshot、PendingAction 和 Execution 事实；`ModelUsage` 只从 ModelCall 聚合查询。五个 Worker Pool 通过 Lease/Fence 恢复，支持双模型协议、ContextAssembler、确定性投影与 Compaction、Tool 权限/Schema 门禁、审批和 Action Executor。可信 `run_id` 从 Agent Preview 贯穿 PendingAction/Execution 并在完成后恢复同一 Run 的 Verify Step。实现边界见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
+Agent 运行时已完成 Provider-neutral 单 Agent 小内核：PostgreSQL 持久化不可变 ConversationEvent、Run/Step/Task、ModelCall、ToolResult、ContextSnapshot、PendingAction 和 Execution 事实；`ModelUsage` 只从 ModelCall 聚合查询。四个 Worker Pool 通过 Lease/Fence 恢复，支持双模型协议、ContextAssembler、确定性投影与 Compaction、Tool 权限/Schema 门禁、审批和 Action Executor。可信 `run_id` 从 Agent Preview 贯穿 PendingAction/Execution 并在完成后恢复同一 Run 的 Verify Step。实现边界见[Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)。
 
 ### 3.3 后端程序与运行角色
 
@@ -85,7 +85,7 @@ Agent 运行时已完成 Provider-neutral 单 Agent 小内核：PostgreSQL 持�
 | 二进制                         | 部署位置                 | 目标职责                                          | 当前状态                                                                                                   |
 | ------------------------------ | ------------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `argus-server`                 | `argus-system`           | Web/API、身份、权限、领域服务、Action Executor    | M2-M7 Evaluation API 可用                                                                                  |
-| `argus-worker`                 | `argus-system`           | Agent、Tool Run、任务、Sandbox、安装执行          | 五个 M4 Pool 可按 Profile 合并或拆分部署；Direct Executor、Collector 与 Remote Access 执行可用             |
+| `argus-worker`                 | `argus-system`           | Agent、Tool Run、任务、Sandbox、安装执行          | 四个 M4 Pool 可按 Profile 合并或拆分部署；Direct Executor、Collector 与 Remote Access 执行可用             |
 | `argus-connector-gateway`      | `argus-system`           | Connector 长连接、命令流、Artifact、Remote Access | mTLS、Registry、epoch、Drain、类型化命令和远程会话跨副本路由可用                                           |
 | `argus-telemetry`              | `argus-observability`    | `ingest`、`writer`、`query` 三种模式              | OTLP → Kafka → ClickHouse 与授权 Query 可用                                                                |
 | `argus-connector`              | 受管主机/堡垒机          | 主动 mTLS 接入、命令和 Artifact/会话隧道          | Probe、Kubernetes Read、Collector 管理、SSH/WinRS 会话和 Uninstall 可用                                    |
@@ -98,9 +98,9 @@ Agent 运行时已完成 Provider-neutral 单 Agent 小内核：PostgreSQL 持�
 | `argus-telemetry-e2e`          | 临时 E2E Namespace       | 生成确定性 OTLP 三信号                            | 仅 E2E 镜像包含，生产制品扫描禁止携带                                                                      |
 | `argus-dev`                    | 开发者工作站或 CI Runner | 跨平台检查、构建、发布和 Kubernetes E2E 编排      | Windows、Linux、macOS 使用同一命令；E2E doctor 检查实际目标 Context；生产部署仍只由 `argusctl + Helm` 完成 |
 
-`argus-worker` 保留 agent、action、compaction、automation、sandbox 五条队列和 Processor。Evaluation 通过一个 `argus-worker --pool=default` Deployment 运行这五类任务；Local Hardening 与 Production 使用五个独立 Deployment，以便分别扩缩容和限制网络权限。Direct Executor Pool 在所有 Profile 中均由独立 Deployment 运行。所有 Pool 使用 PostgreSQL Lease/Fence 恢复，Redis 只唤醒；Tool Gateway 当前是 Worker 进程内可信 Registry，未来拆分时才增加内部 mTLS 网络边界。
+`argus-worker` 保留 agent、action、compaction、sandbox 四条队列和 Processor。Evaluation 通过一个 `argus-worker --pool=default` Deployment 运行这四类任务；Local Hardening 与 Production 使用四个独立 Deployment，以便分别扩缩容和限制网络权限。Direct Executor Pool 在所有 Profile 中均由独立 Deployment 运行。所有 Pool 使用 PostgreSQL Lease/Fence 恢复，Redis 只唤醒；Tool Gateway 当前是 Worker 进程内可信 Registry，未来拆分时才增加内部 mTLS 网络边界。
 
-Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector Gateway、Telemetry Ingest/Writer/Query 共 8 个 Argus 常驻运行角色；相较五个普通 Worker 全拆分的拓扑减少 4 个常驻 Pod，完整 Evaluation 环境预计约 22 个常驻 Pod。代价是五类任务共享 Worker 资源、进程故障域和 NetworkPolicy 权限并集，任一 Processor 致命退出会使整个 Worker Pod 重启。
+Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector Gateway、Telemetry Ingest/Writer/Query 共 8 个 Argus 常驻运行角色；相较四个普通 Worker 全拆分的拓扑减少 3 个常驻 Pod，完整 Evaluation 环境预计约 21 个常驻 Pod。代价是四类任务共享 Worker 资源、进程故障域和 NetworkPolicy 权限并集，任一 Processor 致命退出会使整个 Worker Pod 重启。
 
 ### 3.4 已交付部署基础与剩余边界
 
@@ -125,9 +125,9 @@ Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector 
 - Enterprise real Adapter 与页面已接 Host 路径迁移、Kubernetes 有界资源/Pod Logs、Secret/ManagedAccount、Bastion/Connector 卸载和 Preview/Confirm；`in_cluster` 一次性安装命令只在确认结果中展示，Collector、Remote Access 和 Agent 操作不读取 mock 数据。
 - Connector 卸载结果等待 Gateway ACK 后才删除本地身份；无类型化清理证明的 reconcile 保持 `result_unknown`。有效重连恢复 Bastion Scope/Kubernetes 在线状态，Scope 删除要求已卸载或已 fencing 离线，并逻辑删除根 Host。
 - `go run ./cmd/argus-dev e2e run --suite m3`：真实 Secret/Credential/ManagedAccount、Bastion/Connector、证书轮换与 ACK 后卸载、Host 跨 Scope 迁移、双 Gateway 派发、内网/公网 Host、三种 Kubernetes 接入、DataScope 撤权、Redis 停止和 Server/Gateway 恢复，M2 3 条与 M3 6 条 real Playwright，以及成功/失败无条件清理。2026-08-17 的成功运行号为 `20260817060430-49810`，脱敏诊断位于本地同名 `artifacts/m3-e2e/` 目录，Namespace/PVC/Lease 零残留。
-- M4 Conversation/Run/Task/Model/Approval/Execution/Automation/Sandbox 契约、Migration、五个 Worker Pool、双协议 Model Provider、ContextAssembler/Compaction、Tool 权限与严格 Schema Registry、确定性 Projection、不可变 AutomationRevision 和确定性 Action Executor。
-- Enterprise Chat/Model/Approval/Execution/Automation 与 Platform Sandbox 页面已接 real API；Replay Model Provider 仅存在于 `m4e2e` build tag，生产 Artifact 扫描拒绝测试 Provider、mock seed 和私网模型开关。
-- `go run ./cmd/argus-dev e2e run --suite m4`：真实身份与资源基座、双模型协议、Chat Tool、可信 Run→PendingAction→Execution→Verify 绑定、用户确认、多策略审批、Worker 删除、Redis 清空、AutomationRevision 固定、ResultUnknown 不重放、模型额度耗尽、Sandbox 生命周期与配额、real Playwright，以及成功/失败无条件清理。2026-08-17 的成功运行号为 `20260817144832-31660`，脱敏诊断位于 `artifacts/m4-e2e/20260817144832-31660`，Namespace/PVC/Lease 零残留。
+- M4 Conversation/Run/Task/Model/Approval/Execution/Sandbox 契约、Migration、四个 Worker Pool、双协议 Model Provider、ContextAssembler/Compaction、Tool 权限与严格 Schema Registry、确定性 Projection 和确定性 Action Executor。
+- Enterprise Chat/Model/Approval/Execution 与 Platform Sandbox 页面已接 real API；Replay Model Provider 仅存在于 `m4e2e` build tag，生产 Artifact 扫描拒绝测试 Provider、mock seed 和私网模型开关。
+- `go run ./cmd/argus-dev e2e run --suite m4`：真实身份与资源基座、双模型协议、Chat Tool、可信 Run→PendingAction→Execution→Verify 绑定、用户确认、多策略审批、Worker 删除、Redis 清空、ResultUnknown 不重放、模型额度耗尽、Sandbox 生命周期与配额、real Playwright，以及成功/失败无条件清理。2026-08-17 的成功运行号为 `20260817144832-31660`，脱敏诊断位于 `artifacts/m4-e2e/20260817144832-31660`，Namespace/PVC/Lease 零残留。
 - M5 OpenAPI/JSON Schema、Goose/sqlc、不可变 CardVersion、系统 Catalog Sync、企业 Chat Draft、静态/浏览器验证、`card.render`、CardPresentation、Query/Action Binding、版本切换/回滚和授权变化后重新物化。
 - Enterprise Card 管理页与 Chat 已接 real API；Card Runtime 继续复用独立 Origin、CSP、内容哈希和 MessagePort，浏览器只持有短期 Binding ID，不获得 Tool 参数、Commit Token 或私有计划。
 - `go run ./cmd/argus-dev e2e run --suite m5`：两版企业 Card 八场景验证、系统优先/企业精确匹配、DataScope 撤权、Action Binding 重放/双击、非创建人审批、Commit/Verify、回滚、Redis 清空和 Server 重启恢复。2026-08-17 的最终成功运行号为 `20260817211415-4363`，脱敏诊断位于 `artifacts/m5-e2e/20260817211415-4363`，Namespace/PVC/Lease 零残留。
@@ -147,7 +147,7 @@ Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector 
 仍未完成且不能由部署基座替代：
 
 - SBOM、镜像签名、漏洞门禁、备份恢复和独立 Upgrade 工作流。
-- Production PostgreSQL/Kafka/ClickHouse HA、外部 KMS/HSM、Connector/Telemetry CA 根轮换及重启恢复演练、固定出口生产验证、Remote Access 录像不可变保留/恢复、Linux amd64 与真实 Windows 兼容矩阵、OpenSandbox 强化 Runtime ADR，以及平台超级管理员 MFA/恢复/Step-up 的生产验证；这些未完成前 Production 安装保持硬阻断。MFA 能力已存在，但 `spec.security.platformMfaRequired` 在所有 Profile 中默认关闭，需要部署者显式开启。
+- Production PostgreSQL/Kafka/ClickHouse HA、外部 KMS/HSM、Connector/Telemetry CA 根轮换及重启恢复演练、Remote Access 录像不可变保留/恢复、Linux amd64 与真实 Windows 兼容矩阵、OpenSandbox 强化 Runtime ADR，以及平台超级管理员 MFA/恢复/Step-up 的生产验证；这些未完成前 Production 安装保持硬阻断。固定出口属于可选 Egress Gateway 能力，不再作为运行时配置硬门禁；需要时通过严格验证流程单独检查。MFA 能力已存在，但 `spec.security.platformMfaRequired` 在所有 Profile 中默认关闭，需要部署者显式开启。
 
 ## 4. Kubernetes 目标拓扑
 
@@ -309,14 +309,14 @@ Operator 是集群级或共享能力时，`argusctl` 必须检测兼容版本和
 - Web 只能访问 Server，不访问数据库和中间件。
 - Server 可访问 PostgreSQL、Redis、Telemetry Query 和必要的内部 Gateway API。
 - 普通 Worker 可访问 PostgreSQL、Redis、OpenSandbox、Gateway 和允许的模型端点。
-- Direct Executor 只访问任务依赖和经校验的公网 SSH/WinRM；必须拒绝私网、环回、链路本地、云元数据、集群网段和平台内部地址。
+- Direct Executor 访问经校验的任意协议端口；必须拒绝环回、链路本地、云元数据、集群/API Server/Argus 保护地址。未命中保护集合的用户私网允许访问。
 - Connector Gateway 可访问 PostgreSQL、Redis、Artifact Store；Connector 和 Remote Listener 使用独立入口策略。
 - Telemetry Ingest 只通过窄控制数据 Adapter 读取 Collector/Certificate/Route 身份并访问 Redis/Kafka，不直接写 ClickHouse，也不能修改资源、IAM 或 Action 事实。
 - Writer 只通过窄结算 Adapter 读取 Retention、登记 DLQ、累计 Usage，并消费 Kafka、写 ClickHouse；`local-hardening` 已为 Ingest/Writer 签发独立表级最小权限 PostgreSQL Login，Production 凭证轮换仍需环境验证。
 - Telemetry Query 只使用 ClickHouse 只读账号。
 - Sandbox 默认只访问受控 Artifact Bucket 和明确批准的网络目标，不访问 Server 数据库、Gateway、ClickHouse 或 Kubernetes API。
 
-Kubernetes NetworkPolicy 通常不能独立保证固定公网出口和 DNS Rebinding 防护。Direct Executor 还需要集群 Egress Gateway/NAT、防火墙和应用层目标复验共同约束。
+NetworkPolicy 由 Argus 自动部署，用于内部服务隔离；CNI 执行能力由 `argusctl` 探测，结果写入安装状态。Egress Gateway 不由 Argus 默认部署，用户可自行配置；安装器和 Direct Executor 启动时识别并验证，验证失败不阻断基础功能。运行期复核失败时 Direct Executor 保持可用并告警，实际路径由集群默认路由决定；当前运行期告警写入日志/诊断，尚未回写安装 ConfigMap。应用层仍拒绝集群、Argus、metadata、loopback 和 link-local 目标，并允许未命中保护集合的用户私网。
 
 ## 9. Evaluation 与 Production
 
@@ -324,7 +324,7 @@ Kubernetes NetworkPolicy 通常不能独立保证固定公网出口和 DNS Rebin
 | ----------- | ---------------------------- | ----------------------------------------- |
 | 用途        | 开发、演示、功能 E2E         | 正式业务                                  |
 | Argus 副本  | 每角色 1 个                  | 无状态关键角色至少 2 个                   |
-| Worker 拓扑 | 一个 default Pool Deployment | 五个按 Pool 拆分的 Deployment             |
+| Worker 拓扑 | 一个 default Pool Deployment | 四个按 Pool 拆分的 Deployment             |
 | PostgreSQL  | 单实例、较小 PVC             | HA、反亲和、PITR；具体 Operator 待 ADR    |
 | Redis       | 单实例                       | HA/故障转移，仍不保存唯一事实             |
 | Kafka       | Strimzi 低副本 KRaft         | 至少 3 Broker，`min.insync.replicas >= 2` |

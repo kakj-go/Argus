@@ -42,6 +42,7 @@ type ScopeInput struct {
 	Name, Description                  string
 	ResourceTypes, ExplicitResourceIDs []string
 	LabelSelector                      json.RawMessage
+	MatchAll                           *bool
 	Status                             *string
 	ExpectedVersion                    int64
 }
@@ -158,8 +159,9 @@ func (service Service) CreateScope(ctx context.Context, actorID string, enterpri
 		Normalized []byte     `json:"normalized"`
 	}{Input: input, Normalized: normalized}
 	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actorID, "data_scope.create", idempotencyKey, request, 201, func(queries *db.Queries) (db.DataScope, error) {
+		matchAll := input.MatchAll != nil && *input.MatchAll
 		scope, err := queries.CreateDataScope(ctx, db.CreateDataScopeParams{ID: newID(), EnterpriseID: enterpriseID, Name: input.Name, Description: input.Description,
-			ResourceTypes: input.ResourceTypes, ExplicitResourceIds: input.ExplicitResourceIDs, LabelSelector: normalized, SelectorHash: hash})
+			ResourceTypes: input.ResourceTypes, ExplicitResourceIds: input.ExplicitResourceIDs, LabelSelector: normalized, SelectorHash: hash, MatchAll: matchAll})
 		if err != nil {
 			return db.DataScope{}, err
 		}
@@ -182,7 +184,8 @@ func (service Service) UpdateScope(ctx context.Context, actorID string, enterpri
 		var err error
 		scope, err = queries.UpdateDataScope(ctx, db.UpdateDataScopeParams{ID: scopeID, EnterpriseID: enterpriseID, Name: input.Name, Description: input.Description,
 			ResourceTypes: input.ResourceTypes, ExplicitResourceIds: input.ExplicitResourceIDs, LabelSelector: normalized, SelectorHash: hash,
-			Status: textValue(input.Status), ExpectedVersion: input.ExpectedVersion})
+			MatchAll: optionalBool(input.MatchAll),
+			Status:   textValue(input.Status), ExpectedVersion: input.ExpectedVersion})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return identity.ErrVersionConflict
 		}
@@ -302,6 +305,12 @@ func textValue(value *string) pgtype.Text {
 	return pgtype.Text{String: *value, Valid: true}
 }
 func optionalText(value string) pgtype.Text { return pgtype.Text{String: value, Valid: value != ""} }
+func optionalBool(value *bool) pgtype.Bool {
+	if value == nil {
+		return pgtype.Bool{}
+	}
+	return pgtype.Bool{Bool: *value, Valid: true}
+}
 func timeValue(value *time.Time) pgtype.Timestamptz {
 	if value == nil {
 		return pgtype.Timestamptz{}

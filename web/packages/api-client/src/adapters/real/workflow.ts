@@ -12,7 +12,7 @@ import {
   ApiError,
   ClientOperationUnavailableError,
 } from "../../transport/errors";
-import type { ApprovalPolicy } from "../../types";
+import type { ApprovalPolicy, ListQuery } from "../../types";
 import { page, type RealDomainContext } from "./context";
 
 function policyView(value: ApprovalPolicyContract): ApprovalPolicy {
@@ -74,11 +74,19 @@ export function installWorkflowDomains(context: RealDomainContext): void {
 
   client.approvals = {
     ...client.approvals,
-    async list() {
+    async list(filter, query: ListQuery = {}) {
+      const params = new URLSearchParams();
+      if (filter?.scope) params.set("scope", filter.scope);
+      if (filter?.query) params.set("query", filter.query);
+      for (const status of filter?.status ?? []) params.append("status", status);
+      for (const risk of filter?.risk ?? []) params.append("risk", risk);
+      if (query.page?.cursor) params.set("cursor", query.page.cursor);
+      if (query.page?.limit !== undefined) params.set("limit", String(query.page.limit));
+      const suffix = params.toString() ? `?${params.toString()}` : "";
       const value = await http.request<{
         items: PendingActionPublic[];
         page: { next_cursor: string | null; has_more: boolean };
-      }>("enterprise/pending-actions");
+      }>(`enterprise/pending-actions${suffix}`);
       return page(value);
     },
     get: (actionRef) =>

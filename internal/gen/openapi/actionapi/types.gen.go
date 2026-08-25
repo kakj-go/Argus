@@ -86,6 +86,99 @@ func (e PartialMetadataReasons) Valid() bool {
 	}
 }
 
+// Defines values for ListPendingActionsParamsScope.
+const (
+	All     ListPendingActionsParamsScope = "all"
+	Created ListPendingActionsParamsScope = "created"
+	Mine    ListPendingActionsParamsScope = "mine"
+)
+
+// Valid indicates whether the value is a known member of the ListPendingActionsParamsScope enum.
+func (e ListPendingActionsParamsScope) Valid() bool {
+	switch e {
+	case All:
+		return true
+	case Created:
+		return true
+	case Mine:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPendingActionsParamsStatus.
+const (
+	ListPendingActionsParamsStatusAwaitingApproval     ListPendingActionsParamsStatus = "awaiting_approval"
+	ListPendingActionsParamsStatusAwaitingConfirmation ListPendingActionsParamsStatus = "awaiting_confirmation"
+	ListPendingActionsParamsStatusCancelled            ListPendingActionsParamsStatus = "cancelled"
+	ListPendingActionsParamsStatusExecuting            ListPendingActionsParamsStatus = "executing"
+	ListPendingActionsParamsStatusExpired              ListPendingActionsParamsStatus = "expired"
+	ListPendingActionsParamsStatusFailed               ListPendingActionsParamsStatus = "failed"
+	ListPendingActionsParamsStatusInvalidated          ListPendingActionsParamsStatus = "invalidated"
+	ListPendingActionsParamsStatusPrepared             ListPendingActionsParamsStatus = "prepared"
+	ListPendingActionsParamsStatusReady                ListPendingActionsParamsStatus = "ready"
+	ListPendingActionsParamsStatusRejected             ListPendingActionsParamsStatus = "rejected"
+	ListPendingActionsParamsStatusResultUnknown        ListPendingActionsParamsStatus = "result_unknown"
+	ListPendingActionsParamsStatusSucceeded            ListPendingActionsParamsStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ListPendingActionsParamsStatus enum.
+func (e ListPendingActionsParamsStatus) Valid() bool {
+	switch e {
+	case ListPendingActionsParamsStatusAwaitingApproval:
+		return true
+	case ListPendingActionsParamsStatusAwaitingConfirmation:
+		return true
+	case ListPendingActionsParamsStatusCancelled:
+		return true
+	case ListPendingActionsParamsStatusExecuting:
+		return true
+	case ListPendingActionsParamsStatusExpired:
+		return true
+	case ListPendingActionsParamsStatusFailed:
+		return true
+	case ListPendingActionsParamsStatusInvalidated:
+		return true
+	case ListPendingActionsParamsStatusPrepared:
+		return true
+	case ListPendingActionsParamsStatusReady:
+		return true
+	case ListPendingActionsParamsStatusRejected:
+		return true
+	case ListPendingActionsParamsStatusResultUnknown:
+		return true
+	case ListPendingActionsParamsStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPendingActionsParamsRisk.
+const (
+	Critical  ListPendingActionsParamsRisk = "critical"
+	Dangerous ListPendingActionsParamsRisk = "dangerous"
+	Read      ListPendingActionsParamsRisk = "read"
+	Write     ListPendingActionsParamsRisk = "write"
+)
+
+// Valid indicates whether the value is a known member of the ListPendingActionsParamsRisk enum.
+func (e ListPendingActionsParamsRisk) Valid() bool {
+	switch e {
+	case Critical:
+		return true
+	case Dangerous:
+		return true
+	case Read:
+		return true
+	case Write:
+		return true
+	default:
+		return false
+	}
+}
+
 // ApiError defines model for ApiError.
 type ApiError struct {
 	Code       string                                           `json:"code"`
@@ -251,9 +344,22 @@ type Error = ApiError
 
 // ListPendingActionsParams defines parameters for ListPendingActions.
 type ListPendingActionsParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor                           `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit                            `form:"limit,omitempty" json:"limit,omitempty"`
+	Scope  *ListPendingActionsParamsScope    `form:"scope,omitempty" json:"scope,omitempty"`
+	Status *[]ListPendingActionsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Risk   *[]ListPendingActionsParamsRisk   `form:"risk,omitempty" json:"risk,omitempty"`
+	Query  *string                           `form:"query,omitempty" json:"query,omitempty"`
 }
+
+// ListPendingActionsParamsScope defines parameters for ListPendingActions.
+type ListPendingActionsParamsScope string
+
+// ListPendingActionsParamsStatus defines parameters for ListPendingActions.
+type ListPendingActionsParamsStatus string
+
+// ListPendingActionsParamsRisk defines parameters for ListPendingActions.
+type ListPendingActionsParamsRisk string
 
 // CancelPendingActionParams defines parameters for CancelPendingAction.
 type CancelPendingActionParams struct {

@@ -181,6 +181,22 @@ func TestNonEmptyResultRef(t *testing.T) {
 	}
 }
 
+func nonEmptyResultRef(value any) bool {
+	switch item := value.(type) {
+	case string:
+		return strings.TrimSpace(item) != ""
+	case map[string]any:
+		for _, key := range []string{"id", "ref", "artifact_ref"} {
+			if text, ok := item[key].(string); ok && strings.TrimSpace(text) != "" {
+				return true
+			}
+		}
+	case []any:
+		return len(item) > 0 && nonEmptyResultRef(item[0])
+	}
+	return false
+}
+
 func TestRefreshM4ApproverLoginReadsAuthenticatedSession(t *testing.T) {
 	const csrf = "0123456789abcdef0123456789abcdef"
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {

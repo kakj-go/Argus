@@ -84,6 +84,17 @@
   gap: var(--space-4);
   align-items: start;
 }
+
+.argus-approval-tabs > [role="tablist"],
+.argus-approval-scope-tabs > [role="tablist"] {
+  overflow-x: auto;
+  justify-content: flex-start;
+  scrollbar-width: thin;
+}
+
+.argus-approval-scope-tabs {
+  margin: var(--space-3) 0;
+}
 @media (max-width: 1080px) {
   .argus-approvals-layout {
     grid-template-columns: minmax(0, 1fr);

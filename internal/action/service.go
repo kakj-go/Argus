@@ -70,41 +70,6 @@ type CardBindingInvocation struct {
 	PendingAction db.PendingAction
 }
 
-func (service Service) StartAutomationApproval(ctx context.Context, enterpriseID uuid.UUID, actionRef string) (Confirmation, error) {
-	var result Confirmation
-	err := service.Store.InTx(ctx, func(q *db.Queries) error {
-		action, plan, err := service.lockAndRevalidate(ctx, q, enterpriseID, actionRef, "awaiting_approval", 0)
-		if err != nil || action.CreatorSubjectType != "service_account" {
-			return ErrInvalidated
-		}
-		account, err := q.GetServiceAccount(ctx, db.GetServiceAccountParams{ID: action.CreatorSubjectID, EnterpriseID: enterpriseID})
-		if err != nil || account.Status != "active" || account.AuthorizationVersion != action.AuthorizationVersion {
-			return ErrInvalidated
-		}
-		policies, err := q.ListMatchingApprovalPolicies(ctx, approvalPolicyQuery(enterpriseID, action, plan))
-		if err != nil {
-			return err
-		}
-		policies, err = matchingApprovalPolicies(ctx, q, action, plan, policies)
-		if err != nil {
-			return err
-		}
-		if len(policies) == 0 {
-			_, _ = q.InvalidatePendingActionM4(ctx, db.InvalidatePendingActionM4Params{ID: action.ID, EnterpriseID: enterpriseID,
-				ErrorCode: pgtype.Text{String: "APPROVAL_POLICY_REQUIRED", Valid: true}})
-			return ErrApprovalRequired
-		}
-		_ = plan
-		approval, err := service.createApprovalRequest(ctx, q, action, policies)
-		if err != nil {
-			return err
-		}
-		result = Confirmation{PendingAction: action, ApprovalRequest: &approval}
-		return service.audit(ctx, q, action.CreatorSubjectID.String(), enterpriseID, "automation.pending_action", action, "awaiting_approval")
-	})
-	return result, err
-}
-
 func (service Service) Confirm(ctx context.Context, actorID, requestID string, enterpriseID uuid.UUID, authorizationVersion int64, stepUp bool, actionRef, idempotencyKey string) (Confirmation, error) {
 	actor, err := uuid.Parse(actorID)
 	if err != nil {
@@ -280,10 +245,6 @@ func (service Service) Decide(ctx context.Context, actorID string, enterpriseID,
 				if err != nil {
 					return Decision{}, err
 				}
-				if err := q.FinishAutomationRunByPendingAction(ctx, db.FinishAutomationRunByPendingActionParams{PendingActionID: uuid.NullUUID{UUID: action.ID, Valid: true},
-					EnterpriseID: enterpriseID, Status: "failed", ErrorCode: pgtype.Text{String: "APPROVAL_REJECTED", Valid: true}}); err != nil {
-					return Decision{}, err
-				}
 				return Decision{Request: approval, Action: action}, service.audit(ctx, q, actorID, enterpriseID, "approval.reject", action, "rejected")
 			}
 
@@ -378,9 +339,6 @@ func (service Service) createExecutionTask(ctx context.Context, q *db.Queries, a
 	execution, err := q.CreateExecution(ctx, db.CreateExecutionParams{ID: newID(), ExecutionRef: executionRef,
 		PendingActionID: action.ID, EnterpriseID: action.EnterpriseID, RunID: action.RunID, IdempotencyKey: idempotencyKey})
 	if err != nil {
-		return db.Execution{}, err
-	}
-	if err := q.MarkAutomationRunExecuting(ctx, db.MarkAutomationRunExecutingParams{PendingActionID: uuid.NullUUID{UUID: action.ID, Valid: true}, EnterpriseID: action.EnterpriseID}); err != nil {
 		return db.Execution{}, err
 	}
 	payload, _ := json.Marshal(ExecutionTask{ExecutionID: execution.ID, EnterpriseID: action.EnterpriseID})

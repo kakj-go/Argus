@@ -1,3 +1,4 @@
+{{- if .Values.network.policyApiSupported }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -22,11 +23,9 @@ spec:
       ports:
         - {protocol: UDP, port: 53}
         - {protocol: TCP, port: 53}
-    - ports:
-        - {protocol: TCP, port: 22}
-        - {protocol: TCP, port: 443}
-        - {protocol: TCP, port: 5985}
-        - {protocol: TCP, port: 5986}
+    # External targets may use arbitrary TCP ports, including custom SSH ports.
+    # Application-level target validation protects internal addresses.
+    - {}
     - to:
         - podSelector:
             matchLabels:
@@ -98,7 +97,7 @@ spec:
       ports: [{protocol: TCP, port: 443}]
     {{- end }}
 {{- else }}
-{{- range $pool := list "agent" "action" "compaction" "automation" "sandbox" }}
+{{- range $pool := list "agent" "action" "compaction" "sandbox" }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -130,7 +129,7 @@ spec:
               app.kubernetes.io/name: argus-redis
       ports:
         - {protocol: TCP, port: 6379}
-    {{- if or (eq $pool "agent") (eq $pool "action") (eq $pool "automation") }}
+    {{- if or (eq $pool "agent") (eq $pool "action") }}
     - to:
         - podSelector:
             matchLabels:
@@ -144,7 +143,7 @@ spec:
       ports:
         - {protocol: TCP, port: 9443}
     {{- end }}
-    {{- if or (eq $pool "agent") (eq $pool "automation") }}
+    {{- if eq $pool "agent" }}
     - to:
         - namespaceSelector:
             matchLabels:
@@ -257,3 +256,4 @@ spec:
       ports:
         - {protocol: TCP, port: 443}
         - {protocol: TCP, port: 9000}
+{{- end }}

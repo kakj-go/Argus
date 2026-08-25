@@ -244,8 +244,11 @@ func convertPending[T any](value db.PendingAction) T {
 	_ = json.Unmarshal(value.Preview, &preview)
 	_ = json.Unmarshal(value.Diff, &diff)
 	available := []string{}
-	if value.Status == "awaiting_confirmation" {
+	switch value.Status {
+	case "awaiting_confirmation":
 		available = []string{"confirm", "cancel"}
+	case "awaiting_approval":
+		available = []string{"approve", "reject", "cancel"}
 	}
 	body := map[string]any{"schema_version": "argus.pending_action/v1", "action_ref": value.ActionRef, "title": value.Title, "summary": value.Summary,
 		"risk": value.Risk, "preview": preview, "diff": diff, "status": value.Status, "available_actions": available,

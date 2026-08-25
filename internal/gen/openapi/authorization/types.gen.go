@@ -181,6 +181,7 @@ type DataScope struct {
 	ExplicitResourceIds []string                 `json:"explicit_resource_ids"`
 	Id                  string                   `json:"id"`
 	LabelSelector       *LabelSelector           `json:"label_selector,omitempty"`
+	MatchAll            *bool                    `json:"match_all,omitempty"`
 	Name                string                   `json:"name"`
 	ResourceTypes       []DataScopeResourceTypes `json:"resource_types"`
 	Status              DataScopeStatus          `json:"status"`

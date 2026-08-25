@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  formatErrorCode,
   useApi,
   type ConfirmActionResult,
   type PendingActionPublic,
 } from "@argus/api-client";
 import { PreviewCommitCard, type PreviewCommitStatus } from "@argus/ui";
+import { presentPendingAction } from "../pending-action-presentation";
 
 function diffLinesOf(action: PendingActionPublic) {
   return action.diff.map((line) => ({
@@ -36,6 +38,7 @@ export function PendingActionConfirm({
 }) {
   const { t } = useTranslation();
   const api = useApi();
+  const presented = presentPendingAction(action, t);
   const [status, setStatus] = useState<PreviewCommitStatus>("pending");
   const [resultMessage, setResultMessage] = useState<string | undefined>();
   const [confirming, setConfirming] = useState(false);
@@ -65,18 +68,16 @@ export function PendingActionConfirm({
             execution.status === "failed" ||
             execution.status === "cancelled"
           ) {
-            throw new Error(execution.error_code ?? "execution failed");
+            throw new Error(formatErrorCode(execution.error_code, "Execution failed"));
           }
           await new Promise((resolve) => window.setTimeout(resolve, 500));
         }
       }
       setStatus("success");
       setResultMessage(
-        result.pending_action.status === "succeeded"
-          ? result.pending_action.result_summary
-          : result.execution
-            ? t("hosts.preview.submitted")
-            : t("hosts.preview.awaitingApproval"),
+        result.pending_action.status === "awaiting_approval"
+          ? t("hosts.preview.awaitingApproval")
+          : t("hosts.preview.submitted"),
       );
       onDone?.(result);
     } catch {
@@ -104,16 +105,17 @@ export function PendingActionConfirm({
     <PreviewCommitCard
       affected={[]}
       confirming={confirming}
-      diff={diffLinesOf(action)}
+      diff={diffLinesOf({ ...action, diff: presented.diff })}
       expiresAt={action.expires_at}
       onCancel={() => void cancel()}
       onConfirm={() => void confirm()}
       resultMessage={resultMessage}
       risk={action.risk}
+      riskLabel={presented.riskLabel}
       status={status}
-      title={action.title}
+      title={presented.title}
     >
-      <p className="argus-muted">{action.summary}</p>
+      <p className="argus-muted">{presented.summary}</p>
     </PreviewCommitCard>
   );
 }

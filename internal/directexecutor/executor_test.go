@@ -11,12 +11,32 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/kakj-go/Argus/internal/resource"
 )
+
+func TestClassifyConnectionError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "refused", err: syscall.ECONNREFUSED, want: "CONNECTION_REFUSED"},
+		{name: "unroutable", err: syscall.EHOSTUNREACH, want: "TARGET_UNROUTABLE"},
+		{name: "auth", err: errors.New("SSH authentication failed"), want: "AUTH_FAILED"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := classifyConnectionError(test.err); got != test.want {
+				t.Fatalf("classifyConnectionError() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
@@ -46,23 +66,33 @@ func TestVerifyEgressRequiresAdvertisedObservedAddress(t *testing.T) {
 		}
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"ip":"203.0.113.10"}`))}, nil
 	})}
-	if err := verifyEgress(context.Background(), "https://egress.example/check", []string{"203.0.113.10"}, client); err != nil {
-		t.Fatal(err)
+	if observed, err := verifyEgress(context.Background(), "https://egress.example/check", []string{"203.0.113.10"}, client); err != nil || observed != "203.0.113.10" {
+		t.Fatalf("unexpected verification result observed=%q err=%v", observed, err)
 	}
-	if err := verifyEgress(context.Background(), "https://egress.example/check", []string{"203.0.113.11"}, client); err == nil {
+	if observed, err := verifyEgress(context.Background(), "https://egress.example/check", []string{"203.0.113.11"}, client); err == nil || observed != "203.0.113.10" {
 		t.Fatal("expected mismatched egress address to fail")
 	}
 }
 
 func TestVerifyEgressRejectsUnsafeEndpointAndOversizedResponse(t *testing.T) {
-	if err := verifyEgress(context.Background(), "http://egress.example/check", []string{"203.0.113.10"}, http.DefaultClient); err == nil {
+	if _, err := verifyEgress(context.Background(), "http://egress.example/check", []string{"203.0.113.10"}, http.DefaultClient); err == nil {
 		t.Fatal("expected non-HTTPS verification endpoint to fail")
 	}
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(make([]byte, 4097)))}, nil
 	})}
-	if err := verifyEgress(context.Background(), "https://egress.example/check", []string{"203.0.113.10"}, client); err == nil {
+	if _, err := verifyEgress(context.Background(), "https://egress.example/check", []string{"203.0.113.10"}, client); err == nil {
 		t.Fatal("expected oversized verification response to fail")
+	}
+}
+
+func TestVerifyEgressAllowsObservedAddressWithoutAdvertisement(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("203.0.113.10"))}, nil
+	})}
+	observed, err := verifyEgress(context.Background(), "https://egress.example/check", nil, client)
+	if err != nil || observed != "203.0.113.10" {
+		t.Fatalf("expected observed-only verification, got observed=%q err=%v", observed, err)
 	}
 }
 

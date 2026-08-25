@@ -1,5 +1,22 @@
 import { ApiError } from "./transport/errors";
 
+export type ApiErrorTranslationParams = Record<
+  string,
+  string | number | boolean
+>;
+
+export type ApiErrorTranslator = (
+  code: string,
+  messageKey: string,
+  params?: ApiErrorTranslationParams,
+) => string | undefined;
+
+let apiErrorTranslator: ApiErrorTranslator | undefined;
+
+export function setApiErrorTranslator(translator: ApiErrorTranslator | undefined) {
+  apiErrorTranslator = translator;
+}
+
 export interface ApiErrorPresentation {
   code: string;
   messageKey: string;
@@ -40,10 +57,25 @@ export function formatApiError(
 ): string {
   const presentation = apiErrorPresentation(error);
   if (!presentation) return fallback;
-  const message = presentation.publicMessage ?? fallback;
+  const message =
+    presentation.publicMessage ??
+    apiErrorTranslator?.(
+      presentation.code,
+      presentation.messageKey,
+      presentation.params,
+    ) ??
+    fallback;
   return presentation.requestId
     ? `${message} ${requestReference(presentation.requestId)}`
     : message;
+}
+
+export function formatErrorCode(
+  code: string | undefined,
+  fallback = "Operation failed",
+): string {
+  if (!code) return fallback;
+  return apiErrorTranslator?.(code, `errors.codes.${code}`) ?? fallback;
 }
 
 export function apiErrorField(error: unknown): string | undefined {

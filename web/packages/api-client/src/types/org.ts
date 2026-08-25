@@ -69,6 +69,7 @@ export interface SaveDataScopeInput {
   description?: string;
   resource_types: DataScope["resource_types"];
   explicit_resource_ids: string[];
+  match_all: boolean;
   label_selector?: DataScope["label_selector"];
   status?: DataScope["status"];
 }

@@ -17,6 +17,7 @@ import {
   Button,
   ConfirmDialog,
   DataTable,
+  DateTimePicker,
   EmptyState,
   Field,
   FormDrawer,
@@ -495,7 +496,7 @@ function BindingDrawer({
           <Controller
             control={control}
             name="valid_from"
-            render={({ field }) => <Input {...field} type="date" />}
+            render={({ field }) => <DateTimePicker {...field} type="date" />}
           />
         </Field>
         <Field
@@ -506,7 +507,7 @@ function BindingDrawer({
           <Controller
             control={control}
             name="valid_until"
-            render={({ field }) => <Input {...field} type="date" />}
+            render={({ field }) => <DateTimePicker {...field} type="date" />}
           />
         </Field>
         <Controller

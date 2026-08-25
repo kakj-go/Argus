@@ -12,8 +12,10 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -154,26 +156,33 @@ func (executor *Executor) release(count int) {
 }
 
 func VerifyEgress(ctx context.Context, verificationURL string, advertised []string) error {
+	_, err := VerifyEgressObserved(ctx, verificationURL, advertised)
+	return err
+}
+
+// VerifyEgressObserved validates the configured HTTPS endpoint and returns the
+// address reported by it for status and diagnostics.
+func VerifyEgressObserved(ctx context.Context, verificationURL string, advertised []string) (string, error) {
 	return verifyEgress(ctx, verificationURL, advertised, &http.Client{Timeout: 10 * time.Second, CheckRedirect: rejectRedirect})
 }
 
-func verifyEgress(ctx context.Context, verificationURL string, advertised []string, client *http.Client) error {
+func verifyEgress(ctx context.Context, verificationURL string, advertised []string, client *http.Client) (string, error) {
 	if verificationURL == "" && len(advertised) == 0 {
-		return nil
+		return "", nil
 	}
 	parsed, err := url.Parse(verificationURL)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
-		return errors.New("egress verification URL must be HTTPS")
+		return "", errors.New("egress verification URL must be HTTPS")
 	}
 	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	response, err := client.Do(request)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 4097))
 	if err != nil || len(body) > 4096 || response.StatusCode != http.StatusOK {
-		return errors.New("egress verification endpoint failed")
+		return "", errors.New("egress verification endpoint failed")
 	}
 	observed := strings.TrimSpace(string(body))
 	var payload struct {
@@ -184,14 +193,17 @@ func verifyEgress(ctx context.Context, verificationURL string, advertised []stri
 	}
 	address, err := netip.ParseAddr(observed)
 	if err != nil {
-		return errors.New("egress verification returned an invalid address")
+		return "", errors.New("egress verification returned an invalid address")
 	}
 	for _, expected := range advertised {
 		if value, parseErr := netip.ParseAddr(expected); parseErr == nil && value.Unmap() == address.Unmap() {
-			return nil
+			return address.Unmap().String(), nil
 		}
 	}
-	return errors.New("observed egress address is not advertised")
+	if len(advertised) == 0 {
+		return address.Unmap().String(), nil
+	}
+	return address.Unmap().String(), errors.New("observed egress address is not advertised")
 }
 
 func (executor *Executor) execute(parent context.Context, test db.ConnectionTest) {
@@ -242,15 +254,45 @@ func (executor *Executor) execute(parent context.Context, test db.ConnectionTest
 	}
 	result.LatencyMS = time.Since(started).Milliseconds()
 	if err != nil {
-		code := "CONNECTION_TEST_FAILED"
+		code := classifyConnectionError(err)
 		if errors.Is(err, resource.ErrDirectTargetDenied) {
-			code = "DIRECT_TARGET_DENIED"
+			code = "TARGET_PROTECTED"
 		}
 		executor.finish(ctx, test, "failed", result, code)
 		return
 	}
 	_ = executor.Secrets.ConsumeLease(ctx, test.EnterpriseID, lease.Lease.ID)
 	executor.finish(ctx, test, "succeeded", result, "")
+}
+
+func classifyConnectionError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
+		return "TIMEOUT"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "TIMEOUT"
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return "CONNECTION_REFUSED"
+	}
+	if errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+		return "TARGET_UNROUTABLE"
+	}
+	if errors.Is(err, syscall.ETIMEDOUT) {
+		return "TIMEOUT"
+	}
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "authentication") || strings.Contains(message, "invalid ssh credential") || strings.Contains(message, "unauthorized") {
+		return "AUTH_FAILED"
+	}
+	if strings.Contains(message, "egress") {
+		return "EGRESS_DENIED"
+	}
+	return "CONNECTION_TEST_FAILED"
 }
 
 func (executor *Executor) probeSSH(ctx context.Context, plan connectionPlan, addresses []netip.Addr, username string, credential []byte) (resource.ConnectionTestResult, error) {

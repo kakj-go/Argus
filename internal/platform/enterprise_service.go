@@ -87,8 +87,8 @@ func (service EnterpriseService) CreateEnterprise(ctx context.Context, actorID s
 		}
 		emptyHash := sha256.Sum256([]byte("null"))
 		if _, err := queries.CreateDataScope(ctx, db.CreateDataScopeParams{
-			ID: scopeID, EnterpriseID: enterpriseID, Name: "Default empty scope", Description: "Matches no resources",
-			ResourceTypes: []string{"host", "kubernetes_cluster"}, ExplicitResourceIds: []string{}, SelectorHash: emptyHash[:],
+			ID: scopeID, EnterpriseID: enterpriseID, Name: "Default resource scope", Description: "Matches all host and Kubernetes resources",
+			ResourceTypes: []string{"host", "kubernetes_cluster"}, ExplicitResourceIds: []string{}, SelectorHash: emptyHash[:], MatchAll: true,
 		}); err != nil {
 			return db.Enterprise{}, err
 		}
@@ -309,11 +309,20 @@ func (service EnterpriseService) defaultScope(ctx context.Context, queries *db.Q
 		return db.DataScope{}, err
 	}
 	for _, scope := range scopes {
-		if scope.Name == "Default empty scope" {
+		if scope.MatchAll && containsString(scope.ResourceTypes, "host") && containsString(scope.ResourceTypes, "kubernetes_cluster") {
 			return scope, nil
 		}
 	}
 	return db.DataScope{}, fmt.Errorf("default data scope missing")
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 var ErrEnterpriseUnavailable = errors.New("enterprise unavailable")

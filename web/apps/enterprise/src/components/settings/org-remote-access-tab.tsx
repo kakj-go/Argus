@@ -14,6 +14,7 @@ import {
   Button,
   CheckItem,
   DataTable,
+  DateTimePicker,
   EmptyState,
   Field,
   FormDrawer,
@@ -583,7 +584,7 @@ function GrantDrawer({
           control={control}
           name="valid_until"
           render={({ field }) => (
-            <Input
+            <DateTimePicker
               onChange={field.onChange}
               type="datetime-local"
               value={field.value}

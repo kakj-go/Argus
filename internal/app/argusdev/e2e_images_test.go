@@ -103,7 +103,6 @@ func TestE2EWorkerDeploymentsFollowInstallProfile(t *testing.T) {
 			"argus-worker-agent",
 			"argus-worker-action",
 			"argus-worker-compaction",
-			"argus-worker-automation",
 			"argus-worker-sandbox",
 		}},
 	}

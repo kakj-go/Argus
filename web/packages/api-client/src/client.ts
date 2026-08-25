@@ -60,9 +60,6 @@ import type {
 import type { K8sWorkload, K8sWorkloadFilter } from "./provisional";
 import type { TaskEvent, TaskFilter, TaskViewModel } from "./provisional";
 import type {
-  Automation,
-  AutomationRun,
-  AutomationWrite,
   ApprovalDecisionCreate,
   ActionOneTimeResult,
   ApprovalRequestView,
@@ -291,7 +288,7 @@ export interface ArgusApiClient {
     ): Promise<PendingActionPublic>;
   };
 
-  /** Human-only remote access. Tickets never cross into Agent, Card, or Automation APIs. */
+  /** Human-only remote access. Tickets never cross into Agent, Card, or Sandbox APIs. */
   remoteAccess: {
     listGrants(query?: CursorListQuery): Promise<Page<RemoteAccessGrant>>;
     createGrant(input: RemoteAccessGrantWrite): Promise<RemoteAccessGrant>;
@@ -469,17 +466,6 @@ export interface ArgusApiClient {
       > & { monthlyAmount?: number },
     ): Promise<ModelQuota | null>;
     usage(range?: UsageRange): Promise<ModelUsageSummary>;
-  };
-
-  /** Deterministic cron jobs bound to a ServiceAccount and fixed Tool input. */
-  automations: {
-    list(): Promise<Automation[]>;
-    get(id: string): Promise<Automation>;
-    create(input: AutomationWrite): Promise<Automation>;
-    update(id: string, input: AutomationWrite): Promise<Automation>;
-    enable(id: string, expectedVersion: number): Promise<Automation>;
-    disable(id: string, expectedVersion: number): Promise<Automation>;
-    listRuns(id: string): Promise<AutomationRun[]>;
   };
 
   /** Interactive card catalog, bindings, validation and enable gates. */

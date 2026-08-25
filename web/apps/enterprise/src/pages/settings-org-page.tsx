@@ -16,15 +16,14 @@ const TAB_KEYS = [
   "users",
   "departments",
   "roles",
-  "bindings",
-  "scopes",
+  "permissions",
   "policies",
   "access",
   "remote_access",
   "telemetry",
 ] as const;
 
-/** 组织与权限：用户、部门、项目、角色、授权绑定、数据权限、审批策略、ServiceAccount/APIKey。 */
+/** 组织与权限：用户、部门、角色、权限管理、审批策略、ServiceAccount/APIKey。 */
 export function SettingsOrgPage() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<(typeof TAB_KEYS)[number]>("users");
@@ -51,11 +50,8 @@ export function SettingsOrgPage() {
         <TabsContent value="roles">
           <OrgRolesTab />
         </TabsContent>
-        <TabsContent value="bindings">
-          <OrgBindingsTab />
-        </TabsContent>
-        <TabsContent value="scopes">
-          <OrgScopesTab />
+        <TabsContent value="permissions">
+          <PermissionManagementTabs />
         </TabsContent>
         <TabsContent value="policies">
           <OrgPoliciesTab />
@@ -71,5 +67,29 @@ export function SettingsOrgPage() {
         </TabsContent>
       </Tabs>
     </PageShell>
+  );
+}
+
+function PermissionManagementTabs() {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<"bindings" | "scopes">("bindings");
+
+  return (
+    <Tabs onValueChange={(value) => setTab(value as typeof tab)} value={tab}>
+      <TabsList className="argus-settings-permission-tabs">
+        <TabsTrigger value="bindings">
+          {t("settings.org.permissionTabs.bindings")}
+        </TabsTrigger>
+        <TabsTrigger value="scopes">
+          {t("settings.org.permissionTabs.scopes")}
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="bindings">
+        <OrgBindingsTab />
+      </TabsContent>
+      <TabsContent value="scopes">
+        <OrgScopesTab />
+      </TabsContent>
+    </Tabs>
   );
 }

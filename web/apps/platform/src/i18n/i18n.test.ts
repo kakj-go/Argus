@@ -9,6 +9,7 @@ import { loginEn, loginZh } from "./login";
 import { sandboxEn, sandboxZh } from "./sandbox";
 import { setupEn, setupZh } from "./setup";
 import { shellEn, shellZh } from "./shell";
+import { ERROR_CODES, errorsEn, errorsZh } from "./errors";
 
 function keys(value: unknown, prefix = ""): string[] {
   if (!value || typeof value !== "object") return [prefix];
@@ -36,4 +37,13 @@ describe("platform i18n", () => {
       expect(keys(zh)).toEqual(keys(en));
     });
   }
+
+  it("has a zh-CN and en-US message for every API error code", () => {
+    for (const code of ERROR_CODES) {
+      expect(errorsZh.errors.codes[code]).toBeTruthy();
+      expect(errorsEn.errors.codes[code]).toBeTruthy();
+      expect(errorsZh.errors.codes[code]).not.toBe(code);
+      expect(errorsEn.errors.codes[code]).not.toBe(code);
+    }
+  });
 });

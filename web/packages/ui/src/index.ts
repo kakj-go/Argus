@@ -5,6 +5,7 @@ export * from "./card";
 export * from "./chart";
 export * from "./code";
 export * from "./display";
+export * from "./date-time-picker";
 export * from "./filter";
 export * from "./form";
 export * from "./key-value-grid";

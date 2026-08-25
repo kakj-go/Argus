@@ -16,7 +16,6 @@ export type AuditOrigin =
   | "admin_chatbox"
   | "card_action"
   | "openapi"
-  | "automation"
   | "platform_ui"
   | "system";
 

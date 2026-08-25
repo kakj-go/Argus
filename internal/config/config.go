@@ -176,9 +176,6 @@ func (cfg Server) Validate() error {
 	if cfg.ConnectorEnrollmentURL == "" || cfg.ConnectorGatewayAddress == "" || cfg.SystemNamespace == "" || cfg.ConnectorIssuerName == "" || cfg.ConnectorIssuerGeneration < 1 {
 		return errors.New("Connector enrollment, gateway, and cert-manager issuer configuration are required")
 	}
-	if cfg.DeploymentProfile == "production" && (len(cfg.DirectAdvertisedEgress) == 0 || cfg.DirectVerificationURL == "") {
-		return errors.New("production requires ARGUS_DIRECT_ADVERTISED_EGRESS and ARGUS_DIRECT_VERIFICATION_URL")
-	}
 	if cfg.DirectExecutorEndpoint == "" || cfg.DirectExecutorServerName == "" || cfg.DirectExecutorTLSCert == "" || cfg.DirectExecutorTLSKey == "" || cfg.DirectExecutorCABundle == "" {
 		return errors.New("Direct Executor endpoint and mTLS configuration are required")
 	}

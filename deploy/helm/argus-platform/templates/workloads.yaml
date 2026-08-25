@@ -3,7 +3,6 @@
   (dict "name" "argus-worker-agent" "command" "argus-worker" "args" (list "--pool=agent") "worker" true "pool" "agent" "port" 8081 "healthPort" 8081)
   (dict "name" "argus-worker-action" "command" "argus-worker" "args" (list "--pool=action") "worker" true "pool" "action" "port" 8081 "healthPort" 8081)
   (dict "name" "argus-worker-compaction" "command" "argus-worker" "args" (list "--pool=compaction") "worker" true "pool" "compaction" "port" 8081 "healthPort" 8081)
-  (dict "name" "argus-worker-automation" "command" "argus-worker" "args" (list "--pool=automation") "worker" true "pool" "automation" "port" 8081 "healthPort" 8081)
   (dict "name" "argus-worker-sandbox" "command" "argus-worker" "args" (list "--pool=sandbox") "worker" true "pool" "sandbox" "port" 8081 "healthPort" 8081)
 -}}
 {{- if eq $root.Values.profile "evaluation" -}}

@@ -122,34 +122,12 @@ func (a *App) runM4Scenario(ctx context.Context, env *E2EEnvironment) error {
 		return err
 	}
 
-	serviceAccount, err := client.JSON(ctx, "m4-automation-account", "enterprise", http.MethodPost, "/enterprise/service-accounts", http.StatusCreated,
-		map[string]any{"name": "m4-automation", "allowed_tool_ids": []string{"host.list", "host.update.preview"}, "data_scope_ids": []string{scopeID}}, enterpriseHeaders(env, "m4-automation-account"))
-	if err != nil {
-		return err
-	}
-	accountID, _ := stringField(serviceAccount, "id")
-	if _, err := client.JSON(ctx, "m4-automation-binding", "enterprise", http.MethodPost, "/enterprise/role-bindings", http.StatusCreated,
-		map[string]any{"subject_type": "service_account", "subject_id": accountID, "role_id": roleID, "data_scope_ids": []string{scopeID}}, enterpriseHeaders(env, "m4-automation-binding")); err != nil {
-		return err
-	}
 	if err := a.refreshEnterpriseLogin(ctx, env); err != nil {
 		return err
 	}
 	// Role binding changes invalidate every enterprise user's authorization
 	// version, including the independent approver used later in this scenario.
 	if err := a.refreshM4ApproverLogin(ctx, env); err != nil {
-		return err
-	}
-	automation, err := client.JSON(ctx, "m4-automation", "enterprise", http.MethodPost, "/enterprise/automations", http.StatusCreated,
-		map[string]any{"name": "M4 host inventory", "service_account_id": accountID, "tool_id": "host.list", "tool_input": map[string]any{}, "cron": "* * * * *", "timezone": "UTC"}, enterpriseHeaders(env, "m4-automation"))
-	if err != nil {
-		return err
-	}
-	automationID, _ := stringField(automation, "id")
-	if err := a.verifyM4ReadAutomation(ctx, env, automationID); err != nil {
-		return err
-	}
-	if err := a.verifyM4AutomationRevisionAndResultUnknown(ctx, env, accountID, hostID); err != nil {
 		return err
 	}
 	if err := a.createM4Sandbox(ctx, env); err != nil {

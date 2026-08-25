@@ -232,7 +232,6 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       type: "generic",
       title: "查询支付服务 P99",
       status: "succeeded",
-      origin: "automation",
       createdBy: "sa-ci",
       createdByName: "SRE Schedule",
       steps: [stepDone("s1", "执行查询", -90 * MINUTE)],
@@ -411,6 +410,8 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       title: "升级 12 个 Collector",
       risk: "write",
       status: "awaiting_confirmation",
+      created_by: "u-root",
+      created_by_name: "企业超级管理员",
       summary: "v24.1.3 → v24.2.0 · batch 3 · 自动回滚",
       preview: {
         fromVersion: "v24.1.3",

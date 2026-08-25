@@ -10,6 +10,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MetricChart } from "./chart";
+import { DateTimePicker } from "./date-time-picker";
 import { FilterBar, SearchInput } from "./filter";
 import { Field, Input } from "./form";
 import { KeyValueGrid } from "./key-value-grid";
@@ -31,6 +32,14 @@ function Wrapper({ children }: { children: ReactNode }) {
 // jsdom has no global afterEach wiring for auto-cleanup, and defaults to en-US.
 beforeEach(() => {
   window.localStorage.setItem("argus.locale", "zh-CN");
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    },
+  );
 });
 afterEach(cleanup);
 
@@ -90,6 +99,24 @@ describe("SearchInput", () => {
   it("renders a search input", () => {
     render(<SearchInput placeholder="find" />, { wrapper: Wrapper });
     expect(screen.getByPlaceholderText("find")).toBeInTheDocument();
+  });
+});
+
+describe("DateTimePicker", () => {
+  it("opens when the input text is clicked and keeps the local value format", () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <DateTimePicker
+        aria-label="Expires at"
+        onChange={onChange}
+        type="datetime-local"
+        value="2026-08-26T23:06"
+      />,
+      { wrapper: Wrapper },
+    );
+    const input = screen.getByRole("textbox", { name: "Expires at" });
+    fireEvent.click(input);
+    expect(container.querySelector(".react-datepicker")).toBeInTheDocument();
   });
 });
 

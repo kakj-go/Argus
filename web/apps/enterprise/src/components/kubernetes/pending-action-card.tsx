@@ -2,11 +2,13 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  formatErrorCode,
   useApi,
   type ConfirmActionResult,
   type PendingActionPublic,
 } from "@argus/api-client";
 import { PreviewCommitCard, type PreviewCommitStatus } from "@argus/ui";
+import { presentPendingAction } from "../pending-action-presentation";
 
 function toDiffLines(diff: PendingActionPublic["diff"]) {
   return diff.map((line) => ({
@@ -36,6 +38,7 @@ export function PendingActionCard({
 }) {
   const { t } = useTranslation();
   const api = useApi();
+  const presented = presentPendingAction(action, t);
   const [status, setStatus] = useState<PreviewCommitStatus>("pending");
   const [resultMessage, setResultMessage] = useState<string>();
   const timerRef = useRef<number | undefined>(undefined);
@@ -76,7 +79,7 @@ export function PendingActionCard({
           return result;
         }
         if (execution.status === "failed" || execution.status === "cancelled") {
-          throw new Error(execution.error_code ?? "execution failed");
+          throw new Error(formatErrorCode(execution.error_code, "Execution failed"));
         }
         await new Promise((resolve) => window.setTimeout(resolve, 500));
       }
@@ -106,17 +109,17 @@ export function PendingActionCard({
   return (
     <PreviewCommitCard
       confirming={confirm.isPending || cancel.isPending}
-      diff={toDiffLines(action.diff)}
+      diff={toDiffLines(presented.diff)}
       expiresAt={action.expires_at}
       onCancel={() => cancel.mutate()}
       onConfirm={() => confirm.mutate()}
       resultMessage={resultMessage}
       risk={action.risk}
-      riskLabel={t(`kubernetes.risk.${action.risk}`)}
+      riskLabel={presented.riskLabel}
       status={status}
-      title={action.title}
+      title={presented.title}
     >
-      <p>{action.summary}</p>
+      <p>{presented.summary}</p>
     </PreviewCommitCard>
   );
 }

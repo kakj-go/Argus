@@ -41,6 +41,7 @@ type ScopeRow = {
   description: string;
   resource_types: ResourceType[];
   explicit_resource_ids: string[];
+  match_all: boolean;
   selector_summary: string;
   status: DataScope["status"];
 };
@@ -146,6 +147,7 @@ export function OrgScopesTab() {
     description: scope.description ?? "",
     resource_types: scope.resource_types,
     explicit_resource_ids: scope.explicit_resource_ids,
+    match_all: scope.match_all ?? false,
     selector_summary: selectorSummary(scope),
     status: scope.status,
   }));
@@ -188,6 +190,18 @@ export function OrgScopesTab() {
                   ))}
                 </span>
               ),
+            },
+            {
+              key: "match_all",
+              header: t("settings.org.scopesTab.matchAll"),
+              render: (row) =>
+                row.match_all ? (
+                  <StatusBadge tone="warning">
+                    {t("settings.org.scopesTab.matchAllEnabled")}
+                  </StatusBadge>
+                ) : (
+                  "—"
+                ),
             },
             {
               key: "selector_summary",
@@ -318,6 +332,7 @@ function ScopeDrawer({
             scopeConstraints.resourceTypes.minItems ?? 1,
             t("settings.org.scopesTab.resourceTypeRequired"),
           ),
+        match_all: z.boolean(),
         resource_ids: z.string(),
         requirements: z
           .array(
@@ -389,6 +404,7 @@ function ScopeDrawer({
       name: "",
       description: "",
       resource_types: [],
+      match_all: false,
       resource_ids: "",
       requirements: [],
       status: "active",
@@ -410,6 +426,7 @@ function ScopeDrawer({
       name: scope?.name ?? "",
       description: scope?.description ?? "",
       resource_types: scope?.resource_types ?? [],
+      match_all: scope?.match_all ?? false,
       resource_ids: (scope?.explicit_resource_ids ?? []).join("\n"),
       requirements: (scope?.label_selector?.requirements ?? []).map(
         createRequirementDraft,
@@ -430,6 +447,7 @@ function ScopeDrawer({
         description: values.description || undefined,
         resource_types: values.resource_types,
         explicit_resource_ids: parseList(values.resource_ids),
+        match_all: values.match_all,
         label_selector:
           normalizedRequirements.length > 0
             ? {
@@ -446,6 +464,7 @@ function ScopeDrawer({
           description: "description",
           explicit_resource_ids: "resource_ids",
           label_selector: "requirements",
+          match_all: "match_all",
           name: "name",
           resource_types: "resource_types",
           status: "status",
@@ -496,6 +515,27 @@ function ScopeDrawer({
             {...register("description")}
             maxLength={scopeConstraints.description.maxLength}
             rows={2}
+          />
+        </Field>
+        <Field
+          requirement="optional"
+          hint={t("settings.org.scopesTab.matchAllHint")}
+          label={t("settings.org.scopesTab.matchAll")}
+        >
+          <Controller
+            control={control}
+            name="match_all"
+            render={({ field }) => (
+              <button
+                className="argus-settings-check-option"
+                onClick={() => field.onChange(!field.value)}
+                type="button"
+              >
+                <CheckItem checked={field.value}>
+                  {t("settings.org.scopesTab.matchAllEnabled")}
+                </CheckItem>
+              </button>
+            )}
           />
         </Field>
         <Field

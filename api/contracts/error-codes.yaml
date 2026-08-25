@@ -94,7 +94,6 @@ codes:
   ACTION_RESULT_NOT_AVAILABLE: {http_status: 404, message_key: errors.execution.one_time_result_not_available, retryable: true}
   ACTION_RESULT_EXPIRED: {http_status: 410, message_key: errors.execution.one_time_result_expired, retryable: false}
   ACTION_RESULT_ALREADY_CONSUMED: {http_status: 409, message_key: errors.execution.one_time_result_consumed, retryable: false}
-  AUTOMATION_OVERLAP_SKIPPED: {http_status: 409, message_key: errors.automation.overlap_skipped, retryable: true}
   SANDBOX_PROFILE_UNAVAILABLE: {http_status: 503, message_key: errors.sandbox.profile_unavailable, retryable: true}
   SANDBOX_QUOTA_EXCEEDED: {http_status: 429, message_key: errors.sandbox.quota_exceeded, retryable: false}
   CARD_NOT_FOUND: {http_status: 404, message_key: errors.card.not_found, retryable: false}

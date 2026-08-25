@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Bell,
   Bot,
-  CalendarClock,
   ChevronsLeft,
   ChevronsRight,
   Component,
@@ -68,7 +67,7 @@ function useAdminCounts() {
   });
   const approvals = useQuery({
     queryKey: ["approvals", "awaiting_approval"],
-    queryFn: () => api.approvals.list({ status: ["awaiting_approval"] }),
+    queryFn: () => api.approvals.list({ scope: "mine" }),
     enabled: true,
   });
   return {
@@ -103,7 +102,6 @@ function buildSections(
       groupKey: "shell.groups.execution",
       items: [
         { key: "shell.nav.tasks", to: "/tasks", icon: History },
-        { key: "shell.nav.automation", to: "/automations", icon: CalendarClock },
         {
           key: "shell.nav.approvals",
           to: "/approvals",
@@ -118,11 +116,15 @@ function buildSections(
       items: [
         { key: "shell.nav.settingsOrg", to: "/settings/org", icon: Users },
         { key: "shell.nav.settingsAi", to: "/settings/ai", icon: Bot },
-        ...(!realMode ? [{
-          key: "shell.nav.settingsInteractiveCards",
-          to: "/settings/interactive-cards",
-          icon: Component,
-        }] : []),
+        ...(!realMode
+          ? [
+              {
+                key: "shell.nav.settingsInteractiveCards",
+                to: "/settings/interactive-cards",
+                icon: Component,
+              },
+            ]
+          : []),
         {
           key: "shell.nav.settingsSecrets",
           to: "/settings/secrets",
@@ -248,10 +250,14 @@ function CommandDialog() {
           <Search size={15} />
           {t("shell.command.findHost")}
         </Link>
-        {!realMode && <Link onClick={() => setCommandOpen(false)} to="/approvals">
+        <Link
+          onClick={() => setCommandOpen(false)}
+          search={{ approval: "operation", scope: "mine" }}
+          to="/approvals"
+        >
           <ShieldCheck size={15} />
           {t("shell.command.approvals")}
-        </Link>}
+        </Link>
       </div>
     </Dialog>
   );
@@ -262,7 +268,6 @@ const pageTitles: Record<string, string> = {
   "/kubernetes": "shell.nav.kubernetes",
   "/tasks": "shell.nav.tasks",
   "/approvals": "shell.nav.approvals",
-  "/automations": "shell.nav.automation",
   "/settings/org": "shell.nav.settingsOrg",
   "/settings/ai": "shell.nav.settingsAi",
   "/settings/interactive-cards": "shell.nav.settingsInteractiveCards",
@@ -335,12 +340,16 @@ function MobileNavigation() {
   const items = [
     { key: "shell.nav.conversation", to: "/", icon: House, exact: true },
     { key: "shell.nav.hosts", to: "/hosts", icon: Server, exact: false },
-    ...(!realMode ? [{
-      key: "shell.nav.approvals",
-      to: "/approvals",
-      icon: ShieldCheck,
-      exact: false,
-    }] : []),
+    ...(!realMode
+      ? [
+          {
+            key: "shell.nav.approvals",
+            to: "/approvals",
+            icon: ShieldCheck,
+            exact: false,
+          },
+        ]
+      : []),
     {
       key: "shell.nav.settings",
       to: "/settings/org",

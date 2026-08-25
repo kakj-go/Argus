@@ -32,3 +32,29 @@ func TestNormalizeSelectorRejectsDuplicateKeys(t *testing.T) {
 		t.Fatal("duplicate selector key accepted")
 	}
 }
+
+func TestScopeMatchAllAllowsPrecreationResource(t *testing.T) {
+	scope := Scope{
+		ID:                  "all",
+		EnterpriseID:        "enterprise-1",
+		ResourceTypes:       []string{"host", "kubernetes_cluster"},
+		ExplicitResourceIDs: []string{},
+		MatchAll:            true,
+		Status:              "active",
+	}
+	for _, resource := range []Resource{
+		{EnterpriseID: "enterprise-1", Type: "host", ID: "preview-host-id"},
+		{EnterpriseID: "enterprise-1", Type: "kubernetes_cluster", ID: "preview-cluster-id"},
+	} {
+		if !ScopeMatches(scope, resource) {
+			t.Fatalf("match_all scope rejected %s preview resource", resource.Type)
+		}
+	}
+}
+
+func TestEmptyScopeStillMatchesNothing(t *testing.T) {
+	scope := Scope{ID: "empty", EnterpriseID: "enterprise-1", ResourceTypes: []string{"host"}, Status: "active"}
+	if ScopeMatches(scope, Resource{EnterpriseID: "enterprise-1", Type: "host", ID: "host-1"}) {
+		t.Fatal("empty scope unexpectedly matched a resource")
+	}
+}

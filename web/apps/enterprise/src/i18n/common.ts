@@ -8,6 +8,7 @@ export const commonZh = {
     retry: "重试",
     cancel: "取消",
     requestReference: "请求 ID：{{requestId}}",
+    unknown: "未知",
     underConstruction: {
       title: "建设中",
       description: "该页面正在建设中，敬请期待。",
@@ -33,13 +34,6 @@ export const commonZh = {
       description:
         "Metrics、Logs、Traces 独立查询链路；控制通道与遥测摄入互不占用。",
       action: "用 AI 查询数据",
-    },
-    automation: {
-      eyebrow: "执行治理",
-      title: "自动化与审批",
-      description:
-        "运行、审批和变更执行均由 PostgreSQL 保存权威状态，可暂停、恢复与审计。",
-      action: "创建自动化",
     },
     administration: {
       eyebrow: "企业治理",
@@ -72,6 +66,7 @@ export const commonEn = {
     retry: "Retry",
     cancel: "Cancel",
     requestReference: "Request ID: {{requestId}}",
+    unknown: "Unknown",
     underConstruction: {
       title: "Under construction",
       description: "This page is under construction. Stay tuned.",
@@ -98,13 +93,6 @@ export const commonEn = {
       description:
         "Metrics, Logs, and Traces use an isolated query path separate from control and ingestion.",
       action: "Query with AI",
-    },
-    automation: {
-      eyebrow: "Execution governance",
-      title: "Automation & Approvals",
-      description:
-        "PostgreSQL stores authoritative run, approval, and execution state for pause, recovery, and audit.",
-      action: "Create automation",
     },
     administration: {
       eyebrow: "Enterprise governance",

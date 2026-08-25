@@ -428,6 +428,8 @@ components:
           items:
             type: string
             minLength: 1
+        match_all:
+          type: boolean
         label_selector:
           $ref: '#/components/schemas/LabelSelector'
     DataScopeUpdate:
@@ -462,6 +464,8 @@ components:
           items:
             type: string
             minLength: 1
+        match_all:
+          type: boolean
         label_selector:
           $ref: '#/components/schemas/LabelSelector'
         status:
@@ -806,6 +810,8 @@ components:
           items:
             type: string
             minLength: 1
+        match_all:
+          type: boolean
         label_selector:
           $ref: '#/components/schemas/LabelSelector'
         status:

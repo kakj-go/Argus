@@ -19,9 +19,6 @@ export type {
   StepUpSession,
   BreakGlassSession,
   BreakGlassCreate,
-  Automation,
-  AutomationRun,
-  AutomationWrite,
   ApprovalDecisionCreate,
   ActionOneTimeResult,
   ApprovalRequestView,
@@ -98,12 +95,16 @@ export { HttpTransport } from "./transport/http";
 export {
   apiErrorField,
   apiErrorPresentation,
+  formatErrorCode,
   formatApiError,
   presentApiFormError,
+  setApiErrorTranslator,
 } from "./error-presentation";
 export type {
   ApiErrorPresentation,
   ApiFormErrorOptions,
+  ApiErrorTranslationParams,
+  ApiErrorTranslator,
 } from "./error-presentation";
 export {
   FORM_CONSTRAINTS,

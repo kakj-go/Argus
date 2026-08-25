@@ -21,6 +21,7 @@ export interface PendingActionFilter {
   status?: PendingActionStatus[];
   risk?: PendingActionRisk[];
   query?: string;
+  scope?: "mine" | "created" | "all";
 }
 
 export type ConfirmActionResult = PendingActionCommandResult & {

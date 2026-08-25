@@ -49,15 +49,15 @@ cmd/
 
 `argus-telemetry-ingest` 与 `argus-telemetry-query` 使用相同镜像、不同启动参数。它们必须拥有不同的 Service、ServiceAccount、NetworkPolicy、PodDisruptionBudget、HPA 和数据库凭证。
 
-普通 Worker 在所有 Profile 中都保留 `agent`、`action`、`compaction`、`automation`、`sandbox` 五条 PostgreSQL Task Queue 和对应 Processor；此次 Profile 差异只影响 Kubernetes Deployment 拓扑，不合并领域职责：
+普通 Worker 在所有 Profile 中都保留 `agent`、`action`、`compaction`、`sandbox` 四条 PostgreSQL Task Queue 和对应 Processor；当前版本不提供定时无人值守任务。此次 Profile 差异只影响 Kubernetes Deployment 拓扑，不合并领域职责：
 
 | Profile | 普通 Worker Deployment 拓扑 | 隔离与扩缩容边界 |
 | ------- | ---------------------------- | ---------------- |
-| Evaluation | 一个 `argus-worker --pool=default`，同时运行五条队列 | 五类任务共享一个 Pod 的资源与故障域，并使用五个 Pool 所需网络权限的并集 |
-| Local Hardening | `argus-worker-{agent,action,compaction,automation,sandbox}` 五个 Deployment | 各 Pool 可独立扩缩容并保持最小 NetworkPolicy |
-| Production | `argus-worker-{agent,action,compaction,automation,sandbox}` 五个 Deployment | 各 Pool 独立配置副本、PDB、HPA、拓扑分布和最小 NetworkPolicy |
+| Evaluation | 一个 `argus-worker --pool=default`，同时运行四条队列 | 四类任务共享一个 Pod 的资源与故障域，并使用四个 Pool 所需网络权限的并集 |
+| Local Hardening | `argus-worker-{agent,action,compaction,sandbox}` 四个 Deployment | 各 Pool 可独立扩缩容并保持最小 NetworkPolicy |
+| Production | `argus-worker-{agent,action,compaction,sandbox}` 四个 Deployment | 各 Pool 独立配置副本、PDB、HPA、拓扑分布和最小 NetworkPolicy |
 
-Evaluation 合并 Worker 的默认资源为 `requests: 100m/256Mi`、`limits: 2 CPU/1Gi`。任一 Processor 发生导致进程退出的致命错误时，五类任务会随同一个 Worker Pod 一起重启；该取舍只适用于开发、演示和功能验证。`argus-direct-executor` 在所有 Profile 中始终保持独立 Deployment、队列和网络边界。
+Evaluation 合并 Worker 的默认资源为 `requests: 100m/256Mi`、`limits: 2 CPU/1Gi`。任一 Processor 发生导致进程退出的致命错误时，四类任务会随同一个 Worker Pod 一起重启；该取舍只适用于开发、演示和功能验证。`argus-direct-executor` 在所有 Profile 中始终保持独立 Deployment、队列和网络边界。
 
 七类工作负载都支持横向扩展，但扩展条件不同：
 
@@ -125,7 +125,7 @@ flowchart TB
 隔离要求：
 
 - Connector 仅连接 `argus-connector-gateway`，承载控制、Artifact 和独立的 Remote Session Stream，不发送遥测数据。
-- Direct Executor 只从固定出口访问经 DNS/IP 双重校验的公网 SSH/WinRM 目标，NetworkPolicy/出口防火墙拒绝集群、私网、云元数据和平台内部地址。
+- Direct Executor 通过 DNS/IP 双重校验访问用户目标，允许自定义端口和未命中保护集合的用户私网；应用层拒绝集群、Argus、云元数据、环回和链路本地地址。NetworkPolicy 负责内部服务隔离；固定出口、NAT、出口审计和额外 CIDR 防火墙由用户自行部署的 Egress Gateway 或网络防火墙负责。
 - `argus-server` 通过独立内部 CA 的 mTLS gRPC 向 Direct Executor 发送持久任务派发提示；PostgreSQL 队列是权威事实并负责断连恢复，RPC 不携带任意目标参数。
 - Remote Access 入口固定使用外部 WSS `9445`，只接受 `argus-server` 签发的短期一次性会话票据；Gateway peer 使用内部 mTLS `9446`，Connector 控制继续使用 `9443`，Direct Executor RPC 使用 `9444`。
 - Gateway peer 通过 Kubernetes API 获取 Ready owner Pod IP，ServiceAccount 只允许读取同 Namespace Pod；NetworkPolicy 必须允许 Kubernetes API Endpoint、DNS、Gateway peer `9446`、PostgreSQL、Redis、Direct Executor 和 ObjectStore。
@@ -221,6 +221,12 @@ spec:
 
   security:
     platformMfaRequired: false
+
+  network:
+    mode: auto
+    egress:
+      expectedIPs: []
+      verificationURL: ""
 
   images:
     registry: registry.example.com/argus
@@ -450,21 +456,21 @@ Token 过期时间
 ### 12.1 Evaluation
 
 - 单副本 Argus 服务。
-- 普通 Worker 使用一个 `argus-worker --pool=default` Deployment 运行五条队列；Direct Executor 仍独立部署。
+- 普通 Worker 使用一个 `argus-worker --pool=default` Deployment 运行四条队列；Direct Executor 仍独立部署。
 - 单节点或低副本 PostgreSQL、Redis、Kafka 和 ClickHouse。
 - 较小 PVC 和短 TTL。
 - 仅用于开发、演示和功能验证，不承诺节点故障可用性。
 
 ### 12.2 Local Hardening
 
-- 保持单节点、单副本规模，只面向 arm64 Docker Desktop；普通 Worker 仍使用五个拆分 Deployment，不沿用 Evaluation 的合并拓扑。
+- 保持单节点、单副本规模，只面向 arm64 Docker Desktop；普通 Worker 仍使用四个拆分 Deployment，不沿用 Evaluation 的合并拓扑。
 - 强制使用单节点 OpenBao Transit、独立 PostgreSQL Login 和本地加密备份恢复，并提供 TOTP/Step-up 能力；平台超级管理员 MFA 强制开关默认关闭。
 - 允许共享容器 Sandbox Runtime，但明确输出安全降级。
 - 完成状态为 `local_hardening_complete`，不产生生产 SLO、RPO 或 RTO。
 
 ### 12.3 Production
 
-- `argus-server`、五个拆分的普通 Worker、Direct Executor、Connector Gateway、Telemetry Ingest/Query 至少 2 副本；Direct Executor 使用固定 NAT/Egress Gateway，扩容不能改变用户防火墙白名单地址。
+- `argus-server`、四个拆分的普通 Worker、Direct Executor、Connector Gateway、Telemetry Ingest/Query 至少 2 副本；Direct Executor 使用固定 NAT/Egress Gateway，扩容不能改变用户防火墙白名单地址。
 - Pod Anti-Affinity/Topology Spread 和 PodDisruptionBudget。
 - PostgreSQL 在集群内使用高可用拓扑和反亲和；具体 Operator 与备份实现按 ADR 固化。
 - Kafka 至少 3 Broker，跨节点分布。
@@ -565,6 +571,12 @@ deploy/
 ```
 
 Production 默认 `retainData=true`。删除 PVC、对象存储数据、企业加密主密钥或 CRD 必须使用单独的高危确认参数，并在终端展示准确资源清单和恢复边界。
+
+## 网络安全能力说明
+
+`argusctl` 默认使用 `spec.network.mode: auto`：自动部署可用的 Argus NetworkPolicy，探测 CNI 执行状态，并将 `enforced`、`unverified` 或 `unsupported` 写入安装状态。NetworkPolicy 只承担 Argus 内部服务隔离，不限制 Direct Executor 的用户目标端口。
+
+Egress Gateway 不由 Argus 默认安装。用户可以自行使用 Cilium、Calico、Istio、云 NAT 或企业防火墙；`argusctl` 识别可选的出口 IP/验证 URL，Direct Executor 启动和运行期周期性复核。网关缺失或复核失败时，基础连接继续使用集群默认路由并告警；固定出口、统一审计和网关级防护不保证，运行期状态目前以日志/诊断为准。Direct Executor 始终拒绝集群、Argus、metadata、loopback 和 link-local 目标，但允许未命中保护集合的用户私网和自定义端口。
 
 ## 16. 参考
 

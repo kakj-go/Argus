@@ -10,6 +10,7 @@ import { loginEn, loginZh } from "./login";
 import { sandboxEn, sandboxZh } from "./sandbox";
 import { setupEn, setupZh } from "./setup";
 import { shellEn, shellZh } from "./shell";
+import { errorsEn, errorsZh } from "./errors";
 
 /**
  * i18n 模块化注册模式（与 enterprise 应用一致）：
@@ -27,6 +28,7 @@ const modulesZh = [
   auditZh,
   accountZh,
   setupZh,
+  errorsZh,
 ];
 const modulesEn = [
   commonEn,
@@ -39,6 +41,7 @@ const modulesEn = [
   auditEn,
   accountEn,
   setupEn,
+  errorsEn,
 ];
 
 const storedLocale = window.localStorage.getItem("argus.locale");

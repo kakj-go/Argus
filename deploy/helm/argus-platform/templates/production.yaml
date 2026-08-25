@@ -1,5 +1,5 @@
 {{- if eq .Values.profile "production" }}
-{{- $workers := list "argus-worker-agent" "argus-worker-action" "argus-worker-compaction" "argus-worker-automation" "argus-worker-sandbox" -}}
+{{- $workers := list "argus-worker-agent" "argus-worker-action" "argus-worker-compaction" "argus-worker-sandbox" -}}
 {{- range $name := concat (list "argus-web" "argus-server" "argus-direct-executor" "argus-connector-gateway") $workers }}
 ---
 apiVersion: policy/v1

@@ -156,7 +156,7 @@ Redis 不参与 PostgreSQL 的原子提交，也不保存唯一 Run 状态。跨
 MCP Tool 是 AI 可发现的能力接口，领域服务是业务逻辑的唯一实现。领域模块首先作为 `argus-server`/`argus-worker` 内部模块存在，不等同于独立部署服务。
 
 ```text
-Chatbox / Admin / OpenAPI / Automation
+Chatbox / Admin / OpenAPI / Service integrations
                  ↓
              领域服务
                  ↓
@@ -174,11 +174,11 @@ Connector 主动向服务端建立长连接。安装成功后，所在主机成�
 人工远程访问与 AI Tool 执行是两个明确边界：
 
 ```text
-AI / Automation → Preview / Commit → Execution → Connector 或 Direct Executor
+AI / Service integration → Preview / Commit → Execution → Connector 或 Direct Executor
 人工用户 → MFA/JIT/审批 → RemoteAccessSession → Remote Access Gateway → Connector 或 Direct Executor → SSH/后续 RDP
 ```
 
-远程会话票据只交给当前已授权浏览器会话，不能进入模型上下文、Card DOM、Automation 或 OpenSandbox。交互式 Shell 中的人工命令不逐条使用 Tool Preview/Commit，因此必须依赖会话级授权、录像、审计、时长、剪贴板和文件传输策略控制风险。
+远程会话票据只交给当前已授权浏览器会话，不能进入模型上下文、Card DOM 或 OpenSandbox。当前版本不提供定时无人值守任务。交互式 Shell 中的人工命令不逐条使用 Tool Preview/Commit，因此必须依赖会话级授权、录像、审计、时长、剪贴板和文件传输策略控制风险。
 
 ### 5.5 遥测推送与查询平面
 

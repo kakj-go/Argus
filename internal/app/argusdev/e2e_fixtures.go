@@ -131,7 +131,6 @@ func e2eWorkerDeployments(profile string) []string {
 		"argus-worker-agent",
 		"argus-worker-action",
 		"argus-worker-compaction",
-		"argus-worker-automation",
 		"argus-worker-sandbox",
 	}
 }

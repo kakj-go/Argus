@@ -226,6 +226,11 @@ export function HostsPage() {
     void queryClient.invalidateQueries({ queryKey: ["remote-sessions"] });
   };
 
+  const onHostCreated = () => {
+    setAddHostOpen(false);
+    invalidateAll();
+  };
+
   const refresh = () => {
     void hostsQuery.refetch();
     void scopesQuery.refetch();
@@ -604,7 +609,7 @@ export function HostsPage() {
         open={addBastionOpen}
       />
       <AddHostWizard
-        onCreated={invalidateAll}
+        onCreated={onHostCreated}
         onOpenChange={setAddHostOpen}
         open={addHostOpen}
         scopes={activeScopes}

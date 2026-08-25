@@ -22,7 +22,7 @@ M3 已实现 Secret/Credential、Host/Kubernetes、Bastion Scope、Connector 注
 
 ### 1.2 M6 实现边界
 
-M6 已实现 RemoteAccessGrant/Policy、AccessRequest/Lease、一次性 Ticket、SSH PTY、HTTPS WinRS PowerShell 行模式、跨 Gateway peer 路由和加密录像。Remote Access 继续与 Agent、Card、Automation、PendingAction 和 Execution 隔离；M8 已补齐本地 MFA、Step-up、Break Glass 和录像备份恢复，Production 不可变保留与真实 Windows Server 兼容矩阵仍由独立 Validation 清单阻断。
+M6 已实现 RemoteAccessGrant/Policy、AccessRequest/Lease、一次性 Ticket、SSH PTY、HTTPS WinRS PowerShell 行模式、跨 Gateway peer 路由和加密录像。Remote Access 继续与 Agent、Card、PendingAction 和 Execution 隔离；M8 已补齐本地 MFA、Step-up、Break Glass 和录像备份恢复，Production 不可变保留与真实 Windows Server 兼容矩阵仍由独立 Validation 清单阻断。
 
 Connector PKI 由 cert-manager 签发。安装器复用同 major/minor 且 patch 不低于版本锁基线的实例，否则安装锁定版本。Server 和 Connector Gateway 都通过独立 ServiceAccount 与最小 CertificateRequest RBAC 使用同一个 namespaced Issuer；Gateway 缺少 Issuer 或权限时必须 fail closed，不能让轮换退化为继续使用旧证书。实例卸载不得删除被其他安装复用的 cert-manager CRD。
 
@@ -103,7 +103,7 @@ Requested
 → Terminated / Failed / Expired / ConnectionLost
 ```
 
-Remote Access Session 是人工作业通道，不是 MCP Tool Commit。AI、交互卡片、Automation 和 OpenSandbox 不得创建或消费交互式会话票据，也不能通过浏览器终端间接执行生产操作。
+Remote Access Session 是人工作业通道，不是 MCP Tool Commit。AI、交互卡片和 OpenSandbox 不得创建或消费交互式会话票据，也不能通过浏览器终端间接执行生产操作。
 
 ## 3. 堡垒机安装、注册和界面创建
 
@@ -434,18 +434,18 @@ Browser
 
 - 票据短期、一次性、绑定浏览器 Session、用户、企业、Host、ManagedAccount、协议、动作、DataScope 摘要、AuthorizationVersion 和 RemoteAccessSession。
 - 平台超级管理员无权进入企业远程会话。
-- AI、Card、Automation、OpenSandbox 不获得票据。
+- AI、Card 和 OpenSandbox 不获得票据。
 - 录像按 asciicast v2 NDJSON 保存 `i/o/r/m` 事件，AES-256-GCM 密文分片写入 Artifact Store，PostgreSQL 保存索引和 SHA-256 Hash Chain；Gateway Pod 不保存唯一录像。
 - M6 Evaluation 遇到 `step_up_mfa` obligation 时 fail closed；M8 本地加固通过 AuthenticationAssuranceService 提供 TOTP Step-up，Production 仍需独立环境验证。
 - 剪贴板和文件传输默认关闭，开启时分别授权和审计。
 - 管理员可以终止活动会话，但不能静默接管用户身份。
 - 用户禁用、RoleBinding/DataScope/RemoteAccessGrant/Policy 撤销、授权敏感标签变化或企业停用时，未使用票据立即失效，等待连接的会话被拒绝，活动会话立即终止或进入有上限的安全结束窗口并审计。
 
-交互式 Shell 允许人工执行改变目标状态的命令，因此不能声称每条命令都走 Tool Preview/Commit。Tool/Automation 仍使用两阶段操作；远程会话则使用会话级 JIT 授权、录像和审计。后续 RDP、SFTP、端口转发必须分别形成协议和安全 ADR。
+交互式 Shell 允许人工执行改变目标状态的命令，因此不能声称每条命令都走 Tool Preview/Commit。受控 Tool 写操作使用两阶段操作；远程会话则使用会话级 JIT 授权、录像和审计。后续 RDP、SFTP、端口转发必须分别形成协议和安全 ADR。
 
 第一版至少记录结构化命令和完整会话录像；后续 CommandPolicy 可以按用户/部门、Host/标签、ManagedAccount、命令组和优先级执行允许、拒绝、复核或告警。命令匹配不能作为唯一安全边界，高敏主机仍应使用低权限 Managed Account、MFA/JIT、短会话和最小文件能力。
 
-### 7.1 人工命令行与自动化命令的边界
+### 7.1 人工命令行与后台执行任务的边界
 
 Collector 安装、升级、配置收敛、Profile 开关和 Telemetry Route 变更会使用与人工命令行相同的底层连接基础设施，但不能使用同一个逻辑通道：
 
@@ -455,7 +455,7 @@ Collector 安装、升级、配置收敛、Profile 开关和 Telemetry Route 变
 → Remote Access Gateway
 → Connector / Direct Executor 连接适配器
 
-自动化任务
+后台执行任务
 → Preview / Confirm
 → Execution / ConnectorCommand
 → Connector / Direct Executor 连接适配器
@@ -464,9 +464,9 @@ Collector 安装、升级、配置收敛、Profile 开关和 Telemetry Route 变
 二者可以复用目标解析、SSH/WinRM 客户端、Host Key 校验、Credential Broker 和网络路径，但必须分离：
 
 - 人工命令行使用用户绑定的短期会话票据、交互输入输出、会话录像和会话级授权。
-- 自动化命令使用服务端生成的不可变执行计划、幂等键、步骤状态、超时、重试/对账和回滚状态。
-- Collector 自动化任务只能执行版本化的安装、配置和验证模板，不能把任意 Shell 字符串包装成“安装任务”。
-- 前端必须明确标识当前处于“人工命令行”还是“平台自动化任务”，不能在后台向已打开的人工终端写入命令。
+- 后台命令使用服务端生成的不可变执行计划、幂等键、步骤状态、超时、重试/对账和回滚状态。
+- Collector 安装、配置和验证只能通过版本化模板执行，不能把任意 Shell 字符串包装成后台任务。
+- 前端必须明确标识当前处于“人工命令行”还是“平台后台任务”，不能在后台向已打开的人工终端写入命令。
 - 两类操作分别计入 RemoteAccessSession 与 Execution/ConnectorCommand 审计，支持按用户、目标、会话或任务独立检索。
 
 ## 8. 主机管理界面

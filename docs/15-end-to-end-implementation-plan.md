@@ -31,7 +31,7 @@
 - RoleBinding 授予功能能力；DataScope 使用显式资源 ID 和/或受限标签选择器授权资源。
 - 所有变更使用 Preview/Commit；私有 Token 和参数只在服务端保存。
 - Card 使用 Manifest、CSP、MessageChannel/MessagePort 和 Binding ID。
-- 人工 RemoteAccessSession 与 AI/Automation Execution 使用不同票据、接口、状态机和审计。
+- 人工 RemoteAccessSession 与 AI/Tool Execution 使用不同票据、接口、状态机和审计；当前版本不提供定时无人值守任务。企业审批收件箱以桌面端为唯一正式支持视口，移动端不纳入 M4/M6 E2E 验收。
 - 遥测可信身份为 `EnterpriseId + ResourceId + CollectorId`，查询强制应用授权资源范围。
 - Agent Harness 第一版为 Provider-neutral 单 Agent 小内核；完整 ConversationEvent 不可变保存，上下文使用 Typed Checkpoint + ContextSnapshot + Recent Tail，可选 Provider Compaction 不成为事实来源。
 
@@ -84,7 +84,7 @@
 | M1 | 前端与 API 基座 | real/mock Adapter 分离，UI/Token/i18n/安全欠账收敛，前端不再暴露私有 PendingAction 参数 |
 | M2 | 初始化、身份与授权闭环 | Setup、平台域、企业域、Department、RoleBinding/DataScope、Session、审计走真实 API |
 | M3 | 资源与连接闭环 | 带 labels 的 Host/Kubernetes、Secret/Credential、Connector、Bastion Scope、Direct Executor 可真实管理 |
-| M4 | 确定性执行闭环 | Outbox/Lease/Fence、Run、单 Agent Loop、上下文投影/压缩、Tool 权限/Schema 门禁、Preview/PendingAction/Approval/Execution 可恢复执行、AutomationRevision |
+| M4 | 确定性执行闭环 | Outbox/Lease/Fence、Run、单 Agent Loop、上下文投影/压缩、Tool 权限/Schema 门禁、Preview/PendingAction/Approval/Execution 可恢复执行、桌面审批收件箱 |
 | M5 | Card 闭环 | 系统 Card 通过 CSP/MessagePort/Manifest/Binding 安全展示和触发动作，企业 Card 通过发布门禁 |
 | M6 | 人工远程访问闭环 | Grant、短期票据、SSH PTY/HTTPS WinRS、加密录像、终止、撤权和审计完整 |
 | M7 | 遥测闭环 | Collector、Ingest/Kafka/ClickHouse/Query、可信资源身份和统一数据裁剪贯通 |
@@ -166,13 +166,14 @@ M8 结束时至少通过以下全链路场景：
 6. 修改授权敏感标签使 Host 离开 DataScope，旧游标、PendingAction 和票据失效，活动订阅重新鉴权。
 7. Agent 发起变更 Preview，可信 `run_id` 贯穿 PendingAction、Execution 和 Verify；浏览器只持有 ActionBinding，用户确认后 Action Executor 确定性 Commit，重复点击不产生重复副作用。
 8. 长会话和大 ToolResult 触发确定性投影与 ContextSnapshot；原始事件仍可追溯，Worker 重启后能从相同切点恢复，摘要不能恢复已撤销权限。
-9. 需要审批的生产动作不能由创建人自批；多策略必须全部满足；撤权后 Commit 失败；ResultUnknown 仅依据外部命令终态对账且不重放副作用；AutomationRun 固定使用创建时 Revision。
-10. 系统 Card 使用 MessagePort 展示裁剪后的 Tool Result，伪造消息、Binding ID 或 Origin 被拒绝。
-11. RemoteAccessGrant 只允许指定 Host/标签结果与 ManagedAccount；票据撤销、会话终止、录像和审计可验证。
-12. Collector 伪造 Enterprise/Resource/Collector 身份被覆盖或拒绝，Metrics/Logs/Traces 只通过 Query Service 按资源范围返回。
-13. 删除 Server/Worker/Gateway/Writer Pod、清空 Redis、制造 Kafka 积压和 ClickHouse Replica 故障后，事实状态可恢复且无重复危险执行。
-14. 备份恢复到新 Namespace 后关键业务、审计索引和遥测查询符合恢复目标。
-15. E2E 无论成功失败都清理临时 Namespace 和测试资源，并恢复被缩容的常驻服务。
+9. 需要审批的生产动作不能由创建人自批；多策略必须全部满足；撤权后 Commit 失败；ResultUnknown 仅依据外部命令终态对账且不重放副作用。
+10. 桌面审批收件箱支持“操作审批 / 远程访问审批”一级 Tab，以及“待我审批 / 我发起的 / 已处理”二级范围；刷新和深链接保持选择，远程访问申请不混入 PendingAction 列表。
+11. 系统 Card 使用 MessagePort 展示裁剪后的 Tool Result，伪造消息、Binding ID 或 Origin 被拒绝。
+12. RemoteAccessGrant 只允许指定 Host/标签结果与 ManagedAccount；票据撤销、会话终止、录像和审计可验证。
+13. Collector 伪造 Enterprise/Resource/Collector 身份被覆盖或拒绝，Metrics/Logs/Traces 只通过 Query Service 按资源范围返回。
+14. 删除 Server/Worker/Gateway/Writer Pod、清空 Redis、制造 Kafka 积压和 ClickHouse Replica 故障后，事实状态可恢复且无重复危险执行。
+15. 备份恢复到新 Namespace 后关键业务、审计索引和遥测查询符合恢复目标。
+16. E2E 无论成功失败都清理临时 Namespace 和测试资源，并恢复被缩容的常驻服务。
 16. 诊断必须先脱敏再落盘；Ticket、Token、Cookie、Authorization、Secret 和一次性安装命令不得进入日志或发布包。
 17. 每个 Suite 使用固定依赖闭包，M8 先运行 M6/M7 baseline，再执行 Local Hardening、备份和恢复。
 

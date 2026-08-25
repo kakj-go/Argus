@@ -194,52 +194,6 @@ type AuthorizationVersion struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
-type Automation struct {
-	ID                   uuid.UUID          `json:"id"`
-	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
-	Name                 string             `json:"name"`
-	ServiceAccountID     uuid.UUID          `json:"service_account_id"`
-	AuthorizationVersion int64              `json:"authorization_version"`
-	ToolID               string             `json:"tool_id"`
-	ToolInput            []byte             `json:"tool_input"`
-	Cron                 string             `json:"cron"`
-	Timezone             string             `json:"timezone"`
-	Status               string             `json:"status"`
-	NextRunAt            pgtype.Timestamptz `json:"next_run_at"`
-	Revision             int32              `json:"revision"`
-	Version              int64              `json:"version"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-}
-
-type AutomationRevision struct {
-	AutomationID         uuid.UUID          `json:"automation_id"`
-	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
-	Revision             int32              `json:"revision"`
-	ServiceAccountID     uuid.UUID          `json:"service_account_id"`
-	AuthorizationVersion int64              `json:"authorization_version"`
-	ToolID               string             `json:"tool_id"`
-	ToolInput            []byte             `json:"tool_input"`
-	Cron                 string             `json:"cron"`
-	Timezone             string             `json:"timezone"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-}
-
-type AutomationRun struct {
-	ID                 uuid.UUID          `json:"id"`
-	AutomationID       uuid.UUID          `json:"automation_id"`
-	EnterpriseID       uuid.UUID          `json:"enterprise_id"`
-	AutomationRevision int32              `json:"automation_revision"`
-	ScheduledFor       pgtype.Timestamptz `json:"scheduled_for"`
-	Status             string             `json:"status"`
-	TaskID             uuid.NullUUID      `json:"task_id"`
-	PendingActionID    uuid.NullUUID      `json:"pending_action_id"`
-	ResultRef          pgtype.Text        `json:"result_ref"`
-	ErrorCode          pgtype.Text        `json:"error_code"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-}
-
 type BastionScope struct {
 	ID                uuid.UUID          `json:"id"`
 	EnterpriseID      uuid.UUID          `json:"enterprise_id"`
@@ -684,6 +638,7 @@ type DataScope struct {
 	Version             int64              `json:"version"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	MatchAll            bool               `json:"match_all"`
 }
 
 type Department struct {

@@ -218,6 +218,10 @@ export interface operations {
             query?: {
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
+                scope?: "mine" | "created" | "all";
+                status?: ("prepared" | "awaiting_confirmation" | "awaiting_approval" | "ready" | "executing" | "succeeded" | "failed" | "result_unknown" | "cancelled" | "expired" | "rejected" | "invalidated")[];
+                risk?: ("read" | "write" | "dangerous" | "critical")[];
+                query?: string;
             };
             header?: never;
             path?: never;

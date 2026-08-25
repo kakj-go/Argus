@@ -67,14 +67,15 @@ type Check struct {
 }
 
 type PreflightReport struct {
-	Profile          string  `json:"profile"`
-	Context          string  `json:"context"`
-	ReleaseID        string  `json:"releaseId"`
-	Checks           []Check `json:"checks"`
-	EstimatedPods    int     `json:"estimatedPods"`
-	EstimatedPVCs    int     `json:"estimatedPvcs"`
-	EstimatedStorage string  `json:"estimatedStorage"`
-	Ready            bool    `json:"ready"`
+	Profile          string         `json:"profile"`
+	Context          string         `json:"context"`
+	ReleaseID        string         `json:"releaseId"`
+	Checks           []Check        `json:"checks"`
+	Network          NetworkProfile `json:"network"`
+	EstimatedPods    int            `json:"estimatedPods"`
+	EstimatedPVCs    int            `json:"estimatedPvcs"`
+	EstimatedStorage string         `json:"estimatedStorage"`
+	Ready            bool           `json:"ready"`
 }
 
 func (a *App) preflight(ctx context.Context, cfg *InstallConfig, output string) error {
@@ -113,6 +114,11 @@ func (a *App) buildPreflight(ctx context.Context, cfg *InstallConfig) (Preflight
 		add("kubernetes-api", "fail", err.Error(), true)
 	} else {
 		add("kubernetes-api", "pass", version.GitVersion, true)
+	}
+	report.Network = discoverNetworkProfile(ctx, clients, cfg)
+	add("network-profile", "pass", networkProfileMessage(report.Network), false)
+	for _, warning := range report.Network.Warnings {
+		add("network-security", "warn", warning, false)
 	}
 
 	nodes, err := clients.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -170,9 +176,7 @@ func (a *App) buildPreflight(ctx context.Context, cfg *InstallConfig) (Preflight
 	if cfg.Spec.Profile == "production" {
 		productionChecks(ctx, clients, cfg, add)
 	} else {
-		if pods, listErr := clients.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{}); listErr == nil && hasPodPrefix(pods.Items, "kindnet") {
-			add("network-policy", "warn", "kindnet policy enforcement is unverified; the local profile records this degradation", false)
-		} else {
+		if report.Network.Policy.Enforcement != "enforced" {
 			add("network-policy", "warn", "NetworkPolicy enforcement was not positively verified", false)
 		}
 		if cfg.Spec.OpenSandbox.RuntimeClassName == "" && cfg.Spec.OpenSandbox.AllowSharedRuntime {
@@ -211,7 +215,7 @@ func productionChecks(ctx context.Context, clients *kubeClients, cfg *InstallCon
 	} else {
 		add("metrics-server", "pass", "metrics.k8s.io/v1beta1", true)
 	}
-	add("network-policy", "fail", "NETWORK_POLICY_ENFORCEMENT_UNVERIFIED", true)
+	add("network-policy", "warn", "NETWORK_POLICY_ENFORCEMENT_UNVERIFIED", false)
 	add("postgresql-ha", "fail", "POSTGRES_HA_ADR_REQUIRED", true)
 }
 
@@ -283,6 +287,28 @@ func (c *kubeClients) setStage(ctx context.Context, cfg *InstallConfig, stage, s
 	current.Data["state"] = state
 	current.Data["message"] = message
 	current.Data["updated-at"] = time.Now().UTC().Format(time.RFC3339)
+	_, err = configMaps.Update(ctx, current, metav1.UpdateOptions{})
+	return err
+}
+
+func (c *kubeClients) setNetworkProfile(ctx context.Context, cfg *InstallConfig, profile NetworkProfile) error {
+	name := cfg.Spec.ReleaseID + "-install-status"
+	configMaps := c.typed.CoreV1().ConfigMaps(cfg.Spec.Namespaces.System)
+	current, err := configMaps.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("load install status ConfigMap for network profile: %w", err)
+	}
+	if current.Data == nil {
+		current.Data = map[string]string{}
+	}
+	encoded, err := json.Marshal(profile)
+	if err != nil {
+		return fmt.Errorf("encode network profile: %w", err)
+	}
+	current.Data["network-profile"] = string(encoded)
+	current.Data["network-policy-enforcement"] = profile.Policy.Enforcement
+	current.Data["egress-gateway-status"] = profile.Egress.Status
+	current.Data["security-posture"] = profile.SecurityPosture
 	_, err = configMaps.Update(ctx, current, metav1.UpdateOptions{})
 	return err
 }

@@ -288,61 +288,6 @@ describe("configured adapter", () => {
     expect(fetch.mock.calls[8]?.[1]?.body).toBeUndefined();
   });
 
-  it("uses real automation paths and keeps sandbox credentials write-only", async () => {
-    const json = (value: unknown) =>
-      new Response(JSON.stringify(value), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(json({ id: "automation-1" }))
-      .mockResolvedValueOnce(
-        json({
-          id: "backend-1",
-          name: "sandbox",
-          endpoint: "https://sandbox.example.test",
-          status: "enabled",
-          health_status: "healthy",
-          version: 1,
-          created_at: "2026-08-17T00:00:00Z",
-          updated_at: "2026-08-17T00:00:00Z",
-        }),
-      );
-    const client = await createConfiguredApiClient({
-      portal: "platform",
-      mode: "real",
-      base_url: "https://api.example.test",
-      csrf_token: () => "csrf",
-      fetch,
-    });
-
-    await client.automations.create({
-      name: "inventory",
-      service_account_id: "service-1",
-      tool_id: "host.list",
-      tool_input: {},
-      cron: "0 * * * *",
-      timezone: "Asia/Shanghai",
-    });
-    const backend = await client.platform.sandboxBackends.create({
-      name: "sandbox",
-      endpoint: "https://sandbox.example.test",
-      credentialRef: "sandbox-secret",
-      tlsVerify: true,
-      defaultStorage: "",
-    });
-
-    expect(String(fetch.mock.calls[0]?.[0])).toContain(
-      "/api/v1/enterprise/automations",
-    );
-    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body)).api_key).toBe(
-      "sandbox-secret",
-    );
-    expect(backend.credentialRef).toBe("write-only");
-    expect(JSON.stringify(backend)).not.toContain("sandbox-secret");
-  });
-
   it("keeps mock and real domain method shapes aligned", async () => {
     const mock = createMockApiClient({ persist: false, delay: 0 });
     const real = await createConfiguredApiClient({

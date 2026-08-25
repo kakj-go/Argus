@@ -246,6 +246,7 @@ export function HostDetailPage() {
 
   return (
     <PageShell
+      className="argus-host-detail-page"
       breadcrumbs={[
         { label: t("hosts.detail.backToList"), href: "/hosts" },
         { label: host?.name ?? hostId ?? "" },

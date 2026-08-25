@@ -8,7 +8,6 @@ import {
 } from "@argus/api-client";
 import { aiSettingsEn, aiSettingsZh } from "./ai-settings";
 import { accountEn, accountZh } from "./account";
-import { automationsEn, automationsZh } from "./automations";
 import { chatEn, chatZh } from "./chat";
 import { commonEn, commonZh } from "./common";
 import { governanceEn, governanceZh } from "./governance";
@@ -19,6 +18,7 @@ import { remoteAccessEn, remoteAccessZh } from "./remote-access";
 import { settingsEn, settingsZh } from "./settings";
 import { shellEn, shellZh } from "./shell";
 import { telemetryEn, telemetryZh } from "./telemetry";
+import { ERROR_CODES, errorsEn, errorsZh } from "./errors";
 
 function keys(value: unknown, prefix = ""): string[] {
   if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -37,7 +37,6 @@ const modules = [
   ["hosts", hostsZh, hostsEn],
   ["kubernetes", kubernetesZh, kubernetesEn],
   ["ai-settings", aiSettingsZh, aiSettingsEn],
-  ["automations", automationsZh, automationsEn],
   ["remote-access", remoteAccessZh, remoteAccessEn],
   ["telemetry", telemetryZh, telemetryEn],
   ["settings", settingsZh, settingsEn],
@@ -63,6 +62,15 @@ describe("i18n resources", () => {
       for (const code of AUDIT_ACTOR_TYPE_CODES) {
         expect(audit.actorTypes[auditCodeKey(code) as keyof typeof audit.actorTypes]).toBeTruthy();
       }
+    }
+  });
+
+  it("has a zh-CN and en-US message for every API error code", () => {
+    for (const code of ERROR_CODES) {
+      expect(errorsZh.errors.codes[code]).toBeTruthy();
+      expect(errorsEn.errors.codes[code]).toBeTruthy();
+      expect(errorsZh.errors.codes[code]).not.toBe(code);
+      expect(errorsEn.errors.codes[code]).not.toBe(code);
     }
   });
 });

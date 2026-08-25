@@ -288,6 +288,7 @@ type DataScope struct {
 	ExplicitResourceIds []string                 `json:"explicit_resource_ids"`
 	Id                  string                   `json:"id"`
 	LabelSelector       *LabelSelector           `json:"label_selector,omitempty"`
+	MatchAll            *bool                    `json:"match_all,omitempty"`
 	Name                string                   `json:"name"`
 	ResourceTypes       []DataScopeResourceTypes `json:"resource_types"`
 	Status              DataScopeStatus          `json:"status"`
@@ -306,6 +307,7 @@ type DataScopeCreate struct {
 	Description         *string                        `json:"description,omitempty"`
 	ExplicitResourceIds []string                       `json:"explicit_resource_ids"`
 	LabelSelector       *LabelSelector                 `json:"label_selector,omitempty"`
+	MatchAll            *bool                          `json:"match_all,omitempty"`
 	Name                string                         `json:"name"`
 	ResourceTypes       []DataScopeCreateResourceTypes `json:"resource_types"`
 }
@@ -325,6 +327,7 @@ type DataScopeUpdate struct {
 	ExpectedVersion     int64                          `json:"expected_version"`
 	ExplicitResourceIds []string                       `json:"explicit_resource_ids"`
 	LabelSelector       *LabelSelector                 `json:"label_selector,omitempty"`
+	MatchAll            *bool                          `json:"match_all,omitempty"`
 	Name                string                         `json:"name"`
 	ResourceTypes       []DataScopeUpdateResourceTypes `json:"resource_types"`
 	Status              *DataScopeUpdateStatus         `json:"status,omitempty"`

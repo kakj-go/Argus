@@ -1,9 +1,6 @@
 import type {
   AIModel as AIModelContract,
   AIModelTestResult,
-  Automation,
-  AutomationRun,
-  AutomationWrite,
   Conversation as ConversationContract,
   ConversationEvent,
   ConversationEventPage,
@@ -383,33 +380,4 @@ export function installAgentDomains(context: RealDomainContext): void {
     },
   };
 
-  client.automations = {
-    list: () => http.request<Automation[]>("enterprise/automations"),
-    get: (id) => http.request<Automation>(`enterprise/automations/${id}`),
-    create: (input: AutomationWrite) =>
-      http.request<Automation>("enterprise/automations", {
-        method: "POST",
-        csrf: true,
-        headers: { "Idempotency-Key": idempotencyKey() },
-        body: input,
-      }),
-    update: (id, input) =>
-      http.request<Automation>(`enterprise/automations/${id}`, {
-        method: "PUT",
-        csrf: true,
-        body: input,
-      }),
-    enable: (id, version) =>
-      http.request<Automation>(
-        `enterprise/automations/${id}/enable?expected_version=${version}`,
-        { method: "POST", csrf: true },
-      ),
-    disable: (id, version) =>
-      http.request<Automation>(
-        `enterprise/automations/${id}/disable?expected_version=${version}`,
-        { method: "POST", csrf: true },
-      ),
-    listRuns: (id) =>
-      http.request<AutomationRun[]>(`enterprise/automations/${id}/runs`),
-  };
 }

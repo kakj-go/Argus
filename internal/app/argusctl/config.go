@@ -3,6 +3,8 @@ package argusctl
 import (
 	"crypto/sha256"
 	"fmt"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -37,6 +39,7 @@ type InstallSpec struct {
 	Images       Images     `json:"images"`
 	Exposure     Exposure   `json:"exposure"`
 	Security     Security   `json:"security"`
+	Network      Network    `json:"network"`
 	OpenSandbox  struct {
 		RuntimeClassName   string `json:"runtimeClassName"`
 		AllowSharedRuntime bool   `json:"allowSharedRuntime"`
@@ -49,8 +52,19 @@ type InstallSpec struct {
 	} `json:"cleanup"`
 }
 
+type Network struct {
+	Mode   string        `json:"mode"`
+	Egress NetworkEgress `json:"egress"`
+}
+
+type NetworkEgress struct {
+	ExpectedIPs     []string `json:"expectedIPs"`
+	VerificationURL string   `json:"verificationURL"`
+}
+
 type Security struct {
-	PlatformMFARequired bool `json:"platformMfaRequired"`
+	PlatformMFARequired bool     `json:"platformMfaRequired"`
+	ProtectedCIDRs      []string `json:"protectedCidrs"`
 }
 
 type TelemetryArtifacts struct {
@@ -124,6 +138,28 @@ func (c *InstallConfig) Validate() error {
 	}
 	if !contains([]string{"evaluation", "local-hardening", "production"}, c.Spec.Profile) {
 		return fmt.Errorf("spec.profile must be evaluation, local-hardening, or production")
+	}
+	if c.Spec.Network.Mode == "" {
+		c.Spec.Network.Mode = "auto"
+	}
+	if !contains([]string{"auto", "portable", "network-policy", "external"}, c.Spec.Network.Mode) {
+		return fmt.Errorf("spec.network.mode must be auto, portable, network-policy, or external")
+	}
+	for _, value := range c.Spec.Network.Egress.ExpectedIPs {
+		if _, err := netip.ParseAddr(value); err != nil {
+			return fmt.Errorf("spec.network.egress.expectedIPs contains invalid address %q", value)
+		}
+	}
+	for _, value := range c.Spec.Security.ProtectedCIDRs {
+		if _, err := netip.ParsePrefix(value); err != nil {
+			return fmt.Errorf("spec.security.protectedCidrs contains invalid CIDR %q", value)
+		}
+	}
+	if c.Spec.Network.Egress.VerificationURL != "" {
+		parsed, err := url.Parse(c.Spec.Network.Egress.VerificationURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
+			return fmt.Errorf("spec.network.egress.verificationURL must be an HTTPS URL")
+		}
 	}
 	for name, value := range map[string]string{
 		"metadata.name":                 c.Metadata.Name,

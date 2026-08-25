@@ -55,6 +55,7 @@ components:
           uniqueItems: true
           items: {type: string, enum: [host, kubernetes_cluster, kubernetes_namespace]}
         explicit_resource_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        match_all: {type: boolean}
         label_selector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}
         status: {type: string, enum: [active, disabled]}
         version: {type: integer, format: int64, minimum: 1}

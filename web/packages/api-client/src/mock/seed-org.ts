@@ -54,8 +54,6 @@ export const BUILTIN_ROLE_TEMPLATES: BuiltinRoleTemplate[] = [
       "host.update",
       "host.connection.test",
       "host.direct_connect",
-      "automation.command.execute",
-      "automation.template.execute",
       "connector.read",
       "connector.create",
       "connector.rotate_credential",
@@ -96,8 +94,6 @@ export const BUILTIN_ROLE_TEMPLATES: BuiltinRoleTemplate[] = [
     permissions: [
       "host.read",
       "host.connection.test",
-      "automation.command.execute",
-      "automation.template.execute",
       "connector.read",
       "bastion_scope.read",
       "remote_access.request",
@@ -433,6 +429,7 @@ export function createOrgSeed(now: number): OrgSeed {
         description: "开发与预发布环境的运维资源",
         resource_types: ["host", "kubernetes_cluster"],
         explicit_resource_ids: [],
+        match_all: false,
         label_selector: {
           schema_version: "argus.label_selector/v1",
           requirements: [

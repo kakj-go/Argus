@@ -17,7 +17,6 @@ import (
 	"github.com/kakj-go/Argus/internal/buildinfo"
 	actionapi "github.com/kakj-go/Argus/internal/gen/openapi/actionapi"
 	auditapi "github.com/kakj-go/Argus/internal/gen/openapi/audit"
-	automationapi "github.com/kakj-go/Argus/internal/gen/openapi/automationapi"
 	cardapi "github.com/kakj-go/Argus/internal/gen/openapi/cardapi"
 	connectionapi "github.com/kakj-go/Argus/internal/gen/openapi/connectionapi"
 	connectorapi "github.com/kakj-go/Argus/internal/gen/openapi/connectorapi"
@@ -71,7 +70,6 @@ type RouterOptions struct {
 	Workflow                *WorkflowHandler
 	Conversation            *ConversationHandler
 	Model                   *ModelHandler
-	Automation              *AutomationHandler
 	Sandbox                 *SandboxHandler
 	Connector               *ConnectorHandler
 	Card                    *CardHandler
@@ -165,10 +163,6 @@ func NewRouterWithOptions(options RouterOptions) http.Handler {
 		strict := modelapi.NewStrictHandler(*options.Model, []modelapi.StrictMiddlewareFunc{modelRequestContext})
 		modelapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
 	}
-	if options.Automation != nil {
-		strict := automationapi.NewStrictHandler(*options.Automation, []automationapi.StrictMiddlewareFunc{automationRequestContext})
-		automationapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
-	}
 	if options.Sandbox != nil {
 		strict := sandboxapi.NewStrictHandler(*options.Sandbox, []sandboxapi.StrictMiddlewareFunc{sandboxRequestContext})
 		sandboxapi.HandlerFromMuxWithBaseURL(strict, router, "/api/v1")
@@ -257,12 +251,6 @@ func conversationRequestContext(next conversationapi.StrictHandlerFunc, _ string
 }
 
 func modelRequestContext(next modelapi.StrictHandlerFunc, _ string) modelapi.StrictHandlerFunc {
-	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
-		return next(WithRequestContext(ctx, writer, request), writer, request, value)
-	}
-}
-
-func automationRequestContext(next automationapi.StrictHandlerFunc, _ string) automationapi.StrictHandlerFunc {
 	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value any) (any, error) {
 		return next(WithRequestContext(ctx, writer, request), writer, request, value)
 	}

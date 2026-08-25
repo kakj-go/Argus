@@ -1,6 +1,7 @@
 package argusctl
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,5 +82,37 @@ spec:
 	}
 	if _, err := LoadConfig(path); err == nil {
 		t.Fatal("expected strict YAML decoding error")
+	}
+}
+
+func TestNetworkDefaultsAndValidation(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "evaluation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Spec.Network.Mode != "auto" {
+		t.Fatalf("network mode = %q, want auto", cfg.Spec.Network.Mode)
+	}
+	cfg.Spec.Network.Mode = "external"
+	cfg.Spec.Network.Egress.ExpectedIPs = []string{"203.0.113.10"}
+	cfg.Spec.Network.Egress.VerificationURL = "https://example.com/egress"
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Spec.Network.Egress.ExpectedIPs = []string{"not-an-ip"}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected invalid expected IP to fail validation")
+	}
+}
+
+func TestProtectedPrefixesIncludesAddressesAndCIDRs(t *testing.T) {
+	profile := NetworkProfile{ProtectedTargets: ProtectedTargetProfile{CIDRs: []string{"10.0.0.0/24"}, Addresses: []string{netip.MustParseAddr("192.168.1.10").String()}}}
+	got := protectedPrefixes(profile)
+	if len(got) != 2 || got[0] != "10.0.0.0/24" || got[1] != "192.168.1.10/32" {
+		t.Fatalf("protectedPrefixes() = %v", got)
 	}
 }

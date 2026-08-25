@@ -73,6 +73,7 @@ spec:
       - name: cluster-service
         generateName: argus-clickhouse
         spec:
+          type: ClusterIP
           ports:
             - {name: http, port: 8123}
             - {name: tcp, port: 9000}

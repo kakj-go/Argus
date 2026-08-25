@@ -287,50 +287,6 @@ components:
         result_kind: {type: string, enum: [connector_enrollment]}
         enrollment: {$ref: './m3.yaml#/components/schemas/EnrollmentResult'}
         expires_at: {type: string, format: date-time}
-    Automation:
-      type: object
-      additionalProperties: false
-      required: [id, name, service_account_id, tool_id, tool_input, cron, timezone, status, next_run_at, version, created_at, updated_at]
-      properties:
-        id: {type: string, format: uuid}
-        name: {type: string, minLength: 1, maxLength: 128}
-        service_account_id: {type: string, format: uuid}
-        tool_id: {type: string, pattern: '^[a-z][a-z0-9_.-]*$'}
-        tool_input: {$ref: '../../schemas/common/public-json.schema.json#/$defs/PublicJsonObject'}
-        cron: {type: string, minLength: 9, maxLength: 128}
-        timezone: {type: string, minLength: 1, maxLength: 128}
-        status: {type: string, enum: [enabled, disabled]}
-        next_run_at: {type: string, format: date-time}
-        version: {type: integer, format: int64, minimum: 1}
-        created_at: {type: string, format: date-time}
-        updated_at: {type: string, format: date-time}
-    AutomationWrite:
-      type: object
-      additionalProperties: false
-      required: [name, service_account_id, tool_id, tool_input, cron, timezone]
-      properties:
-        name: {type: string, minLength: 1, maxLength: 128}
-        service_account_id: {type: string, format: uuid}
-        tool_id: {type: string, pattern: '^[a-z][a-z0-9_.-]*$'}
-        tool_input: {$ref: '../../schemas/common/public-json.schema.json#/$defs/PublicJsonObject'}
-        cron: {type: string, minLength: 9, maxLength: 128}
-        timezone: {type: string, minLength: 1, maxLength: 128}
-        expected_version: {type: integer, format: int64, minimum: 1}
-    AutomationRun:
-      type: object
-      additionalProperties: false
-      required: [id, automation_id, automation_revision, scheduled_for, status, created_at, updated_at]
-      properties:
-        id: {type: string, format: uuid}
-        automation_id: {type: string, format: uuid}
-        automation_revision: {type: integer, minimum: 1}
-        scheduled_for: {type: string, format: date-time}
-        status: {type: string, enum: [pending, running, waiting_approval, succeeded, failed, skipped, cancelled]}
-        pending_action_ref: {type: string}
-        result_ref: {type: string}
-        error_code: {type: string, pattern: '^[A-Z][A-Z0-9_]*$'}
-        created_at: {type: string, format: date-time}
-        updated_at: {type: string, format: date-time}
     SandboxBackend:
       type: object
       additionalProperties: false

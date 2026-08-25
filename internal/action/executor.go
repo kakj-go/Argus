@@ -124,9 +124,6 @@ func (executor Executor) Handle(ctx context.Context, task runtime.Task) error {
 		if err != nil {
 			return err
 		}
-		if err = finishAutomationRun(ctx, q, finished); err != nil {
-			return err
-		}
 		if execution.RunID.Valid {
 			return enqueueVerify(ctx, q, execution, finished)
 		}
@@ -184,9 +181,6 @@ func (executor Executor) finishReconciledExecution(ctx context.Context, q *db.Qu
 	if err != nil {
 		return err
 	}
-	if err = finishAutomationRun(ctx, q, finished); err != nil {
-		return err
-	}
 	if execution.RunID.Valid {
 		return enqueueVerify(ctx, q, execution, finished)
 	}
@@ -206,15 +200,6 @@ func reconciledTelemetryOutcome(operation db.TelemetryCollectorOperation) (strin
 	default:
 		return "", pgtype.Text{}, false
 	}
-}
-
-func finishAutomationRun(ctx context.Context, q *db.Queries, action db.PendingAction) error {
-	status := action.Status
-	if status != "succeeded" && status != "failed" {
-		return nil
-	}
-	return q.FinishAutomationRunByPendingAction(ctx, db.FinishAutomationRunByPendingActionParams{PendingActionID: uuid.NullUUID{UUID: action.ID, Valid: true},
-		EnterpriseID: action.EnterpriseID, Status: status, ErrorCode: action.ErrorCode})
 }
 
 func reconciledCommandOutcome(command db.ConnectorCommand) (string, pgtype.Text, bool) {

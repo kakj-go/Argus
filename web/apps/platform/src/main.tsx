@@ -2,7 +2,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
-import { ApiProvider, createConfiguredApiClient } from "@argus/api-client";
+import {
+  ApiProvider,
+  createConfiguredApiClient,
+  setApiErrorTranslator,
+} from "@argus/api-client";
 import { usePlatformAuthStore } from "@argus/auth";
 import {
   initializeTheme,
@@ -28,6 +32,12 @@ const queryClient = new QueryClient({
 });
 
 initializeTheme();
+
+setApiErrorTranslator((code, _messageKey, params) => {
+  const key = `errors.codes.${code}`;
+  const translated = i18n.t(key, { defaultValue: "", ...(params ?? {}) });
+  return translated === key ? undefined : translated || undefined;
+});
 
 function syncLocale(locale: SupportedLocale) {
   void i18n.changeLanguage(locale);

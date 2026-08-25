@@ -103,7 +103,7 @@
   border: 1px solid;
   border-radius: var(--radius-pill);
   padding: var(--space-px-3) var(--space-px-8);
-  font: 600 10.var(--font-size-5)/1.25 var(--font-sans);
+  font: 600 var(--font-size-10-5)/1.25 var(--font-sans);
   white-space: nowrap;
 }
 .argus-badge--dot > i {
@@ -164,12 +164,12 @@
 }
 .argus-card__title {
   color: var(--text-primary);
-  font-size: 13.var(--font-size-5);
+  font-size: var(--font-size-13-5);
   font-weight: 650;
 }
 .argus-card__description {
   color: var(--text-tertiary);
-  font-size: 11.var(--font-size-5);
+  font-size: var(--font-size-11-5);
   margin-top: var(--space-px-4);
 }
 .argus-card__action {
@@ -215,6 +215,68 @@
 .argus-input:hover,
 .argus-textarea:hover {
   border-color: var(--border-strong);
+}
+.argus-date-time-picker {
+  position: relative;
+  width: 100%;
+}
+.argus-date-time-picker__control,
+.argus-date-time-picker__control .react-datepicker__input-container,
+.argus-date-time-picker__control .argus-input {
+  display: block;
+  width: 100%;
+}
+.argus-date-time-picker__control .argus-input {
+  padding-right: var(--space-px-36);
+}
+.argus-date-time-picker__icon {
+  position: absolute;
+  top: 50%;
+  right: var(--space-px-11);
+  color: var(--text-tertiary);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+.argus-date-time-picker__popper {
+  z-index: 1000;
+}
+.argus-date-time-picker__calendar {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-sans);
+}
+.argus-date-time-picker__calendar .react-datepicker__header {
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-muted);
+}
+.argus-date-time-picker__calendar .react-datepicker__day,
+.argus-date-time-picker__calendar .react-datepicker__time-list-item {
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+}
+.argus-date-time-picker__calendar .react-datepicker__day:hover,
+.argus-date-time-picker__calendar .react-datepicker__time-list-item:hover {
+  background: var(--bg-hover);
+}
+.argus-date-time-picker__calendar .react-datepicker__day--selected,
+.argus-date-time-picker__calendar .react-datepicker__day--keyboard-selected,
+.argus-date-time-picker__calendar .react-datepicker__time-list-item--selected {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+.argus-date-time-picker__calendar .react-datepicker__day--disabled {
+  color: var(--text-disabled);
+}
+.argus-date-time-picker__calendar .react-datepicker__current-month,
+.argus-date-time-picker__calendar .react-datepicker-time__header,
+.argus-date-time-picker__calendar .react-datepicker__day-name {
+  color: var(--text-primary);
+}
+.argus-date-time-picker__calendar .react-datepicker__triangle {
+  display: none;
 }
 .argus-field {
   display: grid;
@@ -457,7 +519,7 @@
   padding: var(--space-px-9) var(--space-px-10);
   border-radius: var(--radius-8);
   color: var(--text-secondary);
-  font-size: 12.var(--font-size-5);
+  font-size: var(--font-size-12-5);
 }
 .argus-menu-item > span:first-child {
   flex: 1;
@@ -495,7 +557,7 @@
   display: flex;
   justify-content: space-between;
   color: var(--text-tertiary);
-  font-size: 10.var(--font-size-5);
+  font-size: var(--font-size-10-5);
 }
 .argus-progress {
   height: 5px;
@@ -544,7 +606,7 @@
 .argus-metric__change {
   margin-top: var(--space-px-6);
   color: var(--text-tertiary);
-  font-size: 10.var(--font-size-5);
+  font-size: var(--font-size-10-5);
 }
 .argus-metric__change.is-success {
   color: var(--success);
@@ -568,7 +630,7 @@
 }
 .argus-description-list dt {
   color: var(--text-tertiary);
-  font-size: 11.var(--font-size-5);
+  font-size: var(--font-size-11-5);
 }
 .argus-description-list dd {
   margin: 0;
@@ -629,7 +691,7 @@
 .argus-timeline__meta {
   margin-top: var(--space-px-3);
   color: var(--text-disabled);
-  font: 10.var(--font-size-5) var(--font-mono);
+  font: var(--font-size-10-5) var(--font-mono);
 }
 
 .argus-empty-state {
@@ -655,7 +717,7 @@
 .argus-empty-state > p {
   max-width: 360px;
   margin: var(--space-px-6) 0 var(--space-px-15);
-  font-size: 11.var(--font-size-5);
+  font-size: var(--font-size-11-5);
   line-height: 1.55;
 }
 .argus-skeleton {
@@ -711,7 +773,7 @@
   padding: var(--space-px-9) var(--space-px-13);
   text-align: left;
   color: var(--text-tertiary);
-  font-size: 10.var(--font-size-5);
+  font-size: var(--font-size-10-5);
   font-weight: 600;
   background: color-mix(in srgb, var(--overlay-black) 7%, transparent);
   border-bottom: 1px solid var(--border-subtle);
@@ -767,7 +829,7 @@
   padding: var(--space-px-14);
   overflow-x: auto;
   color: var(--text-secondary);
-  font: 11.var(--font-size-5)/1.7 var(--font-mono);
+  font: var(--font-size-11-5)/1.7 var(--font-mono);
 }
 .argus-diff {
   padding: var(--space-px-9) 0;
@@ -775,7 +837,7 @@
   border-radius: var(--radius-10);
   overflow-x: auto;
   background: var(--surface-terminal);
-  font: 11.var(--font-size-5)/1.65 var(--font-mono);
+  font: var(--font-size-11-5)/1.65 var(--font-mono);
 }
 .argus-diff > div {
   display: grid;

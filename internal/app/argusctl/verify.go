@@ -29,6 +29,7 @@ type VerifyReport struct {
 	Degradations []string          `json:"degradations"`
 	Images       map[string]string `json:"images"`
 	Artifacts    string            `json:"artifacts"`
+	Network      *NetworkProfile   `json:"network,omitempty"`
 }
 
 func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPath string) (returnErr error) {
@@ -41,7 +42,7 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 	}
 	report := VerifyReport{
 		ReleaseID: cfg.Spec.ReleaseID, Profile: cfg.Spec.Profile, VerifiedAt: time.Now().UTC().Format(time.RFC3339), Passed: true,
-		Degradations: []string{"NETWORK_POLICY_ENFORCEMENT_UNVERIFIED", "SHARED_CONTAINER_SANDBOX_RUNTIME"},
+		Degradations: []string{},
 		Images:       map[string]string{}, Artifacts: artifactPath,
 	}
 	defer func() {
@@ -53,6 +54,14 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 	clients, err := clientsFor(cfg.Spec.KubeContext)
 	if err != nil {
 		return err
+	}
+	networkProfile := discoverNetworkProfile(ctx, clients, cfg)
+	report.Network = &networkProfile
+	if networkProfile.SecurityPosture == "degraded" {
+		report.Degradations = append(report.Degradations, networkProfile.Warnings...)
+	}
+	if cfg.Spec.OpenSandbox.RuntimeClassName == "" && cfg.Spec.OpenSandbox.AllowSharedRuntime {
+		report.Degradations = append(report.Degradations, "SHARED_CONTAINER_SANDBOX_RUNTIME")
 	}
 	add := func(name string, err error) {
 		check := VerifyCheck{Name: name, Status: "pass", Message: "ok"}

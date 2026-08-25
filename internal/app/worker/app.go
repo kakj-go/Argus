@@ -18,7 +18,6 @@ import (
 	"github.com/kakj-go/Argus/internal/action"
 	"github.com/kakj-go/Argus/internal/agent"
 	"github.com/kakj-go/Argus/internal/app/component"
-	"github.com/kakj-go/Argus/internal/automation"
 	cardservice "github.com/kakj-go/Argus/internal/card"
 	"github.com/kakj-go/Argus/internal/collectormanager"
 	"github.com/kakj-go/Argus/internal/config"
@@ -43,13 +42,12 @@ const (
 	PoolAgent          = "agent"
 	PoolAction         = "action"
 	PoolCompaction     = "compaction"
-	PoolAutomation     = "automation"
 	PoolSandbox        = "sandbox"
 	PoolDirectExecutor = "direct-executor"
 )
 
 func Run(ctx context.Context, logger *slog.Logger, pool string) error {
-	if pool != PoolDefault && pool != PoolAgent && pool != PoolAction && pool != PoolCompaction && pool != PoolAutomation && pool != PoolSandbox && pool != PoolDirectExecutor {
+	if pool != PoolDefault && pool != PoolAgent && pool != PoolAction && pool != PoolCompaction && pool != PoolSandbox && pool != PoolDirectExecutor {
 		return fmt.Errorf("unsupported worker pool %q", pool)
 	}
 	if pool == PoolDirectExecutor {
@@ -117,7 +115,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 	if err := (agent.ResourceTools{Store: store, Resources: resourceDomain}).Register(registry); err != nil {
 		return err
 	}
-	if cfg.TelemetryEnabled && (pool == PoolDefault || pool == PoolAgent || pool == PoolAutomation) {
+	if cfg.TelemetryEnabled && (pool == PoolDefault || pool == PoolAgent) {
 		telemetryTLS, tlsErr := telemetryservice.ClientTLSConfig(cfg.TelemetryClientCert, cfg.TelemetryClientKey, cfg.TelemetryCABundle, cfg.TelemetryServerName)
 		if tlsErr != nil {
 			return tlsErr
@@ -138,18 +136,15 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 	if err := cardDomain.RegisterRenderTool(registry); err != nil {
 		return err
 	}
-	workflowDomain := action.Service{Store: store, Idempotency: idempotency, Resources: resourceDomain,
-		OneTimeResultKey: cfg.PendingActionKey}
 	handlers := map[string]runtime.Handler{
 		PoolAgent:      agent.Loop{Store: store, Models: modelDomain, Tools: registry, Cards: cardDomain},
 		PoolAction:     action.Executor{Store: store, Resources: resourceDomain, OneTimeResultKey: cfg.PendingActionKey},
 		PoolCompaction: agent.Compactor{Store: store, Models: modelDomain},
-		PoolAutomation: automation.Runner{Store: store, Tools: registry, Workflow: workflowDomain},
 		PoolSandbox:    sandbox.Runner{Service: sandbox.Service{Store: store, Keyring: keyring}},
 	}
 	queues := []string{pool}
 	if pool == PoolDefault {
-		queues = []string{PoolAgent, PoolAction, PoolCompaction, PoolAutomation, PoolSandbox}
+		queues = []string{PoolAgent, PoolAction, PoolCompaction, PoolSandbox}
 	}
 	hostname, _ := os.Hostname()
 	if hostname == "" {
@@ -165,13 +160,6 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		go func() {
 			defer group.Done()
 			errorsChannel <- (runtime.Processor{Store: store, Queue: queue, Owner: hostname + ":" + queue, Handle: handlers[queue], Logger: logger}).Run(workerCtx)
-		}()
-	}
-	if pool == PoolDefault || pool == PoolAutomation {
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			errorsChannel <- (automation.Scheduler{Store: store, Logger: logger}).Run(workerCtx)
 		}()
 	}
 	if pool == PoolDefault || pool == PoolSandbox {
@@ -221,8 +209,12 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	if err := directexecutor.VerifyEgress(ctx, cfg.EgressVerificationURL, cfg.AdvertisedEgress); err != nil {
-		return err
+	if observed, verifyErr := directexecutor.VerifyEgressObserved(ctx, cfg.EgressVerificationURL, cfg.AdvertisedEgress); verifyErr != nil {
+		// Egress governance is optional. Keep the executor available on the
+		// cluster default route and expose the degraded posture in logs.
+		logger.Warn("Direct Executor egress verification failed; continuing with default route", "error", verifyErr)
+	} else if observed != "" {
+		logger.Info("Direct Executor egress verified", "observed_ip", observed)
 	}
 	store, err := postgres.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -263,6 +255,7 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 			errorsChannel <- err
 		}
 	}()
+	go monitorDirectEgress(ctx, logger, cfg.EgressVerificationURL, cfg.AdvertisedEgress)
 	logger.Info("argus Direct Executor started", "instance_id", cfg.InstanceID, "grpc_address", cfg.GRPCAddress)
 	select {
 	case err := <-errorsChannel:
@@ -280,5 +273,33 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 		}
 		logger.Info("argus Direct Executor stopped")
 		return nil
+	}
+}
+
+func monitorDirectEgress(ctx context.Context, logger *slog.Logger, verificationURL string, advertised []string) {
+	if verificationURL == "" && len(advertised) == 0 {
+		return
+	}
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	degraded := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			observed, err := directexecutor.VerifyEgressObserved(ctx, verificationURL, advertised)
+			if err != nil {
+				if !degraded {
+					logger.Warn("Direct Executor egress gateway lost or unverified; using cluster default route", "error", err)
+				}
+				degraded = true
+				continue
+			}
+			if degraded {
+				logger.Info("Direct Executor egress verification recovered", "observed_ip", observed)
+			}
+			degraded = false
+		}
 	}
 }

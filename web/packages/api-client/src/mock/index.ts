@@ -1,8 +1,5 @@
 import type { ArgusApiClient } from "../client";
 import type {
-  Automation,
-  AutomationRun,
-  AutomationWrite,
   ApprovalRequestView,
   Execution,
   Run,
@@ -77,8 +74,6 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
   const persist = options.persist !== false;
   const emitter = new Emitter();
   const db: MockDb = (persist ? loadDb() : null) ?? seed();
-  let automations: Automation[] = [];
-  const automationRuns = new Map<string, AutomationRun[]>();
 
   function seed(): MockDb {
     const fresh = createSeedDb();
@@ -244,71 +239,6 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
     };
   }
 
-  const automationDomain: ArgusApiClient["automations"] = {
-    async list() {
-      await pause();
-      return automations.map((item) => ({ ...item }));
-    },
-    async get(id) {
-      await pause();
-      return { ...mustFind(automations, (item) => item.id === id, "automation") };
-    },
-    async create(input: AutomationWrite) {
-      await pause();
-      const now = nowIso();
-      const value: Automation = {
-        id: crypto.randomUUID(),
-        name: input.name,
-        service_account_id: input.service_account_id,
-        tool_id: input.tool_id,
-        tool_input: input.tool_input,
-        cron: input.cron,
-        timezone: input.timezone,
-        status: "disabled",
-        next_run_at: now,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      };
-      automations = [...automations, value];
-      return { ...value };
-    },
-    async update(id, input) {
-      await pause();
-      const value = mustFind(automations, (item) => item.id === id, "automation");
-      Object.assign(value, input, { version: value.version + 1, updated_at: nowIso() });
-      return { ...value };
-    },
-    async enable(id, expectedVersion) {
-      const current = await automationDomain.get(id);
-      if (current.version !== expectedVersion) throw new Error("version conflict");
-      return automationDomain.update(id, {
-        name: current.name,
-        service_account_id: current.service_account_id,
-        tool_id: current.tool_id,
-        tool_input: current.tool_input,
-        cron: current.cron,
-        timezone: current.timezone,
-        expected_version: current.version,
-      }).then((value) => {
-        const stored = mustFind(automations, (item) => item.id === id, "automation");
-        stored.status = "enabled";
-        value.status = "enabled";
-        return value;
-      });
-    },
-    async disable(id, expectedVersion) {
-      const value = await automationDomain.enable(id, expectedVersion);
-      const stored = mustFind(automations, (item) => item.id === id, "automation");
-      stored.status = "disabled";
-      value.status = "disabled";
-      return value;
-    },
-    async listRuns(id) {
-      await pause();
-      return [...(automationRuns.get(id) ?? [])];
-    },
-  };
 
   return {
     auth: createAuthDomain(ctx),
@@ -385,7 +315,6 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
       },
     },
     models: createModelsDomain(ctx),
-    automations: automationDomain,
     interactiveCards: createInteractiveCardsDomain(ctx),
     org: createOrgDomain(ctx),
     secrets: createSecretsDomain(ctx),

@@ -8,6 +8,7 @@ import {
   apiErrorField,
   formConstraint,
   formatApiError,
+  formatErrorCode,
   useApi,
   type BastionScope,
   type ConfirmActionResult,
@@ -677,7 +678,10 @@ export function EditHostDrawer({
         if (connectionTest.status !== "succeeded") {
           setError("root", {
             message:
-              connectionTest.error_code ?? t("hosts.hostForm.testFailed"),
+              formatErrorCode(
+                connectionTest.error_code,
+                t("hosts.hostForm.testFailed"),
+              ),
             type: "server",
           });
           return;

@@ -19,6 +19,7 @@ import {
   CodeBlock,
   ConfirmDialog,
   DataTable,
+  DateTimePicker,
   EmptyState,
   Field,
   FormDrawer,
@@ -446,6 +447,7 @@ function ApiKeysDrawer({
   type KeyForm = z.infer<typeof keySchema>;
   const {
     clearErrors,
+    control,
     register,
     reset,
     handleSubmit,
@@ -590,10 +592,20 @@ function ApiKeysDrawer({
           requirement="optional"
           label={t("settings.org.accessTab.expiresAt")}
         >
-          <Input
-            {...register("expires_at")}
-            min={toDateTimeLocal(new Date().toISOString())}
-            type="datetime-local"
+          <Controller
+            control={control}
+            name="expires_at"
+            render={({ field }) => (
+              <DateTimePicker
+                aria-label={t("settings.org.accessTab.expiresAt")}
+                min={toDateTimeLocal(new Date().toISOString())}
+                onBlur={field.onBlur}
+                onChange={field.onChange}
+                ref={field.ref}
+                type="datetime-local"
+                value={field.value}
+              />
+            )}
           />
         </Field>
         <Button loading={create.isPending} type="submit" variant="primary">

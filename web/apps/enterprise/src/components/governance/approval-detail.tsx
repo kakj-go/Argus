@@ -13,6 +13,7 @@ import type {
 import {
   formConstraint,
   formatApiError,
+  formatErrorCode,
   humanizeAuditCode,
   presentApiFormError,
   useApi,
@@ -73,7 +74,7 @@ function resultMessage(action: PendingActionPublic): string | undefined {
  * awaiting_confirmation 使用卡片自带的确认/取消；awaiting_approval
  * 使用下方审批操作区（批准/驳回，含职责分离禁用）；终态只读。
  */
-export function ApprovalDetail({ actionRef }: { actionRef: string }) {
+export function ApprovalDetail({ actionRef, readOnly = false }: { actionRef: string; readOnly?: boolean }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
@@ -269,8 +270,8 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
     approveMutation.isPending ||
     rejectMutation.isPending;
 
-  const isConfirmable = action.status === "awaiting_confirmation";
-  const isApprovable = action.status === "awaiting_approval";
+  const isConfirmable = !readOnly && action.status === "awaiting_confirmation";
+  const isApprovable = !readOnly && action.status === "awaiting_approval";
   const showCountdown =
     action.status === "awaiting_confirmation" ||
     action.status === "awaiting_approval" ||
@@ -498,8 +499,10 @@ export function ApprovalDetail({ actionRef }: { actionRef: string }) {
             {execution && (
               <Alert
                 description={
-                  execution.error_code ??
-                  t("governance.approvals.detail.executionStatusDescription")
+                  formatErrorCode(
+                    execution.error_code,
+                    t("governance.approvals.detail.executionStatusDescription"),
+                  )
                 }
                 title={t(
                   `governance.approvals.executionStatus.${execution.status}`,

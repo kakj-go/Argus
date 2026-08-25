@@ -145,7 +145,7 @@ func TestToolIdempotencyIsBoundToTrustedInvocationAndCall(t *testing.T) {
 	}
 	otherInvocation := base
 	otherInvocation.RunID = ""
-	otherInvocation.InvocationID = "automation-run-2"
+	otherInvocation.InvocationID = "service-run-2"
 	if idempotency(base) == idempotency(otherInvocation) {
 		t.Fatal("different invocations shared a Tool idempotency key")
 	}

@@ -1381,15 +1381,6 @@ function createUnavailableClient(): ArgusApiClient {
       setQuota: () => unavailable("models.setQuota"),
       usage: () => unavailable("models.usage"),
     },
-    automations: {
-      list: () => unavailable("automations.list"),
-      get: () => unavailable("automations.get"),
-      create: () => unavailable("automations.create"),
-      update: () => unavailable("automations.update"),
-      enable: () => unavailable("automations.enable"),
-      disable: () => unavailable("automations.disable"),
-      listRuns: () => unavailable("automations.listRuns"),
-    },
     interactiveCards: {
       list: () => unavailable("interactiveCards.list"),
       get: () => unavailable("interactiveCards.get"),

@@ -45,7 +45,7 @@ export const hostsZh = {
     path: {
       viaBastion: "Argus → {{scope}} → {{address}}",
       connectorLocal: "Argus → {{scope}}（堡垒机本机）",
-      direct: "Argus Direct Executor → {{address}}",
+      direct: "Argus 直连执行器 → {{address}}",
     },
     scope: {
       members: "成员 {{count}}",
@@ -70,10 +70,10 @@ export const hostsZh = {
     standalone: {
       title: "独立主机",
       description:
-        "不经过堡垒机、由 Argus Direct Executor 从其部署网络连接的主机。",
-      egressHint: "请确认目标网络已放行 Direct Executor 出口地址：{{ip}}",
+        "不经过堡垒机、由 Argus 直连执行器从其部署网络连接的主机。",
+      egressHint: "请确认目标网络已放行直连执行器出口地址：{{ip}}",
       egressNotConfigured: "尚未配置",
-      directExecutor: "Direct Executor",
+      directExecutor: "直连执行器",
     },
     row: {
       name: "主机名",
@@ -185,7 +185,7 @@ export const hostsZh = {
       viaBastion: "经堡垒机",
       viaBastionDesc: "目标在内网，选择所属 Bastion Scope",
       direct: "直连",
-      directDesc: "由 Direct Executor 从其部署网络直接连接目标",
+      directDesc: "由直连执行器从其部署网络直接连接目标",
       selectScope: "选择 Bastion Scope",
       noActiveScope: "暂无已激活的 Bastion Scope",
       name: "主机名",
@@ -206,7 +206,7 @@ export const hostsZh = {
       environment: "环境",
       labels: "标签",
       labelsHint: "每行一个，格式 key=value",
-      egressNote: "请确认目标网络已放行 Direct Executor 出口地址：{{ip}}",
+      egressNote: "请确认目标网络已放行直连执行器出口地址：{{ip}}",
       egressNotConfigured: "尚未配置",
       runTest: "开始测试",
       testing: "测试中…",
@@ -216,6 +216,10 @@ export const hostsZh = {
       preview: "生成预览",
     },
     preview: {
+      createTitle: "新增主机 {{name}}",
+      createSummary: "创建已验证的主机资源",
+      createResourceDiff: "+ 主机资源 {{name}}",
+      collectorDiff: "+ OTLP 收集器",
       awaitingApproval: "已确认，等待审批通过后执行",
       submitted: "已确认，执行任务已创建",
     },
@@ -600,6 +604,10 @@ export const hostsEn = {
       preview: "Generate preview",
     },
     preview: {
+      createTitle: "Create host {{name}}",
+      createSummary: "Create a validated host resource",
+      createResourceDiff: "+ host resource {{name}}",
+      collectorDiff: "+ OTLP collector",
       awaitingApproval: "Confirmed; waiting for approval before execution",
       submitted: "Confirmed; execution task created",
     },

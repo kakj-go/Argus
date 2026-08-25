@@ -2,7 +2,6 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import { aiSettingsEn, aiSettingsZh } from "./ai-settings";
 import { accountEn, accountZh } from "./account";
-import { automationsEn, automationsZh } from "./automations";
 import { chatEn, chatZh } from "./chat";
 import { commonEn, commonZh } from "./common";
 import { hostsEn, hostsZh } from "./hosts";
@@ -13,6 +12,7 @@ import { governanceEn, governanceZh } from "./governance";
 import { settingsEn, settingsZh } from "./settings";
 import { shellEn, shellZh } from "./shell";
 import { telemetryEn, telemetryZh } from "./telemetry";
+import { errorsEn, errorsZh } from "./errors";
 
 /**
  * i18n 模块化注册模式：
@@ -31,11 +31,11 @@ const modulesZh = [
   hostsZh,
   kubernetesZh,
   aiSettingsZh,
-  automationsZh,
   remoteAccessZh,
   telemetryZh,
   settingsZh,
   governanceZh,
+  errorsZh,
 ];
 const modulesEn = [
   commonEn,
@@ -46,11 +46,11 @@ const modulesEn = [
   hostsEn,
   kubernetesEn,
   aiSettingsEn,
-  automationsEn,
   remoteAccessEn,
   telemetryEn,
   settingsEn,
   governanceEn,
+  errorsEn,
 ];
 
 const storedLocale = window.localStorage.getItem("argus.locale");

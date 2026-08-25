@@ -149,10 +149,10 @@ Action Binding 和 Pending Action 的唯一状态位于 PostgreSQL；Redis 只�
 - ContextAssembler 给定相同 Run Version、Active ContextSnapshot 和 Event Tail 时必须产生相同来源集合与 Projection Hash。
 - HPA 使用可运行 Task 数、最老 Task 年龄、模型并发和 CPU；不能只看 CPU。
 
-M4 将普通 Worker 的职责拆为五个独立 Pool：`agent` 运行模型与可见 Tool，`action` 原子消费私有计划并执行 Commit/ResultUnknown 对账，`compaction` 生成 ContextSnapshot，`automation` 调度并执行固定 Tool，`sandbox` 管理 Lifecycle 与恢复。五个 Pool 始终保留独立 PostgreSQL Task Queue、Processor 和同一套 Task/Fence 恢复协议，但 Deployment 拓扑取决于 Profile：
+M4 将普通 Worker 的职责拆为四个独立 Pool：`agent` 运行模型与可见 Tool，`action` 原子消费私有计划并执行 Commit/ResultUnknown 对账，`compaction` 生成 ContextSnapshot，`sandbox` 管理 Lifecycle 与恢复。四个 Pool 始终保留独立 PostgreSQL Task Queue、Processor 和同一套 Task/Fence 恢复协议，但 Deployment 拓扑取决于 Profile：
 
-- Evaluation 使用一个 `argus-worker --pool=default` Deployment，同时启动五个 Processor。它们共享资源、进程故障域和五类依赖的 NetworkPolicy 权限并集；任一 Processor 的致命错误会重启整个 Worker。
-- Local Hardening 和 Production 使用五个独立 Deployment，分别运行 `--pool=agent|action|compaction|automation|sandbox`，并独立配置并发、资源、NetworkPolicy、PDB、指标与扩缩容。
+- Evaluation 使用一个 `argus-worker --pool=default` Deployment，同时启动四个 Processor。它们共享资源、进程故障域和四类依赖的 NetworkPolicy 权限并集；任一 Processor 的致命错误会重启整个 Worker。
+- Local Hardening 和 Production 使用四个独立 Deployment，分别运行 `--pool=agent|action|compaction|sandbox`，并独立配置并发、资源、NetworkPolicy、PDB、指标与扩缩容。
 
 因此 `default` Pool 是 Evaluation 的正式部署拓扑，不再只是本地兼容入口；它不改变队列所有权、Handler、Lease/Fence 或 Reconciler 的领域边界。
 

@@ -8,6 +8,7 @@ import {
   apiErrorField,
   formConstraint,
   formatApiError,
+  formatErrorCode,
   useApi,
   type ConfirmActionResult,
   type Environment,
@@ -204,7 +205,10 @@ export function ClusterFormDrawer({
         }
         if (connectionTest.status !== "succeeded") {
           throw new Error(
-            connectionTest.error_code ?? "Connection test failed",
+            formatErrorCode(
+              connectionTest.error_code,
+              "Connection test failed",
+            ),
           );
         }
       }
@@ -320,13 +324,14 @@ export function ClusterFormDrawer({
           action={pendingAction}
           claimOneTimeResult={connectionMode === "in_cluster" && !editing}
           onSettled={(confirmed, result) => {
-            void invalidateClusters();
-            if (confirmed && result?.one_time_result) {
-              setPendingAction(null);
-              setEnrollment(result.one_time_result);
-              return;
-            }
-            resetAndClose();
+            void invalidateClusters().then(() => {
+              if (confirmed && result?.one_time_result) {
+                setPendingAction(null);
+                setEnrollment(result.one_time_result);
+                return;
+              }
+              resetAndClose();
+            });
           }}
         />
       ) : (

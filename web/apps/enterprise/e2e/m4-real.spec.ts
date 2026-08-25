@@ -13,7 +13,7 @@ test.describe("M4 real Agent and governance flow", () => {
   test.skip(!enabled, "M4 Kubernetes environment is not active");
   test.describe.configure({ mode: "serial", timeout: 120_000 });
 
-  test("renders persisted Chat, model, approval, execution, and automation facts", async ({
+  test("renders persisted Chat, model, approval, and execution facts", async ({
     page,
   }) => {
     await enterpriseLogin(
@@ -38,8 +38,6 @@ test.describe("M4 real Agent and governance flow", () => {
     await page.goto("http://127.0.0.1:4173/tasks");
     await expect(page.getByText(/Succeeded|已成功/).first()).toBeVisible();
 
-    await page.goto("http://127.0.0.1:4173/automations");
-    await expect(page.getByText("M4 host inventory", { exact: true })).toBeVisible();
     await expectNoCredentialInBrowserState(page, "m4-write-only-key");
   });
 

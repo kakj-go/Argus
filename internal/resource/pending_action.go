@@ -213,6 +213,28 @@ func (service PendingActionService) List(ctx context.Context, enterpriseID uuid.
 	return service.Store.Queries.ListPendingActions(ctx, enterpriseID)
 }
 
+func (service PendingActionService) ListCreated(ctx context.Context, enterpriseID uuid.UUID, actorID string) ([]db.PendingAction, error) {
+	actor, err := uuid.Parse(actorID)
+	if err != nil {
+		return nil, err
+	}
+	return service.Store.Queries.ListPendingActionsByCreator(ctx, db.ListPendingActionsByCreatorParams{
+		EnterpriseID:     enterpriseID,
+		CreatorSubjectID: actor,
+	})
+}
+
+func (service PendingActionService) ListMine(ctx context.Context, enterpriseID uuid.UUID, actorID string) ([]db.PendingAction, error) {
+	actor, err := uuid.Parse(actorID)
+	if err != nil {
+		return nil, err
+	}
+	return service.Store.Queries.ListPendingActionsForApprover(ctx, db.ListPendingActionsForApproverParams{
+		EnterpriseID: enterpriseID,
+		SubjectID:    actor,
+	})
+}
+
 func (service PendingActionService) Get(ctx context.Context, enterpriseID uuid.UUID, actionRef string) (db.PendingAction, error) {
 	return service.Store.Queries.GetPendingAction(ctx, db.GetPendingActionParams{ActionRef: actionRef, EnterpriseID: enterpriseID})
 }

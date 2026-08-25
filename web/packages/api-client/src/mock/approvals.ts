@@ -30,6 +30,21 @@ export function createApprovalsDomain(
           entry.title.includes(filter.query ?? ""),
         );
       }
+      if (filter?.scope === "created") {
+        const actor = ctx.actor().id;
+        items = items.filter(
+          (entry) => db.actionPlans[entry.action_ref]?.created_by === actor,
+        );
+      } else if (filter?.scope === "mine") {
+        const actor = ctx.actor().id;
+        items = items.filter((entry) => {
+          const plan = db.actionPlans[entry.action_ref];
+          return (
+            entry.status === "awaiting_approval" &&
+            !(entry.approval?.separation_of_duty && plan?.created_by === actor)
+          );
+        });
+      }
       return ctx.paginate(items, query);
     },
     async get(actionRef) {

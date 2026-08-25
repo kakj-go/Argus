@@ -16,13 +16,13 @@ import (
 var contractDomains = []string{
 	"common", "identity", "authorization", "labels", "action", "card", "agent", "stream", "setup", "m8api", "platform",
 	"enterpriseidentity", "enterpriseauthz", "machine", "audit", "secretapi", "hostapi", "kubernetesapi", "connectionapi",
-	"actionapi", "connectorapi", "conversationapi", "modelapi", "workflowapi", "automationapi", "sandboxapi", "cardapi",
+	"actionapi", "connectorapi", "conversationapi", "modelapi", "workflowapi", "sandboxapi", "cardapi",
 	"remoteaccessapi", "telemetryapi",
 }
 
 var contractServerDomains = []string{
 	"setup", "m8api", "platform", "enterpriseidentity", "enterpriseauthz", "machine", "audit", "secretapi", "hostapi",
-	"kubernetesapi", "connectionapi", "actionapi", "connectorapi", "conversationapi", "modelapi", "workflowapi", "automationapi",
+	"kubernetesapi", "connectionapi", "actionapi", "connectorapi", "conversationapi", "modelapi", "workflowapi",
 	"sandboxapi", "cardapi", "remoteaccessapi", "telemetryapi",
 }
 

@@ -18,6 +18,10 @@
   flex-wrap: wrap;
 }
 
+.argus-settings-permission-tabs {
+  margin-bottom: var(--space-px-12);
+}
+
 .argus-settings-section {
   display: flex;
   flex-direction: column;

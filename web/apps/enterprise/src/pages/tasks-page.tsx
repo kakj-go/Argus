@@ -8,6 +8,7 @@ import type {
 } from "@argus/api-client/provisional";
 import {
   formatApiError,
+  formatErrorCode,
   useApi,
   type ActionOneTimeResult,
   type Execution,
@@ -160,7 +161,11 @@ function ExecutionsPage() {
               key: "result_ref",
               header: t("governance.tasks.columns.resultRef"),
             },
-            { key: "error_code", header: t("automations.errorCode") },
+            {
+              key: "error_code",
+              header: t("governance.tasks.columns.errorCode"),
+              render: (item) => formatErrorCode(item.error_code, "—"),
+            },
             {
               key: "one_time_result_available",
               header: t("governance.tasks.columns.oneTimeResult"),

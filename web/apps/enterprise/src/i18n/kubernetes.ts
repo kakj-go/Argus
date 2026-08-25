@@ -20,6 +20,9 @@ export const kubernetesZh = {
       critical: "关键操作",
     },
     pendingAction: {
+      createTitle: "新增 Kubernetes 集群 {{name}}",
+      createSummary: "创建已验证的 Kubernetes 集群资源",
+      createResourceDiff: "~ Kubernetes 集群资源 {{name}}",
       awaitingApproval: "已确认，等待审批通过后执行",
       executed: "已确认，执行任务已创建",
     },
@@ -259,6 +262,9 @@ export const kubernetesEn = {
       critical: "Critical",
     },
     pendingAction: {
+      createTitle: "Create Kubernetes cluster {{name}}",
+      createSummary: "Create a validated Kubernetes cluster resource",
+      createResourceDiff: "~ Kubernetes cluster resource {{name}}",
       awaitingApproval: "Confirmed; waiting for approval before execution",
       executed: "Confirmed; execution task created",
     },

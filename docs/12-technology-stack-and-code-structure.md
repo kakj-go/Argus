@@ -51,6 +51,7 @@ web/
 - `enterprise` 包含 Chatbox 和企业管理后台。
 - `card-runtime` 只承载独立 Origin 的框架无关 Card iframe 运行时，不接入门户认证状态或业务路由。
 - `ui` 是唯一通用组件实现，业务应用不得维护平行组件库。
+- 日期与日期时间输入统一使用 `@argus/ui` 的 `DateTimePicker`。组件基于开源 `react-datepicker`，对外保留表单契约使用的 `yyyy-MM-dd` / `yyyy-MM-ddTHH:mm` 本地值格式，并由 Argus Design Token 覆盖日历、时间列表和输入框样式；输入框文字与日历图标都必须打开同一面板。
 - `api-client` 由 OpenAPI 生成基础类型，在其上提供领域 Port、mock/real Adapter 以及 HTTP/SSE/WebSocket Transport；客户端上下文不能替代服务端资源归属检查。两个门户必须显式设置 `VITE_API_MODE=mock|real`，未知模式、real 缺少 Base URL 或调用尚未冻结的领域操作都 fail closed，禁止隐式回退 mock。
 - `card-host` 只实现 iframe 生命周期、Manifest/RenderPlan 校验、Host Bridge 和受控 Action/Query 调用；`card-runtime` 负责独立 Origin 内的 CSP 和 Card 文档执行，两者共同消费生成的 Bridge 契约。
 
@@ -189,7 +190,7 @@ internal/mcp/
 
 Agent Loop、ContextAssembler、Compactor 和 Provider Adapter 保持独立接口，避免把模型 SDK、数据库事务、Tool 执行和 Prompt 拼接写入同一个大文件。
 
-每个领域内部包含 domain、service、repository/port 和 adapter。HTTP Handler、MCP Tool、Worker Handler 和自动化任务只能调用领域服务，不能各自实现数据库业务规则。
+每个领域内部包含 domain、service、repository/port 和 adapter。HTTP Handler、MCP Tool、Worker Handler 和后台执行任务只能调用领域服务，不能各自实现数据库业务规则。
 
 ## 4. 身份、权限和 Secret
 
@@ -236,7 +237,7 @@ E2E 至少覆盖：
 - 初始化、双层管理域、平台/企业身份互斥、单企业用户和跨企业拒绝。
 - RoleBinding + DataScope 的列表/详情/批量/Tool/Card 一致过滤，以及授权敏感标签变化后的缓存、Binding、游标和流式订阅失效。
 - Connector 注册并创建 Bastion Scope、证书轮换与 fencing、双 Gateway 跨副本派发、内网主机经堡垒机接入、公网 Direct SSH 的 SSRF/固定出口边界。
-- Connector 本机/SSH/WinRM 人工命令行票据与录像；RemoteAccessGrant 限定 Host/ManagedAccount/动作；人工会话和自动化 Execution 隔离。
+- Connector 本机/SSH/WinRM 人工命令行票据与录像；RemoteAccessGrant 限定 Host/ManagedAccount/动作；人工会话和后台 Execution 隔离。
 - Collector 沿两种执行路径安装、Telemetry Route 选择矩阵和 Metrics/Logs/Traces Profile 配置。
 - Kubernetes Node/Host 绑定，以及 Host Collector 与 DaemonSet Collection Claim 的冲突、非冲突共存和到期迁移。
 - 资源查询、Preview/Confirm/Commit、撤权与 AuthorizationVersion、审批不补齐基础权限、Redis 清空恢复和 Pod 重启接管。

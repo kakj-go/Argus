@@ -198,7 +198,7 @@ func (handler EnterpriseAuthorizationHandler) UpdateDataScope(ctx context.Contex
 		v := string(*request.Body.Status)
 		status = &v
 	}
-	value, err := handler.Service.UpdateScope(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), uuid.UUID(request.Id), authorization.ScopeInput{Name: request.Body.Name, Description: description, ResourceTypes: resourceTypes, ExplicitResourceIDs: request.Body.ExplicitResourceIds, LabelSelector: raw, Status: status, ExpectedVersion: request.Body.ExpectedVersion})
+	value, err := handler.Service.UpdateScope(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), uuid.UUID(request.Id), authorization.ScopeInput{Name: request.Body.Name, Description: description, ResourceTypes: resourceTypes, ExplicitResourceIDs: request.Body.ExplicitResourceIds, LabelSelector: raw, MatchAll: request.Body.MatchAll, Status: status, ExpectedVersion: request.Body.ExpectedVersion})
 	if err != nil {
 		return authzapi.UpdateDataScopedefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusConflict}, nil
 	}
@@ -217,7 +217,8 @@ func (handler EnterpriseAuthorizationHandler) DisableDataScope(ctx context.Conte
 	for _, scope := range current {
 		if scope.ID == uuid.UUID(request.Id) {
 			status := "disabled"
-			_, err = handler.Service.UpdateScope(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), scope.ID, authorization.ScopeInput{Name: scope.Name, Description: scope.Description, ResourceTypes: scope.ResourceTypes, ExplicitResourceIDs: scope.ExplicitResourceIds, LabelSelector: scope.LabelSelector, Status: &status, ExpectedVersion: request.Params.ExpectedVersion})
+			matchAll := scope.MatchAll
+			_, err = handler.Service.UpdateScope(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), scope.ID, authorization.ScopeInput{Name: scope.Name, Description: scope.Description, ResourceTypes: scope.ResourceTypes, ExplicitResourceIDs: scope.ExplicitResourceIds, LabelSelector: scope.LabelSelector, MatchAll: &matchAll, Status: &status, ExpectedVersion: request.Params.ExpectedVersion})
 			break
 		}
 	}
@@ -329,7 +330,8 @@ func toAuthzScope(value db.DataScope) authzapi.DataScope {
 	for i, v := range value.ResourceTypes {
 		types[i] = authzapi.DataScopeResourceTypes(v)
 	}
-	r := authzapi.DataScope{Id: value.ID.String(), EnterpriseId: value.EnterpriseID.String(), Name: value.Name, ResourceTypes: types, ExplicitResourceIds: value.ExplicitResourceIds, Status: authzapi.DataScopeStatus(value.Status), Version: value.Version, CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time}
+	matchAll := value.MatchAll
+	r := authzapi.DataScope{Id: value.ID.String(), EnterpriseId: value.EnterpriseID.String(), Name: value.Name, ResourceTypes: types, ExplicitResourceIds: value.ExplicitResourceIds, MatchAll: &matchAll, Status: authzapi.DataScopeStatus(value.Status), Version: value.Version, CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time}
 	if value.Description != "" {
 		r.Description = &value.Description
 	}
@@ -368,7 +370,7 @@ func scopeCreateInput(body authzapi.DataScopeCreate) (authorization.ScopeInput, 
 	if body.Description != nil {
 		description = *body.Description
 	}
-	return authorization.ScopeInput{Name: body.Name, Description: description, ResourceTypes: types, ExplicitResourceIDs: body.ExplicitResourceIds, LabelSelector: raw}, nil
+	return authorization.ScopeInput{Name: body.Name, Description: description, ResourceTypes: types, ExplicitResourceIDs: body.ExplicitResourceIds, LabelSelector: raw, MatchAll: body.MatchAll}, nil
 }
 func uuidSlice(values []uuid.UUID) []uuid.UUID { return append([]uuid.UUID(nil), values...) }
 func emptyAuthzPage() authzapi.CursorPage {

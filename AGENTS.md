@@ -14,6 +14,8 @@
 
 ## 前端约定
 
+- 当前企业门户仅支持 web 桌面端作为正式产品体验和验收范围；移动端导航、窄屏布局和移动端专属交互不属于本项目当前版本的实现与 E2E 验收目标。
+
 - 应用与共享包：`web/apps/{enterprise,platform,setup}` + `web/packages/{ui,design-tokens,api-client,auth,card-host,observability}`；通用组件只进 `@argus/ui`，业务应用不维护平行组件库。
 - API 模式：Enterprise 与 Platform 两个门户必须显式设置 `VITE_API_MODE=mock|real`；Platform 内含首次初始化流程。未知模式或 real 缺少必要 URL 时 fail closed，不得回退 mock。mock 数据持久化在 localStorage，Playwright 每个用例独立 browser context 即得到干净种子数据。
 - i18n：每个业务模块一个 `src/i18n/<module>.ts`，导出 `<module>Zh` / `<module>En`，在 `src/i18n/index.ts` 的模块清单中注册即生效；通用文案放 `common.ts`。默认 `zh-CN`，偏好持久化在 `argus.locale`。

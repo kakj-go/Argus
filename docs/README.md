@@ -2,6 +2,8 @@
 
 Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Chatbox 作为主要入口，以管理后台作为确定性配置入口，以 MCP Tool 作为业务能力边界，并通过 Connector/Agent 连接主机、Kubernetes 集群及其他受管环境。
 
+当前企业门户正式支持和验收范围为桌面 Web 端；移动端不属于本版本产品承诺或 E2E 门禁。
+
 本文档集记录当前产品讨论形成的基线设计。它不是最终接口定义；涉及协议字段的示例用于表达约束和职责，实施时应再固化为版本化 JSON Schema、OpenAPI 或 protobuf。
 
 ## 阅读顺序
@@ -28,6 +30,8 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 20. [M9 查询语言 ADR](./adr/telemetry-query-ir.md)
 21. [M9 ClickHouse 语义子集 ADR](./adr/clickhouse-semantic-subset.md)
 22. [M10 单进程 Telemetry Query Engine ADR](./adr/telemetry-query-engine.md)
+23. [PlanV2 遥测仪表盘与 AI 分析](./planv2/README.md)
+24. [PlanV3 企业级远程访问治理](./planv3/README.md)
 
 ## 关键术语
 
@@ -76,7 +80,7 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 ## 已确定的设计原则
 
 - Chatbox 是交互和编排层，不承载新增主机、查询 Pod 等原生业务逻辑。
-- 管理后台、Chatbox、OpenAPI 和自动化任务复用同一套领域服务、权限检查和审计链路。
+- 管理后台、Chatbox、OpenAPI 和后台执行任务复用同一套领域服务、权限检查和审计链路。
 - Tool 只产出业务数据；已启用交互卡片由内置“渲染交互卡片”Skill 选择，并通过 Render Plan 与真实 `tool_call_id + path` 动态连接。
 - 数据绑定应引用 `tool_call_id + path`，避免复制值后丢失来源。
 - 用户确认后的提交由卡片事件直接触发，不再经过模型推理。
@@ -94,7 +98,7 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 - OpenTelemetry Collector 本身承担采集与 OTLP 推送；Argus 不额外开发一个重复的遥测 Pusher 进程。
 - Connector 可以使所在主机成为堡垒机并承载远程访问隧道，但人工远程会话票据不得提供给 AI、交互卡片 或 Sandbox。
 - 人工远程访问必须同时授权目标 Host、Managed Account、协议、动作和有效期；文件传输、剪贴板、会话分享和端口转发不能由“允许连接”隐式获得。
-- 所有受管 Host 统一提供命令行入口；人工会话与 Collector 安装/配置自动化可以共享底层连接适配器，但使用独立票据、状态机、队列和审计。
+- 所有受管 Host 统一提供命令行入口；人工会话与 Collector 安装/配置后台任务可以共享底层连接适配器，但使用独立票据、状态机、队列和审计。
 - 独立主机可以由受控 Direct Executor 通过 SSH/WinRM 直连；公网和私网目标均须由 Executor 部署网络实际可达，并继续受高风险地址与禁用网段策略约束。
 - 堡垒机主机可以同时安装 Edge Gateway Collector；遥测仍由 Collector 的 OTLP Pipeline 转发，不能复用 Connector 控制或远程会话通道。
 - 互通网络中的 Collector 可以组成 Leaf → Edge Gateway 拓扑，仅 Edge Gateway 需要访问 Argus。
