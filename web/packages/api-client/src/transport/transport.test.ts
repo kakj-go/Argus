@@ -372,6 +372,20 @@ describe("configured adapter", () => {
 });
 
 describe("HttpTransport", () => {
+  it("does not duplicate an /api base path", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    const transport = new HttpTransport({
+      base_url: "/api",
+      fetch,
+    });
+    await transport.request("enterprise/auth/session");
+    expect(String(fetch.mock.calls[0]?.[0])).toBe(
+      "http://localhost/api/v1/enterprise/auth/session",
+    );
+  });
+
   it("applies v1 base URL, cookies, locale, request ID and JSON body", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), {

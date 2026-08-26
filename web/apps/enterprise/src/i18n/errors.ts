@@ -169,11 +169,11 @@ export const ERROR_CODES = [
 
 type Locale = "zh-CN" | "en-US";
 
-const tokenZh: Record<string, string> = {
+const errorTokenZhMap: Record<string, string> = {
   INTERNAL: "内部", ERROR: "错误", INVALID: "无效", ARGUMENT: "参数", AUTHENTICATION: "身份验证", AUTHORIZATION: "授权", VERSION: "版本", STALE: "已过期", CURSOR: "游标", EXPIRED: "已过期", IDEMPOTENCY: "幂等", CONFLICT: "冲突", LABEL: "标签", RESERVED: "保留", LIMIT: "限制", EXCEEDED: "已超出", SELECTOR: "选择器", TOO: "过大", COMPLEX: "复杂", PENDING: "待处理", ACTION: "操作", STATE: "状态", RESULT: "结果", UNKNOWN: "未知", STREAM: "流", PROTOCOL: "协议", CONTEXT: "上下文", INPUT: "输入", COMPACTION: "压缩", FAILED: "失败", CONTRACT: "契约", UNSUPPORTED: "不支持", RESOURCE: "资源", NOT: "未", FOUND: "找到", SETUP: "初始化", ALREADY: "已经", TOKEN: "令牌", UNAVAILABLE: "不可用", CREDENTIAL: "凭据", PASSWORD: "密码", WEAK: "强度不足", CHANGE: "修改", REQUIRED: "需要", TEMPORARY: "临时", MFA: "多因素认证", ENROLLMENT: "注册", PROOF: "验证", STEP: "二次验证", UP: "提升", BREAK: "紧急", GLASS: "应急通道", CSRF: "CSRF", MISSING: "缺失", ORIGIN: "来源", ALLOWED: "允许", LOGIN: "登录", RATE: "频率", LIMITED: "受限", DEPENDENCY: "依赖", SESSION: "会话", REVOKED: "已撤销", AUDIENCE: "受众", MISMATCH: "不匹配", ENTERPRISE: "企业", SUSPENDED: "已暂停", DISABLED: "已停用", DEFAULT: "默认", DEPARTMENT: "部门", IMMUTABLE: "不可变更", BUILTIN: "内置", ROLE: "角色", CROSS: "跨", API: "API", KEY: "密钥", SECRET: "密文", REFERENCED: "被引用", LEASE: "租约", CONNECTION: "连接", TEST: "测试", DIRECT: "直连", TARGET: "目标", DENIED: "被拒绝", PLAN: "计划", KUBERNETES: "Kubernetes", QUERY: "查询", CONNECTOR: "连接器", FENCED: "已隔离", COMMAND: "命令", SEQUENCE: "序列", FRAME: "帧", HEARTBEAT: "心跳", TIMEOUT: "超时", GATEWAY: "网关", DRAINING: "排空中", DISCONNECTED: "已断开", SCHEMA: "结构", REPLAYABLE: "可重放", CERTIFICATE: "证书", ROTATION: "轮换", MODEL: "模型", ENDPOINT: "端点", COMPATIBILITY: "兼容性", QUOTA: "配额", RUN: "运行", CANCELLED: "已取消", TOOL: "工具", AVAILABLE: "可用", APPROVAL: "审批", POLICY: "策略", ELIGIBLE: "符合条件", EXECUTION: "执行", ONE: "一次性", AUTOMATION: "自动化", OVERLAP: "重叠", SKIPPED: "已跳过", SANDBOX: "沙箱", PROFILE: "配置", CARD: "卡片", SOURCE: "来源", READ: "只读", CONTENT: "内容", MANIFEST: "清单", HASH: "哈希", STATIC: "静态", RUNTIME: "运行时", BINDING: "绑定", INCOMPATIBLE: "不兼容", PRESENTATION: "展示", CONSUMED: "已消费", REMOTE: "远程", ACCESS: "访问", GRANT: "授权", SCOPE: "范围", RECORDING: "录制", CAPACITY: "容量", WINRM: "WinRM", TLS: "TLS", COLLECTOR: "收集器", DISTRIBUTION: "发行版", ARTIFACT: "制品", INSTALLED: "已安装", CONFIG: "配置", HEALTH: "健康检查", NODE: "节点", EVIDENCE: "证据", MANAGEMENT: "管理", ROUTE: "路由", COLLECTION: "采集", CLAIM: "声明", HOST: "主机", TELEMETRY: "遥测", IDENTITY: "身份", INGEST: "摄入", BACKPRESSURE: "背压", BUDGET: "预算", PARSE: "解析", TYPE: "类型", FEATURE: "功能", COMPLEXITY: "复杂度", SIGNAL: "信号", FIELD: "字段", CLIENT: "客户端", DLQ: "死信队列", REPLAY: "重放"
 };
 
-const specialZh: Record<string, string> = {
+const errorSpecialZhMap: Record<string, string> = {
   REMOTE_ACCESS_GRANT_REQUIRED: "当前账号未获得该主机和托管账号的远程访问授权。",
   REMOTE_ACCESS_SCOPE_DENIED: "当前账号不在该远程访问范围内。",
   REMOTE_ACCESS_APPROVAL_REQUIRED: "该远程访问需要审批通过后才能继续。",
@@ -198,15 +198,15 @@ const specialZh: Record<string, string> = {
   INTERNAL_ERROR: "服务暂时不可用，请稍后重试。",
 };
 
-const tokenEn: Record<string, string> = {};
+const errorTokenEnMap: Record<string, string> = {};
 function englishToken(token: string): string {
   return token.toLowerCase().replace(/(^|[-_])([a-z])/g, (_, p, c) => (p ? " " : "") + c.toUpperCase());
 }
 function humanize(code: string, locale: Locale): string {
-  if (locale === "zh-CN" && specialZh[code]) return specialZh[code];
+  if (locale === "zh-CN" && errorSpecialZhMap[code]) return errorSpecialZhMap[code];
   const tokens = code.split("_");
-  if (locale === "en-US") return tokens.map((token) => tokenEn[token] ?? englishToken(token)).join(" ") + ".";
-  const text = tokens.map((token) => tokenZh[token] ?? token).join("");
+  if (locale === "en-US") return tokens.map((token) => errorTokenEnMap[token] ?? englishToken(token)).join(" ") + ".";
+  const text = tokens.map((token) => errorTokenZhMap[token] ?? token).join("");
   return `操作失败：${text}。`;
 }
 

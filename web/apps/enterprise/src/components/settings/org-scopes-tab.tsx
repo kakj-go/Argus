@@ -156,7 +156,7 @@ export function OrgScopesTab() {
     <div className="argus-settings-section">
       <div className="argus-settings-section__head">
         <h2 className="argus-settings-section__title">
-          {t("settings.org.tabs.scopes")}
+          {t("settings.org.permissionTabs.scopes")}
         </h2>
         <Button
           onClick={() => {

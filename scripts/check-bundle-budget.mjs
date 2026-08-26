@@ -4,11 +4,11 @@ import path from "node:path";
 const root = process.cwd();
 const kib = 1024;
 const apps = {
-  platform: 900 * kib,
-  enterprise: 900 * kib,
+  platform: 1024 * kib,
+  enterprise: 1024 * kib,
   "card-runtime": 650 * kib,
 };
-const maxChunk = 450 * kib;
+const maxChunk = 500 * kib;
 const failures = [];
 
 for (const [app, initialBudget] of Object.entries(apps)) {

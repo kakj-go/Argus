@@ -21,7 +21,6 @@ import {
   EmptyState,
   Field,
   FormDrawer,
-  Input,
   Select,
   Spinner,
   StatusBadge,
@@ -130,7 +129,7 @@ export function OrgBindingsTab() {
     <div className="argus-settings-section">
       <div className="argus-settings-section__head">
         <h2 className="argus-settings-section__title">
-          {t("settings.org.tabs.bindings")}
+          {t("settings.org.permissionTabs.bindings")}
         </h2>
         <Button onClick={() => setEditing(null)} size="sm" variant="primary">
           {t("settings.org.bindingsTab.create")}
@@ -473,7 +472,7 @@ function BindingDrawer({
             )}
           />
         </Field>
-        <Field requirement="optional" label={t("settings.org.tabs.scopes")}>
+        <Field requirement="optional" label={t("settings.org.permissionTabs.scopes")}>
           <Controller
             control={control}
             name="data_scope_ids"
