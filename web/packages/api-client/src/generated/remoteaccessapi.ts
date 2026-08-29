@@ -1,3 +1,6 @@
+import type { operations } from "./remoteaccessapi_operations.js";
+export type { operations };
+
 export interface paths {
     "/enterprise/remote-access-grants": {
         parameters: {
@@ -31,32 +34,13 @@ export interface paths {
         /** Update a remote access grant with optimistic concurrency. */
         put: operations["updateRemoteAccessGrant"];
         post?: never;
-        /** Disable a remote access grant. */
-        delete: operations["disableRemoteAccessGrant"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/enterprise/remote-access-policies": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List remote access approval policies. */
-        get: operations["listRemoteAccessPolicies"];
-        put?: never;
-        /** Create a remote access approval policy. */
-        post: operations["createRemoteAccessPolicy"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/enterprise/remote-access-policies/{id}": {
+    "/enterprise/remote-access-grants/{id}/enable": {
         parameters: {
             query?: never;
             header?: never;
@@ -65,13 +49,503 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Get a remote access approval policy. */
-        get: operations["getRemoteAccessPolicy"];
-        /** Update a remote access approval policy with optimistic concurrency. */
-        put: operations["updateRemoteAccessPolicy"];
+        get?: never;
+        put?: never;
+        /** Enable a remote access grant. */
+        post: operations["enableRemoteAccessGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-grants/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable a remote access grant. */
+        post: operations["disableRemoteAccessGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-grants/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an archived remote access grant as a draft. */
+        post: operations["restoreRemoteAccessGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-grants/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a remote access grant. */
+        post: operations["archiveRemoteAccessGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-grants/{id}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get remote access grant references. */
+        get: operations["getRemoteAccessGrantReferences"];
+        put?: never;
         post?: never;
-        /** Disable a remote access approval policy. */
-        delete: operations["disableRemoteAccessPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List remote access rules. */
+        get: operations["listRemoteAccessRules"];
+        put?: never;
+        /** Create a remote access rule. */
+        post: operations["createRemoteAccessRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-rules/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Simulate the current remote access decision without creating runtime state. */
+        post: operations["simulateRemoteAccessRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get a remote access rule. */
+        get: operations["getRemoteAccessRule"];
+        /** Update a remote access rule with optimistic concurrency. */
+        put: operations["updateRemoteAccessRule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-rules/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enable a remote access rule. */
+        post: operations["enableRemoteAccessRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-rules/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable a remote access rule. */
+        post: operations["disableRemoteAccessRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-rules/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an archived remote access rule as a draft. */
+        post: operations["restoreRemoteAccessRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-rules/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a remote access rule. */
+        post: operations["archiveRemoteAccessRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-rules/{id}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get remote access rule references. */
+        get: operations["getRemoteAccessRuleReferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/approval-workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List remote access approval workflows. */
+        get: operations["listApprovalWorkflows"];
+        put?: never;
+        /** Create a remote access approval workflow. */
+        post: operations["createApprovalWorkflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/approval-workflows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get a remote access approval workflow. */
+        get: operations["getApprovalWorkflow"];
+        /** Update a remote access approval workflow with optimistic concurrency. */
+        put: operations["updateApprovalWorkflow"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/approval-workflows/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enable an approval workflow. */
+        post: operations["enableApprovalWorkflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/approval-workflows/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable an approval workflow. */
+        post: operations["disableApprovalWorkflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/approval-workflows/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an archived approval workflow as a draft. */
+        post: operations["restoreApprovalWorkflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/approval-workflows/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive an approval workflow. */
+        post: operations["archiveApprovalWorkflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/approval-workflows/{id}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get approval workflow references. */
+        get: operations["getApprovalWorkflowReferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/session-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List remote access session profiles. */
+        get: operations["listSessionProfiles"];
+        put?: never;
+        /** Create a remote access session profile. */
+        post: operations["createSessionProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/session-profiles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get a remote access session profile. */
+        get: operations["getSessionProfile"];
+        /** Update a remote access session profile with optimistic concurrency. */
+        put: operations["updateSessionProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/session-profiles/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enable a session profile. */
+        post: operations["enableSessionProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/session-profiles/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable a session profile. */
+        post: operations["disableSessionProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/session-profiles/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an archived session profile as a draft. */
+        post: operations["restoreSessionProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/session-profiles/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a session profile. */
+        post: operations["archiveSessionProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/session-profiles/{id}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get session profile references. */
+        get: operations["getSessionProfileReferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -127,6 +601,25 @@ export interface paths {
         put?: never;
         /** Approve or reject one remote access requirement. */
         post: operations["decideRemoteAccessRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/remote-access-requests/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-evaluate an access request after fresh step-up authentication. */
+        post: operations["resumeRemoteAccessRequest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -263,6 +756,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/enterprise/remote-access-recordings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List remote access recordings. */
+        get: operations["listRemoteAccessRecordings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/enterprise/remote-access-recordings/{id}/events": {
         parameters: {
             query?: {
@@ -297,7 +807,6 @@ export interface components {
             /** Format: uuid */
             subject_id: string;
             host_ids: string[];
-            host_selector?: components["schemas"]["LabelSelector"];
             managed_account_ids: string[];
             protocols: components["schemas"]["RemoteAccessProtocol"][];
             actions: components["schemas"]["RemoteAccessAction"][];
@@ -305,7 +814,7 @@ export interface components {
             valid_from: string;
             /** Format: date-time */
             valid_until: string;
-            enabled: boolean;
+            status: components["schemas"]["RemoteAccessGovernanceStatus"];
             /** Format: int64 */
             version: number;
             /** Format: uuid */
@@ -320,7 +829,6 @@ export interface components {
             /** Format: uuid */
             subject_id: string;
             host_ids: string[];
-            host_selector?: components["schemas"]["LabelSelector"];
             managed_account_ids: string[];
             protocols: components["schemas"]["RemoteAccessProtocol"][];
             actions: components["schemas"]["RemoteAccessAction"][];
@@ -328,14 +836,17 @@ export interface components {
             valid_from: string;
             /** Format: date-time */
             valid_until: string;
-            enabled: boolean;
+            /**
+             * @default draft
+             * @enum {string}
+             */
+            status: "draft";
         };
         RemoteAccessGrantUpdate: {
             subject_type: components["schemas"]["RemoteAccessSubjectType"];
             /** Format: uuid */
             subject_id: string;
             host_ids: string[];
-            host_selector?: components["schemas"]["LabelSelector"];
             managed_account_ids: string[];
             protocols: components["schemas"]["RemoteAccessProtocol"][];
             actions: components["schemas"]["RemoteAccessAction"][];
@@ -343,7 +854,6 @@ export interface components {
             valid_from: string;
             /** Format: date-time */
             valid_until: string;
-            enabled: boolean;
             /** Format: int64 */
             expected_version: number;
         };
@@ -351,68 +861,252 @@ export interface components {
             items: components["schemas"]["RemoteAccessGrant"][];
             page: components["schemas"]["CursorPage"];
         };
-        RemoteAccessPolicy: {
+        RemoteAccessRule: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             readonly enterprise_id: string;
             name: string;
-            enabled: boolean;
+            description: string;
             priority: number;
             protocols: components["schemas"]["RemoteAccessProtocol"][];
-            host_selector?: components["schemas"]["LabelSelector"];
-            approver_role_ids?: string[];
-            minimum_approvals: number;
-            separation_of_duties: boolean;
-            require_mfa: boolean;
-            max_session_seconds: number;
-            idle_timeout_seconds: number;
+            actions: components["schemas"]["RemoteAccessAction"][];
+            source_cidrs: string[];
+            time_windows: components["schemas"]["RemoteAccessTimeWindow"][];
+            effects: components["schemas"]["RemoteAccessRuleEffect"][];
+            /** Format: uuid */
+            approval_workflow_id?: string;
+            /** Format: uuid */
+            session_profile_id?: string;
+            status: components["schemas"]["RemoteAccessGovernanceStatus"];
             /** Format: int64 */
             version: number;
+            /** Format: uuid */
+            created_by: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
         };
-        RemoteAccessPolicyWrite: {
+        RemoteAccessRuleWrite: {
             name: string;
-            enabled: boolean;
+            description: string;
             priority: number;
             protocols: components["schemas"]["RemoteAccessProtocol"][];
-            host_selector?: components["schemas"]["LabelSelector"];
-            approver_role_ids?: string[];
-            minimum_approvals: number;
-            separation_of_duties: boolean;
-            require_mfa: boolean;
-            max_session_seconds: number;
-            idle_timeout_seconds: number;
+            actions: components["schemas"]["RemoteAccessAction"][];
+            source_cidrs: string[];
+            time_windows: components["schemas"]["RemoteAccessTimeWindow"][];
+            effects: components["schemas"]["RemoteAccessRuleEffect"][];
+            /** Format: uuid */
+            approval_workflow_id?: string;
+            /** Format: uuid */
+            session_profile_id?: string;
+            /**
+             * @default draft
+             * @enum {string}
+             */
+            status: "draft";
         };
-        RemoteAccessPolicyUpdate: {
+        RemoteAccessRuleUpdate: {
             name: string;
-            enabled: boolean;
+            description: string;
             priority: number;
             protocols: components["schemas"]["RemoteAccessProtocol"][];
-            host_selector?: components["schemas"]["LabelSelector"];
-            approver_role_ids?: string[];
-            minimum_approvals: number;
-            separation_of_duties: boolean;
-            require_mfa: boolean;
-            max_session_seconds: number;
-            idle_timeout_seconds: number;
+            actions: components["schemas"]["RemoteAccessAction"][];
+            source_cidrs: string[];
+            time_windows: components["schemas"]["RemoteAccessTimeWindow"][];
+            effects: components["schemas"]["RemoteAccessRuleEffect"][];
+            /** Format: uuid */
+            approval_workflow_id?: string;
+            /** Format: uuid */
+            session_profile_id?: string;
             /** Format: int64 */
             expected_version: number;
         };
-        RemoteAccessPolicyPage: {
-            items: components["schemas"]["RemoteAccessPolicy"][];
+        RemoteAccessRulePage: {
+            items: components["schemas"]["RemoteAccessRule"][];
             page: components["schemas"]["CursorPage"];
+        };
+        ApprovalWorkflow: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            readonly enterprise_id: string;
+            name: string;
+            description: string;
+            approver_role_ids: string[];
+            minimum_approvals: number;
+            separation_of_duties: boolean;
+            approval_timeout_seconds: number;
+            escalation_after_seconds: number;
+            /** @enum {string} */
+            timeout_effect: "reject" | "expire";
+            escalation_role_ids: string[];
+            status: components["schemas"]["RemoteAccessGovernanceStatus"];
+            /** Format: int64 */
+            version: number;
+            /** Format: uuid */
+            created_by: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ApprovalWorkflowWrite: {
+            name: string;
+            description: string;
+            approver_role_ids: string[];
+            minimum_approvals: number;
+            separation_of_duties: boolean;
+            approval_timeout_seconds: number;
+            escalation_after_seconds: number;
+            /** @enum {string} */
+            timeout_effect: "reject" | "expire";
+            escalation_role_ids: string[];
+            /**
+             * @default draft
+             * @enum {string}
+             */
+            status: "draft";
+        };
+        ApprovalWorkflowUpdate: {
+            name: string;
+            description: string;
+            approver_role_ids: string[];
+            minimum_approvals: number;
+            separation_of_duties: boolean;
+            approval_timeout_seconds: number;
+            escalation_after_seconds: number;
+            /** @enum {string} */
+            timeout_effect: "reject" | "expire";
+            escalation_role_ids: string[];
+            /** Format: int64 */
+            expected_version: number;
+        };
+        ApprovalWorkflowPage: {
+            items: components["schemas"]["ApprovalWorkflow"][];
+            page: components["schemas"]["CursorPage"];
+        };
+        SessionProfile: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            readonly enterprise_id: string;
+            name: string;
+            description: string;
+            max_session_seconds: number;
+            idle_timeout_seconds: number;
+            /** @enum {string} */
+            recording_mode: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            command_audit_mode: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            clipboard_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            file_upload_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            file_download_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            port_forward_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            session_share_mode: "enabled" | "disabled";
+            retention_days: number;
+            status: components["schemas"]["RemoteAccessGovernanceStatus"];
+            /** Format: int64 */
+            version: number;
+            /** Format: uuid */
+            created_by: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SessionProfileWrite: {
+            name: string;
+            description: string;
+            max_session_seconds: number;
+            idle_timeout_seconds: number;
+            /** @enum {string} */
+            recording_mode: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            command_audit_mode: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            clipboard_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            file_upload_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            file_download_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            port_forward_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            session_share_mode: "enabled" | "disabled";
+            retention_days: number;
+            /**
+             * @default draft
+             * @enum {string}
+             */
+            status: "draft";
+        };
+        SessionProfileUpdate: {
+            name: string;
+            description: string;
+            max_session_seconds: number;
+            idle_timeout_seconds: number;
+            /** @enum {string} */
+            recording_mode: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            command_audit_mode: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            clipboard_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            file_upload_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            file_download_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            port_forward_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            session_share_mode: "enabled" | "disabled";
+            retention_days: number;
+            /** Format: int64 */
+            expected_version: number;
+        };
+        SessionProfilePage: {
+            items: components["schemas"]["SessionProfile"][];
+            page: components["schemas"]["CursorPage"];
+        };
+        RemoteAccessReferences: {
+            rules: number;
+            requests: number;
+            leases: number;
+            sessions: number;
         };
         RemoteAccessRequirement: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            policy_id: string;
+            rule_id?: string;
             /** Format: int64 */
-            policy_version: number;
+            rule_version?: number;
+            /** Format: uuid */
+            workflow_id?: string;
+            /** Format: int64 */
+            workflow_version?: number;
+            /** Format: uuid */
+            session_profile_id?: string;
+            /** Format: int64 */
+            session_profile_version?: number;
+            approval_snapshot?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            deadline_at?: string;
+            /** Format: date-time */
+            escalation_at?: string;
+            /** Format: date-time */
+            escalated_at?: string;
+            /** @enum {string} */
+            timeout_effect?: "reject" | "expire";
+            escalation_role_ids?: string[];
             minimum_approvals: number;
             separation_of_duties: boolean;
             require_mfa: boolean;
@@ -472,6 +1166,21 @@ export interface components {
             decisions: components["schemas"]["RemoteAccessDecision"][];
             /** Format: int64 */
             authorization_version: number;
+            /** @enum {string} */
+            decision_outcome?: "allowed" | "denied" | "awaiting_mfa" | "awaiting_approval";
+            decision_reason_codes?: string[];
+            decision_snapshot?: {
+                [key: string]: unknown;
+            };
+            decision_snapshot_hash?: string;
+            matched_grant_snapshots?: {
+                [key: string]: unknown;
+            }[];
+            matched_rule_snapshots?: {
+                [key: string]: unknown;
+            }[];
+            /** Format: date-time */
+            decision_at?: string;
             /** Format: date-time */
             expires_at: string;
             /** Format: date-time */
@@ -502,6 +1211,7 @@ export interface components {
             action: components["schemas"]["RemoteAccessAction"];
             /** Format: int64 */
             authorization_version: number;
+            decision_snapshot_hash?: string;
             /** Format: date-time */
             issued_at: string;
             /** Format: date-time */
@@ -536,13 +1246,44 @@ export interface components {
             protocol: components["schemas"]["RemoteAccessProtocol"];
             /** @enum {string} */
             connection_mode: "via_bastion" | "connector_local" | "direct_ssh" | "direct_winrm";
+            /** Format: uuid */
+            connector_id?: string;
+            /** Format: int64 */
+            connector_epoch?: number;
+            gateway_instance?: string;
             status: components["schemas"]["RemoteAccessSessionStatus"];
             /** Format: int64 */
             readonly session_fence: number;
+            /** Format: int64 */
+            readonly authorization_version: number;
+            /** @description Reason snapshot captured when the session was created. */
+            readonly reason: string;
             /** Format: uuid */
-            recording_id: string;
+            recording_id?: string;
             idle_timeout_seconds: number;
             max_duration_seconds: number;
+            decision_snapshot_hash?: string;
+            readonly decision_snapshot?: {
+                [key: string]: unknown;
+            };
+            readonly session_profile_snapshot?: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            recording_mode?: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            command_audit_mode?: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            clipboard_mode?: "enabled" | "disabled";
+            /** @enum {string} */
+            file_upload_mode?: "enabled" | "disabled";
+            /** @enum {string} */
+            file_download_mode?: "enabled" | "disabled";
+            /** @enum {string} */
+            port_forward_mode?: "enabled" | "disabled";
+            /** @enum {string} */
+            session_share_mode?: "enabled" | "disabled";
+            retention_days?: number;
             /** Format: date-time */
             connect_before: string;
             /** Format: date-time */
@@ -599,6 +1340,10 @@ export interface components {
             /** Format: date-time */
             completed_at?: string;
         };
+        RemoteAccessRecordingPage: {
+            items: components["schemas"]["RemoteAccessRecording"][];
+            page: components["schemas"]["CursorPage"];
+        };
         RecordingEventPage: {
             recording: components["schemas"]["RemoteAccessRecording"];
             events: {
@@ -625,33 +1370,12 @@ export interface components {
         };
         /** @enum {string} */
         RemoteAccessSubjectType: "user" | "department";
-        UserLabelKey: string;
-        SystemLabelKey: string;
-        LabelValue: string;
-        LabelRequirement: {
-            key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
-            /** @constant */
-            operator: "eq";
-            values: components["schemas"]["LabelValue"][];
-        } | {
-            key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
-            /** @constant */
-            operator: "in";
-            values: components["schemas"]["LabelValue"][];
-        } | {
-            key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
-            /** @enum {unknown} */
-            operator: "exists" | "not_exists";
-        };
-        LabelSelector: {
-            /** @constant */
-            schema_version: "argus.label_selector/v1";
-            requirements: components["schemas"]["LabelRequirement"][];
-        };
         /** @enum {string} */
         RemoteAccessProtocol: "ssh" | "winrs";
         /** @enum {string} */
         RemoteAccessAction: "terminal";
+        /** @enum {string} */
+        RemoteAccessGovernanceStatus: "draft" | "enabled" | "disabled" | "archived";
         PartialMetadata: {
             partial: boolean;
             reasons: ("authorization_filtered" | "budget_truncated" | "source_timeout" | "source_unavailable")[];
@@ -662,8 +1386,81 @@ export interface components {
             partial: components["schemas"]["PartialMetadata"];
         };
         IdempotencyKey: string;
+        RemoteAccessTimeWindow: {
+            day_of_week: number;
+            start: string;
+            end: string;
+            timezone: string;
+        };
         /** @enum {string} */
-        RemoteAccessRequestStatus: "requested" | "awaiting_approval" | "authorized" | "rejected" | "expired" | "invalidated";
+        RemoteAccessRuleEffect: "deny" | "require_mfa" | "require_approval" | "notify";
+        RemoteAccessRuleSimulationRequest: {
+            /** Format: uuid */
+            host_id: string;
+            /** Format: uuid */
+            managed_account_id: string;
+            protocol: components["schemas"]["RemoteAccessProtocol"];
+            action: components["schemas"]["RemoteAccessAction"];
+            /** Format: ip */
+            source_ip?: string;
+            /** Format: date-time */
+            evaluation_time?: string;
+            step_up_authenticated: boolean;
+        };
+        RemoteAccessObjectVersion: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            version: number;
+        };
+        RemoteAccessApprovalRequirementSimulation: {
+            /** Format: uuid */
+            workflow_id: string;
+            /** Format: int64 */
+            workflow_version: number;
+            approver_role_ids: string[];
+            minimum_approvals: number;
+            separation_of_duties: boolean;
+            approval_timeout_seconds: number;
+            escalation_after_seconds: number;
+            /** @enum {string} */
+            timeout_effect: "reject" | "expire";
+            escalation_role_ids: string[];
+            source_rule_ids: string[];
+        };
+        RemoteAccessSessionProfileSnapshot: {
+            source_profiles: components["schemas"]["RemoteAccessObjectVersion"][];
+            max_session_seconds: number;
+            idle_timeout_seconds: number;
+            /** @enum {string} */
+            recording_mode: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            command_audit_mode: "required" | "optional" | "disabled";
+            /** @enum {string} */
+            clipboard_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            file_upload_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            file_download_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            port_forward_mode: "enabled" | "disabled";
+            /** @enum {string} */
+            session_share_mode: "enabled" | "disabled";
+            retention_days: number;
+        };
+        RemoteAccessRuleSimulationResult: {
+            /** @enum {string} */
+            outcome: "allowed" | "denied" | "awaiting_mfa" | "awaiting_approval";
+            reason_codes: string[];
+            explanation: string[];
+            matched_grants: components["schemas"]["RemoteAccessObjectVersion"][];
+            matched_rules: components["schemas"]["RemoteAccessObjectVersion"][];
+            approval_requirements: components["schemas"]["RemoteAccessApprovalRequirementSimulation"][];
+            session_profile: components["schemas"]["RemoteAccessSessionProfileSnapshot"];
+            snapshot_hash: string;
+        };
+        /** @enum {string} */
+        RemoteAccessRequestStatus: "requested" | "awaiting_mfa" | "awaiting_approval" | "authorized" | "rejected" | "expired" | "invalidated";
         /** @enum {string} */
         RemoteAccessSessionStatus: "requested" | "awaiting_approval" | "authorized" | "connecting" | "active" | "terminating" | "terminated" | "failed" | "expired" | "connection_lost" | "invalidated";
     };
@@ -683,603 +1480,10 @@ export interface components {
         Limit: number;
         IdempotencyKey: components["schemas"]["IdempotencyKey"];
         CsrfToken: string;
+        ExpectedVersion: number;
     };
     requestBodies: never;
     headers: never;
     pathItems: never;
 }
 export type $defs = Record<string, never>;
-export interface operations {
-    listRemoteAccessGrants: {
-        parameters: {
-            query?: {
-                cursor?: components["parameters"]["Cursor"];
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Grant page. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessGrantPage"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    createRemoteAccessGrant: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RemoteAccessGrantWrite"];
-            };
-        };
-        responses: {
-            /** @description Grant. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessGrant"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    getRemoteAccessGrant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Grant. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessGrant"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    updateRemoteAccessGrant: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RemoteAccessGrantUpdate"];
-            };
-        };
-        responses: {
-            /** @description Grant. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessGrant"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    disableRemoteAccessGrant: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Grant disabled. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    listRemoteAccessPolicies: {
-        parameters: {
-            query?: {
-                cursor?: components["parameters"]["Cursor"];
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Policy page. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessPolicyPage"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    createRemoteAccessPolicy: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RemoteAccessPolicyWrite"];
-            };
-        };
-        responses: {
-            /** @description Policy. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessPolicy"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    getRemoteAccessPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Policy. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessPolicy"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    updateRemoteAccessPolicy: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RemoteAccessPolicyUpdate"];
-            };
-        };
-        responses: {
-            /** @description Policy. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessPolicy"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    disableRemoteAccessPolicy: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Policy disabled. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    listRemoteAccessRequests: {
-        parameters: {
-            query?: {
-                cursor?: components["parameters"]["Cursor"];
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Request page. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessRequestPage"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    createRemoteAccessRequest: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AccessRequestCreate"];
-            };
-        };
-        responses: {
-            /** @description Request. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessRequest"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    getRemoteAccessRequest: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Request. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessRequest"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    decideRemoteAccessRequest: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RemoteAccessDecisionCreate"];
-            };
-        };
-        responses: {
-            /** @description Request. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessRequest"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    listRemoteAccessLeases: {
-        parameters: {
-            query?: {
-                cursor?: components["parameters"]["Cursor"];
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Lease page. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessLeasePage"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    revokeRemoteAccessLease: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Revoked lease. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessLease"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    listRemoteAccessSessions: {
-        parameters: {
-            query?: {
-                cursor?: components["parameters"]["Cursor"];
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Session page. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessSessionPage"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    createRemoteAccessSession: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RemoteAccessSessionCreate"];
-            };
-        };
-        responses: {
-            /** @description Session. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessSession"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    getRemoteAccessSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessSession"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    createRemoteAccessSessionTicket: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description One-time ticket. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionTicketResult"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    terminateRemoteAccessSession: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SessionTerminate"];
-            };
-        };
-        responses: {
-            /** @description Session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessSession"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    getRemoteAccessRecording: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recording metadata. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteAccessRecording"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    listRemoteAccessRecordingEvents: {
-        parameters: {
-            query?: {
-                cursor?: string;
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Authorized recording event page. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecordingEventPage"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-}

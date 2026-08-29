@@ -12,7 +12,7 @@ Argus 同时连接模型、不可信用户输入、生成代码、基础设施�
 - 模型不能持有能够绕过确认的完整提交能力。
 - AI 生成代码必须同时经过静态检查和运行时隔离。
 - 所有操作具有来源、身份、租户和调用链。
-- 平台身份与企业身份互斥；EnterpriseUser 直接绑定唯一企业和部门，`enterprise_id` 是唯一隔离边界，资源授权由企业级 RoleBinding 与 DataScope 共同决定。
+- 平台身份与企业身份互斥；EnterpriseUser 直接绑定唯一企业和部门，`enterprise_id` 是唯一隔离边界，资源授权由企业级 RoleBinding 与 explicit resource authorization 共同决定。
 - 变更操作默认幂等、可追踪、可超时。
 
 ## 2. 主要威胁与控制
@@ -20,7 +20,7 @@ Argus 同时连接模型、不可信用户输入、生成代码、基础设施�
 | 威胁                                       | 控制                                                                                                                                                 |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 跨企业数据访问                             | enterprise_id 强制过滤、统一授权中心、服务端检查                                                                                                     |
-| 借标签或直接资源 ID 越权                   | 企业归属复核、受限标签选择器、DataScope、Query Service 强制 Resource Filter、统一 Tool/Card 数据裁剪                                                 |
+| 借标签或直接资源 ID 越权                   | 企业归属复核、受限标签过滤条件、explicit resource authorization、Query Service 强制 Resource Filter、统一 Tool/Card 数据裁剪                                                 |
 | 平台管理员借空企业上下文读取企业数据       | 平台/企业身份类型互斥、不同 Audience 和 API 域、平台账号不能加入企业                                                                                 |
 | Prompt injection 诱导越权 Tool             | Tool allowlist、策略中心、风险分级、模型与 Action Executor 权限隔离                                                                                  |
 | AI 绕过确认直接提交                        | 模型只看到 action_ref；`_meta.argus__token` 仅进入服务端 Pending Action Store；Commit Tool 不暴露给模型                                              |
@@ -31,8 +31,8 @@ Argus 同时连接模型、不可信用户输入、生成代码、基础设施�
 | 卡片伪造 Tool 数据来源                     | 使用 tool_call_id + path，服务端解析，禁止受限 Slot 使用 literal                                                                                     |
 | Connector 被冒用                           | 一次性注册、mTLS、证书轮换、设备吊销和本地策略                                                                                                       |
 | Direct Executor 被用于 SSRF/内网扫描       | 固定出口、协议/端口白名单、DNS 前后校验、私网/元数据/内部地址拒绝和独立 Worker Pool                                                                  |
-| 远程会话票据泄漏或被 AI 使用               | 一次性短期票据绑定用户/浏览器/企业/Host/ManagedAccount/动作/DataScope/授权版本；AI、Card、Sandbox 不可获取；MFA/JIT/审批、录像与强制终止 |
-| 功能权限被误当作 root/任意账号访问         | RoleBinding 只授予功能能力；DataScope 和 RemoteAccessGrant 独立限定 Host、ManagedAccount、协议、动作和有效期                                         |
+| 远程会话票据泄漏或被 AI 使用               | 一次性短期票据绑定用户/浏览器/企业/Host/ManagedAccount/动作/explicit resource authorization/授权版本；AI、Card、Sandbox 不可获取；MFA/JIT/审批、录像与强制终止 |
+| 功能权限被误当作 root/任意账号访问         | RoleBinding 只授予功能能力；explicit resource authorization 和 RemoteAccessGrant 独立限定 Host、ManagedAccount、协议、动作和有效期                                         |
 | 交互式 Shell 绕过 Tool 两阶段确认          | 明确划分人工堡垒会话与 AI Tool；人工会话使用独立权限、理由、审批、时长、剪贴板/文件策略、录像和命令审计                                              |
 | 后台任务借人工终端执行未审计命令           | RemoteAccessSession 与 Execution/ConnectorCommand 使用不同票据、API、队列和审计；安装配置只执行不可变计划和版本化模板，禁止向人工终端注入命令        |
 | Sandbox 横向访问生产环境                   | 默认断网或受限出网，生产访问必须通过受控 Tool 和 Connector                                                                                           |
@@ -93,19 +93,19 @@ PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。
 - 初始化平台超级管理员账号密码。
 - 平台超级管理员门户。
 - 企业和企业管理员创建流程。
-- Enterprise、PlatformUser、EnterpriseUser、Department、Role、Permission、RoleBinding、DataScope 和 AuthorizationVersion。
+- Enterprise、PlatformUser、EnterpriseUser、Department、Role、Permission、RoleBinding、explicit resource authorization 和 AuthorizationVersion。
 - EnterpriseUser 直接绑定唯一 `enterprise_id + department_id`，不提供 Membership、企业切换、Project 或通用 Group。
-- 企业级功能权限、显式资源/标签选择范围和统一授权入口。
+- 企业级功能权限、显式资源选择范围和统一授权入口；标签仅用于展示和筛选。
 - ServiceAccount/APIKey 和平台/企业分域审计日志；Secret Vault 在资源执行阶段接入。
 - OpenSandbox 由 Helm 安装；平台级镜像、Profile、配额和活动会话治理 API 作为 Agent/Sandbox 接入前置在 M4 完成。
 - Connector 一次性注册、mTLS、心跳和在线状态；注册同时创建/激活堡垒机 Host 和稳定 Bastion Scope。
 - 管理后台基础框架。
 
-完成标准：首次启动能够通过短期 Setup Token 安全创建唯一的平台超级管理员；超级管理员能够创建企业、默认部门和临时密码初始管理员但不能访问企业业务数据；平台身份不能成为企业身份，企业用户不能切换到其他企业；企业管理员能够建立 RoleBinding、DataScope、ServiceAccount 和 APIKey，不同企业之间身份、资源范围、密钥和审计完全隔离。该阶段只达到 Evaluation 身份闭环，平台超级管理员 MFA 仍是 Production 硬阻断。
+完成标准：首次启动能够通过短期 Setup Token 安全创建唯一的平台超级管理员；超级管理员能够创建企业、默认部门和临时密码初始管理员但不能访问企业业务数据；平台身份不能成为企业身份，企业用户不能切换到其他企业；企业管理员能够建立 RoleBinding、explicit resource authorization、ServiceAccount 和 APIKey，不同企业之间身份、资源范围、密钥和审计完全隔离。该阶段只达到 Evaluation 身份闭环，平台超级管理员 MFA 仍是 Production 硬阻断。
 
 ## 6. 第二阶段：资源管理基座（M3）
 
-- Host/KubernetesCluster CRUD 和用户自定义 `labels`，以及标签筛选、分组和授权敏感变更 Preview/Commit。
+- Host/KubernetesCluster CRUD 和用户自定义 `labels`，以及标签筛选、分组；标签变化不触发授权 Preview/Commit。
 - 主机 `connector_local`、`via_bastion`、公网 `direct_ssh/direct_winrm` 连接模式。
 - 受控 Direct Executor：固定出口、SSRF 防护、Host Key 校验和独立执行池。
 - Secret、Credential、ManagedAccount 和绑定操作/资源/接收者的短期 Credential Lease；不提供原值读取权限。
@@ -116,9 +116,9 @@ PendingAction、UserConfirmation、ApprovalRequest 和 Execution 分开保存。
 - 资源专用 PendingAction/Plan/Token 与 Preview/Confirm；M4 在其上增加 Approval、Execution、Agent 和 Tool。
 - 管理后台和领域服务打通。
 
-完成标准：不使用 AI 也能通过管理后台完成 Secret/ManagedAccount、带标签的堡垒机安装、经堡垒机/直连主机和 Kubernetes 接入；Resource Operator 不能使用 DataScope 之外的资源，所有 Secret 不回显，所有接入路径、确认和连接测试可审计。
+完成标准：不使用 AI 也能通过管理后台完成 Secret/ManagedAccount、带标签的堡垒机安装、经堡垒机/直连主机和 Kubernetes 接入；Resource Operator 不能使用 explicit resource authorization 之外的资源，所有 Secret 不回显，所有接入路径、确认和连接测试可审计。
 
-M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证了 Connector 注册竞争/证书轮换、双 Gateway 路由、Bastion Replacement、Direct SSRF 边界、Kubernetes 三种接入、DataScope 撤权、Secret 轮换、Redis 清空和 Server/Gateway 重启恢复；M3 Namespace、PVC 与 Lease 均已清理。
+M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证了 Connector 注册竞争/证书轮换、双 Gateway 路由、Bastion Replacement、Direct SSRF 边界、Kubernetes 三种接入、explicit resource authorization 撤权、Secret 轮换、Redis 清空和 Server/Gateway 重启恢复；M3 Namespace、PVC 与 Lease 均已清理。
 
 人工 SSH/WinRS 会话、RemoteAccessGrant、AccessLease、短期会话票据、录像和终止已由 M6 完成；M8 已为本地环境补齐 TOTP、Step-up 和 Break Glass，并由统一 AuthenticationAssuranceService 约束 Critical Action 与 Remote Access。Collector 安装、CollectionClaim、Telemetry Route 与 OTLP 链路属于 M7。M3 ConnectorCommand 仍明确禁止任意 Shell、文件写入、Remote Access Frame 和 Collector 命令，M6 使用独立类型化会话协议。
 
@@ -128,7 +128,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 - 模型连通性测试、调用价格快照、部门/用户月金额额度和治理仪表盘。
 - 会话历史和消息模型。
 - 会话显式选择模型，切换只影响后续消息，额度耗尽时不自动切换。
-- Conversation/Run 固定企业；每个 ToolCall、Run、PendingAction 和 Execution 保存目标资源引用、DataScope 与授权版本快照。
+- Conversation/Run 固定企业；每个 ToolCall、Run、PendingAction 和 Execution 保存目标资源引用、explicit resource authorization 与授权版本快照。
 - Provider-neutral 单 Agent Harness、ConversationEvent Ledger、Typed Run Checkpoint、ToolResult Projection 和 Token 预算 Compaction。
 - MCP Gateway、Tool Registry 和 Tool Result Store。
 - Model Agent 基础编排。
@@ -136,7 +136,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 - 新增主机和 Kubernetes 的 preview/commit/cancel 两阶段 Tool。
 - Pending Action、Action Binding 和审计。
 
-完成标准：用户能够通过自然语言添加、查询其 DataScope 范围内资源；模型可发现的 Tool 和可见数据不超过当前用户权限；所有写操作可预览、确认、审计且不能由模型绕过确认或通过审批补齐基础权限。
+完成标准：用户能够通过自然语言添加、查询其 explicit resource authorization 范围内资源；模型可发现的 Tool 和可见数据不超过当前用户权限；所有写操作可预览、确认、审计且不能由模型绕过确认或通过审批补齐基础权限。
 
 ## 8. 第四阶段：交互卡片
 
@@ -151,7 +151,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 
 ## 9. 第五阶段：人工远程访问（M6）
 
-- RemoteAccessGrant 限定 user/department、显式 Host ID/标签选择器、ManagedAccount、协议、动作和有效期；审批只能收窄，不能补齐缺失权限。
+- RemoteAccessGrant 限定 user/department、显式 Host ID/标签过滤条件、ManagedAccount、协议、动作和有效期；审批只能收窄，不能补齐缺失权限。
 - AccessRequest/Lease 与 M4 Action Approval 分离，多策略全部满足；MFA obligation 在 Evaluation 中 fail closed。
 - Ticket 为 60 秒一次性 opaque Token，绑定 HTTP Session、用户、企业、Host、ManagedAccount、协议、Lease、AuthorizationVersion 和 Session Fence。
 - SSH 提供完整 PTY；WinRM 只提供 HTTPS WinRS PowerShell 行模式，不宣称完整 PTY、PSRP 或桌面能力。
@@ -170,10 +170,10 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 - 企业级 OTLP 凭证和可信 Enterprise/Resource/Collector 身份注入。
 - `argus-telemetry ingest`、Kafka、`argus-telemetry writer` 和 ClickHouse。
 - Altinity ClickHouse Operator、ClickHouseInstallation、Keeper、Schema Migration 和备份恢复演练。
-- Metrics/Logs 查询 Tool、基础监控页面、告警和用量界面；授权 Resource ID/标签范围、Signal、字段脱敏、Live Tail、Export 和查询预算分别授权。
+- Metrics/Logs 查询 Tool、基础监控页面、告警和用量界面；显式授权 Resource ID、Signal、字段脱敏、Live Tail、Export 和查询预算分别授权。
 - Collector、Gateway、Kafka Consumer 自身健康监控。
 
-完成标准：Bastion Scope 成员只能直推或使用所属堡垒机 Gateway，第一批独立主机只允许直推 Argus；Leaf 数据可靠归属到具体企业和资源，跨企业、超出 DataScope 的查询及跨 Scope 路由被拒绝；同一 Kubernetes Node 的 Host/DaemonSet Claim 冲突在提交前被阻止或形成有期限迁移计划；安装和配置均经过两阶段确认并支持失败回滚。
+完成标准：Bastion Scope 成员只能直推或使用所属堡垒机 Gateway，第一批独立主机只允许直推 Argus；Leaf 数据可靠归属到具体企业和资源，跨企业、超出 explicit resource authorization 的查询及跨 Scope 路由被拒绝；同一 Kubernetes Node 的 Host/DaemonSet Claim 冲突在提交前被阻止或形成有期限迁移计划；安装和配置均经过两阶段确认并支持失败回滚。
 
 ## 11. 第七阶段：Agentic AIOps
 
@@ -184,7 +184,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 - 长任务、重试、暂停和恢复。
 - 企业级 交互卡片 发布和治理。
 - 高危生产操作的增强审批。
-- ServiceAccount、Tool 与 DataScope 的受控后台执行、AuthorizationVersion 撤权和单管理员受控 Break Glass；当前版本不提供定时无人值守任务。
+- ServiceAccount、Tool 与 explicit resource authorization 的受控后台执行、AuthorizationVersion 撤权和单管理员受控 Break Glass；当前版本不提供定时无人值守任务。
 
 完成标准：AI 能够在受控范围内完成“发现问题—获取证据—生成计划—用户批准—执行—验证”的完整闭环。
 
@@ -198,7 +198,7 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 
 优先验证五个基础协议：
 
-1. 单企业用户、企业级 RoleBinding、DataScope、RemoteAccessGrant、Telemetry Scope、AuthorizationVersion 和统一授权决策。
+1. 单企业用户、企业级 RoleBinding、explicit resource authorization、RemoteAccessGrant、Telemetry Scope、AuthorizationVersion 和统一授权决策。
 2. Connector 注册、Bastion Scope、Direct Executor、RemoteAccessSession 与命令/远程会话通道。
 3. Tool Result/Pending Action/Action Binding。
    - 所有变更 Tool 的 `.preview/.commit` 强制配对。
@@ -217,11 +217,11 @@ M3 已于 2026-08-17 达到该完成标准。临时 Namespace E2E 同时验证�
 
 1. 平台超级管理员能够创建企业、默认部门和初始企业管理员，但不能读取该企业 Host、Conversation、Telemetry、Secret 或审计正文。
 2. EnterpriseUser 不能登录或构造 Token 访问其他企业，也不存在企业切换入口。
-3. DataScope A 的用户不能通过列表、详情、批量 API、Tool、Card、游标、伪造标签选择器或直接资源 ID 获取范围外资源。
+3. explicit resource authorization A 的用户不能通过列表、详情、批量 API、Tool、Card、游标、伪造标签过滤条件或直接资源 ID 获取范围外资源。
 4. 仅有 Metrics 权限的用户不能查询 Logs、Traces、Live Tail、Export 或敏感字段；Model Agent 得到相同裁剪结果。
-5. `resource_operator` 没有 RemoteAccessGrant 时不能建立终端；Grant 只允许显式 Host/标签选择结果和 ManagedAccount，不能改为 root 或启用未授权文件能力。
-6. 生产 Tool 完成 Preview 后撤销 RoleBinding/DataScope、修改授权敏感标签或递增 AuthorizationVersion，Commit 必须失败并要求重新 Preview。
+5. `resource_operator` 没有 RemoteAccessGrant 时不能建立终端；Grant 只允许显式 Host 和 ManagedAccount，不能改为 root 或启用未授权文件能力。
+6. 生产 Tool 完成 Preview 后撤销 RoleBinding/explicit resource authorization 或递增 AuthorizationVersion，Commit 必须失败并要求重新 Preview；标签变化不触发失效。
 7. 远程会话票据签发后撤销 Grant，未使用票据立即失败，活动会话按策略终止并产生审计。
-8. Approval 不能补齐缺失的 Role/DataScope/Tool/资源权限；创建人不能满足非本人审批，Break Glass 必须绑定单个操作并完整审计。
-9. ServiceAccount 仅能按当前 Tool/DataScope 权限调用受控服务；审批不能补齐缺失权限，也不能消费人工会话票据。
+8. Approval 不能补齐缺失的 Role/explicit resource authorization/Tool/资源权限；创建人不能满足非本人审批，Break Glass 必须绑定单个操作并完整审计。
+9. ServiceAccount 仅能按当前 Tool/explicit resource authorization 权限调用受控服务；审批不能补齐缺失权限，也不能消费人工会话票据。
 10. Collector 自报伪造 EnterpriseId、ResourceId 或 CollectorId 时被覆盖或拒绝，超出授权资源范围的遥测查询不返回记录。

@@ -13,7 +13,7 @@ paths:
   /enterprise/hosts:
     get:
       operationId: listHosts
-      summary: List DataScope-filtered Hosts.
+      summary: List explicitly authorized Hosts.
       parameters:
         - name: query
           in: query
@@ -54,7 +54,7 @@ paths:
       - $ref: '#/components/parameters/ResourceId'
     get:
       operationId: getHost
-      summary: Get a DataScope-filtered Host.
+      summary: Get an explicitly authorized Host.
       responses:
         '200':
           description: Host.

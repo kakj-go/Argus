@@ -310,12 +310,6 @@ components:
           items:
             type: string
             minLength: 1
-        data_scope_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            minLength: 1
         authorization_version:
           $ref: '#/components/schemas/AuthorizationVersion'
         version:

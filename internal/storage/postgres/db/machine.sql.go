@@ -12,22 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const addServiceAccountDataScope = `-- name: AddServiceAccountDataScope :exec
-INSERT INTO service_account_data_scopes (service_account_id, data_scope_id, enterprise_id)
-VALUES ($1, $2, $3)
-`
-
-type AddServiceAccountDataScopeParams struct {
-	ServiceAccountID uuid.UUID `json:"service_account_id"`
-	DataScopeID      uuid.UUID `json:"data_scope_id"`
-	EnterpriseID     uuid.UUID `json:"enterprise_id"`
-}
-
-func (q *Queries) AddServiceAccountDataScope(ctx context.Context, arg AddServiceAccountDataScopeParams) error {
-	_, err := q.db.Exec(ctx, addServiceAccountDataScope, arg.ServiceAccountID, arg.DataScopeID, arg.EnterpriseID)
-	return err
-}
-
 const createApiKey = `-- name: CreateApiKey :one
 INSERT INTO api_keys (id, enterprise_id, service_account_id, name, prefix, secret_hash, authorization_version, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -262,30 +246,6 @@ func (q *Queries) ListApiKeys(ctx context.Context, arg ListApiKeysParams) ([]Api
 	return items, nil
 }
 
-const listServiceAccountDataScopes = `-- name: ListServiceAccountDataScopes :many
-SELECT data_scope_id FROM service_account_data_scopes WHERE service_account_id = $1 ORDER BY data_scope_id
-`
-
-func (q *Queries) ListServiceAccountDataScopes(ctx context.Context, serviceAccountID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listServiceAccountDataScopes, serviceAccountID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []uuid.UUID{}
-	for rows.Next() {
-		var data_scope_id uuid.UUID
-		if err := rows.Scan(&data_scope_id); err != nil {
-			return nil, err
-		}
-		items = append(items, data_scope_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listServiceAccounts = `-- name: ListServiceAccounts :many
 SELECT id, enterprise_id, name, description, allowed_tool_ids, status, authorization_version, version, created_at, updated_at FROM service_accounts WHERE enterprise_id = $1 ORDER BY created_at, id
 `
@@ -327,15 +287,6 @@ UPDATE api_keys SET last_used_at = now() WHERE id = $1
 
 func (q *Queries) MarkApiKeyUsed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markApiKeyUsed, id)
-	return err
-}
-
-const replaceServiceAccountDataScopes = `-- name: ReplaceServiceAccountDataScopes :exec
-DELETE FROM service_account_data_scopes WHERE service_account_id = $1
-`
-
-func (q *Queries) ReplaceServiceAccountDataScopes(ctx context.Context, serviceAccountID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, replaceServiceAccountDataScopes, serviceAccountID)
 	return err
 }
 

@@ -13,7 +13,7 @@ paths:
   /enterprise/kubernetes-clusters:
     get:
       operationId: listKubernetesClusters
-      summary: List DataScope-filtered Kubernetes clusters.
+      summary: List explicitly authorized Kubernetes clusters.
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -31,7 +31,7 @@ paths:
       - $ref: '#/components/parameters/ResourceId'
     get:
       operationId: getKubernetesCluster
-      summary: Get a DataScope-filtered Kubernetes cluster.
+      summary: Get an explicitly authorized Kubernetes cluster.
       responses:
         '200':
           description: Kubernetes cluster.
@@ -138,7 +138,7 @@ paths:
       - $ref: '#/components/parameters/ResourceId'
     get:
       operationId: listKubernetesResources
-      summary: List bounded Kubernetes resources after cluster and Namespace DataScope checks.
+      summary: List bounded Kubernetes resources after Kubernetes cluster authorization checks.
       parameters:
         - name: resource_type
           in: query

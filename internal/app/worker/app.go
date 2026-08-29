@@ -28,6 +28,7 @@ import (
 	"github.com/kakj-go/Argus/internal/kubernetesreader"
 	"github.com/kakj-go/Argus/internal/mcp"
 	modelservice "github.com/kakj-go/Argus/internal/model"
+	remoteaccessservice "github.com/kakj-go/Argus/internal/remoteaccess"
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/runtime"
 	"github.com/kakj-go/Argus/internal/sandbox"
@@ -107,7 +108,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		EnrollmentEndpoint: cfg.TelemetryEnrollment, IngestGRPCEndpoint: cfg.TelemetryIngestGRPC,
 		IngestHTTPEndpoint: cfg.TelemetryIngestHTTP, ServerCABundlePath: cfg.TelemetryCABundle,
 		KubernetesImage: cfg.OtelcolKubernetesImage}
-	resourceDomain := resource.Service{Store: store, Actions: actionDomain, Access: resource.AccessService{Store: store},
+	resourceDomain := resource.Service{Store: store, Actions: actionDomain, Access: resource.AccessService{},
 		Direct: resource.DirectTargetValidator{DeniedCIDRs: denied}, Commands: connectorDomain, DirectCommands: directDispatcher,
 		Extension: telemetryActions, ClusterEnrollment: connectorDomain,
 		Kubernetes: kubernetesreader.Reader{Store: store, Secrets: secretDomain, Validator: resource.DirectTargetValidator{DeniedCIDRs: denied}, Notifier: connectorDomain}}
@@ -125,7 +126,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 			return queryErr
 		}
 		defer telemetryQuery.Close()
-		telemetryDomain := telemetryservice.Service{Store: store, Access: resource.AccessService{Store: store}, Actions: actionDomain, Query: telemetryQuery}
+		telemetryDomain := telemetryservice.Service{Store: store, Access: resource.AccessService{}, Actions: actionDomain, Query: telemetryQuery}
 		if err := (telemetryservice.Tools{Service: telemetryDomain}).Register(registry); err != nil {
 			return err
 		}
@@ -152,7 +153,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 	}
 	workerCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	errorsChannel := make(chan error, len(queues)+2)
+	errorsChannel := make(chan error, len(queues)+3)
 	var group sync.WaitGroup
 	for _, queue := range queues {
 		queue := queue
@@ -174,6 +175,13 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		go func() {
 			defer group.Done()
 			errorsChannel <- (action.Reconciler{Executor: action.Executor{Store: store, Resources: resourceDomain}, Logger: logger}).Run(workerCtx)
+		}()
+	}
+	if pool == PoolDefault {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			errorsChannel <- (remoteaccessservice.RemoteAccessGovernanceReconciler{Service: remoteaccessservice.Service{Store: store, Keyring: keyring}, Logger: logger}).Run(workerCtx)
 		}()
 	}
 	health := &http.Server{Addr: config.LoadHealthAddress(), Handler: component.HealthHandler("argus-worker-" + pool), ReadHeaderTimeout: 5 * time.Second}

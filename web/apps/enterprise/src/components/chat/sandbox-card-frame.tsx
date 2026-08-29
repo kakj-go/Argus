@@ -60,7 +60,7 @@ export function SandboxCardFrame({ card }: { card: CardInstance }) {
                 value.render_plan.action_binding_ids,
               ),
             }}
-            card_origin={cardOrigin}
+            card_origin={cardOrigin()}
             color_scheme={resolvedTheme}
             html={value.entrypoint_html}
             initial_data={value.initial_data as Record<string, unknown>}

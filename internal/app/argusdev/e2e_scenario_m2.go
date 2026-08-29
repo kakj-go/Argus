@@ -9,10 +9,8 @@ import (
 )
 
 func (a *App) runM2Scenario(ctx context.Context, env *E2EEnvironment) error {
-	httpClient := NewScenarioHTTP("http://127.0.0.1:4180/api/v1", env.Options.Artifacts)
+	httpClient := NewDomainScenarioHTTP(env)
 	env.State.HTTP = httpClient
-	platformOrigin := "http://127.0.0.1:4174"
-	enterpriseOrigin := "http://127.0.0.1:4173"
 	platformUsername := "platform-admin"
 	platformPassword := "N7!qP4@vL9#sT2$x"
 	enterpriseUsername := "enterprise-admin"
@@ -30,14 +28,14 @@ func (a *App) runM2Scenario(ctx context.Context, env *E2EEnvironment) error {
 		return fmt.Errorf("new installation setup state is %q", state)
 	}
 	_, err = httpClient.JSON(ctx, "setup-initialize", "", http.MethodPost, "/setup/initialize", http.StatusCreated, map[string]any{
-		"platform_name": "Argus E2E", "default_locale": "zh-CN", "timezone": "Asia/Shanghai", "external_url": platformOrigin,
+		"platform_name": "Argus E2E", "default_locale": "zh-CN", "timezone": "Asia/Shanghai", "external_url": env.PlatformOrigin(),
 		"super_admin": map[string]any{"username": platformUsername, "display_name": "Platform Admin", "email": "platform@example.test", "password": platformPassword},
-	}, map[string]string{"Origin": platformOrigin, "X-Argus-Setup-Token": setupToken, "Idempotency-Key": "setup-" + env.Options.RunID})
+	}, map[string]string{"Origin": env.PlatformOrigin(), "X-Argus-Setup-Token": setupToken, "Idempotency-Key": "setup-" + env.Options.RunID})
 	if err != nil {
 		return err
 	}
 	platformLogin, err := httpClient.JSON(ctx, "platform-login", "platform", http.MethodPost, "/platform/auth/login", http.StatusOK,
-		map[string]any{"username": platformUsername, "password": platformPassword}, map[string]string{"Origin": platformOrigin})
+		map[string]any{"username": platformUsername, "password": platformPassword}, map[string]string{"Origin": env.PlatformOrigin()})
 	if err != nil {
 		return err
 	}
@@ -45,17 +43,17 @@ func (a *App) runM2Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if err != nil {
 		return err
 	}
-	platformMFA, err := enrollScenarioMFA(ctx, httpClient, "platform", "platform", platformOrigin, platformCSRF, env.Options.RunID)
+	platformMFA, err := enrollScenarioMFA(ctx, httpClient, "platform", "platform", env.PlatformOrigin(), platformCSRF, env.Options.RunID)
 	if err != nil {
 		return err
 	}
-	platformCSRF, err = completeScenarioMFALogin(ctx, httpClient, "platform", "platform", platformOrigin, platformUsername, platformPassword, &platformMFA)
+	platformCSRF, err = completeScenarioMFALogin(ctx, httpClient, "platform", "platform", env.PlatformOrigin(), platformUsername, platformPassword, &platformMFA)
 	if err != nil {
 		return err
 	}
 	enterprise, err := httpClient.JSON(ctx, "enterprise-create", "platform", http.MethodPost, "/platform/enterprises", http.StatusCreated,
 		map[string]any{"name": "Acme Evaluation", "code": "acme-eval", "timezone": "Asia/Shanghai", "default_locale": "zh-CN"},
-		map[string]string{"Origin": platformOrigin, "X-CSRF-Token": platformCSRF, "Idempotency-Key": "enterprise-" + env.Options.RunID})
+		map[string]string{"Origin": env.PlatformOrigin(), "X-CSRF-Token": platformCSRF, "Idempotency-Key": "enterprise-" + env.Options.RunID})
 	if err != nil {
 		return err
 	}
@@ -65,7 +63,7 @@ func (a *App) runM2Scenario(ctx context.Context, env *E2EEnvironment) error {
 	}
 	admin, err := httpClient.JSON(ctx, "enterprise-admin-create", "platform", http.MethodPost, "/platform/enterprise-admins", http.StatusCreated,
 		map[string]any{"enterprise_id": enterpriseID, "username": enterpriseUsername, "display_name": "Enterprise Admin", "email": "enterprise@example.test"},
-		map[string]string{"Origin": platformOrigin, "X-CSRF-Token": platformCSRF, "Idempotency-Key": "admin-" + env.Options.RunID})
+		map[string]string{"Origin": env.PlatformOrigin(), "X-CSRF-Token": platformCSRF, "Idempotency-Key": "admin-" + env.Options.RunID})
 	if err != nil {
 		return err
 	}
@@ -79,7 +77,7 @@ func (a *App) runM2Scenario(ctx context.Context, env *E2EEnvironment) error {
 	}
 
 	temporaryLogin, err := httpClient.JSON(ctx, "enterprise-temp-login", "enterprise", http.MethodPost, "/enterprise/auth/login", http.StatusOK,
-		map[string]any{"username": enterpriseUsername, "password": temporaryPassword}, map[string]string{"Origin": enterpriseOrigin})
+		map[string]any{"username": enterpriseUsername, "password": temporaryPassword}, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -88,7 +86,7 @@ func (a *App) runM2Scenario(ctx context.Context, env *E2EEnvironment) error {
 		return err
 	}
 	passwordChange, err := httpClient.JSON(ctx, "enterprise-password-change", "enterprise", http.MethodPost, "/enterprise/auth/complete-password-change", http.StatusOK,
-		map[string]any{"challenge_id": challengeID, "temporary_password": temporaryPassword, "new_password": enterprisePassword}, map[string]string{"Origin": enterpriseOrigin})
+		map[string]any{"challenge_id": challengeID, "temporary_password": temporaryPassword, "new_password": enterprisePassword}, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -96,7 +94,7 @@ func (a *App) runM2Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if err != nil {
 		return err
 	}
-	enterpriseMFA, err := enrollScenarioMFA(ctx, httpClient, "enterprise", "enterprise", enterpriseOrigin, enterpriseCSRF, env.Options.RunID)
+	enterpriseMFA, err := enrollScenarioMFA(ctx, httpClient, "enterprise", "enterprise", env.EnterpriseOrigin(), enterpriseCSRF, env.Options.RunID)
 	if err != nil {
 		return err
 	}
@@ -134,7 +132,7 @@ func (a *App) runM2Scenario(ctx context.Context, env *E2EEnvironment) error {
 		}
 		env.State.Values["enterprise_mfa_last"] = code
 		_, err = httpClient.JSON(ctx, "enterprise-step-up", "enterprise", http.MethodPost, "/enterprise/auth/step-up", http.StatusOK,
-			map[string]any{"code": code}, map[string]string{"Origin": enterpriseOrigin, "X-CSRF-Token": enterpriseCSRF})
+			map[string]any{"code": code}, map[string]string{"Origin": env.EnterpriseOrigin(), "X-CSRF-Token": enterpriseCSRF})
 		if err != nil {
 			return err
 		}

@@ -121,7 +121,7 @@ func (a *App) Run(ctx context.Context) error {
 			IngestHTTPEndpoint: a.config.TelemetryIngestHTTP, ServerCABundlePath: a.config.TelemetryCABundle,
 			KubernetesImage: a.config.OtelcolKubernetesImage}
 	}
-	resourceDomain := resource.Service{Store: postgresStore, Actions: actionDomain, Access: resource.AccessService{Store: postgresStore},
+	resourceDomain := resource.Service{Store: postgresStore, Actions: actionDomain, Access: resource.AccessService{},
 		Direct: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs}, Commands: connectorDomain, DirectCommands: directDispatcher, Extension: actionExtension,
 		ClusterEnrollment: connectorDomain,
 		Kubernetes: kubernetesreader.Reader{Store: postgresStore, Secrets: secretDomain, Validator: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs},
@@ -155,8 +155,9 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 	remoteAccessHandler := httpapi.RemoteAccessHandler{Identity: enterpriseIdentityHandler, WebsocketURL: remoteWebsocketURL,
+		Cursor: cursorSigner,
 		Service: remoteaccessservice.Service{Store: postgresStore, Idempotency: idempotency,
-			Access: resource.AccessService{Store: postgresStore}, Keyring: secretKeyring, ObjectStore: objects, UserLimit: a.config.RemoteUserLimit,
+			Access: resource.AccessService{}, Keyring: secretKeyring, ObjectStore: objects, UserLimit: a.config.RemoteUserLimit,
 			HostLimit: a.config.RemoteHostLimit, EnterpriseLimit: a.config.RemoteEnterpriseLimit}}
 	var telemetryHandler *httpapi.TelemetryHandler
 	if a.config.TelemetryEnabled {
@@ -170,7 +171,7 @@ func (a *App) Run(ctx context.Context) error {
 		}
 		defer telemetryQuery.Close()
 		platformHandler.Enterprise.Telemetry = telemetryQuery
-		telemetryDomain := telemetryservice.Service{Store: postgresStore, Access: resource.AccessService{Store: postgresStore}, Actions: actionDomain,
+		telemetryDomain := telemetryservice.Service{Store: postgresStore, Access: resource.AccessService{}, Actions: actionDomain,
 			Query: telemetryQuery, Engine: telemetryQuery, OtelcolKubernetesImage: a.config.OtelcolKubernetesImage}
 		telemetryIdentity := telemetryservice.IdentityService{Store: postgresStore, Issuer: connectorservice.CertManagerIssuer{
 			Client: kubernetesClient, Namespace: a.config.SystemNamespace, IssuerName: a.config.TelemetryIssuerName, IssuerKind: "ClusterIssuer",

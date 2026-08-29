@@ -124,10 +124,13 @@ FROM remote_access_sessions session, remote_access_leases lease, remote_access_g
      enterprise_users actor, enterprises enterprise
 WHERE ticket.ticket_hash=$1 AND ticket.session_id=$2
   AND ticket.consumed_at IS NULL AND ticket.expires_at>$3
-  AND session.id=ticket.session_id AND session.status='authorized' AND session.connect_before>$3
+  AND session.id=ticket.session_id AND session.status IN ('authorized','active') AND (
+    session.status='authorized' AND session.connect_before>$3
+    OR session.status='active'
+  )
   AND session.session_fence=ticket.session_fence AND session.authorization_version=ticket.authorization_version
   AND lease.id=session.lease_id AND lease.revoked_at IS NULL AND lease.expires_at>$3
-  AND access_grant.id=lease.grant_id AND access_grant.enabled=true AND access_grant.valid_until>$3
+  AND access_grant.id=lease.grant_id AND access_grant.status='enabled' AND access_grant.valid_until>$3
   AND actor.id=ticket.user_id AND actor.enterprise_id=ticket.enterprise_id AND actor.status='active'
   AND actor.authorization_version=ticket.authorization_version
   AND enterprise.id=ticket.enterprise_id AND enterprise.status='active'
@@ -140,6 +143,8 @@ type ConsumeRemoteAccessTicketForGatewayParams struct {
 	Now        pgtype.Timestamptz `json:"now"`
 }
 
+// status='authorized' 是首次接入；status='active' 允许浏览器断开后重接
+// （会话驻留期间由 Gateway 内存注册表持有 PTY 后端）。
 func (q *Queries) ConsumeRemoteAccessTicketForGateway(ctx context.Context, arg ConsumeRemoteAccessTicketForGatewayParams) (RemoteAccessTicket, error) {
 	row := q.db.QueryRow(ctx, consumeRemoteAccessTicketForGateway, arg.TicketHash, arg.SessionID, arg.Now)
 	var i RemoteAccessTicket
@@ -161,6 +166,165 @@ func (q *Queries) ConsumeRemoteAccessTicketForGateway(ctx context.Context, arg C
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const convergeInvalidRemoteAccessSessions = `-- name: ConvergeInvalidRemoteAccessSessions :many
+WITH candidates AS (
+  SELECT session.id
+  FROM remote_access_sessions session
+  JOIN remote_access_leases lease ON lease.id=session.lease_id
+  JOIN remote_access_grants access_grant ON access_grant.id=lease.grant_id
+  LEFT JOIN enterprise_users actor ON actor.id=session.user_id AND actor.enterprise_id=session.enterprise_id
+  LEFT JOIN enterprises enterprise ON enterprise.id=session.enterprise_id
+  LEFT JOIN hosts host ON host.id=session.host_id AND host.enterprise_id=session.enterprise_id
+  LEFT JOIN managed_accounts account ON account.id=session.managed_account_id AND account.enterprise_id=session.enterprise_id
+  WHERE session.status IN ('authorized','connecting','active')
+    AND (
+      lease.revoked_at IS NOT NULL OR lease.expires_at<=now()
+      OR access_grant.status<>'enabled' OR access_grant.valid_until<=now()
+      OR actor.id IS NULL OR actor.status<>'active' OR actor.authorization_version<>session.authorization_version
+      OR enterprise.id IS NULL OR enterprise.status<>'active'
+      OR host.id IS NULL OR host.status<>'active'
+      OR account.id IS NULL OR account.status<>'active'
+    )
+  ORDER BY session.updated_at,session.id
+  FOR UPDATE OF session SKIP LOCKED
+  LIMIT $1
+)
+UPDATE remote_access_sessions session
+SET status='terminating',session_fence=session_fence+1,termination_reason='authorization_invalidated',updated_at=now()
+FROM candidates
+WHERE session.id=candidates.id
+RETURNING session.id, session.enterprise_id, session.user_id, session.http_session_id, session.lease_id, session.host_id, session.managed_account_id, session.protocol, session.connection_mode, session.connector_id, session.connector_epoch, session.status, session.session_fence, session.authorization_version, session.idle_timeout_seconds, session.max_duration_seconds, session.connect_before, session.connected_at, session.terminated_at, session.termination_reason, session.created_at, session.updated_at, session.decision_snapshot, session.session_profile_snapshot, session.decision_snapshot_hash, session.recording_mode, session.command_audit_mode, session.clipboard_mode, session.file_upload_mode, session.file_download_mode, session.port_forward_mode, session.session_share_mode, session.retention_days, session.gateway_instance, session.reason
+`
+
+func (q *Queries) ConvergeInvalidRemoteAccessSessions(ctx context.Context, limit int32) ([]RemoteAccessSession, error) {
+	rows, err := q.db.Query(ctx, convergeInvalidRemoteAccessSessions, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessSession{}
+	for rows.Next() {
+		var i RemoteAccessSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.UserID,
+			&i.HttpSessionID,
+			&i.LeaseID,
+			&i.HostID,
+			&i.ManagedAccountID,
+			&i.Protocol,
+			&i.ConnectionMode,
+			&i.ConnectorID,
+			&i.ConnectorEpoch,
+			&i.Status,
+			&i.SessionFence,
+			&i.AuthorizationVersion,
+			&i.IdleTimeoutSeconds,
+			&i.MaxDurationSeconds,
+			&i.ConnectBefore,
+			&i.ConnectedAt,
+			&i.TerminatedAt,
+			&i.TerminationReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const convergeStuckTerminatingRemoteAccessSessions = `-- name: ConvergeStuckTerminatingRemoteAccessSessions :many
+WITH candidates AS (
+  SELECT id
+  FROM remote_access_sessions
+  WHERE status='terminating' AND updated_at < now() - interval '2 minutes'
+  ORDER BY updated_at, id
+  FOR UPDATE SKIP LOCKED
+  LIMIT $1
+)
+UPDATE remote_access_sessions session
+SET status='failed', terminated_at=COALESCE(terminated_at, now()),
+    termination_reason=COALESCE(NULLIF(termination_reason, ''), 'REMOTE_ACCESS_TERMINATION_TIMEOUT'), updated_at=now()
+FROM candidates
+WHERE session.id=candidates.id
+RETURNING session.id, session.enterprise_id, session.user_id, session.http_session_id, session.lease_id, session.host_id, session.managed_account_id, session.protocol, session.connection_mode, session.connector_id, session.connector_epoch, session.status, session.session_fence, session.authorization_version, session.idle_timeout_seconds, session.max_duration_seconds, session.connect_before, session.connected_at, session.terminated_at, session.termination_reason, session.created_at, session.updated_at, session.decision_snapshot, session.session_profile_snapshot, session.decision_snapshot_hash, session.recording_mode, session.command_audit_mode, session.clipboard_mode, session.file_upload_mode, session.file_download_mode, session.port_forward_mode, session.session_share_mode, session.retention_days, session.gateway_instance, session.reason
+`
+
+func (q *Queries) ConvergeStuckTerminatingRemoteAccessSessions(ctx context.Context, limit int32) ([]RemoteAccessSession, error) {
+	rows, err := q.db.Query(ctx, convergeStuckTerminatingRemoteAccessSessions, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessSession{}
+	for rows.Next() {
+		var i RemoteAccessSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.UserID,
+			&i.HttpSessionID,
+			&i.LeaseID,
+			&i.HostID,
+			&i.ManagedAccountID,
+			&i.Protocol,
+			&i.ConnectionMode,
+			&i.ConnectorID,
+			&i.ConnectorEpoch,
+			&i.Status,
+			&i.SessionFence,
+			&i.AuthorizationVersion,
+			&i.IdleTimeoutSeconds,
+			&i.MaxDurationSeconds,
+			&i.ConnectBefore,
+			&i.ConnectedAt,
+			&i.TerminatedAt,
+			&i.TerminationReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const createRemoteAccessCommandEvent = `-- name: CreateRemoteAccessCommandEvent :one
@@ -296,25 +460,39 @@ func (q *Queries) CreateRemoteAccessRecordingChunk(ctx context.Context, arg Crea
 
 const createRemoteAccessSession = `-- name: CreateRemoteAccessSession :one
 INSERT INTO remote_access_sessions (id,enterprise_id,user_id,http_session_id,lease_id,host_id,managed_account_id,protocol,
-    connection_mode,connector_id,status,authorization_version,idle_timeout_seconds,max_duration_seconds,connect_before)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'authorized',$11,$12,$13,$14) RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at
+    connection_mode,connector_id,status,authorization_version,idle_timeout_seconds,max_duration_seconds,connect_before,
+    decision_snapshot,session_profile_snapshot,decision_snapshot_hash,recording_mode,command_audit_mode,clipboard_mode,
+    file_upload_mode,file_download_mode,port_forward_mode,session_share_mode,retention_days,reason)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'authorized',$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason
 `
 
 type CreateRemoteAccessSessionParams struct {
-	ID                   uuid.UUID          `json:"id"`
-	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
-	UserID               uuid.UUID          `json:"user_id"`
-	HttpSessionID        uuid.UUID          `json:"http_session_id"`
-	LeaseID              uuid.UUID          `json:"lease_id"`
-	HostID               uuid.UUID          `json:"host_id"`
-	ManagedAccountID     uuid.UUID          `json:"managed_account_id"`
-	Protocol             string             `json:"protocol"`
-	ConnectionMode       string             `json:"connection_mode"`
-	ConnectorID          uuid.NullUUID      `json:"connector_id"`
-	AuthorizationVersion int64              `json:"authorization_version"`
-	IdleTimeoutSeconds   int32              `json:"idle_timeout_seconds"`
-	MaxDurationSeconds   int32              `json:"max_duration_seconds"`
-	ConnectBefore        pgtype.Timestamptz `json:"connect_before"`
+	ID                     uuid.UUID          `json:"id"`
+	EnterpriseID           uuid.UUID          `json:"enterprise_id"`
+	UserID                 uuid.UUID          `json:"user_id"`
+	HttpSessionID          uuid.UUID          `json:"http_session_id"`
+	LeaseID                uuid.UUID          `json:"lease_id"`
+	HostID                 uuid.UUID          `json:"host_id"`
+	ManagedAccountID       uuid.UUID          `json:"managed_account_id"`
+	Protocol               string             `json:"protocol"`
+	ConnectionMode         string             `json:"connection_mode"`
+	ConnectorID            uuid.NullUUID      `json:"connector_id"`
+	AuthorizationVersion   int64              `json:"authorization_version"`
+	IdleTimeoutSeconds     int32              `json:"idle_timeout_seconds"`
+	MaxDurationSeconds     int32              `json:"max_duration_seconds"`
+	ConnectBefore          pgtype.Timestamptz `json:"connect_before"`
+	DecisionSnapshot       []byte             `json:"decision_snapshot"`
+	SessionProfileSnapshot []byte             `json:"session_profile_snapshot"`
+	DecisionSnapshotHash   []byte             `json:"decision_snapshot_hash"`
+	RecordingMode          string             `json:"recording_mode"`
+	CommandAuditMode       string             `json:"command_audit_mode"`
+	ClipboardMode          string             `json:"clipboard_mode"`
+	FileUploadMode         string             `json:"file_upload_mode"`
+	FileDownloadMode       string             `json:"file_download_mode"`
+	PortForwardMode        string             `json:"port_forward_mode"`
+	SessionShareMode       string             `json:"session_share_mode"`
+	RetentionDays          int32              `json:"retention_days"`
+	Reason                 string             `json:"reason"`
 }
 
 func (q *Queries) CreateRemoteAccessSession(ctx context.Context, arg CreateRemoteAccessSessionParams) (RemoteAccessSession, error) {
@@ -333,6 +511,18 @@ func (q *Queries) CreateRemoteAccessSession(ctx context.Context, arg CreateRemot
 		arg.IdleTimeoutSeconds,
 		arg.MaxDurationSeconds,
 		arg.ConnectBefore,
+		arg.DecisionSnapshot,
+		arg.SessionProfileSnapshot,
+		arg.DecisionSnapshotHash,
+		arg.RecordingMode,
+		arg.CommandAuditMode,
+		arg.ClipboardMode,
+		arg.FileUploadMode,
+		arg.FileDownloadMode,
+		arg.PortForwardMode,
+		arg.SessionShareMode,
+		arg.RetentionDays,
+		arg.Reason,
 	)
 	var i RemoteAccessSession
 	err := row.Scan(
@@ -358,6 +548,19 @@ func (q *Queries) CreateRemoteAccessSession(ctx context.Context, arg CreateRemot
 		&i.TerminationReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.GatewayInstance,
+		&i.Reason,
 	)
 	return i, err
 }
@@ -438,6 +641,60 @@ func (q *Queries) DeleteRemoteAccessRoute(ctx context.Context, arg DeleteRemoteA
 	return result.RowsAffected(), nil
 }
 
+const expireRemoteAccessRecordings = `-- name: ExpireRemoteAccessRecordings :many
+WITH expired AS (
+  SELECT id
+  FROM remote_access_recordings
+  WHERE retention_until <= now() AND status <> 'expired'
+  ORDER BY retention_until, id
+  FOR UPDATE SKIP LOCKED
+  LIMIT $1
+)
+UPDATE remote_access_recordings recording
+SET status='expired', completed_at=COALESCE(recording.completed_at, now())
+FROM expired
+WHERE recording.id = expired.id
+RETURNING recording.id, recording.enterprise_id, recording.session_id, recording.status, recording.format, recording.key_provider, recording.key_id, recording.key_version, recording.wrapped_dek, recording.chunk_count, recording.event_count, recording.size_bytes, recording.duration_ms, recording.final_hash, recording.retention_until, recording.created_at, recording.completed_at
+`
+
+func (q *Queries) ExpireRemoteAccessRecordings(ctx context.Context, limit int32) ([]RemoteAccessRecording, error) {
+	rows, err := q.db.Query(ctx, expireRemoteAccessRecordings, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessRecording{}
+	for rows.Next() {
+		var i RemoteAccessRecording
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.SessionID,
+			&i.Status,
+			&i.Format,
+			&i.KeyProvider,
+			&i.KeyID,
+			&i.KeyVersion,
+			&i.WrappedDek,
+			&i.ChunkCount,
+			&i.EventCount,
+			&i.SizeBytes,
+			&i.DurationMs,
+			&i.FinalHash,
+			&i.RetentionUntil,
+			&i.CreatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const finishRemoteAccessRecording = `-- name: FinishRemoteAccessRecording :one
 UPDATE remote_access_recordings SET status=$2,completed_at=now()
 WHERE id=$1 AND status='recording' RETURNING id, enterprise_id, session_id, status, format, key_provider, key_id, key_version, wrapped_dek, chunk_count, event_count, size_bytes, duration_ms, final_hash, retention_until, created_at, completed_at
@@ -475,7 +732,7 @@ func (q *Queries) FinishRemoteAccessRecording(ctx context.Context, arg FinishRem
 
 const finishRemoteAccessSession = `-- name: FinishRemoteAccessSession :one
 UPDATE remote_access_sessions SET status=$3,termination_reason=$4,terminated_at=now(),updated_at=now()
-WHERE id=$1 AND session_fence=$2 AND status IN ('authorized','connecting','active','terminating') RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at
+WHERE id=$1 AND session_fence=$2 AND status IN ('authorized','connecting','active','terminating') RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason
 `
 
 type FinishRemoteAccessSessionParams struct {
@@ -516,6 +773,19 @@ func (q *Queries) FinishRemoteAccessSession(ctx context.Context, arg FinishRemot
 		&i.TerminationReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.GatewayInstance,
+		&i.Reason,
 	)
 	return i, err
 }
@@ -655,7 +925,7 @@ func (q *Queries) GetRemoteAccessRoute(ctx context.Context, sessionID uuid.UUID)
 }
 
 const getRemoteAccessSession = `-- name: GetRemoteAccessSession :one
-SELECT id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at FROM remote_access_sessions WHERE id=$1 AND enterprise_id=$2
+SELECT id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason FROM remote_access_sessions WHERE id=$1 AND enterprise_id=$2
 `
 
 type GetRemoteAccessSessionParams struct {
@@ -689,12 +959,25 @@ func (q *Queries) GetRemoteAccessSession(ctx context.Context, arg GetRemoteAcces
 		&i.TerminationReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.GatewayInstance,
+		&i.Reason,
 	)
 	return i, err
 }
 
 const getRemoteAccessSessionTarget = `-- name: GetRemoteAccessSessionTarget :one
-SELECT session.id, session.enterprise_id, session.user_id, session.http_session_id, session.lease_id, session.host_id, session.managed_account_id, session.protocol, session.connection_mode, session.connector_id, session.connector_epoch, session.status, session.session_fence, session.authorization_version, session.idle_timeout_seconds, session.max_duration_seconds, session.connect_before, session.connected_at, session.terminated_at, session.termination_reason, session.created_at, session.updated_at, host.address,host.hostname,host.port,host.pinned_host_key,account.username,account.credential_id,
+SELECT session.id, session.enterprise_id, session.user_id, session.http_session_id, session.lease_id, session.host_id, session.managed_account_id, session.protocol, session.connection_mode, session.connector_id, session.connector_epoch, session.status, session.session_fence, session.authorization_version, session.idle_timeout_seconds, session.max_duration_seconds, session.connect_before, session.connected_at, session.terminated_at, session.termination_reason, session.created_at, session.updated_at, session.decision_snapshot, session.session_profile_snapshot, session.decision_snapshot_hash, session.recording_mode, session.command_audit_mode, session.clipboard_mode, session.file_upload_mode, session.file_download_mode, session.port_forward_mode, session.session_share_mode, session.retention_days, session.gateway_instance, session.reason, host.address,host.hostname,host.port,host.pinned_host_key,account.username,account.credential_id,
        connector.connection_epoch,lease.expires_at AS lease_expires_at
 FROM remote_access_sessions session
 JOIN remote_access_leases lease ON lease.id=session.lease_id AND lease.enterprise_id=session.enterprise_id
@@ -705,36 +988,49 @@ WHERE session.id=$1
 `
 
 type GetRemoteAccessSessionTargetRow struct {
-	ID                   uuid.UUID          `json:"id"`
-	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
-	UserID               uuid.UUID          `json:"user_id"`
-	HttpSessionID        uuid.UUID          `json:"http_session_id"`
-	LeaseID              uuid.UUID          `json:"lease_id"`
-	HostID               uuid.UUID          `json:"host_id"`
-	ManagedAccountID     uuid.UUID          `json:"managed_account_id"`
-	Protocol             string             `json:"protocol"`
-	ConnectionMode       string             `json:"connection_mode"`
-	ConnectorID          uuid.NullUUID      `json:"connector_id"`
-	ConnectorEpoch       pgtype.Int8        `json:"connector_epoch"`
-	Status               string             `json:"status"`
-	SessionFence         int64              `json:"session_fence"`
-	AuthorizationVersion int64              `json:"authorization_version"`
-	IdleTimeoutSeconds   int32              `json:"idle_timeout_seconds"`
-	MaxDurationSeconds   int32              `json:"max_duration_seconds"`
-	ConnectBefore        pgtype.Timestamptz `json:"connect_before"`
-	ConnectedAt          pgtype.Timestamptz `json:"connected_at"`
-	TerminatedAt         pgtype.Timestamptz `json:"terminated_at"`
-	TerminationReason    pgtype.Text        `json:"termination_reason"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	Address              string             `json:"address"`
-	Hostname             string             `json:"hostname"`
-	Port                 int32              `json:"port"`
-	PinnedHostKey        string             `json:"pinned_host_key"`
-	Username             string             `json:"username"`
-	CredentialID         uuid.UUID          `json:"credential_id"`
-	ConnectionEpoch      pgtype.Int8        `json:"connection_epoch"`
-	LeaseExpiresAt       pgtype.Timestamptz `json:"lease_expires_at"`
+	ID                     uuid.UUID          `json:"id"`
+	EnterpriseID           uuid.UUID          `json:"enterprise_id"`
+	UserID                 uuid.UUID          `json:"user_id"`
+	HttpSessionID          uuid.UUID          `json:"http_session_id"`
+	LeaseID                uuid.UUID          `json:"lease_id"`
+	HostID                 uuid.UUID          `json:"host_id"`
+	ManagedAccountID       uuid.UUID          `json:"managed_account_id"`
+	Protocol               string             `json:"protocol"`
+	ConnectionMode         string             `json:"connection_mode"`
+	ConnectorID            uuid.NullUUID      `json:"connector_id"`
+	ConnectorEpoch         pgtype.Int8        `json:"connector_epoch"`
+	Status                 string             `json:"status"`
+	SessionFence           int64              `json:"session_fence"`
+	AuthorizationVersion   int64              `json:"authorization_version"`
+	IdleTimeoutSeconds     int32              `json:"idle_timeout_seconds"`
+	MaxDurationSeconds     int32              `json:"max_duration_seconds"`
+	ConnectBefore          pgtype.Timestamptz `json:"connect_before"`
+	ConnectedAt            pgtype.Timestamptz `json:"connected_at"`
+	TerminatedAt           pgtype.Timestamptz `json:"terminated_at"`
+	TerminationReason      pgtype.Text        `json:"termination_reason"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	DecisionSnapshot       []byte             `json:"decision_snapshot"`
+	SessionProfileSnapshot []byte             `json:"session_profile_snapshot"`
+	DecisionSnapshotHash   []byte             `json:"decision_snapshot_hash"`
+	RecordingMode          string             `json:"recording_mode"`
+	CommandAuditMode       string             `json:"command_audit_mode"`
+	ClipboardMode          string             `json:"clipboard_mode"`
+	FileUploadMode         string             `json:"file_upload_mode"`
+	FileDownloadMode       string             `json:"file_download_mode"`
+	PortForwardMode        string             `json:"port_forward_mode"`
+	SessionShareMode       string             `json:"session_share_mode"`
+	RetentionDays          int32              `json:"retention_days"`
+	GatewayInstance        pgtype.Text        `json:"gateway_instance"`
+	Reason                 string             `json:"reason"`
+	Address                string             `json:"address"`
+	Hostname               string             `json:"hostname"`
+	Port                   int32              `json:"port"`
+	PinnedHostKey          string             `json:"pinned_host_key"`
+	Username               string             `json:"username"`
+	CredentialID           uuid.UUID          `json:"credential_id"`
+	ConnectionEpoch        pgtype.Int8        `json:"connection_epoch"`
+	LeaseExpiresAt         pgtype.Timestamptz `json:"lease_expires_at"`
 }
 
 func (q *Queries) GetRemoteAccessSessionTarget(ctx context.Context, id uuid.UUID) (GetRemoteAccessSessionTargetRow, error) {
@@ -763,6 +1059,19 @@ func (q *Queries) GetRemoteAccessSessionTarget(ctx context.Context, id uuid.UUID
 		&i.TerminationReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.GatewayInstance,
+		&i.Reason,
 		&i.Address,
 		&i.Hostname,
 		&i.Port,
@@ -817,23 +1126,125 @@ func (q *Queries) ListRemoteAccessRecordingChunks(ctx context.Context, arg ListR
 	return items, nil
 }
 
+const listRemoteAccessRecordings = `-- name: ListRemoteAccessRecordings :many
+SELECT recording.id, recording.enterprise_id, recording.session_id, recording.status, recording.format, recording.key_provider, recording.key_id, recording.key_version, recording.wrapped_dek, recording.chunk_count, recording.event_count, recording.size_bytes, recording.duration_ms, recording.final_hash, recording.retention_until, recording.created_at, recording.completed_at FROM remote_access_recordings recording
+JOIN remote_access_sessions session ON session.id=recording.session_id AND session.enterprise_id=recording.enterprise_id
+WHERE recording.enterprise_id=$1 AND recording.retention_until>now()
+  AND ($2::text IS NULL OR recording.status=$2::text)
+  AND ($3::uuid IS NULL OR recording.session_id=$3::uuid)
+  AND ($4::uuid IS NULL OR session.user_id=$4::uuid)
+  AND ($5::uuid IS NULL OR session.host_id=$5::uuid)
+  AND ($6::timestamptz IS NULL OR recording.created_at>=$6::timestamptz)
+  AND ($7::timestamptz IS NULL OR recording.created_at<$7::timestamptz)
+ORDER BY recording.created_at DESC,recording.id DESC
+`
+
+type ListRemoteAccessRecordingsParams struct {
+	EnterpriseID uuid.UUID          `json:"enterprise_id"`
+	Status       pgtype.Text        `json:"status"`
+	SessionID    uuid.NullUUID      `json:"session_id"`
+	UserID       uuid.NullUUID      `json:"user_id"`
+	HostID       uuid.NullUUID      `json:"host_id"`
+	CreatedFrom  pgtype.Timestamptz `json:"created_from"`
+	CreatedTo    pgtype.Timestamptz `json:"created_to"`
+}
+
+func (q *Queries) ListRemoteAccessRecordings(ctx context.Context, arg ListRemoteAccessRecordingsParams) ([]RemoteAccessRecording, error) {
+	rows, err := q.db.Query(ctx, listRemoteAccessRecordings,
+		arg.EnterpriseID,
+		arg.Status,
+		arg.SessionID,
+		arg.UserID,
+		arg.HostID,
+		arg.CreatedFrom,
+		arg.CreatedTo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessRecording{}
+	for rows.Next() {
+		var i RemoteAccessRecording
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.SessionID,
+			&i.Status,
+			&i.Format,
+			&i.KeyProvider,
+			&i.KeyID,
+			&i.KeyVersion,
+			&i.WrappedDek,
+			&i.ChunkCount,
+			&i.EventCount,
+			&i.SizeBytes,
+			&i.DurationMs,
+			&i.FinalHash,
+			&i.RetentionUntil,
+			&i.CreatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteAccessSessions = `-- name: ListRemoteAccessSessions :many
-SELECT id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at FROM remote_access_sessions WHERE enterprise_id=$1 AND (user_id=$2 OR $3::boolean) ORDER BY created_at DESC,id DESC LIMIT $4
+SELECT id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason FROM remote_access_sessions session
+WHERE session.enterprise_id=$1
+  AND (session.user_id=$2 OR $3::boolean)
+  AND CASE $4::text
+    WHEN 'active' THEN session.status IN ('authorized','connecting','active','terminating')
+    WHEN 'history' THEN session.status NOT IN ('authorized','connecting','active','terminating')
+    WHEN 'all' THEN true
+    ELSE false
+  END
+  AND ($5::text IS NULL OR session.status=$5::text)
+  AND ($6::uuid IS NULL OR session.user_id=$6::uuid)
+  AND ($7::uuid IS NULL OR session.host_id=$7::uuid)
+  AND ($8::uuid IS NULL OR session.managed_account_id=$8::uuid)
+  AND ($9::text IS NULL OR session.protocol=$9::text)
+  AND ($10::text IS NULL OR session.connection_mode=$10::text)
+  AND ($11::timestamptz IS NULL OR session.created_at>=$11::timestamptz)
+  AND ($12::timestamptz IS NULL OR session.created_at<$12::timestamptz)
+ORDER BY session.created_at DESC,session.id DESC
 `
 
 type ListRemoteAccessSessionsParams struct {
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-	UserID       uuid.UUID `json:"user_id"`
-	Column3      bool      `json:"column_3"`
-	Limit        int32     `json:"limit"`
+	EnterpriseID     uuid.UUID          `json:"enterprise_id"`
+	ActorID          uuid.UUID          `json:"actor_id"`
+	AllSessions      bool               `json:"all_sessions"`
+	Scope            string             `json:"scope"`
+	Status           pgtype.Text        `json:"status"`
+	UserID           uuid.NullUUID      `json:"user_id"`
+	HostID           uuid.NullUUID      `json:"host_id"`
+	ManagedAccountID uuid.NullUUID      `json:"managed_account_id"`
+	Protocol         pgtype.Text        `json:"protocol"`
+	ConnectionMode   pgtype.Text        `json:"connection_mode"`
+	CreatedFrom      pgtype.Timestamptz `json:"created_from"`
+	CreatedTo        pgtype.Timestamptz `json:"created_to"`
 }
 
 func (q *Queries) ListRemoteAccessSessions(ctx context.Context, arg ListRemoteAccessSessionsParams) ([]RemoteAccessSession, error) {
 	rows, err := q.db.Query(ctx, listRemoteAccessSessions,
 		arg.EnterpriseID,
+		arg.ActorID,
+		arg.AllSessions,
+		arg.Scope,
+		arg.Status,
 		arg.UserID,
-		arg.Column3,
-		arg.Limit,
+		arg.HostID,
+		arg.ManagedAccountID,
+		arg.Protocol,
+		arg.ConnectionMode,
+		arg.CreatedFrom,
+		arg.CreatedTo,
 	)
 	if err != nil {
 		return nil, err
@@ -865,6 +1276,88 @@ func (q *Queries) ListRemoteAccessSessions(ctx context.Context, arg ListRemoteAc
 			&i.TerminationReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockOptionalSessionsMissingRecording = `-- name: LockOptionalSessionsMissingRecording :many
+SELECT session.id, session.enterprise_id, session.user_id, session.http_session_id, session.lease_id, session.host_id, session.managed_account_id, session.protocol, session.connection_mode, session.connector_id, session.connector_epoch, session.status, session.session_fence, session.authorization_version, session.idle_timeout_seconds, session.max_duration_seconds, session.connect_before, session.connected_at, session.terminated_at, session.termination_reason, session.created_at, session.updated_at, session.decision_snapshot, session.session_profile_snapshot, session.decision_snapshot_hash, session.recording_mode, session.command_audit_mode, session.clipboard_mode, session.file_upload_mode, session.file_download_mode, session.port_forward_mode, session.session_share_mode, session.retention_days, session.gateway_instance, session.reason
+FROM remote_access_sessions session
+WHERE session.status IN ('authorized','connecting','active')
+  AND session.recording_mode = 'optional'
+  AND NOT EXISTS (
+    SELECT 1 FROM remote_access_recordings recording WHERE recording.session_id = session.id
+  )
+ORDER BY session.created_at, session.id
+FOR UPDATE OF session SKIP LOCKED
+LIMIT $1
+`
+
+func (q *Queries) LockOptionalSessionsMissingRecording(ctx context.Context, limit int32) ([]RemoteAccessSession, error) {
+	rows, err := q.db.Query(ctx, lockOptionalSessionsMissingRecording, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessSession{}
+	for rows.Next() {
+		var i RemoteAccessSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.UserID,
+			&i.HttpSessionID,
+			&i.LeaseID,
+			&i.HostID,
+			&i.ManagedAccountID,
+			&i.Protocol,
+			&i.ConnectionMode,
+			&i.ConnectorID,
+			&i.ConnectorEpoch,
+			&i.Status,
+			&i.SessionFence,
+			&i.AuthorizationVersion,
+			&i.IdleTimeoutSeconds,
+			&i.MaxDurationSeconds,
+			&i.ConnectBefore,
+			&i.ConnectedAt,
+			&i.TerminatedAt,
+			&i.TerminationReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
 		); err != nil {
 			return nil, err
 		}
@@ -878,7 +1371,7 @@ func (q *Queries) ListRemoteAccessSessions(ctx context.Context, arg ListRemoteAc
 
 const markRemoteAccessSessionActive = `-- name: MarkRemoteAccessSessionActive :one
 UPDATE remote_access_sessions SET status='active',connected_at=COALESCE(connected_at,now()),updated_at=now()
-WHERE id=$1 AND session_fence=$2 AND status='connecting' RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at
+WHERE id=$1 AND session_fence=$2 AND status='connecting' RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason
 `
 
 type MarkRemoteAccessSessionActiveParams struct {
@@ -912,13 +1405,26 @@ func (q *Queries) MarkRemoteAccessSessionActive(ctx context.Context, arg MarkRem
 		&i.TerminationReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.GatewayInstance,
+		&i.Reason,
 	)
 	return i, err
 }
 
 const markRemoteAccessSessionConnecting = `-- name: MarkRemoteAccessSessionConnecting :one
 UPDATE remote_access_sessions SET status='connecting',updated_at=now()
-WHERE id=$1 AND session_fence=$2 AND status='authorized' RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at
+WHERE id=$1 AND session_fence=$2 AND status='authorized' RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason
 `
 
 type MarkRemoteAccessSessionConnectingParams struct {
@@ -952,13 +1458,49 @@ func (q *Queries) MarkRemoteAccessSessionConnecting(ctx context.Context, arg Mar
 		&i.TerminationReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.GatewayInstance,
+		&i.Reason,
 	)
 	return i, err
 }
 
+const setRemoteAccessSessionRouteMetadata = `-- name: SetRemoteAccessSessionRouteMetadata :exec
+UPDATE remote_access_sessions
+SET gateway_instance=$2,connector_epoch=$3,updated_at=now()
+WHERE id=$1 AND session_fence=$4 AND status IN ('authorized','connecting','active')
+`
+
+type SetRemoteAccessSessionRouteMetadataParams struct {
+	ID              uuid.UUID   `json:"id"`
+	GatewayInstance pgtype.Text `json:"gateway_instance"`
+	ConnectorEpoch  pgtype.Int8 `json:"connector_epoch"`
+	SessionFence    int64       `json:"session_fence"`
+}
+
+func (q *Queries) SetRemoteAccessSessionRouteMetadata(ctx context.Context, arg SetRemoteAccessSessionRouteMetadataParams) error {
+	_, err := q.db.Exec(ctx, setRemoteAccessSessionRouteMetadata,
+		arg.ID,
+		arg.GatewayInstance,
+		arg.ConnectorEpoch,
+		arg.SessionFence,
+	)
+	return err
+}
+
 const terminateRemoteAccessSession = `-- name: TerminateRemoteAccessSession :one
 UPDATE remote_access_sessions SET status='terminating',session_fence=session_fence+1,termination_reason=$3,updated_at=now()
-WHERE id=$1 AND enterprise_id=$2 AND status IN ('authorized','connecting','active') RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at
+WHERE id=$1 AND enterprise_id=$2 AND status IN ('authorized','connecting','active') RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason
 `
 
 type TerminateRemoteAccessSessionParams struct {
@@ -993,13 +1535,26 @@ func (q *Queries) TerminateRemoteAccessSession(ctx context.Context, arg Terminat
 		&i.TerminationReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.GatewayInstance,
+		&i.Reason,
 	)
 	return i, err
 }
 
 const terminateRemoteAccessSessionsByEnterprise = `-- name: TerminateRemoteAccessSessionsByEnterprise :many
 UPDATE remote_access_sessions SET status='terminating',session_fence=session_fence+1,termination_reason=$1,updated_at=now()
-WHERE enterprise_id=$2 AND status IN ('authorized','connecting','active') RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at
+WHERE enterprise_id=$2 AND status IN ('authorized','connecting','active') RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason
 `
 
 type TerminateRemoteAccessSessionsByEnterpriseParams struct {
@@ -1039,6 +1594,19 @@ func (q *Queries) TerminateRemoteAccessSessionsByEnterprise(ctx context.Context,
 			&i.TerminationReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
 		); err != nil {
 			return nil, err
 		}
@@ -1054,7 +1622,7 @@ const terminateRemoteAccessSessionsByGrant = `-- name: TerminateRemoteAccessSess
 UPDATE remote_access_sessions session SET status='terminating',session_fence=session_fence+1,termination_reason=$1,updated_at=now()
 FROM remote_access_leases lease
 WHERE session.lease_id=lease.id AND lease.grant_id=$2 AND session.enterprise_id=$3
-  AND session.status IN ('authorized','connecting','active') RETURNING session.id, session.enterprise_id, session.user_id, session.http_session_id, session.lease_id, session.host_id, session.managed_account_id, session.protocol, session.connection_mode, session.connector_id, session.connector_epoch, session.status, session.session_fence, session.authorization_version, session.idle_timeout_seconds, session.max_duration_seconds, session.connect_before, session.connected_at, session.terminated_at, session.termination_reason, session.created_at, session.updated_at
+  AND session.status IN ('authorized','connecting','active') RETURNING session.id, session.enterprise_id, session.user_id, session.http_session_id, session.lease_id, session.host_id, session.managed_account_id, session.protocol, session.connection_mode, session.connector_id, session.connector_epoch, session.status, session.session_fence, session.authorization_version, session.idle_timeout_seconds, session.max_duration_seconds, session.connect_before, session.connected_at, session.terminated_at, session.termination_reason, session.created_at, session.updated_at, session.decision_snapshot, session.session_profile_snapshot, session.decision_snapshot_hash, session.recording_mode, session.command_audit_mode, session.clipboard_mode, session.file_upload_mode, session.file_download_mode, session.port_forward_mode, session.session_share_mode, session.retention_days, session.gateway_instance, session.reason
 `
 
 type TerminateRemoteAccessSessionsByGrantParams struct {
@@ -1095,6 +1663,19 @@ func (q *Queries) TerminateRemoteAccessSessionsByGrant(ctx context.Context, arg 
 			&i.TerminationReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
 		); err != nil {
 			return nil, err
 		}
@@ -1108,7 +1689,7 @@ func (q *Queries) TerminateRemoteAccessSessionsByGrant(ctx context.Context, arg 
 
 const terminateRemoteAccessSessionsByLease = `-- name: TerminateRemoteAccessSessionsByLease :many
 UPDATE remote_access_sessions SET status='terminating',session_fence=session_fence+1,termination_reason=$1,updated_at=now()
-WHERE lease_id=$2 AND enterprise_id=$3 AND status IN ('authorized','connecting','active') RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at
+WHERE lease_id=$2 AND enterprise_id=$3 AND status IN ('authorized','connecting','active') RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason
 `
 
 type TerminateRemoteAccessSessionsByLeaseParams struct {
@@ -1149,6 +1730,87 @@ func (q *Queries) TerminateRemoteAccessSessionsByLease(ctx context.Context, arg 
 			&i.TerminationReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const terminateRemoteAccessSessionsByRequest = `-- name: TerminateRemoteAccessSessionsByRequest :many
+UPDATE remote_access_sessions session SET status='terminating',session_fence=session_fence+1,termination_reason=$1,updated_at=now()
+FROM remote_access_leases lease
+WHERE session.lease_id=lease.id AND lease.request_id=$2
+  AND session.status IN ('authorized','connecting','active') RETURNING session.id, session.enterprise_id, session.user_id, session.http_session_id, session.lease_id, session.host_id, session.managed_account_id, session.protocol, session.connection_mode, session.connector_id, session.connector_epoch, session.status, session.session_fence, session.authorization_version, session.idle_timeout_seconds, session.max_duration_seconds, session.connect_before, session.connected_at, session.terminated_at, session.termination_reason, session.created_at, session.updated_at, session.decision_snapshot, session.session_profile_snapshot, session.decision_snapshot_hash, session.recording_mode, session.command_audit_mode, session.clipboard_mode, session.file_upload_mode, session.file_download_mode, session.port_forward_mode, session.session_share_mode, session.retention_days, session.gateway_instance, session.reason
+`
+
+type TerminateRemoteAccessSessionsByRequestParams struct {
+	Reason    pgtype.Text `json:"reason"`
+	RequestID uuid.UUID   `json:"request_id"`
+}
+
+func (q *Queries) TerminateRemoteAccessSessionsByRequest(ctx context.Context, arg TerminateRemoteAccessSessionsByRequestParams) ([]RemoteAccessSession, error) {
+	rows, err := q.db.Query(ctx, terminateRemoteAccessSessionsByRequest, arg.Reason, arg.RequestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessSession{}
+	for rows.Next() {
+		var i RemoteAccessSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.UserID,
+			&i.HttpSessionID,
+			&i.LeaseID,
+			&i.HostID,
+			&i.ManagedAccountID,
+			&i.Protocol,
+			&i.ConnectionMode,
+			&i.ConnectorID,
+			&i.ConnectorEpoch,
+			&i.Status,
+			&i.SessionFence,
+			&i.AuthorizationVersion,
+			&i.IdleTimeoutSeconds,
+			&i.MaxDurationSeconds,
+			&i.ConnectBefore,
+			&i.ConnectedAt,
+			&i.TerminatedAt,
+			&i.TerminationReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
 		); err != nil {
 			return nil, err
 		}

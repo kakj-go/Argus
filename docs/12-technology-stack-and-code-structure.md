@@ -24,7 +24,7 @@ Argus 主应用统一使用：
 | 图表         | Apache ECharts                    | 用于 Metrics、Trace、拓扑和时间序列；查询必须经过 Telemetry Query                                                                   |
 | 远程命令行   | `@xterm/xterm` + fit addon        | SSH 使用完整 PTY；WinRM 使用 HTTPS WinRS PowerShell 行模式，不伪装成完整 PTY/PSRP，且不得暴露 Credential 或允许 AI/Card 获取 Ticket |
 | 国际化       | i18next                           | 第一版必须完整支持 `zh-CN` 与 `en-US`；文案使用稳定 Key，不得散落在不可检索的组件常量中                                             |
-| 实时更新     | SSE 为主、WebSocket 为辅          | 模型输出、Run 和 Card 状态使用可恢复游标；断线后重新校验 Session、固定企业、DataScope 和 AuthorizationVersion                       |
+| 实时更新     | SSE 为主、WebSocket 为辅          | 模型输出、Run 和 Card 状态使用可恢复游标；断线后重新校验 Session、固定企业、explicit resource authorization 和 AuthorizationVersion                       |
 
 不使用 Next.js 作为第一版主框架。Argus 是登录后的控制平面，不依赖 SEO 或服务端页面渲染；Vite 静态构建可以减少运行时和部署复杂度。
 
@@ -51,6 +51,7 @@ web/
 - `enterprise` 包含 Chatbox 和企业管理后台。
 - `card-runtime` 只承载独立 Origin 的框架无关 Card iframe 运行时，不接入门户认证状态或业务路由。
 - `ui` 是唯一通用组件实现，业务应用不得维护平行组件库。
+- 列表/表格/卡片栅格的行内操作统一使用 `@argus/ui` 的 `ActionGroup`（容器）+ `RowAction`（文字型操作按钮）组合；`RowAction` 固定为 ghost + sm 的纯文字形态，破坏性或不可逆操作（删除、卸载、终止、停用企业等）传 `danger` 以红色文字呈现，不得再混用 `Button` 的 secondary/primary/danger 边框按钮形态。页面级主操作（如"新建"）、表单与对话框底部按钮、面板头部动作仍使用 `Button`。
 - 日期与日期时间输入统一使用 `@argus/ui` 的 `DateTimePicker`。组件基于开源 `react-datepicker`，对外保留表单契约使用的 `yyyy-MM-dd` / `yyyy-MM-ddTHH:mm` 本地值格式，并由 Argus Design Token 覆盖日历、时间列表和输入框样式；输入框文字与日历图标都必须打开同一面板。
 - `api-client` 由 OpenAPI 生成基础类型，在其上提供领域 Port、mock/real Adapter 以及 HTTP/SSE/WebSocket Transport；客户端上下文不能替代服务端资源归属检查。两个门户必须显式设置 `VITE_API_MODE=mock|real`，未知模式、real 缺少 Base URL 或调用尚未冻结的领域操作都 fail closed，禁止隐式回退 mock。
 - `card-host` 只实现 iframe 生命周期、Manifest/RenderPlan 校验、Host Bridge 和受控 Action/Query 调用；`card-runtime` 负责独立 Origin 内的 CSP 和 Card 文档执行，两者共同消费生成的 Bridge 契约。
@@ -199,8 +200,8 @@ Agent Loop、ContextAssembler、Compactor 和 Provider Adapter 保持独立接�
 - Session 和撤销事实保存在 PostgreSQL，Redis 只保存热缓存和快速失效通知。
 - Redis 初始连接失败时 Server 可以 degraded 启动并保留自动重连客户端；`/readyz` 只以 PostgreSQL 为必要条件。Redis 不可用期间已有 Session 继续由 PostgreSQL 校验，新登录 fail closed。
 - PlatformUser 与 EnterpriseUser 使用不同身份域和 Audience；EnterpriseUser 固定一个企业，不实现 Membership 或企业切换。
-- 第一版企业级 RoleBinding、DataScope、RemoteAccessGrant、ManagedAccount、AuthorizationVersion 和类型化 Policy 在 Go 领域服务中实现；标签选择器使用独立的版本化白名单语法，受限 Policy 条件可以使用 CEL-Go，二者都不接受用户 SQL。
-- API Key 和 ServiceAccount 凭证只显示一次，数据库只保存哈希，并固定企业、Tool/DataScope 和 AuthorizationVersion。
+- 第一版企业级 RoleBinding、explicit resource authorization、RemoteAccessGrant、ManagedAccount、AuthorizationVersion 和类型化 Policy 在 Go 领域服务中实现；标签过滤条件使用独立的版本化白名单语法，受限 Policy 条件可以使用 CEL-Go，二者都不接受用户 SQL。
+- API Key 和 ServiceAccount 凭证只显示一次，数据库只保存哈希，并固定企业、Tool/explicit resource authorization 和 AuthorizationVersion。
 - M2 真实写表单统一使用 React Hook Form + Zod，DTO 继续直接消费生成的 `snake_case` 契约；Zod 只改善交互，服务端仍执行权威校验。
 - `@argus/ui` 的 `Field` 强制声明 `required/optional/none`，统一必填星号和控件 ARIA；`FormDrawer` 使用原生 form submit，`Button` 默认 `type=button`。
 - `argus-dev contracts generate/check` 从完整 bundled OpenAPI 生成只读 `form-constraints.ts`，普通字段和 Label 标量约束不在页面复制；密码等复合规则继续使用独立共享契约。
@@ -235,14 +236,14 @@ go run ./cmd/argus-dev release local
 E2E 至少覆盖：
 
 - 初始化、双层管理域、平台/企业身份互斥、单企业用户和跨企业拒绝。
-- RoleBinding + DataScope 的列表/详情/批量/Tool/Card 一致过滤，以及授权敏感标签变化后的缓存、Binding、游标和流式订阅失效。
+- RoleBinding + explicit resource authorization 的列表/详情/批量/Tool/Card 一致过滤，以及显式授权或继承关系变化后的缓存、Binding、游标和流式订阅失效；标签变化不触发授权失效。
 - Connector 注册并创建 Bastion Scope、证书轮换与 fencing、双 Gateway 跨副本派发、内网主机经堡垒机接入、公网 Direct SSH 的 SSRF/固定出口边界。
 - Connector 本机/SSH/WinRM 人工命令行票据与录像；RemoteAccessGrant 限定 Host/ManagedAccount/动作；人工会话和后台 Execution 隔离。
 - Collector 沿两种执行路径安装、Telemetry Route 选择矩阵和 Metrics/Logs/Traces Profile 配置。
 - Kubernetes Node/Host 绑定，以及 Host Collector 与 DaemonSet Collection Claim 的冲突、非冲突共存和到期迁移。
 - 资源查询、Preview/Confirm/Commit、撤权与 AuthorizationVersion、审批不补齐基础权限、Redis 清空恢复和 Pod 重启接管。
 - Agent Event 顺序、ToolCall/ToolResult 完整切点、确定性 ToolResult Projection、增量 ContextSnapshot、压缩失败恢复、Projection Hash 和私有字段不可见性。
-- OTLP 写入可信 Enterprise/Resource/Collector 身份，以及跨企业、超出 DataScope、跨 Signal 和敏感字段查询拒绝。
+- OTLP 写入可信 Enterprise/Resource/Collector 身份，以及跨企业、超出 explicit resource authorization、跨 Signal 和敏感字段查询拒绝。
 
 前端与 Card E2E 还必须覆盖 `zh-CN/en-US × light/dark` 基础矩阵、偏好持久化、缺失翻译回退、语言协商和主题切换后 Action Binding 不变。测试完成后删除临时 Namespace。
 

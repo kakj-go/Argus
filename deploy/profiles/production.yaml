@@ -18,11 +18,16 @@ spec:
     pullPolicy: IfNotPresent
     pullSecretRef: argus-registry
   exposure:
-    mode: ingress
     ingressClassName: nginx
     enterpriseHost: argus.example.com
     platformHost: platform.argus.example.com
     connectorHost: connector.argus.example.com
+    tls:
+      enabled: true
+      mode: cert-manager-issuer
+      issuerRef:
+        name: replace-with-cluster-issuer
+        kind: ClusterIssuer
   security:
     platformMfaRequired: false
   openSandbox:
@@ -47,6 +52,3 @@ spec:
     kafka: 500Gi
     clickhouse: 2Ti
     keeper: 20Gi
-  cleanup:
-    retainData: true
-    deleteOwnedCrds: false

@@ -8,6 +8,7 @@ import { hostsEn, hostsZh } from "./hosts";
 import { kubernetesEn, kubernetesZh } from "./kubernetes";
 import { loginEn, loginZh } from "./login";
 import { remoteAccessEn, remoteAccessZh } from "./remote-access";
+import { remoteSessionsEn, remoteSessionsZh } from "./remote-sessions";
 import { governanceEn, governanceZh } from "./governance";
 import { settingsEn, settingsZh } from "./settings";
 import { shellEn, shellZh } from "./shell";
@@ -32,6 +33,7 @@ const modulesZh = [
   kubernetesZh,
   aiSettingsZh,
   remoteAccessZh,
+  remoteSessionsZh,
   telemetryZh,
   settingsZh,
   governanceZh,
@@ -47,6 +49,7 @@ const modulesEn = [
   kubernetesEn,
   aiSettingsEn,
   remoteAccessEn,
+  remoteSessionsEn,
   telemetryEn,
   settingsEn,
   governanceEn,

@@ -27,7 +27,7 @@ func (handler HostHandler) ListHosts(ctx context.Context, _ hostapi.ListHostsReq
 	if apiError != nil {
 		return hostapi.ListHostsdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
 	}
-	items, err := handler.Service.ListHosts(ctx, p.EnterpriseIDValue(), p.DataScopeIDs)
+	items, err := handler.Service.ListHosts(ctx, p.EnterpriseIDValue(), p.AuthorizedResourceIDs)
 	if err != nil {
 		return hostapi.ListHostsdefaultJSONResponse{Body: hostError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}
@@ -43,7 +43,7 @@ func (handler HostHandler) GetHost(ctx context.Context, request hostapi.GetHostR
 	if apiError != nil {
 		return hostapi.GetHostdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
 	}
-	item, err := handler.Service.GetHost(ctx, p.EnterpriseIDValue(), uuid.UUID(request.Id), p.DataScopeIDs)
+	item, err := handler.Service.GetHost(ctx, p.EnterpriseIDValue(), uuid.UUID(request.Id), p.AuthorizedResourceIDs)
 	if err != nil {
 		return hostapi.GetHostdefaultJSONResponse{Body: hostError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}
@@ -132,7 +132,7 @@ func (handler HostHandler) auth(ctx context.Context, mutation bool, csrf, permis
 }
 
 func resourceSubject(value identity.Principal) resource.Subject {
-	return resource.Subject{ActorID: value.ActorID(), AuthorizationVersion: value.AuthorizationVersion(), DataScopeIDs: value.DataScopeIDs}
+	return resource.Subject{ActorID: value.ActorID(), AuthorizationVersion: value.AuthorizationVersion(), AuthorizedResourceIDs: value.AuthorizedResourceIDs}
 }
 
 func hostUpdateInput(value hostapi.HostPreviewUpdate) resource.HostInput {

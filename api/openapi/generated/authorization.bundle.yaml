@@ -78,7 +78,6 @@ components:
         - subject_type
         - subject_id
         - role_id
-        - data_scope_ids
         - status
         - version
         - created_at
@@ -102,80 +101,12 @@ components:
         role_id:
           type: string
           minLength: 1
-        data_scope_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            minLength: 1
         valid_from:
           type: string
           format: date-time
         valid_until:
           type: string
           format: date-time
-        status:
-          type: string
-          enum:
-            - active
-            - disabled
-        version:
-          type: integer
-          format: int64
-          minimum: 1
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-    DataScope:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - enterprise_id
-        - name
-        - resource_types
-        - explicit_resource_ids
-        - status
-        - version
-        - created_at
-        - updated_at
-      properties:
-        id:
-          type: string
-          minLength: 1
-        enterprise_id:
-          type: string
-          minLength: 1
-        name:
-          type: string
-          minLength: 1
-          maxLength: 128
-        description:
-          type: string
-          maxLength: 1024
-        resource_types:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          items:
-            type: string
-            enum:
-              - host
-              - kubernetes_cluster
-              - kubernetes_namespace
-        explicit_resource_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            minLength: 1
-        match_all:
-          type: boolean
-        label_selector:
-          $ref: '#/components/schemas/LabelSelector'
         status:
           type: string
           enum:
@@ -199,7 +130,6 @@ components:
         - reason_code
         - obligations
         - authorization_version
-        - matched_data_scope_ids
       properties:
         decision:
           type: string
@@ -227,95 +157,9 @@ components:
           type: integer
           format: int64
           minimum: 1
-        matched_data_scope_ids:
+        matched_resource_ids:
           type: array
           uniqueItems: true
           items:
             type: string
             minLength: 1
-    UserLabelKey:
-      type: string
-      minLength: 1
-      maxLength: 63
-      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-    SystemLabelKey:
-      type: string
-      maxLength: 72
-      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-      readOnly: true
-    LabelValue:
-      type: string
-      minLength: 1
-      maxLength: 63
-      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
-    LabelRequirement:
-      oneOf:
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-            - values
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              const: eq
-            values:
-              type: array
-              minItems: 1
-              maxItems: 1
-              uniqueItems: true
-              items:
-                $ref: '#/components/schemas/LabelValue'
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-            - values
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              const: in
-            values:
-              type: array
-              minItems: 1
-              maxItems: 32
-              uniqueItems: true
-              items:
-                $ref: '#/components/schemas/LabelValue'
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              enum:
-                - exists
-                - not_exists
-    LabelSelector:
-      type: object
-      additionalProperties: false
-      required:
-        - schema_version
-        - requirements
-      properties:
-        schema_version:
-          const: argus.label_selector/v1
-        requirements:
-          type: array
-          minItems: 1
-          maxItems: 16
-          items:
-            $ref: '#/components/schemas/LabelRequirement'

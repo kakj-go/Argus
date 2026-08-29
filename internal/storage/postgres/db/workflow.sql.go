@@ -226,9 +226,9 @@ func (q *Queries) CreateApprovalDecision(ctx context.Context, arg CreateApproval
 }
 
 const createApprovalPolicy = `-- name: CreateApprovalPolicy :one
-INSERT INTO approval_policies (id, enterprise_id, name, enabled, tool_ids, risks, resource_types, label_selector,
+INSERT INTO approval_policies (id, enterprise_id, name, enabled, tool_ids, risks, resource_types,
     minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, enterprise_id, name, enabled, tool_ids, risks, resource_types, label_selector, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, enterprise_id, name, enabled, tool_ids, risks, resource_types, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at
 `
 
 type CreateApprovalPolicyParams struct {
@@ -239,7 +239,6 @@ type CreateApprovalPolicyParams struct {
 	ToolIds             []string    `json:"tool_ids"`
 	Risks               []string    `json:"risks"`
 	ResourceTypes       []string    `json:"resource_types"`
-	LabelSelector       []byte      `json:"label_selector"`
 	MinimumApprovers    int32       `json:"minimum_approvers"`
 	SeparationOfDuty    bool        `json:"separation_of_duty"`
 	ApproverRoleIds     []uuid.UUID `json:"approver_role_ids"`
@@ -255,7 +254,6 @@ func (q *Queries) CreateApprovalPolicy(ctx context.Context, arg CreateApprovalPo
 		arg.ToolIds,
 		arg.Risks,
 		arg.ResourceTypes,
-		arg.LabelSelector,
 		arg.MinimumApprovers,
 		arg.SeparationOfDuty,
 		arg.ApproverRoleIds,
@@ -270,7 +268,6 @@ func (q *Queries) CreateApprovalPolicy(ctx context.Context, arg CreateApprovalPo
 		&i.ToolIds,
 		&i.Risks,
 		&i.ResourceTypes,
-		&i.LabelSelector,
 		&i.MinimumApprovers,
 		&i.SeparationOfDuty,
 		&i.ApproverRoleIds,
@@ -528,7 +525,7 @@ func (q *Queries) FinishExecution(ctx context.Context, arg FinishExecutionParams
 }
 
 const getApprovalPolicy = `-- name: GetApprovalPolicy :one
-SELECT id, enterprise_id, name, enabled, tool_ids, risks, resource_types, label_selector, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at FROM approval_policies WHERE id = $1 AND enterprise_id = $2
+SELECT id, enterprise_id, name, enabled, tool_ids, risks, resource_types, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at FROM approval_policies WHERE id = $1 AND enterprise_id = $2
 `
 
 type GetApprovalPolicyParams struct {
@@ -547,7 +544,6 @@ func (q *Queries) GetApprovalPolicy(ctx context.Context, arg GetApprovalPolicyPa
 		&i.ToolIds,
 		&i.Risks,
 		&i.ResourceTypes,
-		&i.LabelSelector,
 		&i.MinimumApprovers,
 		&i.SeparationOfDuty,
 		&i.ApproverRoleIds,
@@ -944,7 +940,7 @@ func (q *Queries) ListApprovalDecisions(ctx context.Context, arg ListApprovalDec
 }
 
 const listApprovalPolicies = `-- name: ListApprovalPolicies :many
-SELECT id, enterprise_id, name, enabled, tool_ids, risks, resource_types, label_selector, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at FROM approval_policies WHERE enterprise_id = $1 ORDER BY name, id
+SELECT id, enterprise_id, name, enabled, tool_ids, risks, resource_types, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at FROM approval_policies WHERE enterprise_id = $1 ORDER BY name, id
 `
 
 func (q *Queries) ListApprovalPolicies(ctx context.Context, enterpriseID uuid.UUID) ([]ApprovalPolicy, error) {
@@ -964,7 +960,6 @@ func (q *Queries) ListApprovalPolicies(ctx context.Context, enterpriseID uuid.UU
 			&i.ToolIds,
 			&i.Risks,
 			&i.ResourceTypes,
-			&i.LabelSelector,
 			&i.MinimumApprovers,
 			&i.SeparationOfDuty,
 			&i.ApproverRoleIds,
@@ -1107,7 +1102,7 @@ func (q *Queries) ListExecutions(ctx context.Context, arg ListExecutionsParams) 
 }
 
 const listMatchingApprovalPolicies = `-- name: ListMatchingApprovalPolicies :many
-SELECT id, enterprise_id, name, enabled, tool_ids, risks, resource_types, label_selector, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at FROM approval_policies
+SELECT id, enterprise_id, name, enabled, tool_ids, risks, resource_types, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at FROM approval_policies
 WHERE enterprise_id = $1 AND enabled = true
   AND ($2::text = ANY(risks))
   AND (cardinality(tool_ids) = 0 OR $3::text = ANY(tool_ids))
@@ -1144,7 +1139,6 @@ func (q *Queries) ListMatchingApprovalPolicies(ctx context.Context, arg ListMatc
 			&i.ToolIds,
 			&i.Risks,
 			&i.ResourceTypes,
-			&i.LabelSelector,
 			&i.MinimumApprovers,
 			&i.SeparationOfDuty,
 			&i.ApproverRoleIds,
@@ -1510,11 +1504,11 @@ func (q *Queries) SetPendingActionPolicySnapshot(ctx context.Context, arg SetPen
 const updateApprovalPolicy = `-- name: UpdateApprovalPolicy :one
 UPDATE approval_policies SET
     name = $3, enabled = $4, tool_ids = $5, risks = $6, resource_types = $7,
-    label_selector = $8, minimum_approvers = $9, separation_of_duty = $10,
-    approver_role_ids = $11, expires_after_seconds = $12,
+    minimum_approvers = $8, separation_of_duty = $9,
+    approver_role_ids = $10, expires_after_seconds = $11,
     version = version + 1, updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND version = $13
-RETURNING id, enterprise_id, name, enabled, tool_ids, risks, resource_types, label_selector, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at
+WHERE id = $1 AND enterprise_id = $2 AND version = $12
+RETURNING id, enterprise_id, name, enabled, tool_ids, risks, resource_types, minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds, version, created_at, updated_at
 `
 
 type UpdateApprovalPolicyParams struct {
@@ -1525,7 +1519,6 @@ type UpdateApprovalPolicyParams struct {
 	ToolIds             []string    `json:"tool_ids"`
 	Risks               []string    `json:"risks"`
 	ResourceTypes       []string    `json:"resource_types"`
-	LabelSelector       []byte      `json:"label_selector"`
 	MinimumApprovers    int32       `json:"minimum_approvers"`
 	SeparationOfDuty    bool        `json:"separation_of_duty"`
 	ApproverRoleIds     []uuid.UUID `json:"approver_role_ids"`
@@ -1542,7 +1535,6 @@ func (q *Queries) UpdateApprovalPolicy(ctx context.Context, arg UpdateApprovalPo
 		arg.ToolIds,
 		arg.Risks,
 		arg.ResourceTypes,
-		arg.LabelSelector,
 		arg.MinimumApprovers,
 		arg.SeparationOfDuty,
 		arg.ApproverRoleIds,
@@ -1558,7 +1550,6 @@ func (q *Queries) UpdateApprovalPolicy(ctx context.Context, arg UpdateApprovalPo
 		&i.ToolIds,
 		&i.Risks,
 		&i.ResourceTypes,
-		&i.LabelSelector,
 		&i.MinimumApprovers,
 		&i.SeparationOfDuty,
 		&i.ApproverRoleIds,

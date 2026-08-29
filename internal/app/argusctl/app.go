@@ -29,7 +29,6 @@ const usage = `usage:
   argusctl backup create|verify|list --config FILE [--artifacts DIR] [--backup FILE] [--key-file FILE]
   argusctl restore plan|apply|verify --config FILE --backup FILE [--key-file FILE]
   argusctl upgrade plan|apply|status|rollback --config FILE [--artifacts DIR]
-  argusctl tunnel --config FILE
   argusctl uninstall --config FILE --delete-data --delete-owned-crds --yes`
 
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -62,7 +61,7 @@ type App struct {
 
 func (a *App) run(ctx context.Context, args []string) error {
 	switch args[0] {
-	case "preflight", "plan", "install", "status", "verify", "tunnel", "uninstall":
+	case "preflight", "plan", "install", "status", "verify", "uninstall":
 		return a.runConfigCommand(ctx, args[0], args[1:])
 	case "images":
 		if len(args) < 2 || !contains([]string{"build", "load", "clean"}, args[1]) {
@@ -138,8 +137,6 @@ func (a *App) runConfigCommand(ctx context.Context, command string, args []strin
 		return a.status(ctx, cfg, *output)
 	case "verify":
 		return a.verify(ctx, cfg, *output, *artifacts)
-	case "tunnel":
-		return a.tunnel(ctx, cfg)
 	case "uninstall":
 		if !*yes || !*deleteData {
 			return errors.New("uninstall requires --delete-data --yes; data deletion must be explicit")

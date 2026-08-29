@@ -77,14 +77,21 @@ func (a *App) ensureRegistry(ctx context.Context, cfg *InstallConfig) error {
 	if cfg.Spec.Images.Mode != "local-registry" {
 		return nil
 	}
-	if _, err := a.runner.quiet(ctx, "docker", "inspect", cfg.registryContainerName()); err == nil {
-		return nil
-	}
 	_, port, err := net.SplitHostPort(cfg.Spec.Images.Registry)
 	if err != nil {
 		return fmt.Errorf("local registry must use host:port: %w", err)
 	}
-	_, err = a.runner.run(ctx, nil, "docker", "run", "--detach", "--restart", "unless-stopped", "--name", cfg.registryContainerName(), "--label", "argus.io/release-id="+cfg.Spec.ReleaseID, "--publish", port+":5000", localRegistryImage)
+	containerName := cfg.registryContainerName()
+	running, inspectErr := a.runner.quiet(ctx, "docker", "inspect", "--format={{.State.Running}}", containerName)
+	if inspectErr == nil {
+		if strings.TrimSpace(running) != "true" {
+			if _, err := a.runner.run(ctx, nil, "docker", "start", containerName); err != nil {
+				return fmt.Errorf("start existing local registry %s: %w", containerName, err)
+			}
+		}
+		return waitForRegistry(ctx, "127.0.0.1:"+port)
+	}
+	_, err = a.runner.run(ctx, nil, "docker", "run", "--detach", "--restart", "unless-stopped", "--name", containerName, "--label", "argus.io/release-id="+cfg.Spec.ReleaseID, "--publish", port+":5000", localRegistryImage)
 	if err != nil {
 		return err
 	}

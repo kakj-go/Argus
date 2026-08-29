@@ -75,12 +75,13 @@ type IssuedSession struct {
 }
 
 type Principal struct {
-	Session        db.Session
-	PlatformUser   *db.PlatformUser
-	EnterpriseUser *db.EnterpriseUser
-	ServiceAccount *db.ServiceAccount
-	DataScopeIDs   []uuid.UUID
-	Permissions    []string
+	Session               db.Session
+	PlatformUser          *db.PlatformUser
+	EnterpriseUser        *db.EnterpriseUser
+	ServiceAccount        *db.ServiceAccount
+	AuthorizedResourceIDs []uuid.UUID
+	Permissions           []string
+	EnterpriseAdmin       bool
 }
 
 type actorContextKey struct{}
@@ -413,14 +414,31 @@ func (service Service) loadPrincipal(ctx context.Context, session db.Session) (P
 	if err != nil {
 		return Principal{}, err
 	}
-	scopes, err := service.Store.Queries.ListEffectiveUserDataScopes(ctx, db.ListEffectiveUserDataScopesParams{EnterpriseID: user.EnterpriseID, UserID: user.ID, DepartmentID: user.DepartmentID})
+	enterpriseAdmin, err := service.Store.Queries.IsUserEnterpriseAdmin(ctx, db.IsUserEnterpriseAdminParams{EnterpriseID: user.EnterpriseID, UserID: user.ID, DepartmentID: user.DepartmentID})
+	if err != nil {
+		return Principal{}, err
+	}
+	scopes, err := service.authorizedResourceIDs(ctx, user.EnterpriseID, user.ID, user.DepartmentID, permissions)
 	if err != nil {
 		return Principal{}, err
 	}
 	principal.EnterpriseUser = &user
 	principal.Permissions = permissions
-	principal.DataScopeIDs = scopes
+	principal.EnterpriseAdmin = enterpriseAdmin
+	principal.AuthorizedResourceIDs = scopes
 	return principal, nil
+}
+
+func (service Service) authorizedResourceIDs(ctx context.Context, enterpriseID, userID, departmentID uuid.UUID, permissions []string) ([]uuid.UUID, error) {
+	ids := make([]uuid.UUID, 0)
+	for _, resourceType := range []string{"host", "kubernetes_cluster"} {
+		values, err := service.Store.Queries.ListUserAuthorizedResourceIDs(ctx, db.ListUserAuthorizedResourceIDsParams{UserID: userID, EnterpriseID: enterpriseID, ResourceType: resourceType})
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, values...)
+	}
+	return ids, nil
 }
 
 func (service Service) lookupCredential(ctx context.Context, audience, username string) (uuid.UUID, db.PasswordCredential, error) {

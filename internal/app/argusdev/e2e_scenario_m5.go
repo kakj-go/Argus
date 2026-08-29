@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -34,7 +33,7 @@ func (a *App) runM5Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if err := a.waitRunTerminal(ctx, env, runID); err != nil {
 		return err
 	}
-	cards, err := client.JSON(ctx, "m5-card-list", "enterprise", http.MethodGet, "/enterprise/interactive-cards", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	cards, err := client.JSON(ctx, "m5-card-list", "enterprise", http.MethodGet, "/enterprise/interactive-cards", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -52,7 +51,7 @@ func (a *App) runM5Scenario(ctx context.Context, env *E2EEnvironment) error {
 	}); err != nil {
 		return err
 	}
-	activeR1, err := client.JSON(ctx, "m5-card-active-r1", "enterprise", http.MethodGet, "/enterprise/interactive-cards/"+cardID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	activeR1, err := client.JSON(ctx, "m5-card-active-r1", "enterprise", http.MethodGet, "/enterprise/interactive-cards/"+cardID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -74,7 +73,7 @@ func (a *App) runM5Scenario(ctx context.Context, env *E2EEnvironment) error {
 	}); err != nil {
 		return err
 	}
-	activeR2, err := client.JSON(ctx, "m5-card-active-r2", "enterprise", http.MethodGet, "/enterprise/interactive-cards/"+cardID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	activeR2, err := client.JSON(ctx, "m5-card-active-r2", "enterprise", http.MethodGet, "/enterprise/interactive-cards/"+cardID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -87,7 +86,7 @@ func (a *App) runM5Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if err := a.verifyM5ActionBinding(ctx, env); err != nil {
 		return err
 	}
-	current, err := client.JSON(ctx, "m5-card-current", "enterprise", http.MethodGet, "/enterprise/interactive-cards/"+cardID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	current, err := client.JSON(ctx, "m5-card-current", "enterprise", http.MethodGet, "/enterprise/interactive-cards/"+cardID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -188,7 +187,7 @@ func (a *App) verifyM5ActionBinding(ctx context.Context, env *E2EEnvironment) er
 		return fmt.Errorf("M5 consumed Card Action Binding returned %v", consumed["code"])
 	}
 	approved, err := client.JSON(ctx, "m5-approve", "m4-approver", http.MethodPost, "/enterprise/approval-requests/"+approvalID+"/decisions", http.StatusOK,
-		map[string]any{"decision": "approved", "reason": "independent M5 Card approval"}, map[string]string{"Origin": enterpriseOrigin, "X-CSRF-Token": env.State.Values["m4_approver_csrf"], "Idempotency-Key": "m5-approve-" + env.Options.RunID})
+		map[string]any{"decision": "approved", "reason": "independent M5 Card approval"}, map[string]string{"Origin": env.EnterpriseOrigin(), "X-CSRF-Token": env.State.Values["m4_approver_csrf"], "Idempotency-Key": "m5-approve-" + env.Options.RunID})
 	if err != nil {
 		return err
 	}
@@ -227,7 +226,7 @@ func (a *App) verifyM5SystemCatalog(ctx context.Context, env *E2EEnvironment) (s
 		return "", fmt.Errorf("M5 system Card catalog sync changed an already synchronized catalog")
 	}
 	client, _ := scenarioHTTP(env)
-	cards, err := client.JSON(ctx, "m5-system-cards", "enterprise", http.MethodGet, "/enterprise/interactive-cards", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	cards, err := client.JSON(ctx, "m5-system-cards", "enterprise", http.MethodGet, "/enterprise/interactive-cards", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return "", err
 	}
@@ -302,14 +301,8 @@ func (a *App) verifyM5QueryBindingInvalidation(ctx context.Context, env *E2EEnvi
 	if _, err := client.JSON(ctx, "m5-query-replay", "enterprise", http.MethodPost, "/enterprise/card-query-bindings/"+bindingID+"/invoke", http.StatusOK, nil, enterpriseHeaders(env, "m5-query")); err != nil {
 		return err
 	}
-	scope, err := client.JSON(ctx, "m5-auth-change-scope", "enterprise", http.MethodPost, "/enterprise/data-scopes", http.StatusCreated,
-		map[string]any{"name": "M5 authorization invalidation", "resource_types": []string{"host"}, "explicit_resource_ids": []string{}, "label_selector": map[string]any{"schema_version": "argus.label_selector/v1", "requirements": []any{map[string]any{"key": "team", "operator": "eq", "values": []string{"m5"}}}}}, enterpriseHeaders(env, "m5-auth-scope"))
-	if err != nil {
-		return err
-	}
-	scopeID, _ := stringField(scope, "id")
 	if _, err := client.JSON(ctx, "m5-auth-change-binding", "enterprise", http.MethodPost, "/enterprise/role-bindings", http.StatusCreated,
-		map[string]any{"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "role_id": env.State.Values["m4_resource_viewer_role_id"], "data_scope_ids": []string{scopeID}}, enterpriseHeaders(env, "m5-auth-binding")); err != nil {
+		map[string]any{"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "role_id": env.State.Values["m4_resource_viewer_role_id"]}, enterpriseHeaders(env, "m5-auth-binding")); err != nil {
 		return err
 	}
 	if err := a.refreshEnterpriseLogin(ctx, env); err != nil {
@@ -387,43 +380,17 @@ func (a *App) verifyM5Recovery(ctx context.Context, env *E2EEnvironment, cardID 
 	if _, err := env.Kube.Exec(ctx, env.SystemNS, "app.kubernetes.io/name=argus-redis", "redis", "redis-cli", "-a", password, "FLUSHALL"); err != nil {
 		return err
 	}
-	if len(env.Forwards) == 0 {
-		return fmt.Errorf("M5 API port-forward is unavailable")
-	}
-	_ = env.Forwards[0].Stop()
 	if err := env.Kube.DeletePods(ctx, env.SystemNS, "app.kubernetes.io/name=argus-server"); err != nil {
 		return err
 	}
 	if err := env.Kube.WaitDeployment(ctx, env.SystemNS, "argus-server", 5*time.Minute); err != nil {
 		return err
 	}
-	deadline := time.Now().Add(2 * time.Minute)
-	var forward *KubeForward
-	for time.Now().Before(deadline) {
-		log, openErr := openArtifact(filepath.Join(env.Options.Artifacts, "port-forward-api-recovered.log"))
-		if openErr != nil {
-			return openErr
-		}
-		forward, err = env.Kube.PortForwardService(ctx, env.SystemNS, "argus-server", []string{"4180:8080"}, log)
-		if err == nil {
-			break
-		}
-		_ = log.Close()
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(2 * time.Second):
-		}
-	}
-	if forward == nil {
-		return fmt.Errorf("M5 API port-forward did not recover: %w", err)
-	}
-	env.Forwards[0] = forward
-	if err := waitHTTP(ctx, "http://127.0.0.1:4180/readyz", "", 2*time.Minute); err != nil {
-		return err
+	if err := waitHTTPSReady(ctx, env.Endpoints.HTTPClient(), env.Endpoints.PlatformOrigin+"/readyz", "ready", 2*time.Minute); err != nil {
+		return fmt.Errorf("M5 API through ingress did not recover: %w", err)
 	}
 	client, _ := scenarioHTTP(env)
-	card, err := client.JSON(ctx, "m5-recovered-card", "enterprise", http.MethodGet, "/enterprise/interactive-cards/"+cardID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	card, err := client.JSON(ctx, "m5-recovered-card", "enterprise", http.MethodGet, "/enterprise/interactive-cards/"+cardID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}

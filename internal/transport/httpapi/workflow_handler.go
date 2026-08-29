@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -176,12 +175,8 @@ func workflowPolicyInput(value workflowapi.ApprovalPolicyWrite) actionservice.Po
 	if value.ExpiresAfterSeconds != nil {
 		expires = int32(*value.ExpiresAfterSeconds)
 	}
-	selector, _ := json.Marshal(value.LabelSelector)
-	if value.LabelSelector == nil {
-		selector = nil
-	}
 	return actionservice.PolicyInput{Name: value.Name, Enabled: value.Enabled, ToolIDs: value.ToolIds, Risks: risks,
-		ResourceTypes: value.ResourceTypes, LabelSelector: selector, MinimumApprovers: int32(value.MinimumApprovers),
+		ResourceTypes: value.ResourceTypes, MinimumApprovers: int32(value.MinimumApprovers),
 		SeparationOfDuty: value.SeparationOfDuty, ApproverRoleIDs: value.ApproverRoleIds, ExpiresAfterSeconds: expires,
 		ExpectedVersion: value.ExpectedVersion}
 }
@@ -197,12 +192,6 @@ func toWorkflowPolicy(value db.ApprovalPolicy) workflowapi.ApprovalPolicy {
 	if value.ExpiresAfterSeconds > 0 {
 		expires := int(value.ExpiresAfterSeconds)
 		result.ExpiresAfterSeconds = &expires
-	}
-	if len(value.LabelSelector) > 0 {
-		var selector workflowapi.LabelSelector
-		if json.Unmarshal(value.LabelSelector, &selector) == nil {
-			result.LabelSelector = &selector
-		}
 	}
 	return result
 }

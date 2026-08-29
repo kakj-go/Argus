@@ -18,7 +18,7 @@ func (a *App) runM4Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if err != nil {
 		return err
 	}
-	roles, err := client.JSON(ctx, "m4-roles", "enterprise", http.MethodGet, "/enterprise/roles", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	roles, err := client.JSON(ctx, "m4-roles", "enterprise", http.MethodGet, "/enterprise/roles", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -45,14 +45,8 @@ func (a *App) runM4Scenario(ctx context.Context, env *E2EEnvironment) error {
 		return err
 	}
 	approverRoleID, _ := stringField(resourceApprover, "id")
-	scope, err := client.JSON(ctx, "m4-admin-scope", "enterprise", http.MethodPost, "/enterprise/data-scopes", http.StatusCreated,
-		map[string]any{"name": "M4 managed resources", "resource_types": []string{"host", "kubernetes_cluster", "kubernetes_namespace"}, "explicit_resource_ids": []string{}, "label_selector": map[string]any{"schema_version": "argus.label_selector/v1", "requirements": []any{map[string]any{"key": "team", "operator": "eq", "values": []string{"m4"}}}}}, enterpriseHeaders(env, "m4-admin-scope"))
-	if err != nil {
-		return err
-	}
-	scopeID, _ := stringField(scope, "id")
 	if _, err := client.JSON(ctx, "m4-admin-binding", "enterprise", http.MethodPost, "/enterprise/role-bindings", http.StatusCreated,
-		map[string]any{"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "role_id": roleID, "data_scope_ids": []string{scopeID}}, enterpriseHeaders(env, "m4-admin-binding")); err != nil {
+		map[string]any{"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "role_id": roleID}, enterpriseHeaders(env, "m4-admin-binding")); err != nil {
 		return err
 	}
 	if err := a.refreshEnterpriseLogin(ctx, env); err != nil {
@@ -110,7 +104,7 @@ func (a *App) runM4Scenario(ctx context.Context, env *E2EEnvironment) error {
 		return err
 	}
 	env.State.Values["m4_host_id"] = hostID
-	host, err := client.JSON(ctx, "m4-host", "enterprise", http.MethodGet, "/enterprise/hosts/"+hostID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	host, err := client.JSON(ctx, "m4-host", "enterprise", http.MethodGet, "/enterprise/hosts/"+hostID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -162,7 +156,7 @@ func (a *App) verifyM4Approval(ctx context.Context, env *E2EEnvironment, hostID 
 		return err
 	}
 	login, err := client.JSON(ctx, "m4-approver-login", "m4-approver", http.MethodPost, "/enterprise/auth/login", http.StatusOK,
-		map[string]any{"username": "m4-approver", "password": temporaryPassword}, map[string]string{"Origin": enterpriseOrigin})
+		map[string]any{"username": "m4-approver", "password": temporaryPassword}, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -172,7 +166,7 @@ func (a *App) verifyM4Approval(ctx context.Context, env *E2EEnvironment, hostID 
 	}
 	newPassword := "Q8!mV4@rT7#pL2$x"
 	completed, err := client.JSON(ctx, "m4-approver-password", "m4-approver", http.MethodPost, "/enterprise/auth/complete-password-change", http.StatusOK,
-		map[string]any{"challenge_id": challengeID, "temporary_password": temporaryPassword, "new_password": newPassword}, map[string]string{"Origin": enterpriseOrigin})
+		map[string]any{"challenge_id": challengeID, "temporary_password": temporaryPassword, "new_password": newPassword}, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -205,7 +199,7 @@ func (a *App) verifyM4Approval(ctx context.Context, env *E2EEnvironment, hostID 
 		return fmt.Errorf("M4 host update did not enter approval")
 	}
 	approved, err := client.JSON(ctx, "m4-approve", "m4-approver", http.MethodPost, "/enterprise/approval-requests/"+approvalID+"/decisions", http.StatusOK,
-		map[string]any{"decision": "approved", "reason": "independent M4 approval"}, map[string]string{"Origin": enterpriseOrigin, "X-CSRF-Token": approverCSRF, "Idempotency-Key": "m4-approve-" + env.Options.RunID})
+		map[string]any{"decision": "approved", "reason": "independent M4 approval"}, map[string]string{"Origin": env.EnterpriseOrigin(), "X-CSRF-Token": approverCSRF, "Idempotency-Key": "m4-approve-" + env.Options.RunID})
 	if err != nil {
 		return err
 	}
@@ -232,7 +226,7 @@ func (a *App) refreshM4ApproverLogin(ctx context.Context, env *E2EEnvironment) e
 	}
 	client.Reset("m4-approver")
 	login, err := client.JSON(ctx, "m4-approver-login-refresh", "m4-approver", http.MethodPost, "/enterprise/auth/login", http.StatusOK,
-		map[string]any{"username": "m4-approver", "password": env.State.Values["m4_approver_password"]}, map[string]string{"Origin": enterpriseOrigin})
+		map[string]any{"username": "m4-approver", "password": env.State.Values["m4_approver_password"]}, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -246,7 +240,7 @@ func (a *App) refreshM4ApproverLogin(ctx context.Context, env *E2EEnvironment) e
 
 func (a *App) verifyM4Compaction(ctx context.Context, env *E2EEnvironment, conversationID, runID string) error {
 	client, _ := scenarioHTTP(env)
-	ledger, err := client.JSON(ctx, "m4-ledger", "enterprise", http.MethodGet, "/conversations/"+conversationID+"/ledger", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	ledger, err := client.JSON(ctx, "m4-ledger", "enterprise", http.MethodGet, "/conversations/"+conversationID+"/ledger", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -308,7 +302,7 @@ func (a *App) verifyM4OneTimeResult(ctx context.Context, env *E2EEnvironment) er
 	if err := a.refreshEnterpriseLogin(ctx, env); err != nil {
 		return err
 	}
-	execution, err := client.JSON(ctx, "m4-enrollment-execution", "enterprise", http.MethodGet, "/enterprise/executions/"+executionID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	execution, err := client.JSON(ctx, "m4-enrollment-execution", "enterprise", http.MethodGet, "/enterprise/executions/"+executionID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -354,7 +348,7 @@ func (a *App) waitRunTerminal(ctx context.Context, env *E2EEnvironment, runID st
 	client, _ := scenarioHTTP(env)
 	deadline := time.Now().Add(2 * time.Minute)
 	for time.Now().Before(deadline) {
-		run, err := client.JSON(ctx, "run-"+runID, "enterprise", http.MethodGet, "/runs/"+runID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+		run, err := client.JSON(ctx, "run-"+runID, "enterprise", http.MethodGet, "/runs/"+runID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 		if err != nil {
 			return err
 		}
@@ -383,7 +377,7 @@ func (a *App) createM4Host(ctx context.Context, env *E2EEnvironment) (string, er
 
 func (a *App) createM4Sandbox(ctx context.Context, env *E2EEnvironment) error {
 	client, _ := scenarioHTTP(env)
-	headers := map[string]string{"Origin": platformOrigin, "X-CSRF-Token": env.State.Values["platform_csrf"], "Idempotency-Key": "m4-sandbox-" + env.Options.RunID}
+	headers := map[string]string{"Origin": env.PlatformOrigin(), "X-CSRF-Token": env.State.Values["platform_csrf"], "Idempotency-Key": "m4-sandbox-" + env.Options.RunID}
 	backend, err := client.JSON(ctx, "m4-sandbox-backend", "platform", http.MethodPost, "/platform/sandbox/backends", http.StatusCreated,
 		map[string]any{"name": "M4 OpenSandbox", "endpoint": "http://argus-replay-model." + env.SandboxNS + ".svc:8081/sandbox", "api_key": "write-only", "status": "enabled", "expected_version": 0}, headers)
 	if err != nil {
@@ -414,7 +408,7 @@ func (a *App) createM4Sandbox(ctx context.Context, env *E2EEnvironment) error {
 	if err != nil {
 		return err
 	}
-	quotaHeaders := map[string]string{"Origin": platformOrigin, "X-CSRF-Token": env.State.Values["platform_csrf"]}
+	quotaHeaders := map[string]string{"Origin": env.PlatformOrigin(), "X-CSRF-Token": env.State.Values["platform_csrf"]}
 	if _, err := client.JSON(ctx, "m4-sandbox-quota", "platform", http.MethodPut, "/platform/sandbox/enterprise-quotas/"+env.State.Values["enterprise_id"], http.StatusOK,
 		map[string]any{"max_concurrent_sessions": 1, "monthly_session_seconds": 600, "expected_version": 0}, quotaHeaders); err != nil {
 		return err
@@ -426,7 +420,7 @@ func (a *App) createM4Sandbox(ctx context.Context, env *E2EEnvironment) error {
 	var sessionID string
 	deadline := time.Now().Add(time.Minute)
 	for time.Now().Before(deadline) {
-		sessions, err := client.JSONArray(ctx, "m4-sandbox-sessions", "platform", http.MethodGet, "/platform/sandbox/sessions", http.StatusOK, nil, map[string]string{"Origin": platformOrigin})
+		sessions, err := client.JSONArray(ctx, "m4-sandbox-sessions", "platform", http.MethodGet, "/platform/sandbox/sessions", http.StatusOK, nil, map[string]string{"Origin": env.PlatformOrigin()})
 		if err != nil {
 			return err
 		}
@@ -457,7 +451,7 @@ func (a *App) createM4Sandbox(ctx context.Context, env *E2EEnvironment) error {
 	if terminated["status"] != "terminated" {
 		return fmt.Errorf("M4 Sandbox session ended as %v", terminated["status"])
 	}
-	usage, err := client.JSONArray(ctx, "m4-sandbox-usage", "platform", http.MethodGet, "/platform/sandbox/usage", http.StatusOK, nil, map[string]string{"Origin": platformOrigin})
+	usage, err := client.JSONArray(ctx, "m4-sandbox-usage", "platform", http.MethodGet, "/platform/sandbox/usage", http.StatusOK, nil, map[string]string{"Origin": env.PlatformOrigin()})
 	if err != nil {
 		return err
 	}
@@ -512,7 +506,7 @@ func (a *App) verifyM4ModelQuota(ctx context.Context, env *E2EEnvironment) error
 	}
 	deadline := time.Now().Add(time.Minute)
 	for time.Now().Before(deadline) {
-		run, err := client.JSON(ctx, "m4-quota-run", "enterprise", http.MethodGet, "/runs/"+runID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+		run, err := client.JSON(ctx, "m4-quota-run", "enterprise", http.MethodGet, "/runs/"+runID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 		if err != nil {
 			return err
 		}

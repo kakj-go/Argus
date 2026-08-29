@@ -439,11 +439,6 @@ kbd,
   display: flex;
   justify-content: flex-end;
 }
-.argus-row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-px-2);
-}
 .argus-cell-with-badge {
   display: inline-flex;
   align-items: center;

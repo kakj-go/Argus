@@ -5,25 +5,29 @@ import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import type {
+  RemoteAccessGrant,
+  RemoteAccessGrantUpdate,
   RemoteAccessGrantWrite,
-  RemoteAccessPolicyWrite,
 } from "@argus/api-client";
 import { formConstraint, presentApiFormError, useApi } from "@argus/api-client";
 import {
   Alert,
   Button,
   CheckItem,
-  DataTable,
   DateTimePicker,
   EmptyState,
   Field,
   FormDrawer,
-  Input,
   Select,
-  StatusBadge,
-  Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from "@argus/ui";
-import { roleDisplayName } from "../../lib/role-presentation";
+import { SessionProfilesTab } from "./remote-access/session-profiles-tab";
+import { RulesTab } from "./remote-access/rules-tab";
+import { WorkflowsTab } from "./remote-access/workflows-tab";
+import { GovernanceList } from "./remote-access/governance-list";
 
 type Option = { value: string; label: string };
 type GrantForm = {
@@ -34,24 +38,10 @@ type GrantForm = {
   protocol: "ssh" | "winrs";
   valid_until: string;
 };
-type PolicyForm = {
-  name: string;
-  approver_role_ids: string[];
-  minimum_approvals: number;
-  require_mfa: boolean;
-};
 
 const grantConstraints = {
   accounts: formConstraint("RemoteAccessGrantWrite", "managed_account_ids"),
   hosts: formConstraint("RemoteAccessGrantWrite", "host_ids"),
-};
-const remotePolicyConstraints = {
-  approverRoles: formConstraint("RemoteAccessPolicyWrite", "approver_role_ids"),
-  minimumApprovals: formConstraint(
-    "RemoteAccessPolicyWrite",
-    "minimum_approvals",
-  ),
-  name: formConstraint("RemoteAccessPolicyWrite", "name"),
 };
 
 function OptionChecklist({
@@ -100,17 +90,13 @@ function OptionChecklist({
   );
 }
 
-export function OrgRemoteAccessTab() {
+export function GrantsTab() {
   const { t } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
   const grants = useQuery({
     queryKey: ["remote-access", "grants"],
     queryFn: () => api.remoteAccess.listGrants(),
-  });
-  const policies = useQuery({
-    queryKey: ["remote-access", "policies"],
-    queryFn: () => api.remoteAccess.listPolicies(),
   });
   const users = useQuery({
     queryKey: ["org", "users"],
@@ -119,10 +105,6 @@ export function OrgRemoteAccessTab() {
   const departments = useQuery({
     queryKey: ["org", "departments"],
     queryFn: () => api.org.listDepartments(),
-  });
-  const roles = useQuery({
-    queryKey: ["org", "roles"],
-    queryFn: () => api.org.listRoles(),
   });
   const hosts = useQuery({
     queryKey: ["hosts", "remote-access-options"],
@@ -133,22 +115,17 @@ export function OrgRemoteAccessTab() {
     queryFn: () => api.secrets.listManagedAccounts(),
   });
   const [grantOpen, setGrantOpen] = useState(false);
-  const [policyOpen, setPolicyOpen] = useState(false);
+  const [selectedGrant, setSelectedGrant] = useState<RemoteAccessGrant | null>(null);
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["remote-access"] });
   const createGrant = useMutation({
-    mutationFn: (input: RemoteAccessGrantWrite) =>
-      api.remoteAccess.createGrant(input),
+    mutationFn: (input: RemoteAccessGrantWrite | RemoteAccessGrantUpdate) =>
+      selectedGrant
+        ? api.remoteAccess.updateGrant(selectedGrant.id, input as RemoteAccessGrantUpdate)
+        : api.remoteAccess.createGrant(input as RemoteAccessGrantWrite),
     onSuccess: () => {
       setGrantOpen(false);
-      void invalidate();
-    },
-  });
-  const createPolicy = useMutation({
-    mutationFn: (input: RemoteAccessPolicyWrite) =>
-      api.remoteAccess.createPolicy(input),
-    onSuccess: () => {
-      setPolicyOpen(false);
+      setSelectedGrant(null);
       void invalidate();
     },
   });
@@ -164,10 +141,6 @@ export function OrgRemoteAccessTab() {
     value: item.id,
     label: item.name,
   }));
-  const roleOptions = (roles.data ?? []).map((item) => ({
-    value: item.id,
-    label: roleDisplayName(item, t),
-  }));
   const hostOptions = (hosts.data?.items ?? []).map((item) => ({
     value: item.id,
     label: item.name,
@@ -179,6 +152,17 @@ export function OrgRemoteAccessTab() {
   const lookup = (options: Option[], id: string) =>
     options.find((item) => item.value === id)?.label ??
     t("remoteAccess.unavailableReference");
+  const items = (grants.data?.items ?? []).map((row) => ({
+    ...row,
+    name: lookup(
+      row.subject_type === "user" ? userOptions : departmentOptions,
+      row.subject_id,
+    ),
+  }));
+  const lifecycle = async (operation: (id: string) => Promise<unknown>, id: string) => {
+    await operation(id);
+    await invalidate();
+  };
 
   return (
     <div className="argus-settings-section">
@@ -186,24 +170,15 @@ export function OrgRemoteAccessTab() {
         <h2 className="argus-settings-section__title">
           {t("remoteAccess.grants")}
         </h2>
-        <Button onClick={() => setGrantOpen(true)} size="sm" variant="primary">
+        <Button onClick={() => { setSelectedGrant(null); setGrantOpen(true); }} size="sm" variant="primary">
           {t("remoteAccess.newGrant")}
         </Button>
       </div>
       {(grants.data?.items.length ?? 0) === 0 ? (
         <EmptyState description="" title={t("remoteAccess.noGrants")} />
       ) : (
-        <DataTable
-          columns={[
-            {
-              key: "subject",
-              header: t("remoteAccess.subject"),
-              render: (row) =>
-                lookup(
-                  row.subject_type === "user" ? userOptions : departmentOptions,
-                  row.subject_id,
-                ),
-            },
+        <GovernanceList
+          extraColumns={[
             {
               key: "hosts",
               header: t("remoteAccess.hosts"),
@@ -229,135 +204,47 @@ export function OrgRemoteAccessTab() {
               header: t("remoteAccess.validUntil"),
               render: (row) => new Date(row.valid_until).toLocaleString(),
             },
-            {
-              key: "enabled",
-              header: t("remoteAccess.status"),
-              render: (row) => (
-                <StatusBadge tone={row.enabled ? "success" : "neutral"}>
-                  {t(
-                    row.enabled
-                      ? "remoteAccess.enabled"
-                      : "remoteAccess.disabled",
-                  )}
-                </StatusBadge>
-              ),
-            },
-            {
-              key: "actions",
-              header: t("remoteAccess.actions"),
-              render: (row) =>
-                row.enabled ? (
-                  <Button
-                    onClick={() =>
-                      void api.remoteAccess
-                        .disableGrant(row.id)
-                        .then(invalidate)
-                    }
-                    size="sm"
-                    variant="danger"
-                  >
-                    {t("remoteAccess.disable")}
-                  </Button>
-                ) : null,
-            },
           ]}
-          data={grants.data?.items ?? []}
-          getRowKey={(row) => row.id}
+          items={items}
+          onArchive={(id) => lifecycle(api.remoteAccess.archiveGrant, id)}
+          onDisable={(id) => lifecycle(api.remoteAccess.disableGrant, id)}
+          onEdit={(row) => { setSelectedGrant(row); setGrantOpen(true); }}
+          onEnable={(id) => lifecycle(api.remoteAccess.enableGrant, id)}
+          onRestore={(id) => lifecycle(api.remoteAccess.restoreGrant, id)}
+          references={api.remoteAccess.getGrantReferences}
         />
       )}
 
-      <div className="argus-settings-section__head">
-        <h2 className="argus-settings-section__title">
-          {t("remoteAccess.policies")}
-        </h2>
-        <Button onClick={() => setPolicyOpen(true)} size="sm" variant="primary">
-          {t("remoteAccess.newPolicy")}
-        </Button>
-      </div>
-      {(policies.data?.items.length ?? 0) === 0 ? (
-        <EmptyState description="" title={t("remoteAccess.noPolicies")} />
-      ) : (
-        <DataTable
-          columns={[
-            { key: "name", header: t("remoteAccess.name") },
-            {
-              key: "approver_role_ids",
-              header: t("remoteAccess.approverRoles"),
-              render: (row) =>
-                (row.approver_role_ids ?? [])
-                  .map((id) => lookup(roleOptions, id))
-                  .join(", "),
-            },
-            { key: "minimum_approvals", header: t("remoteAccess.approvals") },
-            {
-              key: "require_mfa",
-              header: t("remoteAccess.mfa"),
-              render: (row) =>
-                row.require_mfa
-                  ? t("remoteAccess.mfaRequiredM8")
-                  : t("remoteAccess.no"),
-            },
-            {
-              key: "duration",
-              header: t("remoteAccess.limits"),
-              render: (row) =>
-                `${row.idle_timeout_seconds}s / ${row.max_session_seconds}s`,
-            },
-            {
-              key: "enabled",
-              header: t("remoteAccess.status"),
-              render: (row) => (
-                <StatusBadge tone={row.enabled ? "success" : "neutral"}>
-                  {t(
-                    row.enabled
-                      ? "remoteAccess.enabled"
-                      : "remoteAccess.disabled",
-                  )}
-                </StatusBadge>
-              ),
-            },
-            {
-              key: "actions",
-              header: t("remoteAccess.actions"),
-              render: (row) =>
-                row.enabled ? (
-                  <Button
-                    onClick={() =>
-                      void api.remoteAccess
-                        .disablePolicy(row.id)
-                        .then(invalidate)
-                    }
-                    size="sm"
-                    variant="danger"
-                  >
-                    {t("remoteAccess.disable")}
-                  </Button>
-                ) : null,
-            },
-          ]}
-          data={policies.data?.items ?? []}
-          getRowKey={(row) => row.id}
-        />
-      )}
       <GrantDrawer
         accountOptions={accountOptions}
         departmentOptions={departmentOptions}
         hostOptions={hostOptions}
         loading={createGrant.isPending}
-        onOpenChange={setGrantOpen}
+        onOpenChange={(open) => { setGrantOpen(open); if (!open) setSelectedGrant(null); }}
         onSubmit={(value) => createGrant.mutateAsync(value)}
         open={grantOpen}
+        grant={selectedGrant}
         userOptions={userOptions}
-      />
-      <PolicyDrawer
-        loading={createPolicy.isPending}
-        onOpenChange={setPolicyOpen}
-        onSubmit={(value) => createPolicy.mutateAsync(value)}
-        open={policyOpen}
-        roleOptions={roleOptions}
       />
     </div>
   );
+}
+
+export function OrgRemoteAccessTab() {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState("grants");
+  return <Tabs onValueChange={setTab} value={tab}>
+    <TabsList>
+      <TabsTrigger value="grants">{t("remoteAccess.tabs.grants")}</TabsTrigger>
+      <TabsTrigger value="rules">{t("remoteAccess.tabs.rules")}</TabsTrigger>
+      <TabsTrigger value="workflows">{t("remoteAccess.tabs.workflows")}</TabsTrigger>
+      <TabsTrigger value="profiles">{t("remoteAccess.tabs.profiles")}</TabsTrigger>
+    </TabsList>
+    <TabsContent value="grants"><GrantsTab /></TabsContent>
+    <TabsContent value="rules"><RulesTab /></TabsContent>
+    <TabsContent value="workflows"><WorkflowsTab /></TabsContent>
+    <TabsContent value="profiles"><SessionProfilesTab /></TabsContent>
+  </Tabs>;
 }
 
 function GrantDrawer({
@@ -369,15 +256,17 @@ function GrantDrawer({
   departmentOptions,
   hostOptions,
   accountOptions,
+  grant,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
-  onSubmit(input: RemoteAccessGrantWrite): Promise<unknown>;
+  onSubmit(input: RemoteAccessGrantWrite | RemoteAccessGrantUpdate): Promise<unknown>;
   loading: boolean;
   userOptions: Option[];
   departmentOptions: Option[];
   hostOptions: Option[];
   accountOptions: Option[];
+  grant: RemoteAccessGrant | null;
 }) {
   const { t } = useTranslation();
   const schema = useMemo(
@@ -425,28 +314,32 @@ function GrantDrawer({
   useEffect(() => {
     if (open)
       reset({
-        subject_type: "user",
-        subject_id: "",
-        host_ids: [],
-        account_ids: [],
-        protocol: "ssh",
-        valid_until: "",
+        subject_type: grant?.subject_type ?? "user",
+        subject_id: grant?.subject_id ?? "",
+        host_ids: grant?.host_ids ?? [],
+        account_ids: grant?.managed_account_ids ?? [],
+        protocol: grant?.protocols[0] ?? "ssh",
+        valid_until: grant ? new Date(grant.valid_until).toISOString().slice(0, 16) : "",
       });
-  }, [open, reset]);
-  const submit = handleSubmit(async (value) => {
+  }, [grant, open, reset]);
+  const submit = handleSubmit(async (formValue) => {
     clearErrors();
     try {
-      await onSubmit({
-        subject_type: value.subject_type,
-        subject_id: value.subject_id,
-        host_ids: value.host_ids,
-        managed_account_ids: value.account_ids,
-        protocols: [value.protocol],
-        actions: ["terminal"],
-        valid_from: new Date().toISOString(),
-        valid_until: new Date(value.valid_until).toISOString(),
-        enabled: true,
-      });
+      const input = {
+        subject_type: formValue.subject_type,
+        subject_id: formValue.subject_id,
+        host_ids: formValue.host_ids,
+        managed_account_ids: formValue.account_ids,
+        protocols: [formValue.protocol],
+        actions: ["terminal" as const],
+        valid_from: grant?.valid_from ?? new Date().toISOString(),
+        valid_until: new Date(formValue.valid_until).toISOString(),
+      };
+      await onSubmit(
+        grant
+          ? { ...input, expected_version: grant.version }
+          : { ...input, status: "draft" } satisfies RemoteAccessGrantWrite,
+      );
     } catch (error) {
       presentApiFormError(error, {
         fallback: t("settings.common.saveFailed"),
@@ -474,8 +367,8 @@ function GrantDrawer({
       onOpenChange={onOpenChange}
       onSubmit={submit}
       open={open}
-      submitLabel={t("remoteAccess.create")}
-      title={t("remoteAccess.newGrant")}
+      submitLabel={grant ? t("remoteAccess.save") : t("remoteAccess.create")}
+      title={grant ? t("remoteAccess.edit") : t("remoteAccess.newGrant")}
     >
       {errors.root?.message && (
         <Alert
@@ -592,175 +485,6 @@ function GrantDrawer({
           )}
         />
       </Field>
-    </FormDrawer>
-  );
-}
-
-function PolicyDrawer({
-  open,
-  onOpenChange,
-  onSubmit,
-  loading,
-  roleOptions,
-}: {
-  open: boolean;
-  onOpenChange(open: boolean): void;
-  onSubmit(input: RemoteAccessPolicyWrite): Promise<unknown>;
-  loading: boolean;
-  roleOptions: Option[];
-}) {
-  const { t } = useTranslation();
-  const schema = useMemo(
-    () =>
-      z.object({
-        name: z
-          .string()
-          .trim()
-          .min(
-            remotePolicyConstraints.name.minLength ?? 1,
-            t("remoteAccess.required"),
-          )
-          .max(remotePolicyConstraints.name.maxLength ?? 128),
-        approver_role_ids: z
-          .array(z.string())
-          .min(1, t("remoteAccess.selectAtLeastOne"))
-          .max(remotePolicyConstraints.approverRoles.maxItems ?? 64),
-        minimum_approvals: z
-          .number()
-          .int()
-          .min(remotePolicyConstraints.minimumApprovals.minimum ?? 1)
-          .max(remotePolicyConstraints.minimumApprovals.maximum ?? 16),
-        require_mfa: z.boolean(),
-      }),
-    [t],
-  );
-  const {
-    clearErrors,
-    control,
-    register,
-    handleSubmit,
-    reset,
-    setError,
-    formState: { errors },
-  } = useForm<PolicyForm>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      name: "",
-      approver_role_ids: [],
-      minimum_approvals: 1,
-      require_mfa: false,
-    },
-  });
-  useEffect(() => {
-    if (open)
-      reset({
-        name: "",
-        approver_role_ids: [],
-        minimum_approvals: 1,
-        require_mfa: false,
-      });
-  }, [open, reset]);
-  const submit = handleSubmit(async (value) => {
-    clearErrors();
-    try {
-      await onSubmit({
-        name: value.name.trim(),
-        enabled: true,
-        priority: 100,
-        protocols: ["ssh", "winrs"],
-        approver_role_ids: value.approver_role_ids,
-        minimum_approvals: value.minimum_approvals,
-        separation_of_duties: true,
-        require_mfa: value.require_mfa,
-        max_session_seconds: 3600,
-        idle_timeout_seconds: 900,
-      });
-    } catch (error) {
-      presentApiFormError(error, {
-        fallback: t("settings.common.saveFailed"),
-        fieldMap: {
-          approver_role_ids: "approver_role_ids",
-          minimum_approvals: "minimum_approvals",
-          name: "name",
-          require_mfa: "require_mfa",
-        },
-        requestReference: (requestId) =>
-          t("common.requestReference", { requestId }),
-        setFieldError: (field, message) =>
-          setError(field, { message, type: "server" }, { shouldFocus: true }),
-        setFormError: (message) =>
-          setError("root", { message, type: "server" }),
-      });
-    }
-  });
-  return (
-    <FormDrawer
-      description={t("remoteAccess.policyDescription")}
-      loading={loading}
-      onOpenChange={onOpenChange}
-      onSubmit={submit}
-      open={open}
-      submitLabel={t("remoteAccess.create")}
-      title={t("remoteAccess.newPolicy")}
-    >
-      {errors.root?.message && (
-        <Alert
-          description={errors.root.message}
-          title={t("settings.common.saveFailed")}
-          tone="danger"
-        />
-      )}
-      <Field
-        requirement="required"
-        error={errors.name?.message}
-        label={t("remoteAccess.name")}
-      >
-        <Input
-          {...register("name")}
-          maxLength={remotePolicyConstraints.name.maxLength}
-        />
-      </Field>
-      <Field
-        requirement="required"
-        error={errors.approver_role_ids?.message}
-        label={t("remoteAccess.approverRoles")}
-      >
-        <Controller
-          control={control}
-          name="approver_role_ids"
-          render={({ field }) => (
-            <OptionChecklist
-              emptyLabel={t("remoteAccess.noSelectableRoles")}
-              onChange={field.onChange}
-              options={roleOptions}
-              value={field.value}
-            />
-          )}
-        />
-      </Field>
-      <Field
-        requirement="required"
-        error={errors.minimum_approvals?.message}
-        label={t("remoteAccess.minimumApprovals")}
-      >
-        <Input
-          {...register("minimum_approvals", { valueAsNumber: true })}
-          max={remotePolicyConstraints.minimumApprovals.maximum}
-          min={remotePolicyConstraints.minimumApprovals.minimum}
-          type="number"
-        />
-      </Field>
-      <Controller
-        control={control}
-        name="require_mfa"
-        render={({ field }) => (
-          <Switch
-            checked={field.value}
-            label={t("remoteAccess.requireMfa")}
-            onChange={field.onChange}
-          />
-        )}
-      />
     </FormDrawer>
   );
 }

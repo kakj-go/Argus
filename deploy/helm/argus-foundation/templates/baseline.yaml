@@ -54,6 +54,13 @@ spec:
         - namespaceSelector:
             matchLabels:
               app.kubernetes.io/part-of: argus
+        {{- if eq $key "system" }}
+        # Domain-based exposure routes through an ingress controller that lives
+        # outside the Argus namespaces; admit it for the web/session edge.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Values.network.ingressControllerNamespace | default "ingress-nginx" }}
+        {{- end }}
   egress:
     - to:
         - namespaceSelector:

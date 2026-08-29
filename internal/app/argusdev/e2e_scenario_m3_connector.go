@@ -66,9 +66,16 @@ func (a *App) startM3BastionConnector(ctx context.Context, env *E2EEnvironment) 
 		return err
 	}
 	dataDir := filepath.Join(env.WorkDir, "m3-bastion-connector")
-	server := "http://127.0.0.1:4180"
+	server := env.Endpoints.EnrollServer
 	baseArgs := []string{"enroll", "--connector-id", command.ConnectorID, "--token", command.Token, "--server", server, "--role", command.Role, "--name", "m3-bastion", "--data-dir"}
-	instanceEnv := map[string]string{"ARGUS_CONNECTOR_INSTANCE_ID": "m3-bastion-" + env.Options.RunID}
+	instanceEnv := map[string]string{
+		"ARGUS_CONNECTOR_INSTANCE_ID": "m3-bastion-" + env.Options.RunID,
+		// E2E-only host overrides: dial the load balancers directly while TLS
+		// keeps the public hostnames as ServerName.
+		"ARGUS_CONNECTOR_CA_FILE":        env.Endpoints.CAFile,
+		"ARGUS_CONNECTOR_DIAL_ADDRESS":   env.Endpoints.ConnectorIP + ":9443",
+		"ARGUS_CONNECTOR_ENROLL_ADDRESS": env.Endpoints.IngressIP + ":443",
+	}
 	var tampered bytes.Buffer
 	tamperedArgs := append(append([]string{}, baseArgs[:2]...), "00000000-0000-4000-8000-000000000001")
 	tamperedArgs = append(tamperedArgs, baseArgs[3:]...)
@@ -94,7 +101,7 @@ func (a *App) startM3BastionConnector(ctx context.Context, env *E2EEnvironment) 
 	if err := writePrivate(filepath.Join(env.Options.Artifacts, "m3-bastion-conflict-enroll.log"), redactDiagnostic(conflict.Bytes())); err != nil {
 		return err
 	}
-	if err := rewriteConnectorGateway(filepath.Join(dataDir, "identity.json"), "grpcs://127.0.0.1:4193"); err != nil {
+	if err := rewriteConnectorGateway(filepath.Join(dataDir, "identity.json"), env.Endpoints.ConnectorGateway); err != nil {
 		return err
 	}
 	logFile, err := openArtifact(filepath.Join(env.Options.Artifacts, "m3-bastion-connector.log"))
@@ -112,7 +119,7 @@ func (a *App) startM3BastionConnector(ctx context.Context, env *E2EEnvironment) 
 		return err
 	}
 	client, _ := scenarioHTTP(env)
-	scope, err := client.JSON(ctx, "m3-bastion-active", "enterprise", http.MethodGet, "/enterprise/bastion-scopes/"+env.State.Values["m3_bastion_scope_id"], http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	scope, err := client.JSON(ctx, "m3-bastion-active", "enterprise", http.MethodGet, "/enterprise/bastion-scopes/"+env.State.Values["m3_bastion_scope_id"], http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -134,9 +141,13 @@ func (a *App) startM3KubernetesConnector(ctx context.Context, env *E2EEnvironmen
 		return err
 	}
 	dataDir := filepath.Join(env.WorkDir, "m3-kubernetes-connector")
-	instanceEnv := map[string]string{"ARGUS_CONNECTOR_INSTANCE_ID": "m3-kubernetes-" + env.Options.RunID}
+	instanceEnv := map[string]string{
+		"ARGUS_CONNECTOR_INSTANCE_ID":    "m3-kubernetes-" + env.Options.RunID,
+		"ARGUS_CONNECTOR_CA_FILE":        env.Endpoints.CAFile,
+		"ARGUS_CONNECTOR_ENROLL_ADDRESS": env.Endpoints.IngressIP + ":443",
+	}
 	if err := a.runner.Run(ctx, instanceEnv, binary, "enroll", "--connector-id", command.ConnectorID, "--token", command.Token,
-		"--server", "http://127.0.0.1:4180", "--role", command.Role, "--name", "m3-in-cluster", "--data-dir", dataDir); err != nil {
+		"--server", env.Endpoints.EnrollServer, "--role", command.Role, "--name", "m3-in-cluster", "--data-dir", dataDir); err != nil {
 		return err
 	}
 	gateway := "grpcs://argus-connector-gateway." + env.SystemNS + ".svc:9443"
@@ -260,7 +271,7 @@ func (a *App) waitM3ConnectorOnline(ctx context.Context, env *E2EEnvironment, co
 	stableEpoch := int64(0)
 	stableChecks := 0
 	for time.Now().Before(deadline) {
-		connectors, err := client.JSON(ctx, "m3-connector-online", "enterprise", http.MethodGet, "/enterprise/connectors", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+		connectors, err := client.JSON(ctx, "m3-connector-online", "enterprise", http.MethodGet, "/enterprise/connectors", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 		if err != nil {
 			return err
 		}

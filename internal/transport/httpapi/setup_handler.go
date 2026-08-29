@@ -359,6 +359,8 @@ func setupErrorBase(ctx context.Context, err error) setupapi.ApiError {
 		code, key, retryable = "LOGIN_DEPENDENCY_UNAVAILABLE", "errors.auth.login_dependency_unavailable", true
 	case errors.Is(err, identity.ErrAudienceMismatch):
 		code, key = "SESSION_AUDIENCE_MISMATCH", "errors.auth.session_audience_mismatch"
+	case errors.Is(err, identity.ErrSessionInvalid):
+		code, key = "SESSION_INVALID", "errors.auth.session_invalid"
 	case errors.Is(err, identity.ErrSessionExpired):
 		code, key = "SESSION_EXPIRED", "errors.auth.session_expired"
 	case errors.Is(err, identity.ErrSessionRevoked):

@@ -59,7 +59,7 @@ func (a *App) runM8Scenario(ctx context.Context, env *E2EEnvironment) error {
 		return err
 	}
 
-	a.stopE2EForwards(env)
+	a.stopE2ELocalProcesses(env)
 	if env.fixtureReady {
 		if err := a.cleanupE2EFixtures(ctx, env); err != nil {
 			return err
@@ -100,10 +100,10 @@ func (a *App) runM8Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if err := a.invokeArgusctl(ctx, env, "verify", "--config", restoreConfig, "--artifacts", filepath.Join(env.Options.Artifacts, "restored")); err != nil {
 		return err
 	}
-	if err := a.startE2EForwards(ctx, env); err != nil {
+	if err := a.resolveE2EAccess(ctx, env); err != nil {
 		return err
 	}
-	env.State.HTTP = NewScenarioHTTP("http://127.0.0.1:4180/api/v1", env.Options.Artifacts)
+	env.State.HTTP = NewDomainScenarioHTTP(env)
 	return a.verifyM8RestoredIdentity(ctx, env)
 }
 
@@ -143,9 +143,9 @@ func (a *App) injectM8Failures(ctx context.Context, env *E2EEnvironment) error {
 func (a *App) verifyM8RestoredIdentity(ctx context.Context, env *E2EEnvironment) error {
 	client, _ := scenarioHTTP(env)
 	for _, audience := range []string{"platform", "enterprise"} {
-		origin := platformOrigin
+		origin := env.PlatformOrigin()
 		if audience == "enterprise" {
-			origin = enterpriseOrigin
+			origin = env.EnterpriseOrigin()
 		}
 		login, err := client.JSON(ctx, "restored-"+audience+"-login", audience, http.MethodPost, "/"+audience+"/auth/login", http.StatusOK,
 			map[string]any{"username": env.State.Values[audience+"_username"], "password": env.State.Values[audience+"_password"]}, map[string]string{"Origin": origin})
@@ -169,7 +169,7 @@ func (a *App) verifyM8RestoredIdentity(ctx context.Context, env *E2EEnvironment)
 			return err
 		}
 	}
-	secrets, err := client.JSON(ctx, "restored-openbao-secret", "enterprise", http.MethodGet, "/enterprise/secrets", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	secrets, err := client.JSON(ctx, "restored-openbao-secret", "enterprise", http.MethodGet, "/enterprise/secrets", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -178,7 +178,7 @@ func (a *App) verifyM8RestoredIdentity(ctx context.Context, env *E2EEnvironment)
 	}); err != nil {
 		return fmt.Errorf("restored Secret: %w", err)
 	}
-	credentials, err := client.JSON(ctx, "restored-openbao-credential", "enterprise", http.MethodGet, "/enterprise/credentials", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	credentials, err := client.JSON(ctx, "restored-openbao-credential", "enterprise", http.MethodGet, "/enterprise/credentials", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -200,9 +200,9 @@ func outputValue(output, key string) string {
 	return ""
 }
 
-func (a *App) stopE2EForwards(env *E2EEnvironment) {
-	for index := len(env.Forwards) - 1; index >= 0; index-- {
-		_ = env.Forwards[index].Stop()
+func (a *App) stopE2ELocalProcesses(env *E2EEnvironment) {
+	for index := len(env.Processes) - 1; index >= 0; index-- {
+		_ = env.Processes[index].Stop(5 * time.Second)
 	}
-	env.Forwards = nil
+	env.Processes = nil
 }

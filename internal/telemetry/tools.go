@@ -97,8 +97,15 @@ func (tools Tools) actor(ctx context.Context, call mcp.Call) (Actor, []string, e
 		if err != nil {
 			return Actor{}, nil, err
 		}
-		scopes, err := tools.Service.Store.Queries.ListServiceAccountDataScopes(ctx, subjectID)
-		return Actor{EnterpriseID: enterpriseID, SubjectID: subjectID, AuthorizationVersion: account.AuthorizationVersion, DataScopeIDs: scopes}, permissions, err
+		scopes := []uuid.UUID{}
+		for _, typ := range []string{"host", "kubernetes_cluster"} {
+			values, queryErr := tools.Service.Store.Queries.ListServiceAccountAuthorizedResourceIDs(ctx, db.ListServiceAccountAuthorizedResourceIDsParams{ServiceAccountID: subjectID, EnterpriseID: enterpriseID, ResourceType: typ})
+			if queryErr != nil {
+				return Actor{}, nil, queryErr
+			}
+			scopes = append(scopes, values...)
+		}
+		return Actor{EnterpriseID: enterpriseID, SubjectID: subjectID, AuthorizationVersion: account.AuthorizationVersion, AuthorizedResourceIDs: scopes}, permissions, err
 	}
 	user, err := tools.Service.Store.Queries.GetEnterpriseUser(ctx, db.GetEnterpriseUserParams{ID: subjectID, EnterpriseID: enterpriseID})
 	if err != nil || user.Status != "active" {
@@ -108,8 +115,15 @@ func (tools Tools) actor(ctx context.Context, call mcp.Call) (Actor, []string, e
 	if err != nil {
 		return Actor{}, nil, err
 	}
-	scopes, err := tools.Service.Store.Queries.ListEffectiveUserDataScopes(ctx, db.ListEffectiveUserDataScopesParams{EnterpriseID: enterpriseID, UserID: subjectID, DepartmentID: user.DepartmentID})
-	return Actor{EnterpriseID: enterpriseID, SubjectID: subjectID, AuthorizationVersion: user.AuthorizationVersion, DataScopeIDs: scopes}, permissions, err
+	scopes := []uuid.UUID{}
+	for _, typ := range []string{"host", "kubernetes_cluster"} {
+		values, queryErr := tools.Service.Store.Queries.ListUserAuthorizedResourceIDs(ctx, db.ListUserAuthorizedResourceIDsParams{UserID: subjectID, EnterpriseID: enterpriseID, ResourceType: typ})
+		if queryErr != nil {
+			return Actor{}, nil, queryErr
+		}
+		scopes = append(scopes, values...)
+	}
+	return Actor{EnterpriseID: enterpriseID, SubjectID: subjectID, AuthorizationVersion: user.AuthorizationVersion, AuthorizedResourceIDs: scopes}, permissions, err
 }
 
 func (tools Tools) collectors(ctx context.Context, call mcp.Call) (mcp.Result, error) {

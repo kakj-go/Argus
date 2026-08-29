@@ -10,9 +10,33 @@ paths:
   /enterprise/role-bindings: {$ref: ../argus.yaml#/paths/~1enterprise~1role-bindings}
   "/enterprise/role-bindings/{id}":
     $ref: "../argus.yaml#/paths/~1enterprise~1role-bindings~1{id}"
-  /enterprise/data-scopes: {$ref: ../argus.yaml#/paths/~1enterprise~1data-scopes}
-  "/enterprise/data-scopes/{id}":
-    $ref: "../argus.yaml#/paths/~1enterprise~1data-scopes~1{id}"
+  "/enterprise/users/{id}/role-assignments":
+    $ref: "../argus.yaml#/paths/~1enterprise~1users~1{id}~1role-assignments"
+  "/enterprise/data-authorizations/{subject_type}/{subject_id}":
+    get:
+      operationId: listDataAuthorizationResources
+      summary: List explicit data authorization resources for a subject.
+      parameters:
+        - {name: subject_type, in: path, required: true, schema: {$ref: "#/components/schemas/DataAuthorizationSubjectType"}}
+        - {name: subject_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: resource_type, in: query, required: true, schema: {$ref: "#/components/schemas/DataAuthorizationResourceType"}}
+        - {$ref: "../argus.yaml#/components/parameters/Cursor"}
+        - {$ref: "../argus.yaml#/components/parameters/Limit"}
+      responses:
+        "200": {description: Resource authorization page., content: {application/json: {schema: {$ref: "#/components/schemas/DataAuthorizationPage"}}}}
+        default: {$ref: "../argus.yaml#/components/responses/Error"}
+    post:
+      operationId: updateDataAuthorization
+      summary: Add or remove explicit data authorization resources.
+      parameters:
+        - {name: subject_type, in: path, required: true, schema: {$ref: "#/components/schemas/DataAuthorizationSubjectType"}}
+        - {name: subject_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: "../argus.yaml#/components/parameters/CsrfToken"}
+        - {$ref: "../argus.yaml#/components/parameters/IdempotencyKey"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/DataAuthorizationBatch"}}}}
+      responses:
+        "204": {description: Authorization updated.}
+        default: {$ref: "../argus.yaml#/components/responses/Error"}
 components:
   securitySchemes:
     sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
@@ -24,6 +48,40 @@ components:
     RoleBindingCreate: {$ref: ../components/m2.yaml#/components/schemas/RoleBindingCreate}
     RoleBindingUpdate: {$ref: ../components/m2.yaml#/components/schemas/RoleBindingUpdate}
     RoleBindingPage: {$ref: ../components/m2.yaml#/components/schemas/RoleBindingPage}
-    DataScopeCreate: {$ref: ../components/m2.yaml#/components/schemas/DataScopeCreate}
-    DataScopeUpdate: {$ref: ../components/m2.yaml#/components/schemas/DataScopeUpdate}
-    DataScopePage: {$ref: ../components/m2.yaml#/components/schemas/DataScopePage}
+    UserRoleAssignments: {$ref: ../components/m2.yaml#/components/schemas/UserRoleAssignments}
+    UserRoleAssignmentsUpdate: {$ref: ../components/m2.yaml#/components/schemas/UserRoleAssignmentsUpdate}
+    DataAuthorizationSubjectType:
+      type: string
+      enum: [user, department, role, service_account]
+    DataAuthorizationResourceType:
+      type: string
+      enum: [host, kubernetes_cluster]
+    DataAuthorizationResource:
+      type: object
+      additionalProperties: false
+      required: [resource_type, resource_id, name, direct, inherited, sources]
+      properties:
+        resource_type: {$ref: "#/components/schemas/DataAuthorizationResourceType"}
+        resource_id: {type: string, format: uuid}
+        name: {type: string}
+        direct: {type: boolean}
+        inherited: {type: boolean}
+        sources: {type: array, uniqueItems: true, items: {type: string}}
+    DataAuthorizationPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, authorization_version, affected_member_count]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/DataAuthorizationResource"}}
+        page: {$ref: "../argus.yaml#/components/schemas/CursorPage"}
+        authorization_version: {type: integer, format: int64, minimum: 1}
+        affected_member_count: {type: integer, format: int64, minimum: 0}
+    DataAuthorizationBatch:
+      type: object
+      additionalProperties: false
+      required: [resource_type, resource_ids, remove, expected_version]
+      properties:
+        resource_type: {$ref: "#/components/schemas/DataAuthorizationResourceType"}
+        resource_ids: {type: array, minItems: 1, maxItems: 1000, uniqueItems: true, items: {type: string, format: uuid}}
+        remove: {type: boolean}
+        expected_version: {type: integer, format: int64, minimum: 1}

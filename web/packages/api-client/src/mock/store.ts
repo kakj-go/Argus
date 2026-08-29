@@ -3,7 +3,6 @@ import type {
   ApiKey,
   ApprovalPolicy,
   AuditEvent,
-  DataScope,
   Enterprise,
   EnterpriseAdmin,
   EnterpriseSandboxQuota,
@@ -24,13 +23,16 @@ import type {
   Unsubscribe,
   User,
 } from "../types";
+import type { TaskViewModel } from "../provisional";
 import type {
-  TaskViewModel,
-} from "../provisional";
-import type {
+  ApprovalWorkflow,
   CollectionClaim,
   CollectorInstance,
   KubernetesNodeHostBinding,
+  RemoteAccessGrant,
+  RemoteAccessRecording,
+  RemoteAccessRule,
+  SessionProfile,
 } from "../generated/contracts";
 import type { MockChatMessage } from "./chat-types";
 import type {
@@ -61,8 +63,23 @@ export interface MockDb {
   departments: Department[];
   roles: Role[];
   roleBindings: RoleBinding[];
-  dataScopes: DataScope[];
+  roleAssignmentVersions?: Record<string, number>;
+  dataAuthorizationGrants?: Array<{
+    subject_type: "user" | "department" | "role" | "service_account";
+    subject_id: string;
+    resource_type: "host" | "kubernetes_cluster";
+    resource_id: string;
+    active: boolean;
+  }>;
+  dataAuthorizationVersions?: Record<string, number>;
   approvalPolicies: ApprovalPolicy[];
+  remoteAccessGrants?: RemoteAccessGrant[];
+  remoteAccessRules?: RemoteAccessRule[];
+  remoteAccessWorkflows?: ApprovalWorkflow[];
+  remoteAccessSessionProfiles?: SessionProfile[];
+  /** 会话录像元数据与其 asciicast 事件（按录像 ID 分页存储在事件数组里）。 */
+  remoteAccessRecordings?: RemoteAccessRecording[];
+  remoteAccessRecordingEvents?: Record<string, unknown[]>;
   serviceAccounts: ServiceAccount[];
   apiKeys: ApiKey[];
   secrets: Secret[];

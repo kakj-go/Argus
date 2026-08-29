@@ -31,6 +31,7 @@ import {
   Field,
   FormDrawer,
   PageShell,
+  RowAction,
   Select,
   StatusBadge,
   Tabs,
@@ -131,9 +132,9 @@ function CardRows({
                 size={15}
               />
             )}
-            <Button onClick={() => onOpen(card)} size="sm" variant="secondary">
+            <RowAction onClick={() => onOpen(card)}>
               {t("aiSettings.cards.detail")}
-            </Button>
+            </RowAction>
           </div>
         </article>
       ))}
@@ -354,7 +355,7 @@ function VersionPreview({ version }: { version: CardVersion }) {
   return (
     <div className={`argus-ic-preview ${expanded ? "is-expanded" : ""}`}>
       <SandboxCard
-        card_origin={cardOrigin}
+        card_origin={cardOrigin()}
         color_scheme={resolvedTheme}
         html={version.entrypoint_html}
         initial_data={asObject(demo?.data)}
@@ -432,7 +433,7 @@ function ValidationRunner({
     <div className="argus-ic-validation">
       <Badge>{validationCase.scenario}</Badge>
       <SandboxCard
-        card_origin={cardOrigin}
+        card_origin={cardOrigin()}
         color_scheme={validationCase.color_scheme}
         html={version.entrypoint_html}
         initial_data={asObject(demo?.data)}

@@ -37,7 +37,7 @@
 - 用一个新的统一查询 AST 替换现有三种 Query Wire Format。
 - 把 Dashboard 做成可执行任意 Tool 的 Card。
 - 个人私有 Dashboard；第一版沿用企业级可见性模型。
-- 通过绑定绕过 DataScope，或把绑定当作授权授予机制。
+- 通过绑定绕过 explicit resource authorization，或把绑定当作授权授予机制。
 - 第一阶段的动态标签绑定、大规模语义向量搜索和未引用 Dashboard 的模糊自动匹配。
 
 ## 2. 与现有架构的关系
@@ -52,7 +52,7 @@ PlanV2 不改变已确定的服务边界：
 | 用户确认和提交 | M4 PendingAction、Action Binding、Action Executor、Execution |
 | 会话内预览和确认 | M5 Card Runtime、RenderPlan、Binding ID |
 | 图表、日志、Trace 展示 | 现有 `@argus/ui` Telemetry 组件和 ECharts |
-| 权限 | M2 RoleBinding/DataScope/AuthorizationVersion |
+| 权限 | M2 RoleBinding/explicit resource authorization/AuthorizationVersion |
 | 资源入口 | M3 Host/Kubernetes 资源事实和资源详情路由 |
 
 Dashboard 不是 `TelemetryGroup`。`TelemetryGroup` 继续只表示 Collector 网络拓扑；Dashboard 的分组使用 `DashboardFolder`。
@@ -83,7 +83,7 @@ DashboardFolder
 - `folder_id = null` 的 Dashboard 放在“未分组”根级区域，不需要人为创建一个“未分组”实体 Folder。
 - 点击分组进入组内视图，组内仍然可以继续创建多个 Dashboard；新建入口默认继承当前 Folder。
 - Dashboard 的 `name` 和 `description` 在创建时单独填写，创建成功后再进入 Dashboard 详情页添加统计图。
-- 分组只负责导航和组织，不改变 Dashboard 的权限、DataScope、Binding 或查询执行边界。
+- 分组只负责导航和组织，不改变 Dashboard 的权限、explicit resource authorization、Binding 或查询执行边界。
 
 ### 3.2 Dashboard
 
@@ -218,7 +218,7 @@ DashboardVariable
 
 ### 3.7 OTLP Catalog 与指标发现
 
-Dashboard 详情页右上角提供“指标查询”入口。该入口打开受权限和 DataScope 裁剪的 OTLP Catalog，不直接修改 Panel 查询：
+Dashboard 详情页右上角提供“指标查询”入口。该入口打开受权限和 explicit resource authorization 裁剪的 OTLP Catalog，不直接修改 Panel 查询：
 
 1. Catalog 顶部先按信号显示三个 Tab：`Metrics`、`Logs`、`Traces`；切换 Tab 会重置当前插件和字段选择，避免把不同信号的语义混在一起。
 2. 每个 Tab 下先展示当前信号可用的 OTLP Collector 插件列表，例如 `collector-prometheus`、`collector-hostmetrics`、`collector-otlp-logs` 或 `collector-otlp-traces`；插件是指标/字段目录的来源边界，点击插件后才加载它提供的条目。
@@ -279,7 +279,7 @@ Kubernetes 绑定必须保存 `cluster_id + kind + namespace + uid`，不能只�
 Load active DashboardRevision
 → 校验 Dashboard/Revision 可见性
 → 解析当前 target、绑定资源和变量
-→ 重新计算 DataScope
+→ 重新计算 explicit resource authorization
 → 为每个 Panel/Target 建立查询请求
 → 进入 M10 Query Coordinator
 → 结果投影、脱敏、预算统计和审计
@@ -366,7 +366,7 @@ Skill 不负责：
 
 - 在没有 `@` 引用时自动猜测 Dashboard。
 - 修改 active Revision 的查询语句后把修改后的查询伪装成 Dashboard 结果。
-- 绕过 Dashboard 权限、DataScope 或资源绑定。
+- 绕过 Dashboard 权限、explicit resource authorization 或资源绑定。
 - 把模型摘要写回 Dashboard 作为事实。
 - 自动创建告警或执行修复动作。
 
@@ -424,7 +424,7 @@ DashboardAnalysisContext
 
 ```text
 DashboardBinding/Target Context
-∩ 当前用户 DataScope
+∩ 当前用户 explicit resource authorization
 ∩ 当前 AuthorizationVersion
 ```
 
@@ -471,7 +471,7 @@ DashboardEvidenceProjection
 - `inferred`：模型基于多个事实作出的推断。
 - `unknown`：数据为空、partial、权限裁剪或查询失败导致无法判断。
 
-没有证据的 Panel 不能被描述为“正常”。如果只查询到了当前用户 DataScope 的部分资源，必须明确说明范围。
+没有证据的 Panel 不能被描述为“正常”。如果只查询到了当前用户 explicit resource authorization 的部分资源，必须明确说明范围。
 
 ## 6. AI 创建与 UI 创建
 
@@ -533,7 +533,7 @@ Tool 的 Input Schema 必须设置 `additionalProperties=false`，服务端不�
 1. 校验名称、描述、Folder、Panel 数量、布局和 Schema。
 2. 校验每个查询语言、字段、GraphQL Operation、变量和预算。
 3. 对查询做小范围样本执行，确认返回类型与 Panel 类型兼容。
-4. 校验绑定目标、资源企业归属、Kubernetes UID、DataScope 和传播策略。
+4. 校验绑定目标、资源企业归属、Kubernetes UID、explicit resource authorization 和传播策略。
 5. 生成不可变 DashboardRevision 草稿、Spec Hash、查询校验报告和预览数据。
 6. 生成公开 `argus.pending_action/v1`、`action_ref`、风险、过期时间；私有 Token 仅保存在服务端。
 
@@ -547,7 +547,7 @@ Preview 失败不能创建 active Dashboard。局部 Panel 失败时必须指出
 浏览器 → action_binding_id/action_ref
 → argus-server Action Executor
 → 读取私有 Token 和不可变计划
-→ 重新检查权限、DataScope、AuthorizationVersion、资源版本
+→ 重新检查权限、explicit resource authorization、AuthorizationVersion、资源版本
 → 原子创建 Dashboard、Revision、Binding
 ```
 
@@ -577,7 +577,7 @@ UI 直接创建和 AI 创建必须调用相同的领域服务。UI 不能绕过 
 ```text
 当前 target context
 ∩ Dashboard binding
-∩ 当前用户 DataScope
+∩ 当前用户 explicit resource authorization
 ```
 
 ### 7.2 查询上下文
@@ -587,7 +587,7 @@ Panel 的 `scope_mode`：
 ```text
 current_target       从资源详情页进入时只查询当前对象
 all_bound_targets    查询当前 Dashboard 的全部有效绑定对象
-viewer_scope         查询用户 DataScope 中允许且与 Panel 资源类型匹配的对象
+viewer_scope         查询用户 explicit resource authorization 中允许且与 Panel 资源类型匹配的对象
 ```
 
 从 Host 页面打开：
@@ -692,7 +692,7 @@ telemetry.dashboard.inspect
 telemetry.dashboard.catalog.read
 ```
 
-Dashboard 权限不能授予遥测数据权限。每次读取、执行、AI Inspect、绑定和 Commit 都重新校验：企业状态、Dashboard 可见性、Signal 权限、DataScope、字段脱敏权限和 AuthorizationVersion。
+Dashboard 权限不能授予遥测数据权限。每次读取、执行、AI Inspect、绑定和 Commit 都重新校验：企业状态、Dashboard 可见性、Signal 权限、explicit resource authorization、字段脱敏权限和 AuthorizationVersion。
 
 ### 10.2 审计
 
@@ -707,7 +707,7 @@ Dashboard 权限不能授予遥测数据权限。每次读取、执行、AI Insp
 
 ### 10.3 撤权与失效
 
-- DataScope 或 AuthorizationVersion 变化后，缓存立即失效。
+- explicit resource authorization 或 AuthorizationVersion 变化后，缓存立即失效。
 - Dashboard 仍存在，但不可见资源从有效绑定集合移除。
 - Kubernetes UID 漂移使 Binding 进入 `stale`，不得自动绑定同名新对象。
 - Revision 查询校验失败、依赖字段删除或 Query Engine 升级不兼容时，阻止发布新 Revision；已有 active Revision 继续按兼容策略运行并报告警告。
@@ -776,9 +776,9 @@ Dashboard 权限不能授予遥测数据权限。每次读取、执行、AI Insp
 1. **契约和领域模型**：固化 `DashboardFolder`、`Dashboard`、`DashboardRevision`、`Panel`、`QueryTarget`、`DashboardVariable`、`DashboardBinding` 的 JSON Schema、状态机、错误码、OpenAPI 和审计字段；明确 active Revision 不可变、绑定不属于授权边界、查询文本不能由浏览器覆盖。
 2. **存储和领域服务**：新增 PostgreSQL Migration、Repository、领域服务和索引；实现 Folder/Dashboard/Revision/Panel/Variable/Binding 的创建、更新、归档、发布；所有写操作接入 Preview/Commit、PendingAction、幂等和审计。
 3. **查询运行时**：实现统一 `ExecuteDashboard`，从 active Revision 恢复查询，解析时间范围、变量依赖、Target Context 和 `scope_mode`，调用 M10 PromQL/KQL/SkyWalking Engine；提供总预算、并发、超时、取消、缓存、partial、单 Panel 错误和结果投影。
-4. **OTLP Catalog**：提供 Metrics 指标/Label/值、Logs 字段/值、Traces 属性/范围的受控目录查询；所有目录结果经过权限、DataScope、敏感字段和数量限制，不能直接拼接成已发布查询。
+4. **OTLP Catalog**：提供 Metrics 指标/Label/值、Logs 字段/值、Traces 属性/范围的受控目录查询；所有目录结果经过权限、explicit resource authorization、敏感字段和数量限制，不能直接拼接成已发布查询。
 5. **后台工作台**：实现分组 + 仪表盘列表、根级未分组、名称/描述创建、仪表盘详情页、逐个 Panel 创建和编辑、Panel 网格布局、放大缩小、Panel 查询校验、样本运行、时间范围、自动刷新、变量下拉框和唯一滚动区域的变量弹框。
-6. **资源绑定和入口**：实现 Dashboard 绑定 Host、Kubernetes Cluster/Namespace/Workload/Service；资源详情页显示有效关联 Dashboard；打开时携带 `current_target`；处理 DataScope、AuthorizationVersion、Kubernetes UID 漂移、资源删除、stale Binding 和撤权。
+6. **资源绑定和入口**：实现 Dashboard 绑定 Host、Kubernetes Cluster/Namespace/Workload/Service；资源详情页显示有效关联 Dashboard；打开时携带 `current_target`；处理 explicit resource authorization、AuthorizationVersion、Kubernetes UID 漂移、资源删除、stale Binding 和撤权。
 7. **安全、审计和测试**：补齐权限矩阵、字段脱敏、查询来源、Revision、Panel、Target、变量摘要、预算和结果状态审计；完成 API/领域/Query Runtime/Playwright 测试。
 
 **Task 1 的交付顺序**：
@@ -813,7 +813,7 @@ Dashboard 权限不能授予遥测数据权限。每次读取、执行、AI Insp
 3. **Preview/Commit 集成**：UI 创建和 AI 创建共用 `dashboard.create.preview`、`dashboard.update.preview` 和领域服务；Preview 返回查询校验、样本数据、Diff、风险、Spec Hash 和公开 Action Ref；用户点击确认后由 Action Executor Commit，Skill 和模型不能直接提交。
 4. **Dashboard `@` Mention**：沿用 Chatbox 资源引用方式，输入 `@` 后通过授权 resolver 展示名称/描述/标签候选，消息中保存稳定 Dashboard ID；没有 `@` 时不得根据自然语言模糊猜测仪表盘。
 5. **分析上下文和查询规划**：实现 `telemetry.dashboard.get`，向 Agent 提供 active Revision 的 Panel 查询定义、变量约束、支持的 Query Tool、Target 范围和预算；Agent 可以选择 Panel、决定查询顺序和并行策略，但不能修改查询文本。
-6. **Dashboard provenance 和 Inspect**：实现 `telemetry.dashboard.inspect` 及带 provenance 的 Metrics/Logs/Traces Query Tool；服务端复核 `dashboard_ref + revision_ref + panel_id + query_hash + signal`，重新执行权限、DataScope、绑定和预算校验。
+6. **Dashboard provenance 和 Inspect**：实现 `telemetry.dashboard.inspect` 及带 provenance 的 Metrics/Logs/Traces Query Tool；服务端复核 `dashboard_ref + revision_ref + panel_id + query_hash + signal`，重新执行权限、explicit resource authorization、绑定和预算校验。
 7. **Evidence Projection 和总结**：将结果投影为统计摘要、Top Pattern、日志样本、慢 Trace、阈值观察、partial、warning 和 `evidence_ref`；模型输出必须区分 `observed`、`inferred`、`unknown`，并提供返回 Dashboard/Panel/资源详情的入口。
 8. **会话/Card 工作台和测试**：接入 Chatbox mention、Skill、Tool Result Projection、Preview Card 和确认 Card；覆盖 AI 生成、用户确认、失败恢复、越权拒绝、查询哈希不匹配、Revision 失效、数据不足和三类信号混排 E2E。
 
@@ -834,7 +834,7 @@ DashboardDraft Schema 与 Skill
 
 - 用户通过 `/创建仪表盘` 可以生成结构化 Draft，查看 Preview 后点击确认创建真实 Dashboard。
 - 用户通过 `@` 明确引用 Dashboard 后，Agent 能读取 active Revision，自行选择 Panel 查询并总结 Metrics/Logs/Traces 证据。
-- Agent 不能调用未授权 Dashboard、修改已发布查询、绕过 Binding/DataScope 或把任意查询伪装成 Dashboard 证据。
+- Agent 不能调用未授权 Dashboard、修改已发布查询、绕过 Binding/explicit resource authorization 或把任意查询伪装成 Dashboard 证据。
 - 查询结果、模型总结、Preview 和 Commit 都能回溯到 Dashboard、Revision、Panel、query_hash、Target 和时间范围。
 - AI 创建和 AI 分析在模型重试、Worker 重启、Redis 清空、权限变化和部分查询失败时保持可恢复、可审计、可解释。
 
@@ -868,7 +868,7 @@ Task 1 的 Batch A/B 是第一版人工仪表盘基线；Task 2 的 Batch C/D �
 
 ### P2V-2：Dashboard Query Runtime
 
-- [ ] `P2V-EXEC-01` 实现 `ExecuteDashboard`，统一处理时间、变量、Target、DataScope 和 Panel 结果。
+- [ ] `P2V-EXEC-01` 实现 `ExecuteDashboard`，统一处理时间、变量、Target、explicit resource authorization 和 Panel 结果。
 - [ ] `P2V-EXEC-02` 接入 M10 PromQL/KQL/SkyWalking Engine，保持三种原生结果语义。
 - [ ] `P2V-EXEC-03` 实现 Dashboard 总预算、并发、缓存、取消、partial 和单 Panel 错误投影。
 - [ ] `P2V-CATALOG-01` 实现指标名、Label/字段、服务和有限值的受控 Catalog 查询。
@@ -899,7 +899,7 @@ Task 1 的 Batch A/B 是第一版人工仪表盘基线；Task 2 的 Batch C/D �
 - [ ] `P2V-E2E-02` AI 创建 Dashboard：自然语言、Catalog、Preview Card、Commit、Revision 和资源入口。
 - [ ] `P2V-E2E-03` 使用 `@` 引用 Dashboard 后执行 Inspect，覆盖 Agent 选择 Panel、调用三类 Query Tool、混排和总结证据。
 - [ ] `P2V-E2E-04` 从 Host、Cluster、Namespace、Workload、Service 详情页打开并验证 Target 上下文。
-- [ ] `P2V-E2E-05` 覆盖跨企业、DataScope、AuthorizationVersion、敏感字段、Kubernetes UID 漂移和 stale Binding。
+- [ ] `P2V-E2E-05` 覆盖跨企业、explicit resource authorization、AuthorizationVersion、敏感字段、Kubernetes UID 漂移和 stale Binding。
 - [ ] `P2V-E2E-06` 覆盖 Redis 清空、Query/Server 重启、缓存失效、重复 Commit、partial Panel 和失败清理。
 - [ ] `P2V-RELEASE-01` 将临时 Namespace、PVC、Topic、Bucket、Lease 和诊断脱敏清理纳入官方 Harness。
 
@@ -969,7 +969,7 @@ Task 1 的 Batch A/B 是第一版人工仪表盘基线；Task 2 的 Batch C/D �
 - 查询语句永远来自已验证 active Revision，浏览器和模型不能覆盖表达式。
 - Preview/Commit 的私有 Token、完整草稿参数和未裁剪结果不出现在模型、Card、浏览器 DOM、网络日志或审计正文中。
 - 同一 Dashboard 从 UI、Card 和 AI Inspect 获得一致的授权裁剪和查询语义。
-- 绑定只缩小有效资源范围，不扩大 DataScope；撤权后旧缓存、链接和查询立即失效或返回明确错误。
+- 绑定只缩小有效资源范围，不扩大 explicit resource authorization；撤权后旧缓存、链接和查询立即失效或返回明确错误。
 - Kubernetes 对象使用 UID，UID 漂移不自动跟随同名对象。
 - Panel 错误、查询超时、partial 和无数据可区分；AI 不得把无证据状态总结为正常。
 - 资源详情页的 Dashboard 入口只展示当前用户有权访问的 active Dashboard。

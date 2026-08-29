@@ -2,7 +2,7 @@
 
 ## 目标
 
-交付第一条真实业务垂直路径：全新安装完成 Setup，平台管理员创建企业和初始管理员，企业管理员建立用户/部门、RoleBinding、DataScope 并登录企业门户。
+交付第一条真实业务垂直路径：全新安装完成 Setup，平台管理员创建企业和初始管理员，企业管理员建立用户/部门、RoleBinding、explicit resource authorization 并登录企业门户。
 
 ## 前置条件
 
@@ -11,14 +11,14 @@
 
 ## 任务
 
-- [x] `M2-DB-01` 实现 Setup、Enterprise、PlatformUser、EnterpriseUser、Department、Session、Role/Permission、RoleBinding、DataScope、AuthorizationVersion、Audit Migration。
+- [x] `M2-DB-01` 实现 Setup、Enterprise、PlatformUser、EnterpriseUser、Department、Session、Role/Permission、RoleBinding、explicit resource authorization、AuthorizationVersion、Audit Migration。
 - [x] `M2-SETUP-01` 实现系统状态、一次性 Setup Token、初始化事务/恢复、永久锁定和离线密码恢复。
 - [x] `M2-IDENTITY-01` 实现 Platform/Enterprise 互斥身份、不同 Audience、Argon2id、Cookie Session、CSRF、撤销和限流。
 - [x] `M2-ENTERPRISE-01` 实现企业生命周期、默认 Department、内置 Role 模板和初始管理员临时密码激活。
 - [x] `M2-IAM-01` 实现 EnterpriseUser/Department CRUD 和部门变化的 AuthorizationVersion 更新。
-- [x] `M2-AUTH-01` 实现 RoleBinding、DataScope、标签选择器编译和统一授权决策服务。
-- [x] `M2-AUTH-02` 实现列表/详情/批量/游标的统一企业与 DataScope 过滤。
-- [x] `M2-MACHINE-01` 实现 ServiceAccount/APIKey 单次显示、哈希、Tool/DataScope Scope、轮换与撤销。
+- [x] `M2-AUTH-01` 实现 RoleBinding、explicit resource authorization 和统一授权决策服务；标签过滤条件不参与授权。
+- [x] `M2-AUTH-02` 实现列表/详情/批量/游标的统一企业与 explicit resource authorization 过滤。
+- [x] `M2-MACHINE-01` 实现 ServiceAccount/APIKey 单次显示、哈希、Tool/explicit resource authorization Scope、轮换与撤销。
 - [x] `M2-AUDIT-01` 实现平台/企业审计分域、字段脱敏和审计查询授权。
 - [x] `M2-WEB-01` 在 M1 real Adapter 上补充冻结后的 Setup/Identity/IAM Path，将两个门户及 Platform 初始化流程切到真实 API；禁止复制 DTO、重写 Transport 或回退 mock。
 - [x] `M2-OUTBOX-01` 建立授权变化 Outbox 和 Redis 快速失效，不让 Redis 成为事实来源。
@@ -37,8 +37,8 @@
 
 - 平台身份不能访问企业 API，企业身份不能访问平台 API。
 - 一个 EnterpriseUser 不能绑定第二个企业或脱离 Department。
-- DataScope 的显式 ID、标签选择器、并集、空范围和跨企业 ID 均有正反例。
-- 用户禁用、部门/RoleBinding/DataScope 变化使旧 Session、游标和 Binding 失效。
+- explicit resource authorization 的显式 ID、标签过滤条件、并集、空范围和跨企业 ID 均有正反例。
+- 用户禁用、部门/RoleBinding/explicit resource authorization 变化使旧 Session、游标和 Binding 失效。
 - Kubernetes 临时 Namespace 完成 Setup → Platform → Enterprise 全流程并清理。
 
 ## 实现证据
@@ -49,7 +49,7 @@
 - 审计展示：OpenAPI 读模型在不可变 actor/resource ID 之外尽力返回当前显示名；企业与平台门户通过统一代码目录展示中英文动作/资源名称，原始 key/UUID 保留在详情。企业引用字段使用名称选择器提交 ID，平台域不跨边界查询企业成员姓名。
 - 部署：独立 Goose Migration Job、仅 Server 可见的 Setup Token Secret Volume、输出一次性初始化链接的 `argusctl setup-token rotate` 和 `argusctl admin reset-password`。
 - 自动化：Migration 真实 PostgreSQL 测试、密码/授权/游标/审计单测、契约门禁、三 Origin real Playwright 和 `go run ./cmd/argus-dev e2e run --suite m2`。
-- 2026-08-16 的临时 Namespace 验收已完成 Setup、双 Audience、跨企业拒绝、DataScope、APIKey 创建/幂等/轮换/撤销、审计、撤权、Redis 停止、Server 重启和无条件清理；验收运行 `20260816110652-35870` 通过后确认无残留 Namespace 与 Lease。
+- 2026-08-16 的临时 Namespace 验收已完成 Setup、双 Audience、跨企业拒绝、explicit resource authorization、APIKey 创建/幂等/轮换/撤销、审计、撤权、Redis 停止、Server 重启和无条件清理；验收运行 `20260816110652-35870` 通过后确认无残留 Namespace 与 Lease。
 
 ## 退出标准
 

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kakj-go/Argus/internal/authorization"
+	"github.com/kakj-go/Argus/internal/identity"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
@@ -49,5 +50,26 @@ func TestToAuthzRoleOmitsBuiltinKeyForCustomRole(t *testing.T) {
 
 	if role.BuiltinKey != nil {
 		t.Fatalf("BuiltinKey = %q, want nil", *role.BuiltinKey)
+	}
+}
+
+func TestHasAllPermissions(t *testing.T) {
+	tests := []struct {
+		name        string
+		permissions []string
+		want        bool
+	}{
+		{name: "both permissions", permissions: []string{"identity.manage", "role.manage"}, want: true},
+		{name: "wildcard", permissions: []string{"*"}, want: true},
+		{name: "role only", permissions: []string{"role.manage"}, want: false},
+		{name: "identity only", permissions: []string{"identity.manage"}, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			principal := identity.Principal{Permissions: test.permissions}
+			if got := hasAllPermissions(principal, "identity.manage", "role.manage"); got != test.want {
+				t.Fatalf("hasAllPermissions() = %v, want %v", got, test.want)
+			}
+		})
 	}
 }

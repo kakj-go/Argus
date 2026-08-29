@@ -1,0 +1,27 @@
+{{- if and .Values.tls.enabled (ne .Values.tls.mode "user-provided") }}
+{{- /* One multi-SAN certificate for every browser-facing host behind the
+       ingress; the remote-access WSS endpoint shares the enterprise host
+       and needs no certificate of its own. */}}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-web
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  secretName: argus-web-tls
+  duration: 2160h
+  renewBefore: 360h
+  dnsNames:
+    - {{ .Values.hosts.enterprise }}
+    - {{ .Values.hosts.platform }}
+    - {{ .Values.hosts.cards }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - server auth
+  issuerRef:
+    name: {{ .Values.tls.issuerName }}
+    kind: {{ .Values.tls.issuerKind }}
+{{- end }}

@@ -20,20 +20,7 @@ func (a *App) verifyM6CrossGatewayDrain(ctx context.Context, env *E2EEnvironment
 		return fmt.Errorf("M6 Bastion Host or Connector is unavailable")
 	}
 	client, _ := scenarioHTTP(env)
-	scope, err := client.JSON(ctx, "m6-bastion-access-scope", "enterprise", http.MethodPost, "/enterprise/data-scopes", http.StatusCreated,
-		map[string]any{"name": "M6 remote access bootstrap", "resource_types": []string{"host"}, "explicit_resource_ids": []string{hostID}}, enterpriseHeaders(env, "m6-bastion-access-scope"))
-	if err != nil {
-		return err
-	}
-	scopeID, _ := stringField(scope, "id")
-	if _, err := client.JSON(ctx, "m6-bastion-access-binding", "enterprise", http.MethodPost, "/enterprise/role-bindings", http.StatusCreated,
-		map[string]any{"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "role_id": env.State.Values["m3_resource_admin_role_id"], "data_scope_ids": []string{scopeID}}, enterpriseHeaders(env, "m6-bastion-access-binding")); err != nil {
-		return err
-	}
-	if err := a.refreshEnterpriseLogin(ctx, env); err != nil {
-		return err
-	}
-	host, err := client.JSON(ctx, "m6-bastion-host-current", "enterprise", http.MethodGet, "/enterprise/hosts/"+hostID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	host, err := client.JSON(ctx, "m6-bastion-host-current", "enterprise", http.MethodGet, "/enterprise/hosts/"+hostID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -45,9 +32,6 @@ func (a *App) verifyM6CrossGatewayDrain(ctx context.Context, env *E2EEnvironment
 	}
 	actionRef, _ := stringField(preview, "action_ref")
 	if _, err := a.confirmPendingAction(ctx, env, "m6-bastion-reauthorize-confirm", actionRef); err != nil {
-		return err
-	}
-	if err := a.refreshEnterpriseLogin(ctx, env); err != nil {
 		return err
 	}
 	hostID, accountID, err := a.createM6BastionTarget(ctx, env)
@@ -67,11 +51,16 @@ func (a *App) verifyM6CrossGatewayDrain(ctx context.Context, env *E2EEnvironment
 	validFrom := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
 	validUntil := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
 	grant, err := client.JSON(ctx, "m6-bastion-grant", "enterprise", http.MethodPost, "/enterprise/remote-access-grants", http.StatusCreated,
-		map[string]any{"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "host_ids": []string{hostID}, "managed_account_ids": []string{accountID}, "protocols": []string{"ssh"}, "actions": []string{"terminal"}, "valid_from": validFrom, "valid_until": validUntil, "enabled": true}, enterpriseHeaders(env, "m6-bastion-grant"))
+		map[string]any{"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "host_ids": []string{hostID}, "managed_account_ids": []string{accountID}, "protocols": []string{"ssh"}, "actions": []string{"terminal"}, "valid_from": validFrom, "valid_until": validUntil, "status": "draft"}, enterpriseHeaders(env, "m6-bastion-grant"))
 	if err != nil {
 		return err
 	}
 	grantID, _ := stringField(grant, "id")
+	if _, err := client.JSON(ctx, "m6-enable-bastion-grant", "enterprise", http.MethodPost,
+		"/enterprise/remote-access-grants/"+grantID+"/enable?expected_version=1", http.StatusOK, nil,
+		enterpriseHeaders(env, "m6-enable-bastion-grant")); err != nil {
+		return err
+	}
 	if err := a.stepUpEnterprise(ctx, env); err != nil {
 		return err
 	}
@@ -112,7 +101,7 @@ func (a *App) verifyM6CrossGatewayDrain(ctx context.Context, env *E2EEnvironment
 		Spec: corev1.PodSpec{RestartPolicy: corev1.RestartPolicyNever, Containers: []corev1.Container{{
 			Name: "remoteclient", Image: env.State.FixtureImages["ssh"], ImagePullPolicy: corev1.PullNever,
 			Command: []string{"/usr/local/bin/argus-e2e-remoteclient"}, Args: []string{
-				"--url", "ws://" + peerIP + ":9445/v1/sessions/" + sessionID, "--origin", enterpriseOrigin,
+				"--url", "ws://" + peerIP + ":9445/v1/sessions/" + sessionID, "--origin", env.EnterpriseOrigin(),
 				"--command", "stream", "--expect-status", "terminated", "--expect-reason", "gateway_drain", "--timeout", "90s",
 			}, Stdin: true, StdinOnce: true,
 			SecurityContext: &corev1.SecurityContext{RunAsNonRoot: boolPointer(true), RunAsUser: int64PointerValue(65532), AllowPrivilegeEscalation: boolPointer(false), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
@@ -154,8 +143,12 @@ func (a *App) verifyM6CrossGatewayDrain(ctx context.Context, env *E2EEnvironment
 	if err := env.Kube.WaitDeployment(ctx, env.SystemNS, "argus-connector-gateway", 5*time.Minute); err != nil {
 		return err
 	}
-	_, err = client.JSON(ctx, "m6-disable-bastion-grant", "enterprise", http.MethodDelete, "/enterprise/remote-access-grants/"+grantID, http.StatusNoContent, nil, enterpriseHeaders(env, "m6-disable-bastion"))
-	return err
+	if _, err = client.JSON(ctx, "m6-disable-bastion-grant", "enterprise", http.MethodPost,
+		"/enterprise/remote-access-grants/"+grantID+"/disable?expected_version=2", http.StatusOK, nil,
+		enterpriseHeaders(env, "m6-disable-bastion")); err != nil {
+		return err
+	}
+	return a.refreshEnterpriseLogin(ctx, env)
 }
 
 func (a *App) createM6BastionTarget(ctx context.Context, env *E2EEnvironment) (string, string, error) {
@@ -163,8 +156,12 @@ func (a *App) createM6BastionTarget(ctx context.Context, env *E2EEnvironment) (s
 	if err != nil {
 		return "", "", err
 	}
+	sshAddress, err := waitForServiceIP(ctx, env, env.SystemNS, "argus-e2e-ssh-target", 3*time.Minute)
+	if err != nil {
+		return "", "", fmt.Errorf("M6 bastion SSH fixture load balancer: %w", err)
+	}
 	target := map[string]any{
-		"address": "127.0.0.1", "port": m6BastionSSHForwardPort, "platform": "linux",
+		"address": sshAddress, "port": 22, "platform": "linux",
 		"connection_mode": "via_bastion", "bastion_scope_id": env.State.Values["m3_bastion_scope_id"],
 		"credential_id": env.State.Values["m3_credential_id"], "username": "argus",
 	}
@@ -209,7 +206,7 @@ func (a *App) createM6BastionTarget(ctx context.Context, env *E2EEnvironment) (s
 		return "", "", err
 	}
 	accounts, err := client.JSON(ctx, "m6-bastion-accounts", "enterprise", http.MethodGet, "/enterprise/managed-accounts", http.StatusOK, nil,
-		map[string]string{"Origin": enterpriseOrigin})
+		map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return "", "", err
 	}

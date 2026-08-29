@@ -45,4 +45,4 @@ M4 已提供公开 `result_ref`、PendingAction/Approval/Execution、隐藏 Comm
 
 ## 完成证据
 
-截至 2026-08-17，M5 已完成。旧 Shell Harness 最终成功运行号为 `20260817211415-4363`，脱敏证据位于 `artifacts/m5-e2e/20260817211415-4363`。该运行覆盖 M2-M4 回归、两版企业 Card 的八场景浏览器验证、系统/企业选择、DataScope 撤权与重新物化、Action Binding 幂等、非创建人审批、Commit/Verify、回滚、Redis 清空和 Server 重启恢复；`m4-runtime-state.txt`、`m5-card-state.txt` 与 `cleanup.txt` 均已生成，运行结束后临时 Namespace、PVC 和 Lease 均无残留。当前官方入口为 `go run ./cmd/argus-dev e2e run --suite m5`。
+截至 2026-08-17，M5 已完成。旧 Shell Harness 最终成功运行号为 `20260817211415-4363`，脱敏证据位于 `artifacts/m5-e2e/20260817211415-4363`。该运行覆盖 M2-M4 回归、两版企业 Card 的八场景浏览器验证、系统/企业选择、explicit resource authorization 撤权与重新物化、Action Binding 幂等、非创建人审批、Commit/Verify、回滚、Redis 清空和 Server 重启恢复；`m4-runtime-state.txt`、`m5-card-state.txt` 与 `cleanup.txt` 均已生成，运行结束后临时 Namespace、PVC 和 Lease 均无残留。当前官方入口为 `go run ./cmd/argus-dev e2e run --suite m5`。

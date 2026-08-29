@@ -76,7 +76,7 @@ func TestInstallerProvidesRequiredObjectStoreBootstrapValues(t *testing.T) {
 	}
 	platform := platformValues(cfg, credentials, "setup-secret", "idempotency", "cursor", "pending", "secret-kek")
 	runtimeValues := platform["runtime"].(map[string]any)
-	if got := runtimeValues["remoteOrigin"]; got != "http://localhost:9445" {
+	if got := runtimeValues["remoteOrigin"]; got != "https://argus.dev" {
 		t.Fatalf("remoteOrigin = %v", got)
 	}
 	observabilityService := "argus-telemetry-ingest." + cfg.Spec.Namespaces.Observability + ".svc"
@@ -88,6 +88,47 @@ func TestInstallerProvidesRequiredObjectStoreBootstrapValues(t *testing.T) {
 		if got := runtimeValues[key]; got != want {
 			t.Fatalf("%s = %v, want %s", key, got, want)
 		}
+	}
+}
+
+func TestPlatformValuesUseUnifiedDomainHosts(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "evaluation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek")
+	runtimeValues := values["runtime"].(map[string]any)
+	for key, want := range map[string]string{
+		"remoteOrigin":            "https://argus.dev",
+		"connectorEnrollmentURL":  "https://argus.dev",
+		"connectorGatewayAddress": "grpcs://connector.argus.dev:9443",
+	} {
+		if got := runtimeValues[key]; got != want {
+			t.Fatalf("%s = %v, want %s", key, got, want)
+		}
+	}
+	if got := runtimeValues["secureCookies"]; got != true {
+		t.Fatalf("secureCookies = %v, want true", got)
+	}
+	hosts := values["hosts"].(map[string]any)
+	for key, want := range map[string]string{
+		"enterprise": "argus.dev", "platform": "platform.argus.dev",
+		"cards": "cards.argus.dev", "connector": "connector.argus.dev",
+	} {
+		if got := hosts[key]; got != want {
+			t.Fatalf("hosts.%s = %v, want %s", key, got, want)
+		}
+	}
+	if _, exists := hosts["remote"]; exists {
+		t.Fatal("hosts must not carry a dedicated remote terminal domain")
+	}
+	tls := values["tls"].(map[string]any)
+	if tls["enabled"] != true || tls["mode"] != "cert-manager-selfsigned" {
+		t.Fatalf("tls values = %#v", tls)
 	}
 }
 
@@ -112,18 +153,10 @@ func TestPlatformMFARequirementIsExplicitAndDefaultsOff(t *testing.T) {
 	}
 }
 
-func TestLocalProfilesAllowBothLoopbackHostnames(t *testing.T) {
+func TestAllowedOriginsAreHttpsDomainsOnly(t *testing.T) {
 	root, err := findRepoRoot(".")
 	if err != nil {
 		t.Fatal(err)
-	}
-	want := []any{
-		"http://localhost:4173",
-		"http://localhost:4174",
-		"http://localhost:4176",
-		"http://127.0.0.1:4173",
-		"http://127.0.0.1:4174",
-		"http://127.0.0.1:4176",
 	}
 	for _, profile := range []string{"evaluation", "local-hardening"} {
 		t.Run(profile, func(t *testing.T) {
@@ -133,10 +166,87 @@ func TestLocalProfilesAllowBothLoopbackHostnames(t *testing.T) {
 			}
 			values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek")
 			runtimeValues := values["runtime"].(map[string]any)
+			want := []any{
+				"https://argus.dev",
+				"https://platform.argus.dev",
+				"https://cards.argus.dev",
+			}
 			if got := runtimeValues["allowedOrigins"]; !reflect.DeepEqual(got, want) {
 				t.Fatalf("allowedOrigins = %#v, want %#v", got, want)
 			}
 		})
+	}
+}
+
+func TestConnectorGatewayHasDedicatedLoadBalancerService(t *testing.T) {
+	for _, profile := range []string{"evaluation", "local-hardening", "production"} {
+		t.Run(profile, func(t *testing.T) {
+			services := resourcesByKind(renderPlatformResources(t, profile), "Service")
+			connector := requireResource(t, services, "argus-connector-gateway")
+			if connector.Object["spec"].(map[string]any)["type"] != "ClusterIP" {
+				t.Fatalf("internal connector Service is not ClusterIP for %s", profile)
+			}
+			public := requireResource(t, services, "argus-connector-gateway-public")
+			spec := public.Object["spec"].(map[string]any)
+			if spec["type"] != "LoadBalancer" {
+				t.Fatalf("public connector Service is not LoadBalancer for %s", profile)
+			}
+			ports := spec["ports"].([]any)
+			if len(ports) != 1 || ports[0].(map[string]any)["port"] != int64(9443) {
+				t.Fatalf("public connector Service must expose only 9443, got %#v", ports)
+			}
+		})
+	}
+}
+
+func TestIngressRendersUnifiedHostsWithTLS(t *testing.T) {
+	resources := renderPlatformResources(t, "evaluation")
+	ingress := requireResource(t, resourcesByKind(resources, "Ingress"), "argus-web")
+	spec := ingress.Object["spec"].(map[string]any)
+	rules := spec["rules"].([]any)
+	hosts := map[string]bool{}
+	for _, rawRule := range rules {
+		rule := rawRule.(map[string]any)
+		hosts[rule["host"].(string)] = true
+	}
+	// The remote-access WSS endpoint shares the enterprise origin instead of
+	// a dedicated terminal domain.
+	for _, want := range []string{"argus.dev", "platform.argus.dev", "cards.argus.dev"} {
+		if !hosts[want] {
+			t.Fatalf("Ingress rule for %s missing", want)
+		}
+	}
+	if hosts["remote.argus.dev"] {
+		t.Fatal("Ingress must not expose a dedicated remote host")
+	}
+	tls := spec["tls"].([]any)
+	if len(tls) != 1 {
+		t.Fatalf("Ingress must terminate TLS with a single multi-SAN secret, got %#v", tls)
+	}
+	tlsHosts := tls[0].(map[string]any)["hosts"].([]any)
+	if len(tlsHosts) != 3 {
+		t.Fatalf("single TLS secret must cover the three browser-facing hosts, got %#v", tlsHosts)
+	}
+	for _, rawRule := range rules {
+		rule := rawRule.(map[string]any)
+		if rule["host"] != "argus.dev" {
+			continue
+		}
+		paths := rule["http"].(map[string]any)["paths"].([]any)
+		wss := paths[0].(map[string]any)
+		if wss["path"] != "/v1/sessions" {
+			t.Fatalf("enterprise host must route /v1/sessions to the gateway, got %#v", paths)
+		}
+		backend := wss["backend"].(map[string]any)["service"].(map[string]any)
+		if backend["name"] != "argus-connector-gateway" {
+			t.Fatalf("remote WSS backend must target argus-connector-gateway, got %#v", backend)
+		}
+	}
+	configMap := requireResource(t, resourcesByKind(resources, "ConfigMap"), "argus-web-runtime-config")
+	data := configMap.Object["data"].(map[string]any)
+	runtimeJSON := data["argus-runtime.json"].(string)
+	if !strings.Contains(runtimeJSON, `"cardOrigin": "https://cards.argus.dev"`) || !strings.Contains(runtimeJSON, `"platformLoginUrl": "https://platform.argus.dev/login"`) {
+		t.Fatalf("runtime config JSON = %q", runtimeJSON)
 	}
 }
 

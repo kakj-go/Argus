@@ -46,6 +46,14 @@ RETURNING *;
 -- name: GetEnterpriseUser :one
 SELECT * FROM enterprise_users WHERE id = $1 AND enterprise_id = $2;
 
+-- name: LockEnterpriseUserForAccessUpdate :one
+SELECT * FROM enterprise_users
+WHERE id = sqlc.arg(id) AND enterprise_id = sqlc.arg(enterprise_id)
+FOR UPDATE;
+
+-- name: LockEnterpriseForAccessUpdate :one
+SELECT id FROM enterprises WHERE id = $1 FOR UPDATE;
+
 -- name: GetEnterpriseUserByID :one
 SELECT * FROM enterprise_users WHERE id = $1;
 
@@ -252,13 +260,21 @@ UPDATE enterprise_users SET last_login_at = now(), updated_at = now() WHERE id =
 UPDATE enterprise_users SET authorization_version = authorization_version + 1, updated_at = now()
 WHERE id = $1 AND enterprise_id = $2 RETURNING authorization_version;
 
+-- name: BumpUserAuthorizationVersionExpected :one
+UPDATE enterprise_users SET authorization_version = authorization_version + 1, updated_at = now()
+WHERE id = sqlc.arg(id) AND enterprise_id = sqlc.arg(enterprise_id)
+  AND authorization_version = sqlc.arg(expected_authorization_version)
+RETURNING authorization_version;
+
 -- name: BumpServiceAccountAuthorizationVersion :one
 UPDATE service_accounts SET authorization_version = authorization_version + 1, updated_at = now()
 WHERE id = $1 AND enterprise_id = $2 RETURNING authorization_version;
 
 -- name: BumpAuthorizationVersionRecord :exec
-UPDATE authorization_versions SET version = version + 1, updated_at = now()
-WHERE enterprise_id = $1 AND subject_type = $2 AND subject_id = $3;
+INSERT INTO authorization_versions (enterprise_id, subject_type, subject_id, version)
+VALUES ($1, $2, $3, 2)
+ON CONFLICT (enterprise_id, subject_type, subject_id)
+DO UPDATE SET version = authorization_versions.version + 1, updated_at = now();
 
 -- name: InitializeAuthorizationVersion :exec
 INSERT INTO authorization_versions (enterprise_id, subject_type, subject_id, version)

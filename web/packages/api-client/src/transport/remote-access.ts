@@ -12,6 +12,7 @@ export class RemoteAccessConnection {
   private serverSequence = 0;
   private ticket?: string;
   private nonce?: string;
+  private opened = false;
   private readonly transport: WebSocketTransport;
 
   constructor(
@@ -20,6 +21,8 @@ export class RemoteAccessConnection {
       cols: number;
       rows: number;
       onFrame(frame: RemoteAccessServerFrame): void;
+      onOpen?(): void;
+      onError?(reason: string): void;
       onClose?(reason: string): void;
     },
   ) {
@@ -27,11 +30,22 @@ export class RemoteAccessConnection {
     this.transport = new WebSocketTransport({
       max_message_bytes: 64 * 1024,
       on_message: (data) => this.onMessage(data),
-      on_close: (event) => options.onClose?.(event.reason || "connection_lost"),
-      on_protocol_error: (code) => options.onClose?.(code),
+      on_close: (event) => {
+        this.opened = false;
+        options.onClose?.(event.reason || "connection_lost");
+      },
+      on_error: () => {
+        options.onError?.("connection_failed");
+      },
+      on_protocol_error: (code) => {
+        options.onError?.(code);
+        options.onClose?.(code);
+      },
     });
     const socket = this.transport.connect(result.websocket_url);
     socket.addEventListener("open", () => {
+      this.opened = true;
+      options.onOpen?.();
       const ticket = this.ticket;
       this.ticket = undefined;
       this.nonce = crypto.randomUUID().replaceAll("-", "");
@@ -39,12 +53,17 @@ export class RemoteAccessConnection {
     }, { once: true });
   }
 
-  input(data: string): void { this.send({ type: "input", data }); }
-  resize(cols: number, rows: number): void { this.send({ type: "resize", cols, rows }); }
-  ping(): void { this.send({ type: "ping" }); }
+  input(data: string): void { if (this.opened) this.send({ type: "input", data }); }
+  resize(cols: number, rows: number): void { if (this.opened) this.send({ type: "resize", cols, rows }); }
+  ping(): void { if (this.opened) this.send({ type: "ping" }); }
   close(reason = "client_close"): void {
-    try { this.send({ type: "close", reason }); } catch { /* Closing an already-lost socket is idempotent. */ }
-    finally { this.transport.close(1000, reason); this.ticket = undefined; this.nonce = undefined; }
+    if (this.opened) {
+      try { this.send({ type: "close", reason }); } catch { /* Closing an already-lost socket is idempotent. */ }
+    }
+    this.opened = false;
+    this.transport.close(1000, reason);
+    this.ticket = undefined;
+    this.nonce = undefined;
   }
 
   private send(frame: Record<string, unknown>): void {

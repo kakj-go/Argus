@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kakj-go/Argus/internal/audit"
+	"github.com/kakj-go/Argus/internal/remoteaccess/revocation"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
@@ -319,6 +320,9 @@ func (service Service) UpdateManagedAccount(ctx context.Context, actorID string,
 			return ErrVersionConflict
 		}
 		if err != nil {
+			return err
+		}
+		if err := revocation.Source(ctx, q, enterpriseID, "managed_account", account.ID, "managed_account_changed"); err != nil {
 			return err
 		}
 		result = account

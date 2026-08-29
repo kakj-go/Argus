@@ -213,8 +213,25 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err := clients.setStage(ctx, cfg, "platform", "running", "installing migrations and platform roles"); err != nil {
 		return err
 	}
+	if cfg.Spec.Images.Mode == "local-registry" {
+		// Reusable image tags leave the completed migration Job in place, so
+		// Helm would skip re-running it and schema changes in a fresh image
+		// would never apply. Drop it and let Helm recreate it from the
+		// current image on every install.
+		_, _ = a.runner.quiet(ctx, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.System,
+			"delete", "job", "argus-postgresql-migration", "--ignore-not-found=true", "--wait=false")
+	}
 	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-platform", cfg.Spec.Namespaces.System, platformChart, platformValues(cfg, credentials, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK, preflight.Network)); err != nil {
 		return err
+	}
+	if cfg.Spec.Images.Mode == "local-registry" {
+		// Local evaluation images intentionally reuse tags such as dev and use
+		// imagePullPolicy=Never. Force every Argus workload to recreate so it
+		// picks up the images loaded into Docker Desktop's containerd on every
+		// install; Kubernetes will not reschedule pods for a same-tag image.
+		if err := a.restartLocalRegistryWorkloads(ctx, cfg); err != nil {
+			return err
+		}
 	}
 	if err := waitForPlatform(ctx, clients, cfg); err != nil {
 		return err
@@ -299,28 +316,21 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 	if len(profiles) > 0 {
 		network = profiles[0]
 	}
+	enterpriseHost := cfg.Spec.Exposure.EnterpriseHost
+	platformHost := cfg.Spec.Exposure.PlatformHost
+	connectorHost := cfg.Spec.Exposure.ConnectorHost
+	cardsHost := "cards." + parentDomain(enterpriseHost)
 	allowedOrigins := []any{
-		"http://localhost:4173",
-		"http://localhost:4174",
-		"http://localhost:4176",
-		"http://127.0.0.1:4173",
-		"http://127.0.0.1:4174",
-		"http://127.0.0.1:4176",
+		"https://" + enterpriseHost,
+		"https://" + platformHost,
+		"https://" + cardsHost,
 	}
-	secureCookies := false
-	if cfg.Spec.Profile == "production" {
-		allowedOrigins = []any{
-			"https://" + cfg.Spec.Exposure.EnterpriseHost,
-			"https://" + cfg.Spec.Exposure.PlatformHost,
-		}
-		secureCookies = true
-	}
-	connectorEnrollmentURL := "http://localhost:8080"
-	connectorGatewayAddress := "grpcs://localhost:9443"
-	if cfg.Spec.Profile == "production" {
-		connectorEnrollmentURL = "https://" + cfg.Spec.Exposure.EnterpriseHost
-		connectorGatewayAddress = "grpcs://" + cfg.Spec.Exposure.ConnectorHost + ":9443"
-	}
+	connectorEnrollmentURL := "https://" + enterpriseHost
+	connectorGatewayAddress := "grpcs://" + connectorHost + ":9443"
+	// The remote-access WSS endpoint is served on the enterprise origin
+	// (wss://<enterprise>/v1/sessions) so the browser reuses the page's TLS
+	// and DNS; no dedicated terminal domain is exposed.
+	remoteOrigin := "https://" + enterpriseHost
 	runtimeValues := map[string]any{
 		"postgresqlPassword": credentials["postgresql-password"], "redisPassword": credentials["redis-password"],
 		"idempotencyEncryptionKey": idempotencyKey, "cursorSigningKey": cursorSigningKey,
@@ -328,7 +338,7 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"connectorEnrollmentURL":     connectorEnrollmentURL,
 		"connectorGatewayAddress":    connectorGatewayAddress,
 		"objectStoreUrl":             "http://argus-minio:9000", "objectStoreBucket": "argus-remote-recordings",
-		"remoteOrigin":         "http://localhost:9445",
+		"remoteOrigin":         remoteOrigin,
 		"objectStoreAccessKey": credentials["minio-root-user"], "objectStoreSecretKey": credentials["minio-root-password"],
 		"telemetryClickhouseMigrationPassword": credentials["telemetry-clickhouse-migration-password"],
 		"telemetryClickhouseWriterPassword":    credentials["telemetry-clickhouse-writer-password"],
@@ -344,7 +354,7 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"otelcolWindowsAmd64Signature": cfg.Spec.Telemetry.WindowsAMD64Signature, "otelcolWindowsAmd64ByteSize": cfg.Spec.Telemetry.WindowsAMD64ByteSize,
 		"otelcolSigningKeyId": cfg.Spec.Telemetry.SigningKeyID, "otelcolSigningPublicKey": cfg.Spec.Telemetry.SigningPublicKey,
 		"otelcolKubernetesImage": cfg.Image("argus-otelcol"),
-		"allowedOrigins":         allowedOrigins, "secureCookies": secureCookies,
+		"allowedOrigins":         allowedOrigins, "secureCookies": true,
 		"keyWrappingMode": "local_test", "breakGlassEnabled": false, "platformMfaRequired": cfg.Spec.Security.PlatformMFARequired, "databaseRolesEnabled": false,
 		"directDeniedCidrs": protectedPrefixes(network),
 	}
@@ -368,12 +378,43 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 	}
 	return map[string]any{
 		"releaseId": cfg.Spec.ReleaseID, "profile": cfg.Spec.Profile, "namespaces": namespacesValues(cfg), "replicas": 1, "setupTokenSecretName": setupSecret,
-		"images":  map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
-		"runtime": runtimeValues,
-		"network": networkValues(network),
-		"production": map[string]any{"hosts": map[string]any{"enterprise": cfg.Spec.Exposure.EnterpriseHost,
-			"platform": cfg.Spec.Exposure.PlatformHost, "connector": cfg.Spec.Exposure.ConnectorHost}},
+		"images":           map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
+		"hosts":            map[string]any{"enterprise": enterpriseHost, "platform": platformHost, "cards": cardsHost, "connector": connectorHost},
+		"ingressClassName": cfg.Spec.Exposure.IngressClassName,
+		"tls":              buildTLSValues(cfg),
+		"runtime":          runtimeValues,
+		"network":          networkValues(network),
 	}
+}
+
+// parentDomain strips the leading service label from a three-or-more-label
+// host (platform.argus.dev -> argus.dev) and returns shorter hosts unchanged.
+func parentDomain(host string) string {
+	labels := strings.Split(host, ".")
+	if len(labels) < 3 {
+		return host
+	}
+	return strings.Join(labels[1:], ".")
+}
+
+func buildTLSValues(cfg *InstallConfig) map[string]any {
+	values := map[string]any{
+		"enabled": true,
+		"mode":    string(cfg.Spec.Exposure.TLS.Mode),
+	}
+
+	switch cfg.Spec.Exposure.TLS.Mode {
+	case TLSModeCertManagerSelfSigned:
+		values["issuerName"] = "argus-ingress-selfsigned"
+		values["issuerKind"] = "ClusterIssuer"
+	case TLSModeCertManagerIssuer:
+		values["issuerName"] = cfg.Spec.Exposure.TLS.IssuerRef.Name
+		values["issuerKind"] = cfg.Spec.Exposure.TLS.IssuerRef.Kind
+	case TLSModeUserProvided:
+		values["secretName"] = cfg.Spec.Exposure.TLS.SecretName
+	}
+
+	return values
 }
 
 func networkValues(profile NetworkProfile) map[string]any {
@@ -667,6 +708,27 @@ func waitForData(ctx context.Context, clients *kubeClients, cfg *InstallConfig) 
 		return strings.EqualFold(state, "completed") || strings.EqualFold(state, "complete")
 	}, 15*time.Minute); err != nil {
 		return fmt.Errorf("wait for ClickHouse: %w", err)
+	}
+	return nil
+}
+
+// restartLocalRegistryWorkloads rolls every deployment that runs the reusable
+// backend/web images so same-tag image updates take effect. Readiness is
+// enforced afterwards by waitForPlatform and waitForTelemetry.
+func (a *App) restartLocalRegistryWorkloads(ctx context.Context, cfg *InstallConfig) error {
+	system := append(
+		append([]string{"argus-web", "argus-server"}, expectedWorkerDeployments(cfg.Spec.Profile)...),
+		"argus-direct-executor", "argus-connector-gateway",
+	)
+	for _, name := range system {
+		if _, err := a.runner.run(ctx, nil, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.System, "rollout", "restart", "deployment/"+name); err != nil {
+			return err
+		}
+	}
+	for _, name := range []string{"argus-telemetry-ingest", "argus-telemetry-writer", "argus-telemetry-query"} {
+		if _, err := a.runner.run(ctx, nil, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.Observability, "rollout", "restart", "deployment/"+name); err != nil {
+			return err
+		}
 	}
 	return nil
 }

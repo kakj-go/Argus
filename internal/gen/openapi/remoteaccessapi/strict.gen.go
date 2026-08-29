@@ -13,42 +13,69 @@ import (
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// ListApprovalWorkflows List remote access approval workflows.
+	// (GET /enterprise/approval-workflows)
+	ListApprovalWorkflows(ctx context.Context, request ListApprovalWorkflowsRequestObject) (ListApprovalWorkflowsResponseObject, error)
+	// CreateApprovalWorkflow Create a remote access approval workflow.
+	// (POST /enterprise/approval-workflows)
+	CreateApprovalWorkflow(ctx context.Context, request CreateApprovalWorkflowRequestObject) (CreateApprovalWorkflowResponseObject, error)
+	// GetApprovalWorkflow Get a remote access approval workflow.
+	// (GET /enterprise/approval-workflows/{id})
+	GetApprovalWorkflow(ctx context.Context, request GetApprovalWorkflowRequestObject) (GetApprovalWorkflowResponseObject, error)
+	// UpdateApprovalWorkflow Update a remote access approval workflow with optimistic concurrency.
+	// (PUT /enterprise/approval-workflows/{id})
+	UpdateApprovalWorkflow(ctx context.Context, request UpdateApprovalWorkflowRequestObject) (UpdateApprovalWorkflowResponseObject, error)
+	// ArchiveApprovalWorkflow Archive an approval workflow.
+	// (POST /enterprise/approval-workflows/{id}/archive)
+	ArchiveApprovalWorkflow(ctx context.Context, request ArchiveApprovalWorkflowRequestObject) (ArchiveApprovalWorkflowResponseObject, error)
+	// DisableApprovalWorkflow Disable an approval workflow.
+	// (POST /enterprise/approval-workflows/{id}/disable)
+	DisableApprovalWorkflow(ctx context.Context, request DisableApprovalWorkflowRequestObject) (DisableApprovalWorkflowResponseObject, error)
+	// EnableApprovalWorkflow Enable an approval workflow.
+	// (POST /enterprise/approval-workflows/{id}/enable)
+	EnableApprovalWorkflow(ctx context.Context, request EnableApprovalWorkflowRequestObject) (EnableApprovalWorkflowResponseObject, error)
+	// GetApprovalWorkflowReferences Get approval workflow references.
+	// (GET /enterprise/approval-workflows/{id}/references)
+	GetApprovalWorkflowReferences(ctx context.Context, request GetApprovalWorkflowReferencesRequestObject) (GetApprovalWorkflowReferencesResponseObject, error)
+	// RestoreApprovalWorkflow Restore an archived approval workflow as a draft.
+	// (POST /enterprise/approval-workflows/{id}/restore)
+	RestoreApprovalWorkflow(ctx context.Context, request RestoreApprovalWorkflowRequestObject) (RestoreApprovalWorkflowResponseObject, error)
 	// ListRemoteAccessGrants List remote access grants.
 	// (GET /enterprise/remote-access-grants)
 	ListRemoteAccessGrants(ctx context.Context, request ListRemoteAccessGrantsRequestObject) (ListRemoteAccessGrantsResponseObject, error)
 	// CreateRemoteAccessGrant Create a remote access grant.
 	// (POST /enterprise/remote-access-grants)
 	CreateRemoteAccessGrant(ctx context.Context, request CreateRemoteAccessGrantRequestObject) (CreateRemoteAccessGrantResponseObject, error)
-	// DisableRemoteAccessGrant Disable a remote access grant.
-	// (DELETE /enterprise/remote-access-grants/{id})
-	DisableRemoteAccessGrant(ctx context.Context, request DisableRemoteAccessGrantRequestObject) (DisableRemoteAccessGrantResponseObject, error)
 	// GetRemoteAccessGrant Get a remote access grant.
 	// (GET /enterprise/remote-access-grants/{id})
 	GetRemoteAccessGrant(ctx context.Context, request GetRemoteAccessGrantRequestObject) (GetRemoteAccessGrantResponseObject, error)
 	// UpdateRemoteAccessGrant Update a remote access grant with optimistic concurrency.
 	// (PUT /enterprise/remote-access-grants/{id})
 	UpdateRemoteAccessGrant(ctx context.Context, request UpdateRemoteAccessGrantRequestObject) (UpdateRemoteAccessGrantResponseObject, error)
+	// ArchiveRemoteAccessGrant Archive a remote access grant.
+	// (POST /enterprise/remote-access-grants/{id}/archive)
+	ArchiveRemoteAccessGrant(ctx context.Context, request ArchiveRemoteAccessGrantRequestObject) (ArchiveRemoteAccessGrantResponseObject, error)
+	// DisableRemoteAccessGrant Disable a remote access grant.
+	// (POST /enterprise/remote-access-grants/{id}/disable)
+	DisableRemoteAccessGrant(ctx context.Context, request DisableRemoteAccessGrantRequestObject) (DisableRemoteAccessGrantResponseObject, error)
+	// EnableRemoteAccessGrant Enable a remote access grant.
+	// (POST /enterprise/remote-access-grants/{id}/enable)
+	EnableRemoteAccessGrant(ctx context.Context, request EnableRemoteAccessGrantRequestObject) (EnableRemoteAccessGrantResponseObject, error)
+	// GetRemoteAccessGrantReferences Get remote access grant references.
+	// (GET /enterprise/remote-access-grants/{id}/references)
+	GetRemoteAccessGrantReferences(ctx context.Context, request GetRemoteAccessGrantReferencesRequestObject) (GetRemoteAccessGrantReferencesResponseObject, error)
+	// RestoreRemoteAccessGrant Restore an archived remote access grant as a draft.
+	// (POST /enterprise/remote-access-grants/{id}/restore)
+	RestoreRemoteAccessGrant(ctx context.Context, request RestoreRemoteAccessGrantRequestObject) (RestoreRemoteAccessGrantResponseObject, error)
 	// ListRemoteAccessLeases List active and historical remote access leases.
 	// (GET /enterprise/remote-access-leases)
 	ListRemoteAccessLeases(ctx context.Context, request ListRemoteAccessLeasesRequestObject) (ListRemoteAccessLeasesResponseObject, error)
 	// RevokeRemoteAccessLease Revoke a remote access lease and its sessions.
 	// (POST /enterprise/remote-access-leases/{id}/revoke)
 	RevokeRemoteAccessLease(ctx context.Context, request RevokeRemoteAccessLeaseRequestObject) (RevokeRemoteAccessLeaseResponseObject, error)
-	// ListRemoteAccessPolicies List remote access approval policies.
-	// (GET /enterprise/remote-access-policies)
-	ListRemoteAccessPolicies(ctx context.Context, request ListRemoteAccessPoliciesRequestObject) (ListRemoteAccessPoliciesResponseObject, error)
-	// CreateRemoteAccessPolicy Create a remote access approval policy.
-	// (POST /enterprise/remote-access-policies)
-	CreateRemoteAccessPolicy(ctx context.Context, request CreateRemoteAccessPolicyRequestObject) (CreateRemoteAccessPolicyResponseObject, error)
-	// DisableRemoteAccessPolicy Disable a remote access approval policy.
-	// (DELETE /enterprise/remote-access-policies/{id})
-	DisableRemoteAccessPolicy(ctx context.Context, request DisableRemoteAccessPolicyRequestObject) (DisableRemoteAccessPolicyResponseObject, error)
-	// GetRemoteAccessPolicy Get a remote access approval policy.
-	// (GET /enterprise/remote-access-policies/{id})
-	GetRemoteAccessPolicy(ctx context.Context, request GetRemoteAccessPolicyRequestObject) (GetRemoteAccessPolicyResponseObject, error)
-	// UpdateRemoteAccessPolicy Update a remote access approval policy with optimistic concurrency.
-	// (PUT /enterprise/remote-access-policies/{id})
-	UpdateRemoteAccessPolicy(ctx context.Context, request UpdateRemoteAccessPolicyRequestObject) (UpdateRemoteAccessPolicyResponseObject, error)
+	// ListRemoteAccessRecordings List remote access recordings.
+	// (GET /enterprise/remote-access-recordings)
+	ListRemoteAccessRecordings(ctx context.Context, request ListRemoteAccessRecordingsRequestObject) (ListRemoteAccessRecordingsResponseObject, error)
 	// GetRemoteAccessRecording Get authorized recording metadata.
 	// (GET /enterprise/remote-access-recordings/{id})
 	GetRemoteAccessRecording(ctx context.Context, request GetRemoteAccessRecordingRequestObject) (GetRemoteAccessRecordingResponseObject, error)
@@ -67,6 +94,39 @@ type StrictServerInterface interface {
 	// DecideRemoteAccessRequest Approve or reject one remote access requirement.
 	// (POST /enterprise/remote-access-requests/{id}/decisions)
 	DecideRemoteAccessRequest(ctx context.Context, request DecideRemoteAccessRequestRequestObject) (DecideRemoteAccessRequestResponseObject, error)
+	// ResumeRemoteAccessRequest Re-evaluate an access request after fresh step-up authentication.
+	// (POST /enterprise/remote-access-requests/{id}/resume)
+	ResumeRemoteAccessRequest(ctx context.Context, request ResumeRemoteAccessRequestRequestObject) (ResumeRemoteAccessRequestResponseObject, error)
+	// ListRemoteAccessRules List remote access rules.
+	// (GET /enterprise/remote-access-rules)
+	ListRemoteAccessRules(ctx context.Context, request ListRemoteAccessRulesRequestObject) (ListRemoteAccessRulesResponseObject, error)
+	// CreateRemoteAccessRule Create a remote access rule.
+	// (POST /enterprise/remote-access-rules)
+	CreateRemoteAccessRule(ctx context.Context, request CreateRemoteAccessRuleRequestObject) (CreateRemoteAccessRuleResponseObject, error)
+	// SimulateRemoteAccessRule Simulate the current remote access decision without creating runtime state.
+	// (POST /enterprise/remote-access-rules/simulate)
+	SimulateRemoteAccessRule(ctx context.Context, request SimulateRemoteAccessRuleRequestObject) (SimulateRemoteAccessRuleResponseObject, error)
+	// GetRemoteAccessRule Get a remote access rule.
+	// (GET /enterprise/remote-access-rules/{id})
+	GetRemoteAccessRule(ctx context.Context, request GetRemoteAccessRuleRequestObject) (GetRemoteAccessRuleResponseObject, error)
+	// UpdateRemoteAccessRule Update a remote access rule with optimistic concurrency.
+	// (PUT /enterprise/remote-access-rules/{id})
+	UpdateRemoteAccessRule(ctx context.Context, request UpdateRemoteAccessRuleRequestObject) (UpdateRemoteAccessRuleResponseObject, error)
+	// ArchiveRemoteAccessRule Archive a remote access rule.
+	// (POST /enterprise/remote-access-rules/{id}/archive)
+	ArchiveRemoteAccessRule(ctx context.Context, request ArchiveRemoteAccessRuleRequestObject) (ArchiveRemoteAccessRuleResponseObject, error)
+	// DisableRemoteAccessRule Disable a remote access rule.
+	// (POST /enterprise/remote-access-rules/{id}/disable)
+	DisableRemoteAccessRule(ctx context.Context, request DisableRemoteAccessRuleRequestObject) (DisableRemoteAccessRuleResponseObject, error)
+	// EnableRemoteAccessRule Enable a remote access rule.
+	// (POST /enterprise/remote-access-rules/{id}/enable)
+	EnableRemoteAccessRule(ctx context.Context, request EnableRemoteAccessRuleRequestObject) (EnableRemoteAccessRuleResponseObject, error)
+	// GetRemoteAccessRuleReferences Get remote access rule references.
+	// (GET /enterprise/remote-access-rules/{id}/references)
+	GetRemoteAccessRuleReferences(ctx context.Context, request GetRemoteAccessRuleReferencesRequestObject) (GetRemoteAccessRuleReferencesResponseObject, error)
+	// RestoreRemoteAccessRule Restore an archived remote access rule as a draft.
+	// (POST /enterprise/remote-access-rules/{id}/restore)
+	RestoreRemoteAccessRule(ctx context.Context, request RestoreRemoteAccessRuleRequestObject) (RestoreRemoteAccessRuleResponseObject, error)
 	// ListRemoteAccessSessions List remote access sessions.
 	// (GET /enterprise/remote-access-sessions)
 	ListRemoteAccessSessions(ctx context.Context, request ListRemoteAccessSessionsRequestObject) (ListRemoteAccessSessionsResponseObject, error)
@@ -82,6 +142,33 @@ type StrictServerInterface interface {
 	// CreateRemoteAccessSessionTicket Issue a one-time short-lived WebSocket ticket.
 	// (POST /enterprise/remote-access-sessions/{id}/tickets)
 	CreateRemoteAccessSessionTicket(ctx context.Context, request CreateRemoteAccessSessionTicketRequestObject) (CreateRemoteAccessSessionTicketResponseObject, error)
+	// ListSessionProfiles List remote access session profiles.
+	// (GET /enterprise/session-profiles)
+	ListSessionProfiles(ctx context.Context, request ListSessionProfilesRequestObject) (ListSessionProfilesResponseObject, error)
+	// CreateSessionProfile Create a remote access session profile.
+	// (POST /enterprise/session-profiles)
+	CreateSessionProfile(ctx context.Context, request CreateSessionProfileRequestObject) (CreateSessionProfileResponseObject, error)
+	// GetSessionProfile Get a remote access session profile.
+	// (GET /enterprise/session-profiles/{id})
+	GetSessionProfile(ctx context.Context, request GetSessionProfileRequestObject) (GetSessionProfileResponseObject, error)
+	// UpdateSessionProfile Update a remote access session profile with optimistic concurrency.
+	// (PUT /enterprise/session-profiles/{id})
+	UpdateSessionProfile(ctx context.Context, request UpdateSessionProfileRequestObject) (UpdateSessionProfileResponseObject, error)
+	// ArchiveSessionProfile Archive a session profile.
+	// (POST /enterprise/session-profiles/{id}/archive)
+	ArchiveSessionProfile(ctx context.Context, request ArchiveSessionProfileRequestObject) (ArchiveSessionProfileResponseObject, error)
+	// DisableSessionProfile Disable a session profile.
+	// (POST /enterprise/session-profiles/{id}/disable)
+	DisableSessionProfile(ctx context.Context, request DisableSessionProfileRequestObject) (DisableSessionProfileResponseObject, error)
+	// EnableSessionProfile Enable a session profile.
+	// (POST /enterprise/session-profiles/{id}/enable)
+	EnableSessionProfile(ctx context.Context, request EnableSessionProfileRequestObject) (EnableSessionProfileResponseObject, error)
+	// GetSessionProfileReferences Get session profile references.
+	// (GET /enterprise/session-profiles/{id}/references)
+	GetSessionProfileReferences(ctx context.Context, request GetSessionProfileReferencesRequestObject) (GetSessionProfileReferencesResponseObject, error)
+	// RestoreSessionProfile Restore an archived session profile as a draft.
+	// (POST /enterprise/session-profiles/{id}/restore)
+	RestoreSessionProfile(ctx context.Context, request RestoreSessionProfileRequestObject) (RestoreSessionProfileResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -121,6 +208,259 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// ListApprovalWorkflows operation middleware
+func (sh *strictHandler) ListApprovalWorkflows(w http.ResponseWriter, r *http.Request, params ListApprovalWorkflowsParams) {
+	var request ListApprovalWorkflowsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListApprovalWorkflows(ctx, request.(ListApprovalWorkflowsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListApprovalWorkflows")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListApprovalWorkflowsResponseObject); ok {
+		if err := validResponse.VisitListApprovalWorkflowsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateApprovalWorkflow operation middleware
+func (sh *strictHandler) CreateApprovalWorkflow(w http.ResponseWriter, r *http.Request, params CreateApprovalWorkflowParams) {
+	var request CreateApprovalWorkflowRequestObject
+
+	request.Params = params
+
+	var body CreateApprovalWorkflowJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateApprovalWorkflow(ctx, request.(CreateApprovalWorkflowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateApprovalWorkflow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateApprovalWorkflowResponseObject); ok {
+		if err := validResponse.VisitCreateApprovalWorkflowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetApprovalWorkflow operation middleware
+func (sh *strictHandler) GetApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetApprovalWorkflowRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetApprovalWorkflow(ctx, request.(GetApprovalWorkflowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetApprovalWorkflow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetApprovalWorkflowResponseObject); ok {
+		if err := validResponse.VisitGetApprovalWorkflowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateApprovalWorkflow operation middleware
+func (sh *strictHandler) UpdateApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateApprovalWorkflowParams) {
+	var request UpdateApprovalWorkflowRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body UpdateApprovalWorkflowJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateApprovalWorkflow(ctx, request.(UpdateApprovalWorkflowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateApprovalWorkflow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateApprovalWorkflowResponseObject); ok {
+		if err := validResponse.VisitUpdateApprovalWorkflowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ArchiveApprovalWorkflow operation middleware
+func (sh *strictHandler) ArchiveApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveApprovalWorkflowParams) {
+	var request ArchiveApprovalWorkflowRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchiveApprovalWorkflow(ctx, request.(ArchiveApprovalWorkflowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchiveApprovalWorkflow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ArchiveApprovalWorkflowResponseObject); ok {
+		if err := validResponse.VisitArchiveApprovalWorkflowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DisableApprovalWorkflow operation middleware
+func (sh *strictHandler) DisableApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableApprovalWorkflowParams) {
+	var request DisableApprovalWorkflowRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DisableApprovalWorkflow(ctx, request.(DisableApprovalWorkflowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DisableApprovalWorkflow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DisableApprovalWorkflowResponseObject); ok {
+		if err := validResponse.VisitDisableApprovalWorkflowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EnableApprovalWorkflow operation middleware
+func (sh *strictHandler) EnableApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableApprovalWorkflowParams) {
+	var request EnableApprovalWorkflowRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EnableApprovalWorkflow(ctx, request.(EnableApprovalWorkflowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EnableApprovalWorkflow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EnableApprovalWorkflowResponseObject); ok {
+		if err := validResponse.VisitEnableApprovalWorkflowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetApprovalWorkflowReferences operation middleware
+func (sh *strictHandler) GetApprovalWorkflowReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetApprovalWorkflowReferencesRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetApprovalWorkflowReferences(ctx, request.(GetApprovalWorkflowReferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetApprovalWorkflowReferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetApprovalWorkflowReferencesResponseObject); ok {
+		if err := validResponse.VisitGetApprovalWorkflowReferencesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RestoreApprovalWorkflow operation middleware
+func (sh *strictHandler) RestoreApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreApprovalWorkflowParams) {
+	var request RestoreApprovalWorkflowRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RestoreApprovalWorkflow(ctx, request.(RestoreApprovalWorkflowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RestoreApprovalWorkflow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RestoreApprovalWorkflowResponseObject); ok {
+		if err := validResponse.VisitRestoreApprovalWorkflowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // ListRemoteAccessGrants operation middleware
@@ -175,33 +515,6 @@ func (sh *strictHandler) CreateRemoteAccessGrant(w http.ResponseWriter, r *http.
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateRemoteAccessGrantResponseObject); ok {
 		if err := validResponse.VisitCreateRemoteAccessGrantResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DisableRemoteAccessGrant operation middleware
-func (sh *strictHandler) DisableRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessGrantParams) {
-	var request DisableRemoteAccessGrantRequestObject
-
-	request.Id = id
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DisableRemoteAccessGrant(ctx, request.(DisableRemoteAccessGrantRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DisableRemoteAccessGrant")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DisableRemoteAccessGrantResponseObject); ok {
-		if err := validResponse.VisitDisableRemoteAccessGrantResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -269,6 +582,140 @@ func (sh *strictHandler) UpdateRemoteAccessGrant(w http.ResponseWriter, r *http.
 	}
 }
 
+// ArchiveRemoteAccessGrant operation middleware
+func (sh *strictHandler) ArchiveRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveRemoteAccessGrantParams) {
+	var request ArchiveRemoteAccessGrantRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchiveRemoteAccessGrant(ctx, request.(ArchiveRemoteAccessGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchiveRemoteAccessGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ArchiveRemoteAccessGrantResponseObject); ok {
+		if err := validResponse.VisitArchiveRemoteAccessGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DisableRemoteAccessGrant operation middleware
+func (sh *strictHandler) DisableRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessGrantParams) {
+	var request DisableRemoteAccessGrantRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DisableRemoteAccessGrant(ctx, request.(DisableRemoteAccessGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DisableRemoteAccessGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DisableRemoteAccessGrantResponseObject); ok {
+		if err := validResponse.VisitDisableRemoteAccessGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EnableRemoteAccessGrant operation middleware
+func (sh *strictHandler) EnableRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableRemoteAccessGrantParams) {
+	var request EnableRemoteAccessGrantRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EnableRemoteAccessGrant(ctx, request.(EnableRemoteAccessGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EnableRemoteAccessGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EnableRemoteAccessGrantResponseObject); ok {
+		if err := validResponse.VisitEnableRemoteAccessGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRemoteAccessGrantReferences operation middleware
+func (sh *strictHandler) GetRemoteAccessGrantReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetRemoteAccessGrantReferencesRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRemoteAccessGrantReferences(ctx, request.(GetRemoteAccessGrantReferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRemoteAccessGrantReferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRemoteAccessGrantReferencesResponseObject); ok {
+		if err := validResponse.VisitGetRemoteAccessGrantReferencesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RestoreRemoteAccessGrant operation middleware
+func (sh *strictHandler) RestoreRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreRemoteAccessGrantParams) {
+	var request RestoreRemoteAccessGrantRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RestoreRemoteAccessGrant(ctx, request.(RestoreRemoteAccessGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RestoreRemoteAccessGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RestoreRemoteAccessGrantResponseObject); ok {
+		if err := validResponse.VisitRestoreRemoteAccessGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListRemoteAccessLeases operation middleware
 func (sh *strictHandler) ListRemoteAccessLeases(w http.ResponseWriter, r *http.Request, params ListRemoteAccessLeasesParams) {
 	var request ListRemoteAccessLeasesRequestObject
@@ -322,145 +769,25 @@ func (sh *strictHandler) RevokeRemoteAccessLease(w http.ResponseWriter, r *http.
 	}
 }
 
-// ListRemoteAccessPolicies operation middleware
-func (sh *strictHandler) ListRemoteAccessPolicies(w http.ResponseWriter, r *http.Request, params ListRemoteAccessPoliciesParams) {
-	var request ListRemoteAccessPoliciesRequestObject
+// ListRemoteAccessRecordings operation middleware
+func (sh *strictHandler) ListRemoteAccessRecordings(w http.ResponseWriter, r *http.Request, params ListRemoteAccessRecordingsParams) {
+	var request ListRemoteAccessRecordingsRequestObject
 
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListRemoteAccessPolicies(ctx, request.(ListRemoteAccessPoliciesRequestObject))
+		return sh.ssi.ListRemoteAccessRecordings(ctx, request.(ListRemoteAccessRecordingsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListRemoteAccessPolicies")
+		handler = middleware(handler, "ListRemoteAccessRecordings")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListRemoteAccessPoliciesResponseObject); ok {
-		if err := validResponse.VisitListRemoteAccessPoliciesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateRemoteAccessPolicy operation middleware
-func (sh *strictHandler) CreateRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, params CreateRemoteAccessPolicyParams) {
-	var request CreateRemoteAccessPolicyRequestObject
-
-	request.Params = params
-
-	var body CreateRemoteAccessPolicyJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateRemoteAccessPolicy(ctx, request.(CreateRemoteAccessPolicyRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateRemoteAccessPolicy")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateRemoteAccessPolicyResponseObject); ok {
-		if err := validResponse.VisitCreateRemoteAccessPolicyResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DisableRemoteAccessPolicy operation middleware
-func (sh *strictHandler) DisableRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessPolicyParams) {
-	var request DisableRemoteAccessPolicyRequestObject
-
-	request.Id = id
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DisableRemoteAccessPolicy(ctx, request.(DisableRemoteAccessPolicyRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DisableRemoteAccessPolicy")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DisableRemoteAccessPolicyResponseObject); ok {
-		if err := validResponse.VisitDisableRemoteAccessPolicyResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetRemoteAccessPolicy operation middleware
-func (sh *strictHandler) GetRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	var request GetRemoteAccessPolicyRequestObject
-
-	request.Id = id
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetRemoteAccessPolicy(ctx, request.(GetRemoteAccessPolicyRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetRemoteAccessPolicy")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetRemoteAccessPolicyResponseObject); ok {
-		if err := validResponse.VisitGetRemoteAccessPolicyResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateRemoteAccessPolicy operation middleware
-func (sh *strictHandler) UpdateRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateRemoteAccessPolicyParams) {
-	var request UpdateRemoteAccessPolicyRequestObject
-
-	request.Id = id
-	request.Params = params
-
-	var body UpdateRemoteAccessPolicyJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateRemoteAccessPolicy(ctx, request.(UpdateRemoteAccessPolicyRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateRemoteAccessPolicy")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdateRemoteAccessPolicyResponseObject); ok {
-		if err := validResponse.VisitUpdateRemoteAccessPolicyResponse(w); err != nil {
+	} else if validResponse, ok := response.(ListRemoteAccessRecordingsResponseObject); ok {
+		if err := validResponse.VisitListRemoteAccessRecordingsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -640,6 +967,319 @@ func (sh *strictHandler) DecideRemoteAccessRequest(w http.ResponseWriter, r *htt
 	}
 }
 
+// ResumeRemoteAccessRequest operation middleware
+func (sh *strictHandler) ResumeRemoteAccessRequest(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ResumeRemoteAccessRequestParams) {
+	var request ResumeRemoteAccessRequestRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ResumeRemoteAccessRequest(ctx, request.(ResumeRemoteAccessRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ResumeRemoteAccessRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ResumeRemoteAccessRequestResponseObject); ok {
+		if err := validResponse.VisitResumeRemoteAccessRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRemoteAccessRules operation middleware
+func (sh *strictHandler) ListRemoteAccessRules(w http.ResponseWriter, r *http.Request, params ListRemoteAccessRulesParams) {
+	var request ListRemoteAccessRulesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRemoteAccessRules(ctx, request.(ListRemoteAccessRulesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRemoteAccessRules")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRemoteAccessRulesResponseObject); ok {
+		if err := validResponse.VisitListRemoteAccessRulesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateRemoteAccessRule operation middleware
+func (sh *strictHandler) CreateRemoteAccessRule(w http.ResponseWriter, r *http.Request, params CreateRemoteAccessRuleParams) {
+	var request CreateRemoteAccessRuleRequestObject
+
+	request.Params = params
+
+	var body CreateRemoteAccessRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateRemoteAccessRule(ctx, request.(CreateRemoteAccessRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateRemoteAccessRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateRemoteAccessRuleResponseObject); ok {
+		if err := validResponse.VisitCreateRemoteAccessRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SimulateRemoteAccessRule operation middleware
+func (sh *strictHandler) SimulateRemoteAccessRule(w http.ResponseWriter, r *http.Request, params SimulateRemoteAccessRuleParams) {
+	var request SimulateRemoteAccessRuleRequestObject
+
+	request.Params = params
+
+	var body SimulateRemoteAccessRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SimulateRemoteAccessRule(ctx, request.(SimulateRemoteAccessRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SimulateRemoteAccessRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SimulateRemoteAccessRuleResponseObject); ok {
+		if err := validResponse.VisitSimulateRemoteAccessRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRemoteAccessRule operation middleware
+func (sh *strictHandler) GetRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetRemoteAccessRuleRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRemoteAccessRule(ctx, request.(GetRemoteAccessRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRemoteAccessRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRemoteAccessRuleResponseObject); ok {
+		if err := validResponse.VisitGetRemoteAccessRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateRemoteAccessRule operation middleware
+func (sh *strictHandler) UpdateRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateRemoteAccessRuleParams) {
+	var request UpdateRemoteAccessRuleRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body UpdateRemoteAccessRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateRemoteAccessRule(ctx, request.(UpdateRemoteAccessRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateRemoteAccessRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateRemoteAccessRuleResponseObject); ok {
+		if err := validResponse.VisitUpdateRemoteAccessRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ArchiveRemoteAccessRule operation middleware
+func (sh *strictHandler) ArchiveRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveRemoteAccessRuleParams) {
+	var request ArchiveRemoteAccessRuleRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchiveRemoteAccessRule(ctx, request.(ArchiveRemoteAccessRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchiveRemoteAccessRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ArchiveRemoteAccessRuleResponseObject); ok {
+		if err := validResponse.VisitArchiveRemoteAccessRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DisableRemoteAccessRule operation middleware
+func (sh *strictHandler) DisableRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessRuleParams) {
+	var request DisableRemoteAccessRuleRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DisableRemoteAccessRule(ctx, request.(DisableRemoteAccessRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DisableRemoteAccessRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DisableRemoteAccessRuleResponseObject); ok {
+		if err := validResponse.VisitDisableRemoteAccessRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EnableRemoteAccessRule operation middleware
+func (sh *strictHandler) EnableRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableRemoteAccessRuleParams) {
+	var request EnableRemoteAccessRuleRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EnableRemoteAccessRule(ctx, request.(EnableRemoteAccessRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EnableRemoteAccessRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EnableRemoteAccessRuleResponseObject); ok {
+		if err := validResponse.VisitEnableRemoteAccessRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRemoteAccessRuleReferences operation middleware
+func (sh *strictHandler) GetRemoteAccessRuleReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetRemoteAccessRuleReferencesRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRemoteAccessRuleReferences(ctx, request.(GetRemoteAccessRuleReferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRemoteAccessRuleReferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRemoteAccessRuleReferencesResponseObject); ok {
+		if err := validResponse.VisitGetRemoteAccessRuleReferencesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RestoreRemoteAccessRule operation middleware
+func (sh *strictHandler) RestoreRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreRemoteAccessRuleParams) {
+	var request RestoreRemoteAccessRuleRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RestoreRemoteAccessRule(ctx, request.(RestoreRemoteAccessRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RestoreRemoteAccessRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RestoreRemoteAccessRuleResponseObject); ok {
+		if err := validResponse.VisitRestoreRemoteAccessRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListRemoteAccessSessions operation middleware
 func (sh *strictHandler) ListRemoteAccessSessions(w http.ResponseWriter, r *http.Request, params ListRemoteAccessSessionsParams) {
 	var request ListRemoteAccessSessionsRequestObject
@@ -779,6 +1419,259 @@ func (sh *strictHandler) CreateRemoteAccessSessionTicket(w http.ResponseWriter, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateRemoteAccessSessionTicketResponseObject); ok {
 		if err := validResponse.VisitCreateRemoteAccessSessionTicketResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSessionProfiles operation middleware
+func (sh *strictHandler) ListSessionProfiles(w http.ResponseWriter, r *http.Request, params ListSessionProfilesParams) {
+	var request ListSessionProfilesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSessionProfiles(ctx, request.(ListSessionProfilesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSessionProfiles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSessionProfilesResponseObject); ok {
+		if err := validResponse.VisitListSessionProfilesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSessionProfile operation middleware
+func (sh *strictHandler) CreateSessionProfile(w http.ResponseWriter, r *http.Request, params CreateSessionProfileParams) {
+	var request CreateSessionProfileRequestObject
+
+	request.Params = params
+
+	var body CreateSessionProfileJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSessionProfile(ctx, request.(CreateSessionProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSessionProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSessionProfileResponseObject); ok {
+		if err := validResponse.VisitCreateSessionProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSessionProfile operation middleware
+func (sh *strictHandler) GetSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetSessionProfileRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSessionProfile(ctx, request.(GetSessionProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSessionProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSessionProfileResponseObject); ok {
+		if err := validResponse.VisitGetSessionProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSessionProfile operation middleware
+func (sh *strictHandler) UpdateSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateSessionProfileParams) {
+	var request UpdateSessionProfileRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body UpdateSessionProfileJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSessionProfile(ctx, request.(UpdateSessionProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSessionProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSessionProfileResponseObject); ok {
+		if err := validResponse.VisitUpdateSessionProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ArchiveSessionProfile operation middleware
+func (sh *strictHandler) ArchiveSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveSessionProfileParams) {
+	var request ArchiveSessionProfileRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchiveSessionProfile(ctx, request.(ArchiveSessionProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchiveSessionProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ArchiveSessionProfileResponseObject); ok {
+		if err := validResponse.VisitArchiveSessionProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DisableSessionProfile operation middleware
+func (sh *strictHandler) DisableSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableSessionProfileParams) {
+	var request DisableSessionProfileRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DisableSessionProfile(ctx, request.(DisableSessionProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DisableSessionProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DisableSessionProfileResponseObject); ok {
+		if err := validResponse.VisitDisableSessionProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EnableSessionProfile operation middleware
+func (sh *strictHandler) EnableSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableSessionProfileParams) {
+	var request EnableSessionProfileRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EnableSessionProfile(ctx, request.(EnableSessionProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EnableSessionProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EnableSessionProfileResponseObject); ok {
+		if err := validResponse.VisitEnableSessionProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSessionProfileReferences operation middleware
+func (sh *strictHandler) GetSessionProfileReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetSessionProfileReferencesRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSessionProfileReferences(ctx, request.(GetSessionProfileReferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSessionProfileReferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSessionProfileReferencesResponseObject); ok {
+		if err := validResponse.VisitGetSessionProfileReferencesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RestoreSessionProfile operation middleware
+func (sh *strictHandler) RestoreSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreSessionProfileParams) {
+	var request RestoreSessionProfileRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RestoreSessionProfile(ctx, request.(RestoreSessionProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RestoreSessionProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RestoreSessionProfileResponseObject); ok {
+		if err := validResponse.VisitRestoreSessionProfileResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

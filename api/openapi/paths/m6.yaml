@@ -22,45 +22,235 @@ grant_item:
     parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
     requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessGrantUpdate'}}}}
     responses: {'200': {description: Grant., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessGrant'}}}}, default: {$ref: '#/components/responses/Error'}}
-  delete:
+grant_enable:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: enableRemoteAccessGrant
+    summary: Enable a remote access grant.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Grant., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessGrant'}}}}, default: {$ref: '#/components/responses/Error'}}
+grant_disable:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
     operationId: disableRemoteAccessGrant
     summary: Disable a remote access grant.
-    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
-    responses: {'204': {description: Grant disabled.}, default: {$ref: '#/components/responses/Error'}}
-policy_collection:
-  get:
-    operationId: listRemoteAccessPolicies
-    summary: List remote access approval policies.
-    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
-    responses: {'200': {description: Policy page., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessPolicyPage'}}}}, default: {$ref: '#/components/responses/Error'}}
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Grant., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessGrant'}}}}, default: {$ref: '#/components/responses/Error'}}
+grant_restore:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
   post:
-    operationId: createRemoteAccessPolicy
-    summary: Create a remote access approval policy.
-    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
-    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessPolicyWrite'}}}}
-    responses: {'201': {description: Policy., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessPolicy'}}}}, default: {$ref: '#/components/responses/Error'}}
-policy_item:
+    operationId: restoreRemoteAccessGrant
+    summary: Restore an archived remote access grant as a draft.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Grant., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessGrant'}}}}, default: {$ref: '#/components/responses/Error'}}
+grant_archive:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: archiveRemoteAccessGrant
+    summary: Archive a remote access grant.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Grant., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessGrant'}}}}, default: {$ref: '#/components/responses/Error'}}
+grant_references:
   parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
   get:
-    operationId: getRemoteAccessPolicy
-    summary: Get a remote access approval policy.
-    responses: {'200': {description: Policy., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessPolicy'}}}}, default: {$ref: '#/components/responses/Error'}}
+    operationId: getRemoteAccessGrantReferences
+    summary: Get remote access grant references.
+    responses: {'200': {description: References., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessReferences'}}}}, default: {$ref: '#/components/responses/Error'}}
+rule_collection:
+  get:
+    operationId: listRemoteAccessRules
+    summary: List remote access rules.
+    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+    responses: {'200': {description: Rule page., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRulePage'}}}}, default: {$ref: '#/components/responses/Error'}}
+  post:
+    operationId: createRemoteAccessRule
+    summary: Create a remote access rule.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRuleWrite'}}}}
+    responses: {'201': {description: Rule., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRule'}}}}, default: {$ref: '#/components/responses/Error'}}
+rule_simulate:
+  post:
+    operationId: simulateRemoteAccessRule
+    summary: Simulate the current remote access decision without creating runtime state.
+    parameters: [{$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRuleSimulationRequest'}}}}
+    responses: {'200': {description: Redacted decision explanation., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRuleSimulationResult'}}}}, default: {$ref: '#/components/responses/Error'}}
+rule_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getRemoteAccessRule
+    summary: Get a remote access rule.
+    responses: {'200': {description: Rule., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRule'}}}}, default: {$ref: '#/components/responses/Error'}}
   put:
-    operationId: updateRemoteAccessPolicy
-    summary: Update a remote access approval policy with optimistic concurrency.
+    operationId: updateRemoteAccessRule
+    summary: Update a remote access rule with optimistic concurrency.
     parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
-    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessPolicyUpdate'}}}}
-    responses: {'200': {description: Policy., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessPolicy'}}}}, default: {$ref: '#/components/responses/Error'}}
-  delete:
-    operationId: disableRemoteAccessPolicy
-    summary: Disable a remote access approval policy.
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRuleUpdate'}}}}
+    responses: {'200': {description: Rule., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRule'}}}}, default: {$ref: '#/components/responses/Error'}}
+rule_enable:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: enableRemoteAccessRule
+    summary: Enable a remote access rule.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Rule., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRule'}}}}, default: {$ref: '#/components/responses/Error'}}
+rule_disable:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: disableRemoteAccessRule
+    summary: Disable a remote access rule.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Rule., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRule'}}}}, default: {$ref: '#/components/responses/Error'}}
+rule_restore:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: restoreRemoteAccessRule
+    summary: Restore an archived remote access rule as a draft.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Rule., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRule'}}}}, default: {$ref: '#/components/responses/Error'}}
+rule_archive:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: archiveRemoteAccessRule
+    summary: Archive a remote access rule.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Rule., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRule'}}}}, default: {$ref: '#/components/responses/Error'}}
+rule_references:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getRemoteAccessRuleReferences
+    summary: Get remote access rule references.
+    responses: {'200': {description: References., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessReferences'}}}}, default: {$ref: '#/components/responses/Error'}}
+workflow_collection:
+  get:
+    operationId: listApprovalWorkflows
+    summary: List remote access approval workflows.
+    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+    responses: {'200': {description: Workflow page., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflowPage'}}}}, default: {$ref: '#/components/responses/Error'}}
+  post:
+    operationId: createApprovalWorkflow
+    summary: Create a remote access approval workflow.
     parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
-    responses: {'204': {description: Policy disabled.}, default: {$ref: '#/components/responses/Error'}}
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflowWrite'}}}}
+    responses: {'201': {description: Workflow., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflow'}}}}, default: {$ref: '#/components/responses/Error'}}
+workflow_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getApprovalWorkflow
+    summary: Get a remote access approval workflow.
+    responses: {'200': {description: Workflow., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflow'}}}}, default: {$ref: '#/components/responses/Error'}}
+  put:
+    operationId: updateApprovalWorkflow
+    summary: Update a remote access approval workflow with optimistic concurrency.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflowUpdate'}}}}
+    responses: {'200': {description: Workflow., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflow'}}}}, default: {$ref: '#/components/responses/Error'}}
+workflow_enable:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: enableApprovalWorkflow
+    summary: Enable an approval workflow.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Workflow., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflow'}}}}, default: {$ref: '#/components/responses/Error'}}
+workflow_disable:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: disableApprovalWorkflow
+    summary: Disable an approval workflow.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Workflow., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflow'}}}}, default: {$ref: '#/components/responses/Error'}}
+workflow_restore:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: restoreApprovalWorkflow
+    summary: Restore an archived approval workflow as a draft.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Workflow., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflow'}}}}, default: {$ref: '#/components/responses/Error'}}
+workflow_archive:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: archiveApprovalWorkflow
+    summary: Archive an approval workflow.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Workflow., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/ApprovalWorkflow'}}}}, default: {$ref: '#/components/responses/Error'}}
+workflow_references:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getApprovalWorkflowReferences
+    summary: Get approval workflow references.
+    responses: {'200': {description: References., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessReferences'}}}}, default: {$ref: '#/components/responses/Error'}}
+profile_collection:
+  get:
+    operationId: listSessionProfiles
+    summary: List remote access session profiles.
+    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+    responses: {'200': {description: Session profile page., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfilePage'}}}}, default: {$ref: '#/components/responses/Error'}}
+  post:
+    operationId: createSessionProfile
+    summary: Create a remote access session profile.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfileWrite'}}}}
+    responses: {'201': {description: Session profile., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfile'}}}}, default: {$ref: '#/components/responses/Error'}}
+profile_item:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getSessionProfile
+    summary: Get a remote access session profile.
+    responses: {'200': {description: Session profile., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfile'}}}}, default: {$ref: '#/components/responses/Error'}}
+  put:
+    operationId: updateSessionProfile
+    summary: Update a remote access session profile with optimistic concurrency.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfileUpdate'}}}}
+    responses: {'200': {description: Session profile., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfile'}}}}, default: {$ref: '#/components/responses/Error'}}
+profile_enable:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: enableSessionProfile
+    summary: Enable a session profile.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Session profile., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfile'}}}}, default: {$ref: '#/components/responses/Error'}}
+profile_disable:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: disableSessionProfile
+    summary: Disable a session profile.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Session profile., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfile'}}}}, default: {$ref: '#/components/responses/Error'}}
+profile_restore:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: restoreSessionProfile
+    summary: Restore an archived session profile as a draft.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Session profile., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfile'}}}}, default: {$ref: '#/components/responses/Error'}}
+profile_archive:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: archiveSessionProfile
+    summary: Archive a session profile.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}, {$ref: '#/components/parameters/ExpectedVersion'}]
+    responses: {'200': {description: Session profile., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/SessionProfile'}}}}, default: {$ref: '#/components/responses/Error'}}
+profile_references:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  get:
+    operationId: getSessionProfileReferences
+    summary: Get session profile references.
+    responses: {'200': {description: References., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessReferences'}}}}, default: {$ref: '#/components/responses/Error'}}
 request_collection:
   get:
     operationId: listRemoteAccessRequests
     summary: List remote access requests visible to the current user.
-    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+    parameters:
+      - {$ref: '#/components/parameters/Cursor'}
+      - {$ref: '#/components/parameters/Limit'}
+      - {name: scope, in: query, required: false, schema: {type: string, enum: [mine, approver, processed], default: mine}}
+      - {name: status, in: query, required: false, schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRequestStatus'}}
+      - {name: created_by, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: host_id, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: protocol, in: query, required: false, schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessProtocol'}}
+      - {name: created_from, in: query, required: false, schema: {type: string, format: date-time}}
+      - {name: created_to, in: query, required: false, schema: {type: string, format: date-time}}
     responses: {'200': {description: Request page., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/AccessRequestPage'}}}}, default: {$ref: '#/components/responses/Error'}}
   post:
     operationId: createRemoteAccessRequest
@@ -82,6 +272,13 @@ request_decisions:
     parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
     requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessDecisionCreate'}}}}
     responses: {'200': {description: Request., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/AccessRequest'}}}}, default: {$ref: '#/components/responses/Error'}}
+request_resume:
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post:
+    operationId: resumeRemoteAccessRequest
+    summary: Re-evaluate an access request after fresh step-up authentication.
+    parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
+    responses: {'200': {description: Request., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/AccessRequest'}}}}, default: {$ref: '#/components/responses/Error'}}
 lease_collection:
   get:
     operationId: listRemoteAccessLeases
@@ -99,7 +296,18 @@ session_collection:
   get:
     operationId: listRemoteAccessSessions
     summary: List remote access sessions.
-    parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+    parameters:
+      - {$ref: '#/components/parameters/Cursor'}
+      - {$ref: '#/components/parameters/Limit'}
+      - {name: scope, in: query, required: false, schema: {type: string, enum: [active, history, all], default: all}}
+      - {name: status, in: query, required: false, schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessSessionStatus'}}
+      - {name: user_id, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: host_id, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: managed_account_id, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: protocol, in: query, required: false, schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessProtocol'}}
+      - {name: connection_mode, in: query, required: false, schema: {type: string, enum: [via_bastion, connector_local, direct_ssh, direct_winrm]}}
+      - {name: created_from, in: query, required: false, schema: {type: string, format: date-time}}
+      - {name: created_to, in: query, required: false, schema: {type: string, format: date-time}}
     responses: {'200': {description: Session page., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessSessionPage'}}}}, default: {$ref: '#/components/responses/Error'}}
   post:
     operationId: createRemoteAccessSession
@@ -134,6 +342,20 @@ recording_item:
     operationId: getRemoteAccessRecording
     summary: Get authorized recording metadata.
     responses: {'200': {description: Recording metadata., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRecording'}}}}, default: {$ref: '#/components/responses/Error'}}
+recording_collection:
+  get:
+    operationId: listRemoteAccessRecordings
+    summary: List remote access recordings.
+    parameters:
+      - {$ref: '#/components/parameters/Cursor'}
+      - {$ref: '#/components/parameters/Limit'}
+      - {name: status, in: query, required: false, schema: {type: string, enum: [recording, available, incomplete, failed, expired]}}
+      - {name: session_id, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: user_id, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: host_id, in: query, required: false, schema: {type: string, format: uuid}}
+      - {name: created_from, in: query, required: false, schema: {type: string, format: date-time}}
+      - {name: created_to, in: query, required: false, schema: {type: string, format: date-time}}
+    responses: {'200': {description: Recording page., content: {application/json: {schema: {$ref: '../components/m6.yaml#/components/schemas/RemoteAccessRecordingPage'}}}}, default: {$ref: '#/components/responses/Error'}}
 recording_events:
   parameters:
     - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -146,6 +368,7 @@ components:
   parameters:
     IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {$ref: '../components/common.yaml#/components/schemas/IdempotencyKey'}}
     CsrfToken: {name: X-CSRF-Token, in: header, required: true, schema: {type: string, minLength: 32, maxLength: 256}}
+    ExpectedVersion: {name: expected_version, in: query, required: true, schema: {type: integer, format: int64, minimum: 1}}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string, minLength: 1, maxLength: 4096}}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
   responses:

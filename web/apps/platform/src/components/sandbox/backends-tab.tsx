@@ -12,12 +12,14 @@ import {
   type SandboxBackend,
 } from "@argus/api-client";
 import {
+  ActionGroup,
   Alert,
   Button,
   DataTable,
   Field,
   FormDrawer,
   Input,
+  RowAction,
   Spinner,
   StatusBadge,
   Switch,
@@ -213,8 +215,8 @@ export function BackendsTab() {
               key: "id",
               header: t("common.actions"),
               render: (row) => (
-                <div className="argus-row-actions">
-                  <Button
+                <ActionGroup>
+                  <RowAction
                     onClick={() =>
                       setForm({
                         id: row.id,
@@ -225,20 +227,16 @@ export function BackendsTab() {
                         defaultStorage: row.defaultStorage,
                       })
                     }
-                    size="sm"
-                    variant="ghost"
                   >
                     {t("common.edit")}
-                  </Button>
-                  <Button
+                  </RowAction>
+                  <RowAction
                     loading={test.isPending && test.variables === row.id}
                     onClick={() => test.mutate(row.id)}
-                    size="sm"
-                    variant="ghost"
                   >
                     {t("sandbox.backends.test")}
-                  </Button>
-                </div>
+                  </RowAction>
+                </ActionGroup>
               ),
             },
           ]}

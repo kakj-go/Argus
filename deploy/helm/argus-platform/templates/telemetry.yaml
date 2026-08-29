@@ -340,6 +340,7 @@ spec:
       containers:
         - name: sync
           image: {{ .Values.images.backend }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
           command: [/usr/local/bin/argus-telemetry-catalog-sync]
           envFrom: [{secretRef: {name: argus-runtime-secrets}}]
           env:

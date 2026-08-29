@@ -9,10 +9,10 @@ import {
   useApi,
   type CreatedApiKey,
   type CreateServiceAccountInput,
-  type DataScope,
   type ServiceAccount,
 } from "@argus/api-client";
 import {
+  ActionGroup,
   Alert,
   Badge,
   Button,
@@ -24,19 +24,19 @@ import {
   Field,
   FormDrawer,
   Input,
+  RowAction,
   Spinner,
   StatusBadge,
   Textarea,
 } from "@argus/ui";
 import { formatDateTime } from "./shared";
-import { CheckList } from "./org-users-tab";
+import { DataAuthorizationDialog } from "./data-authorization-dialog";
 
 type ServiceAccountRow = {
   id: string;
   name: string;
   description: string;
   allowed_tool_ids: string[];
-  data_scope_ids: string[];
   status: ServiceAccount["status"];
   updated_at: string;
 };
@@ -64,13 +64,10 @@ export function OrgAccessTab() {
     queryKey: ["org", "serviceAccounts"],
     queryFn: () => api.org.listServiceAccounts(),
   });
-  const dataScopes = useQuery({
-    queryKey: ["org", "dataScopes"],
-    queryFn: () => api.org.listDataScopes(),
-  });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<ServiceAccount | null>(null);
   const [keysFor, setKeysFor] = useState<ServiceAccount | null>(null);
+  const [authorizationTarget, setAuthorizationTarget] = useState<ServiceAccount | null>(null);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["org", "serviceAccounts"] });
@@ -87,7 +84,6 @@ export function OrgAccessTab() {
         ? api.org.updateServiceAccount(account.id, {
             description: input.description,
             allowed_tool_ids: input.allowed_tool_ids,
-            data_scope_ids: input.data_scope_ids,
           })
         : api.org.createServiceAccount(input),
     onSuccess: () => {
@@ -105,16 +101,12 @@ export function OrgAccessTab() {
     onSuccess: () => void invalidate(),
   });
 
-  const scopeName = (id: string) =>
-    dataScopes.data?.find((scope) => scope.id === id)?.name ?? id;
-
   const rows: ServiceAccountRow[] = (serviceAccounts.data ?? []).map(
     (account) => ({
       id: account.id,
       name: account.name,
       description: account.description ?? "",
       allowed_tool_ids: account.allowed_tool_ids ?? [],
-      data_scope_ids: account.data_scope_ids ?? [],
       status: account.status,
       updated_at: account.updated_at,
     }),
@@ -166,20 +158,6 @@ export function OrgAccessTab() {
                 ),
             },
             {
-              key: "data_scope_ids",
-              header: t("settings.org.accessTab.dataScopes"),
-              render: (row) =>
-                row.data_scope_ids.length === 0 ? (
-                  t("settings.common.all")
-                ) : (
-                  <span className="argus-settings-inline-actions">
-                    {row.data_scope_ids.map((id) => (
-                      <Badge key={id}>{scopeName(id)}</Badge>
-                    ))}
-                  </span>
-                ),
-            },
-            {
               key: "status",
               header: t("settings.common.status"),
               render: (row) => (
@@ -201,8 +179,9 @@ export function OrgAccessTab() {
               key: "actions",
               header: t("settings.common.actions"),
               render: (row) => (
-                <span className="argus-settings-inline-actions">
-                  <Button
+                <ActionGroup>
+                  <RowAction onClick={() => setAuthorizationTarget(serviceAccounts.data?.find((account) => account.id === row.id) ?? null)}>数据授权</RowAction>
+                  <RowAction
                     onClick={() => {
                       setEditing(
                         serviceAccounts.data?.find(
@@ -211,12 +190,10 @@ export function OrgAccessTab() {
                       );
                       setDrawerOpen(true);
                     }}
-                    size="sm"
-                    variant="ghost"
                   >
                     {t("settings.common.edit")}
-                  </Button>
-                  <Button
+                  </RowAction>
+                  <RowAction
                     onClick={() =>
                       setKeysFor(
                         serviceAccounts.data?.find(
@@ -224,26 +201,22 @@ export function OrgAccessTab() {
                         ) ?? null,
                       )
                     }
-                    size="sm"
-                    variant="ghost"
                   >
                     {t("settings.org.accessTab.apiKeys")}
-                  </Button>
-                  <Button
+                  </RowAction>
+                  <RowAction
                     onClick={() => {
                       const account = serviceAccounts.data?.find(
                         (entry) => entry.id === row.id,
                       );
                       if (account) toggleStatus.mutate(account);
                     }}
-                    size="sm"
-                    variant="ghost"
                   >
                     {row.status === "active"
                       ? t("settings.org.accessTab.disableSa")
                       : t("settings.org.accessTab.enableSa")}
-                  </Button>
-                </span>
+                  </RowAction>
+                </ActionGroup>
               ),
             },
           ]}
@@ -254,7 +227,6 @@ export function OrgAccessTab() {
 
       <ServiceAccountDrawer
         account={editing}
-        dataScopes={dataScopes.data ?? []}
         loading={save.isPending}
         onOpenChange={(open) => {
           setDrawerOpen(open);
@@ -272,6 +244,7 @@ export function OrgAccessTab() {
           }}
         />
       )}
+      <DataAuthorizationDialog open={authorizationTarget !== null} onOpenChange={(open) => !open && setAuthorizationTarget(null)} subjectType="service_account" subjectId={authorizationTarget?.id ?? ""} subjectLabel={authorizationTarget?.name ?? ""} />
     </div>
   );
 }
@@ -282,14 +255,12 @@ function ServiceAccountDrawer({
   onSubmit,
   loading,
   account,
-  dataScopes,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: CreateServiceAccountInput) => Promise<unknown>;
   loading: boolean;
   account: ServiceAccount | null;
-  dataScopes: DataScope[];
 }) {
   const { t } = useTranslation();
   const serviceAccountSchema = useMemo(
@@ -298,14 +269,12 @@ function ServiceAccountDrawer({
         name: z.string().trim().min(1, t("settings.common.required")),
         description: z.string().trim(),
         allowed_tools: z.string(),
-        data_scope_ids: z.array(z.string()),
       }),
     [t],
   );
   type ServiceAccountForm = z.infer<typeof serviceAccountSchema>;
   const {
     clearErrors,
-    control,
     register,
     reset,
     handleSubmit,
@@ -317,7 +286,6 @@ function ServiceAccountDrawer({
       name: "",
       description: "",
       allowed_tools: "",
-      data_scope_ids: [],
     },
   });
 
@@ -327,7 +295,6 @@ function ServiceAccountDrawer({
       name: account?.name ?? "",
       description: account?.description ?? "",
       allowed_tools: (account?.allowed_tool_ids ?? []).join("\n"),
-      data_scope_ids: account?.data_scope_ids ?? [],
     });
   }, [account, open, reset]);
   const submit = handleSubmit(async (values) => {
@@ -337,14 +304,12 @@ function ServiceAccountDrawer({
         name: values.name,
         description: values.description || undefined,
         allowed_tool_ids: parseList(values.allowed_tools),
-        data_scope_ids: values.data_scope_ids,
       });
     } catch (error) {
       presentApiFormError(error, {
         fallback: t("settings.common.saveFailed"),
         fieldMap: {
           allowed_tool_ids: "allowed_tools",
-          data_scope_ids: "data_scope_ids",
           description: "description",
           name: "name",
         },
@@ -394,25 +359,6 @@ function ServiceAccountDrawer({
           label={t("settings.org.accessTab.allowedTools")}
         >
           <Textarea {...register("allowed_tools")} rows={4} />
-        </Field>
-        <Field
-          requirement="optional"
-          label={t("settings.org.accessTab.dataScopes")}
-        >
-          <Controller
-            control={control}
-            name="data_scope_ids"
-            render={({ field }) => (
-              <CheckList
-                onChange={field.onChange}
-                options={dataScopes.map((scope) => ({
-                  id: scope.id,
-                  label: scope.name,
-                }))}
-                value={field.value}
-              />
-            )}
-          />
         </Field>
       </div>
     </FormDrawer>

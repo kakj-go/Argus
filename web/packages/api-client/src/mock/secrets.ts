@@ -25,7 +25,21 @@ export function createSecretsDomain(
     created_at: item.created_at,
     updated_at: item.updated_at,
   }));
-  const managedAccounts: ManagedAccount[] = [];
+  const seedHost = db.hosts[0];
+  const seedCredential = credentials.find((item) => item.enterprise_id === seedHost?.enterpriseId && item.protocol !== "kubernetes");
+  const managedAccounts: ManagedAccount[] = seedHost && seedCredential ? [{
+    id: "ma-remote-access-seed",
+    enterprise_id: seedHost.enterpriseId,
+    host_id: seedHost.id,
+    username: seedCredential.username ?? "argus",
+    privilege_level: "standard",
+    credential_id: seedCredential.id,
+    allowed_protocols: seedCredential.protocol === "winrm" ? ["winrm"] : ["ssh"],
+    status: "active",
+    version: 1,
+    created_at: seedCredential.created_at,
+    updated_at: seedCredential.updated_at,
+  }] : [];
 
   return {
     async list(query) {

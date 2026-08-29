@@ -46,6 +46,10 @@ const ApprovalsPage = lazyRouteComponent(
   () => import("./pages/approvals-page"),
   "ApprovalsPage",
 );
+const RemoteSessionsPage = lazyRouteComponent(
+  () => import("./pages/remote-sessions-page"),
+  "RemoteSessionsPage",
+);
 const SettingsOrgPage = lazyRouteComponent(
   () => import("./pages/settings-org-page"),
   "SettingsOrgPage",
@@ -90,7 +94,9 @@ const authedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "authed",
   beforeLoad: ({ location }) => {
-    const session = useEnterpriseAuthStore.getState().session;
+    const auth = useEnterpriseAuthStore.getState();
+    if (auth.status === "unknown" || auth.status === "checking") return;
+    const session = auth.session;
     if (!session || session.session.audience !== "enterprise") {
       throw redirect({
         to: "/login",
@@ -158,6 +164,11 @@ const approvalsRoute = createRoute({
   }),
   component: ApprovalsPage,
 });
+const remoteSessionsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "/remote-sessions",
+  component: RemoteSessionsPage,
+});
 const accountRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "/account",
@@ -209,6 +220,7 @@ const routeTree = rootRoute.addChildren([
       kubernetesClusterRoute,
       tasksRoute,
       approvalsRoute,
+      remoteSessionsRoute,
       accountRoute,
       settingsOrgRoute,
       settingsAiRoute,

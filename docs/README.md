@@ -28,10 +28,13 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 18. [输入校验与安全错误契约](./17-validation-and-error-contract.md)
 19. [分阶段任务文件](./plans/README.md)
 20. [M9 查询语言 ADR](./adr/telemetry-query-ir.md)
-21. [M9 ClickHouse 语义子集 ADR](./adr/clickhouse-semantic-subset.md)
-22. [M10 单进程 Telemetry Query Engine ADR](./adr/telemetry-query-engine.md)
-23. [PlanV2 遥测仪表盘与 AI 分析](./planv2/README.md)
-24. [PlanV3 企业级远程访问治理](./planv3/README.md)
+21. [显式资源数据授权 ADR](./adr/explicit-resource-data-authorization.md)
+22. [M9 ClickHouse 语义子集 ADR](./adr/clickhouse-semantic-subset.md)
+23. [M10 单进程 Telemetry Query Engine ADR](./adr/telemetry-query-engine.md)
+24. [PlanV2 遥测仪表盘与 AI 分析](./planv2/README.md)
+25. [PlanV3 企业级远程访问治理](./planv3/README.md)
+
+远程终端正式采用与页面内容切分视口的 Terminal Dock（非遮罩，类似浏览器 DevTools）：连接生命周期由 `TerminalSessionProvider` 与 Gateway 共同管理，支持底部/左侧/右侧三向停靠切换与 20%～80% 拖拽，位置与尺寸持久化在 `argus.terminalDock`；`server_ready` 语义与远端 shell 启动进度对齐（Connector 路径等待 `state: active`）。
 
 ## 关键术语
 
@@ -61,11 +64,11 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 | Host Bridge                  | 沙箱卡片与 Argus 宿主之间唯一的受控通信通道                                                                                |
 | Platform Super Admin         | 首次初始化创建的平台超级管理员；M2 管理企业、企业管理员和平台审计，OpenSandbox 治理在 M4 接入                              |
 | Enterprise Admin             | 企业管理员，管理本企业用户、模型、Agent、资源、权限和业务设置                                                              |
-| Resource Label               | Host 和 KubernetesCluster 的用户自定义 `labels`，用于企业内归类、过滤和资源范围选择；`argus.io/*` 为系统保留命名空间       |
-| DataScope                    | 由显式资源 ID 和/或经过校验的标签选择器构成的企业内资源授权范围                                                            |
-| Role Binding                 | 将企业用户、部门或 ServiceAccount 的角色和 DataScope 绑定到当前企业的授权关系                                              |
+| Resource Label               | Host 和 KubernetesCluster 的用户自定义 `labels`，仅用于展示、搜索、普通筛选和保存视图；`argus.io/*` 为系统保留命名空间       |
+| Data Authorization Grant     | 将 user、department、role 或 ServiceAccount 与明确 Host/KubernetesCluster ID 绑定的数据授权关系                          |
+| Role Binding                 | 将企业用户、部门或 ServiceAccount 与角色绑定的功能权限关系，不携带显式资源授权                                              |
 | Managed Account              | Host 上可由 Credential Broker 代用的目标账号；账号使用、Secret 查看和账号管理是不同权限                                    |
-| Remote Access Grant          | 用户或部门对显式 Host 或 Host 标签选择结果、Managed Account、协议、动作和有效期的人工远程访问授权                          |
+| Remote Access Grant          | 用户或部门对显式 Host、Managed Account、协议、动作和有效期的人工远程访问授权                                              |
 | Authorization Version        | 用户、角色或授权变化时递增的版本，用于使票据、Pending Action、查询和缓存及时失效                                           |
 | Sandbox Profile              | 超级管理员批准的语言、镜像、资源、网络和生命周期策略集合                                                                   |
 | Leaf Collector               | 部署在受管机器上，采集本机数据并向 Direct/Edge Gateway 推送的轻量 Collector                                                |
@@ -92,7 +95,7 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 - 大 Tool Result 先经过确定性安全投影；Compaction 按 Token 预算触发且不能拆开 ToolCall/ToolResult 或执行事件组，Provider 原生压缩不成为事实来源。
 - 平台超级管理员与企业管理员使用不同管理域；超级管理员默认无权进入企业会话、模型凭证和受管资源。
 - 平台身份与企业身份互斥；一个企业用户只能属于一个企业，第一版不提供多企业 Membership 或企业切换。
-- `enterprise_id` 是第一版唯一租户和安全隔离边界；第一版不实现 Project。Host/Kubernetes 标签用于归类和 DataScope 选择，Bastion Scope 与 Telemetry Group 只描述网络或遥测拓扑。
+- `enterprise_id` 是第一版唯一租户和安全隔离边界；第一版不实现 Project。Host/Kubernetes 标签只用于归类和筛选，Bastion Scope 与 Telemetry Group 只描述网络或遥测拓扑。
 - 企业管理员负责本企业 IAM，但管理权限不自动等于生产 Shell、目标账号、Secret 原值或 AI 生产执行权限。
 - AI 只能选择超级管理员批准的 Sandbox Profile，不能自行指定任意镜像或扩大资源、网络权限。
 - OpenTelemetry Collector 本身承担采集与 OTLP 推送；Argus 不额外开发一个重复的遥测 Pusher 进程。
@@ -111,5 +114,5 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 - 第一版所有中间件随 Argus 安装到同一 Kubernetes 集群的隔离命名空间中；外部托管中间件接入延后。
 - 第一版主前端固定为 React + TypeScript + Vite，交互卡片保持框架无关的 HTML/CSS/JavaScript 沙箱运行时。
 - 第一版后端固定使用 Go；外部 API 使用 REST/OpenAPI，内部服务与 Connector 使用 gRPC/protobuf。
-- ClickHouse 在 M10 按 Enterprise UUID 创建 Metrics、Logs、Traces 租户物理表；表名由 `TenantTableRouter` 生成，企业内部仍通过 `ResourceId` 和 DataScope 裁剪。
-- Telemetry Query 在 `EnterpriseId` 之外还必须执行授权 Resource ID/标签选择结果、Signal、字段脱敏、时间范围和预算约束；用户、AI 和 Card 复用同一裁剪结果。
+- ClickHouse 在 M10 按 Enterprise UUID 创建 Metrics、Logs、Traces 租户物理表；表名由 `TenantTableRouter` 生成，企业内部仍通过 `ResourceId` 和 explicit resource authorization 裁剪。
+- Telemetry Query 在 `EnterpriseId` 之外还必须执行授权 Resource ID、用户筛选条件、Signal、字段脱敏、时间范围和预算约束；标签筛选不能扩大授权范围；用户、AI 和 Card 复用同一裁剪结果。

@@ -15,28 +15,20 @@ import (
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
-func (service Service) ListKubernetesClusters(ctx context.Context, enterpriseID uuid.UUID, scopeIDs []uuid.UUID) ([]db.KubernetesCluster, error) {
+func (service Service) ListKubernetesClusters(ctx context.Context, enterpriseID uuid.UUID, authorizedResourceIDs []uuid.UUID) ([]db.KubernetesCluster, error) {
 	items, err := service.Store.Queries.ListKubernetesClusters(ctx, enterpriseID)
 	if err != nil {
 		return nil, err
 	}
-	return service.Access.FilterKubernetesClusters(ctx, enterpriseID, scopeIDs, items)
+	return service.Access.FilterKubernetesClusters(authorizedResourceIDs, items), nil
 }
 
-func (service Service) GetKubernetesCluster(ctx context.Context, enterpriseID, clusterID uuid.UUID, scopeIDs []uuid.UUID) (db.KubernetesCluster, error) {
+func (service Service) GetKubernetesCluster(ctx context.Context, enterpriseID, clusterID uuid.UUID, authorizedResourceIDs []uuid.UUID) (db.KubernetesCluster, error) {
 	cluster, err := service.Store.Queries.GetKubernetesCluster(ctx, db.GetKubernetesClusterParams{ID: clusterID, EnterpriseID: enterpriseID})
 	if err != nil {
 		return db.KubernetesCluster{}, err
 	}
-	labels, err := DecodeLabels(cluster.Labels)
-	if err != nil {
-		return db.KubernetesCluster{}, err
-	}
-	allowed, _, err := service.Access.CanAccess(ctx, enterpriseID, scopeIDs, "kubernetes_cluster", cluster.ID.String(), labels)
-	if err != nil {
-		return db.KubernetesCluster{}, err
-	}
-	if !allowed {
+	if !service.Access.CanAccess(authorizedResourceIDs, cluster.ID) {
 		return db.KubernetesCluster{}, ErrResourceDenied
 	}
 	return cluster, nil
@@ -128,41 +120,32 @@ func (service Service) PreviewCreateKubernetesCluster(ctx context.Context, subje
 	} else if input.CredentialID.Valid || input.BastionScopeID.Valid {
 		return db.PendingAction{}, ErrInvalidConnectionMode
 	}
-	labelsJSON, _, err := NormalizeUserLabels(input.Labels)
+	_, _, err := NormalizeUserLabels(input.Labels)
 	if err != nil {
 		return db.PendingAction{}, err
 	}
-	labels, _ := DecodeLabels(labelsJSON)
 	clusterID := newResourceID()
-	allowed, matched, err := service.Access.CanAccess(ctx, enterpriseID, subject.DataScopeIDs, "kubernetes_cluster", clusterID.String(), labels)
-	if err != nil || !allowed {
-		return db.PendingAction{}, ErrResourceDenied
-	}
-	impact, _, err := ComputeLabelImpact(ctx, service.Store.Queries, enterpriseID, "kubernetes_cluster", clusterID.String(), map[string]string{}, labels)
-	if err != nil {
-		return db.PendingAction{}, err
-	}
-	plan := kubernetesActionPlan{Operation: "create", ClusterID: clusterID, Input: input, Impact: impact, Version: result.RemoteVersion}
+	snapshot := NewResourceAuthorizationSnapshot("kubernetes_cluster", clusterID)
+	plan := kubernetesActionPlan{Operation: "create", ClusterID: clusterID, Input: input, Version: result.RemoteVersion}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "kubernetes.create", Title: "Create Kubernetes cluster",
 		Summary: "Create a validated Kubernetes cluster", Risk: "write", ResourceType: "kubernetes_cluster", ResourceID: uuid.NullUUID{UUID: clusterID, Valid: true},
-		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"cluster_id": clusterID, "name": input.Name, "matched_data_scope_ids": matched,
-			"affected_subject_count": len(impact.AffectedSubjects)}, Diff: []map[string]string{{"kind": "add", "text": "Create Kubernetes cluster " + input.Name}},
-		ImmutablePlan: plan, ResourceScopeSnapshot: impact, CommitHandler: "argus.kubernetes.create.commit"}, idempotencyKey)
+		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"cluster_id": clusterID, "name": input.Name},
+		Diff:          []map[string]string{{"kind": "add", "text": "Create Kubernetes cluster " + input.Name}},
+		ImmutablePlan: plan, ResourceScopeSnapshot: snapshot, CommitHandler: "argus.kubernetes.create.commit"}, idempotencyKey)
 }
 
 func (service Service) PreviewUpdateKubernetesCluster(ctx context.Context, subject Subject, enterpriseID, clusterID uuid.UUID, input KubernetesInput, idempotencyKey string) (db.PendingAction, error) {
-	current, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.DataScopeIDs)
+	current, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.AuthorizedResourceIDs)
 	if err != nil || current.ResourceVersion != input.ExpectedVersion {
 		return db.PendingAction{}, ErrVersionConflict
 	}
-	before, _ := DecodeLabels(current.Labels)
-	after := before
 	if input.Labels != nil {
+		before, _ := DecodeLabels(current.Labels)
 		encoded, _, err := NormalizeUserLabels(MergeSystemLabels(input.Labels, before))
 		if err != nil {
 			return db.PendingAction{}, err
 		}
-		after, _ = DecodeLabels(encoded)
+		_ = encoded
 	}
 	version := current.KubernetesVersion
 	pathChanged := kubernetesNetworkPathChanged(current, input)
@@ -176,17 +159,14 @@ func (service Service) PreviewUpdateKubernetesCluster(ctx context.Context, subje
 		}
 		version = result.RemoteVersion
 	}
-	impact, _, err := ComputeLabelImpact(ctx, service.Store.Queries, enterpriseID, "kubernetes_cluster", clusterID.String(), before, after)
-	if err != nil {
-		return db.PendingAction{}, err
-	}
-	plan := kubernetesActionPlan{Operation: "update", ClusterID: clusterID, Input: input, Impact: impact, Version: version}
+	snapshot := NewResourceAuthorizationSnapshot("kubernetes_cluster", clusterID)
+	plan := kubernetesActionPlan{Operation: "update", ClusterID: clusterID, Input: input, Version: version}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "kubernetes.update", Title: "Update Kubernetes cluster",
 		Summary: "Apply validated Kubernetes cluster changes", Risk: "write", ResourceType: "kubernetes_cluster", ResourceID: uuid.NullUUID{UUID: clusterID, Valid: true},
 		ExpectedResourceVersion: pgtype.Int8{Int64: input.ExpectedVersion, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
-		Preview: map[string]any{"cluster_id": clusterID, "affected_subject_count": len(impact.AffectedSubjects)},
+		Preview: map[string]any{"cluster_id": clusterID},
 		Diff:    []map[string]string{{"kind": "change", "text": "Update Kubernetes cluster " + current.Name}}, ImmutablePlan: plan,
-		ResourceScopeSnapshot: impact, CommitHandler: "argus.kubernetes.update.commit"}, idempotencyKey)
+		ResourceScopeSnapshot: snapshot, CommitHandler: "argus.kubernetes.update.commit"}, idempotencyKey)
 }
 
 func (service Service) requireKubernetesUpdateConnectionTest(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, current db.KubernetesCluster, input KubernetesInput) (db.ConnectionTest, ConnectionTestResult, error) {
@@ -226,25 +206,21 @@ func kubernetesNetworkPathChanged(current db.KubernetesCluster, input Kubernetes
 }
 
 func (service Service) PreviewDeleteKubernetesCluster(ctx context.Context, subject Subject, enterpriseID, clusterID uuid.UUID, expectedVersion int64, idempotencyKey string) (db.PendingAction, error) {
-	current, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.DataScopeIDs)
+	current, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.AuthorizedResourceIDs)
 	if err != nil || current.ResourceVersion != expectedVersion {
 		return db.PendingAction{}, ErrVersionConflict
 	}
-	before, _ := DecodeLabels(current.Labels)
-	impact, _, err := ComputeLabelImpact(ctx, service.Store.Queries, enterpriseID, "kubernetes_cluster", clusterID.String(), before, map[string]string{})
-	if err != nil {
-		return db.PendingAction{}, err
-	}
-	plan := kubernetesActionPlan{Operation: "delete", ClusterID: clusterID, Input: KubernetesInput{ExpectedVersion: expectedVersion}, Impact: impact}
+	snapshot := NewResourceAuthorizationSnapshot("kubernetes_cluster", clusterID)
+	plan := kubernetesActionPlan{Operation: "delete", ClusterID: clusterID, Input: KubernetesInput{ExpectedVersion: expectedVersion}}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "kubernetes.delete", Title: "Delete Kubernetes cluster",
 		Summary: "Logically delete Kubernetes cluster " + current.Name, Risk: "dangerous", ResourceType: "kubernetes_cluster", ResourceID: uuid.NullUUID{UUID: clusterID, Valid: true},
 		ExpectedResourceVersion: pgtype.Int8{Int64: expectedVersion, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
-		Preview: map[string]any{"cluster_id": clusterID, "affected_subject_count": len(impact.AffectedSubjects)},
+		Preview: map[string]any{"cluster_id": clusterID},
 		Diff:    []map[string]string{{"kind": "remove", "text": "Delete Kubernetes cluster " + current.Name}}, ImmutablePlan: plan,
-		ResourceScopeSnapshot: impact, CommitHandler: "argus.kubernetes.delete.commit"}, idempotencyKey)
+		ResourceScopeSnapshot: snapshot, CommitHandler: "argus.kubernetes.delete.commit"}, idempotencyKey)
 }
 
-func (service Service) commitKubernetes(ctx context.Context, q *db.Queries, actorID string, enterpriseID uuid.UUID, plan kubernetesActionPlan) (ActionCommitResult, error) {
+func (service Service) commitKubernetes(ctx context.Context, q *db.Queries, actorID, actorType string, enterpriseID uuid.UUID, plan kubernetesActionPlan) (ActionCommitResult, error) {
 	var cluster db.KubernetesCluster
 	var err error
 	switch plan.Operation {
@@ -261,6 +237,12 @@ func (service Service) commitKubernetes(ctx context.Context, q *db.Queries, acto
 			ApiServer: plan.Input.APIServer, ConnectionMode: plan.Input.ConnectionMode, BastionScopeID: plan.Input.BastionScopeID,
 			CredentialID: plan.Input.CredentialID, DefaultNamespace: plan.Input.DefaultNamespace, Environment: plan.Input.Environment,
 			Labels: labels, LabelsHash: hash, ConnectionStatus: status})
+		if err == nil {
+			creator, parseErr := uuid.Parse(actorID)
+			if parseErr == nil {
+				_, err = q.AddDataAuthorizationGrant(ctx, db.AddDataAuthorizationGrantParams{ID: newResourceID(), EnterpriseID: enterpriseID, SubjectType: explicitGrantSubjectType(actorType), SubjectID: creator, ResourceType: "kubernetes_cluster", ResourceID: cluster.ID, CreatedBy: uuid.NullUUID{UUID: creator, Valid: true}})
+			}
+		}
 	case "update":
 		params := db.UpdateKubernetesClusterParams{ID: plan.ClusterID, EnterpriseID: enterpriseID, ResourceVersion: plan.Input.ExpectedVersion,
 			Name: text(plan.Input.Name), Environment: text(plan.Input.Environment), ApiServer: text(plan.Input.APIServer), ConnectionMode: text(plan.Input.ConnectionMode),
@@ -292,9 +274,6 @@ func (service Service) commitKubernetes(ctx context.Context, q *db.Queries, acto
 	if err != nil {
 		return ActionCommitResult{}, err
 	}
-	if err := ApplyLabelImpact(ctx, q, enterpriseID, plan.Impact); err != nil {
-		return ActionCommitResult{}, err
-	}
 	result := ActionCommitResult{ResourceType: "kubernetes_cluster", ResourceID: cluster.ID, ResourceVersion: cluster.ResourceVersion, Summary: "Kubernetes cluster change committed"}
 	if plan.Operation == "create" && plan.Input.ConnectionMode == "in_cluster" {
 		if service.ClusterEnrollment == nil {
@@ -310,21 +289,17 @@ func (service Service) commitKubernetes(ctx context.Context, q *db.Queries, acto
 }
 
 func (service Service) KubernetesNamespaceAllowed(ctx context.Context, subject Subject, enterpriseID, clusterID uuid.UUID, namespace string) error {
-	if _, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.DataScopeIDs); err != nil {
+	if _, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.AuthorizedResourceIDs); err != nil {
 		return err
 	}
-	allowed, err := service.Access.CanAccessNamespace(ctx, enterpriseID, subject.DataScopeIDs, clusterID, namespace)
-	if err != nil {
-		return err
-	}
-	if !allowed {
+	if !service.Access.CanAccessNamespace(subject.AuthorizedResourceIDs, clusterID) {
 		return ErrResourceDenied
 	}
 	return nil
 }
 
 func (service Service) ListKubernetesResources(ctx context.Context, subject Subject, enterpriseID, clusterID uuid.UUID, query KubernetesQuery) ([]KubernetesObject, error) {
-	cluster, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.DataScopeIDs)
+	cluster, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.AuthorizedResourceIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +332,7 @@ func (service Service) ListKubernetesResources(ctx context.Context, subject Subj
 }
 
 func (service Service) GetKubernetesPodLogs(ctx context.Context, subject Subject, enterpriseID, clusterID uuid.UUID, query PodLogsQuery) ([]byte, bool, error) {
-	cluster, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.DataScopeIDs)
+	cluster, err := service.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.AuthorizedResourceIDs)
 	if err != nil {
 		return nil, false, err
 	}

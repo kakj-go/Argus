@@ -41,6 +41,8 @@ spec:
       labels:
         app.kubernetes.io/name: {{ $item.name }}
         app.kubernetes.io/part-of: argus
+      annotations:
+        checksum/runtime-config: {{ include (print $root.Template.BasePath "/config.yaml") $root | sha256sum }}
     spec:
       {{- if or (eq $item.name "argus-server") $isWorker (eq $item.name "argus-connector-gateway") }}
       serviceAccountName: {{ if $isWorker }}argus-worker{{ else }}{{ $item.name }}{{ end }}
@@ -280,21 +282,30 @@ kind: Service
 metadata:
   name: argus-connector-gateway
   namespace: {{ .Values.namespaces.system }}
-  {{- if eq .Values.profile "production" }}
-  annotations:
-    {{- toYaml .Values.production.connectorService.annotations | nindent 4 }}
-  {{- end }}
 spec:
-  type: {{ if eq .Values.profile "production" }}{{ .Values.production.connectorService.type }}{{ else }}ClusterIP{{ end }}
-  {{- if and (eq .Values.profile "production") (or (eq .Values.production.connectorService.type "LoadBalancer") (eq .Values.production.connectorService.type "NodePort")) }}
-  externalTrafficPolicy: Local
-  {{- end }}
+  type: ClusterIP
   selector: {app.kubernetes.io/name: argus-connector-gateway}
   ports:
     - {name: health, port: 8081, targetPort: health}
     - {name: connector, port: 9443, targetPort: connector}
     - {name: remote-wss, port: 9445, targetPort: remote-wss}
     - {name: remote-rpc, port: 9446, targetPort: remote-rpc}
+---
+# Public TCP entry for the connector mTLS channel (grpcs://<hosts.connector>:9443).
+# LoadBalancer TCP passthrough only; TLS is terminated by the gateway's own PKI.
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-connector-gateway-public
+  namespace: {{ .Values.namespaces.system }}
+  annotations:
+    {{- toYaml .Values.connectorPublicService.annotations | nindent 4 }}
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector: {app.kubernetes.io/name: argus-connector-gateway}
+  ports:
+    - {name: connector, port: 9443, targetPort: connector}
 ---
 apiVersion: v1
 kind: Service

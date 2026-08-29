@@ -43,8 +43,8 @@ type E2EEnvironment struct {
 	ImagePlatform      string
 	Argusctl           string
 	Kube               *E2EKube
+	Endpoints          *E2EEndpoints
 	Processes          []*Process
-	Forwards           []*KubeForward
 	ManagedNamespaces  []string
 	ManagedClusterRBAC []string
 	State              *ScenarioState
@@ -175,15 +175,12 @@ func (a *App) runE2ECluster(ctx context.Context, options E2EOptions) (returnErr 
 		return err
 	}
 	env.installed = true
-	if err := a.configureE2ERuntime(ctx, env); err != nil {
-		return err
-	}
 	env.fixtureAttempted = true
 	if err := a.installE2EFixtures(ctx, env); err != nil {
 		return err
 	}
 	env.fixtureReady = true
-	if err := a.startE2EForwards(ctx, env); err != nil {
+	if err := a.resolveE2EAccess(ctx, env); err != nil {
 		return err
 	}
 	if err := a.runE2EScenarios(ctx, env); err != nil {
@@ -315,11 +312,6 @@ func (a *App) cleanupE2E(env *E2EEnvironment) error {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("%s: %w", operation, err))
 		}
 	}
-	for index := len(env.Forwards) - 1; index >= 0; index-- {
-		if err := env.Forwards[index].Stop(); err != nil && !isPortForwardNotFound(err) {
-			record("stop port-forward", err)
-		}
-	}
 	for index := len(env.Processes) - 1; index >= 0; index-- {
 		record("stop local process", env.Processes[index].Stop(5*time.Second))
 	}
@@ -372,19 +364,6 @@ func (a *App) cleanupE2E(env *E2EEnvironment) error {
 		}
 	}
 	return errors.Join(cleanupErrors...)
-}
-
-// A port-forward can report NotFound when its Service is removed before the
-// forwarding goroutine observes the stop signal. The Service is already gone,
-// so this is an idempotent cleanup result rather than a failed teardown.
-func isPortForwardNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	if apierrors.IsNotFound(err) {
-		return true
-	}
-	return strings.Contains(strings.ToLower(err.Error()), " not found")
 }
 
 func cleanupManagedCollectorRBAC(ctx context.Context, env *E2EEnvironment) error {

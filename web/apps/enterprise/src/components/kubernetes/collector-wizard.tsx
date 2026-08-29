@@ -8,10 +8,10 @@ import {
 } from "@argus/api-client";
 import {
   Alert,
-  Button,
   DataTable,
   EmptyState,
   KeyValueGrid,
+  RowAction,
   Spinner,
   StatusBadge,
   Wizard,
@@ -193,7 +193,7 @@ export function CollectorWizard({
       header: t("kubernetes.table.actions"),
       render: (row) =>
         row.status === "proposed" ? (
-          <Button
+          <RowAction
             disabled={row.host === "—"}
             loading={verify.isPending && verify.variables?.bindingId === row.id}
             onClick={() =>
@@ -203,11 +203,9 @@ export function CollectorWizard({
                 version: row.version,
               })
             }
-            size="sm"
-            variant="primary"
           >
             {t("kubernetes.collector.wizard.verify")}
-          </Button>
+          </RowAction>
         ) : null,
     },
   ];

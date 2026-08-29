@@ -7,6 +7,7 @@ import {
   type KubernetesResource,
 } from "@argus/api-client";
 import {
+  ActionGroup,
   Button,
   DataTable,
   Dialog,
@@ -14,6 +15,7 @@ import {
   FormDrawer,
   KeyValueGrid,
   LogViewer,
+  RowAction,
   Spinner,
   StatusBadge,
   Tabs,
@@ -247,16 +249,16 @@ export function WorkloadExplorer({ cluster }: { cluster: KubernetesCluster }) {
       key: "actions",
       header: t("kubernetes.table.actions"),
       render: (row) => (
-        <div className="argus-inline-actions">
-          <Button onClick={() => setDetail(row)} size="sm" variant="ghost">
+        <ActionGroup>
+          <RowAction onClick={() => setDetail(row)}>
             {t("kubernetes.table.detail")}
-          </Button>
+          </RowAction>
           {row.resource_type === "pod" && row.namespace && (
-            <Button onClick={() => setLogPod(row)} size="sm" variant="ghost">
+            <RowAction onClick={() => setLogPod(row)}>
               {t("kubernetes.table.logs")}
-            </Button>
+            </RowAction>
           )}
-        </div>
+        </ActionGroup>
       ),
     },
   ];

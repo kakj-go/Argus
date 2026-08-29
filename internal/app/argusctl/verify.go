@@ -12,6 +12,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type VerifyCheck struct {
@@ -103,6 +104,21 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 		add("health/"+deployment, a.podHealthProbe(ctx, cfg, clients, cfg.Spec.Namespaces.System, deployment, 8081))
 	}
 
+	ingressHosts := map[string]string{
+		"enterprise": cfg.Spec.Exposure.EnterpriseHost,
+		"platform":   cfg.Spec.Exposure.PlatformHost,
+		"cards":      "cards." + parentDomain(cfg.Spec.Exposure.EnterpriseHost),
+		"remote":     "remote." + parentDomain(cfg.Spec.Exposure.PlatformHost),
+	}
+	add("ingress-ready", ingressAddressReady(ctx, clients, cfg))
+	if cfg.Spec.Exposure.TLS.Mode != TLSModeUserProvided {
+		add("ingress-certificates", ingressCertificatesReady(ctx, clients, cfg, ingressHosts))
+	}
+	add("connector-lb", connectorLoadBalancerReady(ctx, clients, cfg))
+	add("https-endpoint/enterprise", a.httpsProbe(ctx, cfg, ingressHosts["enterprise"]))
+	add("https-endpoint/platform", a.httpsProbe(ctx, cfg, ingressHosts["platform"]))
+	add("cors-origin", a.corsOriginProbe(ctx, cfg, ingressHosts["platform"]))
+
 	postgresSQL := `set -eu; export PGPASSWORD="$POSTGRES_PASSWORD"; psql -U argus -d argus -v ON_ERROR_STOP=1 -Atc "BEGIN; CREATE TEMP TABLE argus_installation_checks(id text PRIMARY KEY, value text); INSERT INTO argus_installation_checks(id,value) VALUES ('argus-e2e','postgres-ok'); SELECT value FROM argus_installation_checks WHERE id='argus-e2e'; COMMIT;" | grep postgres-ok`
 	add("postgresql-write-read", a.execBySelector(ctx, cfg, clients, cfg.Spec.Namespaces.System, "app.kubernetes.io/name=argus-postgresql", "postgresql", postgresSQL))
 	redisCommand := `set -eu; redis-cli -a "$REDIS_PASSWORD" SET argus:e2e redis-ok >/dev/null; test "$(redis-cli -a "$REDIS_PASSWORD" GET argus:e2e)" = redis-ok; redis-cli -a "$REDIS_PASSWORD" DEL argus:e2e >/dev/null; test -z "$(redis-cli -a "$REDIS_PASSWORD" GET argus:e2e)"`
@@ -147,6 +163,104 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 		return fmt.Errorf("one or more verification checks failed")
 	}
 	return nil
+}
+
+func ingressAddressReady(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
+	ingress, err := clients.typed.NetworkingV1().Ingresses(cfg.Spec.Namespaces.System).Get(ctx, "argus-web", metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("read Ingress argus-web: %w", err)
+	}
+	if len(ingress.Status.LoadBalancer.Ingress) == 0 {
+		return fmt.Errorf("Ingress argus-web has no load-balancer address yet; the ingress controller may still be allocating one")
+	}
+	return nil
+}
+
+func ingressCertificatesReady(ctx context.Context, clients *kubeClients, cfg *InstallConfig, hosts map[string]string) error {
+	certificateGVR := schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates"}
+	for key, host := range hosts {
+		object, err := clients.dynamic.Resource(certificateGVR).Namespace(cfg.Spec.Namespaces.System).Get(ctx, "argus-web-"+key, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("read Certificate argus-web-%s: %w", key, err)
+		}
+		ready := false
+		if conditions, found, _ := unstructuredNestedSlice(object.Object, "status", "conditions"); found {
+			for _, raw := range conditions {
+				condition, _ := raw.(map[string]any)
+				if condition["type"] == "Ready" && condition["status"] == "True" {
+					ready = true
+					break
+				}
+			}
+		}
+		if !ready {
+			return fmt.Errorf("certificate for %s (%s) is not Ready", host, key)
+		}
+	}
+	return nil
+}
+
+func connectorLoadBalancerReady(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
+	service, err := clients.typed.CoreV1().Services(cfg.Spec.Namespaces.System).Get(ctx, "argus-connector-gateway-public", metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("read Service argus-connector-gateway-public: %w", err)
+	}
+	if len(service.Status.LoadBalancer.Ingress) == 0 {
+		return fmt.Errorf("connector load balancer has no address yet; ensure the cluster provides a LoadBalancer implementation")
+	}
+	return nil
+}
+
+func (a *App) httpsProbe(ctx context.Context, cfg *InstallConfig, host string) error {
+	status, err := a.curlStatus(ctx, "https://"+host+"/healthz", "")
+	if err != nil {
+		return err
+	}
+	if status != "200" {
+		return fmt.Errorf("https://%s/healthz returned HTTP %s (expected 200; check DNS, ingress, certificate, and backend)", host, status)
+	}
+	return nil
+}
+
+// corsOriginProbe exercises the exact browser-origin path that produced
+// "origin not allowed" regressions: an allowed Origin must pass and a forged
+// Origin must be rejected by the backend CORS middleware.
+func (a *App) corsOriginProbe(ctx context.Context, cfg *InstallConfig, platformHost string) error {
+	status, err := a.curlStatus(ctx, "https://"+platformHost+"/api/v1/setup/status", "https://"+platformHost)
+	if err != nil {
+		return err
+	}
+	if status == "403" {
+		return fmt.Errorf("allowed Origin https://%s was rejected (403): ARGUS_ALLOWED_ORIGINS does not match the deployed origin", platformHost)
+	}
+	if status != "200" && status != "401" {
+		return fmt.Errorf("setup status with allowed Origin returned HTTP %s", status)
+	}
+	status, err = a.curlStatus(ctx, "https://"+platformHost+"/api/v1/setup/status", "https://evil.example.net")
+	if err != nil {
+		return err
+	}
+	if status != "403" {
+		return fmt.Errorf("forged Origin returned HTTP %s (expected 403 rejection)", status)
+	}
+	return nil
+}
+
+func (a *App) curlStatus(ctx context.Context, url, origin string) (string, error) {
+	args := []string{"-ksS", "--max-time", "20", "-o", "/dev/null", "-w", "%{http_code}"}
+	if origin != "" {
+		args = append(args, "-H", "Origin: "+origin)
+	}
+	args = append(args, url)
+	output, err := a.runner.quiet(ctx, "curl", args...)
+	if err != nil {
+		return "", fmt.Errorf("probe %s with curl: %w", url, err)
+	}
+	status := strings.TrimSpace(output)
+	if len(status) != 3 {
+		return "", fmt.Errorf("probe %s returned unexpected curl output %q", url, output)
+	}
+	return status, nil
 }
 
 func (a *App) httpProbe(ctx context.Context, cfg *InstallConfig, namespace, service string, port int) error {

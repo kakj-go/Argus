@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { RefreshCw } from "lucide-react";
 import { z } from "zod";
 import {
-  apiErrorPresentation,
   formConstraint,
   formatApiError,
-  RemoteAccessConnection,
   useApi,
+  useTerminalSessions,
   type Host,
   type RemoteAccessSession,
 } from "@argus/api-client";
@@ -23,12 +23,10 @@ import {
   Field,
   Input,
   Select,
-  StatusBadge,
-  TerminalEmulator,
-  type TerminalLine,
 } from "@argus/ui";
-import { RemoteRecordingPlayer } from "./remote-recording-player";
-import { MfaStepUpDialog } from "../security/mfa-step-up-dialog";
+import { RecordingDetailDialog } from "../remote-sessions/recording-detail";
+import { SessionTable } from "../remote-sessions/session-table";
+import { TerminalPanel } from "./terminal-panel";
 
 const activeStates: RemoteAccessSession["status"][] = [
   "authorized",
@@ -42,13 +40,14 @@ export function RealTerminalTab({ host }: { host: Host }) {
   const { t } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
-  const connection = useRef<RemoteAccessConnection | null>(null);
+  const { sessions: terminalSessions } = useTerminalSessions();
   const [error, setError] = useState("");
-  const [starting, setStarting] = useState(false);
-  const [stepUpOpen, setStepUpOpen] = useState(false);
-  const [live, setLive] = useState<RemoteAccessSession>();
-  const [lines, setLines] = useState<TerminalLine[]>([]);
-  const [recording, setRecording] = useState<RemoteAccessSession>();
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const terminalPanelRef = useRef<{
+    createSession: (accountId: string, reason: string) => Promise<void>;
+    attachSession: (session: RemoteAccessSession, ticket: any) => Promise<void>;
+    showSession: (sessionId: string) => void;
+  }>(null);
 
   const accounts = useQuery({
     queryKey: ["managed-accounts", host.id],
@@ -57,13 +56,36 @@ export function RealTerminalTab({ host }: { host: Host }) {
         (item) => item.host_id === host.id && item.status === "active",
       ),
   });
+  // 会话表展示需要用户显示名；与「会话中心」使用同一 SessionTable 组件。
+  const users = useQuery({
+    queryKey: ["org", "users"],
+    queryFn: () => api.org.listUsers(),
+  });
+  const userNames = useMemo(
+    () => new Map((users.data ?? []).map((item) => [item.id, item.displayName])),
+    [users.data],
+  );
+  // 与「会话中心」共用 ["remote-access", "sessions"] 前缀，SessionTable
+  // 终止/进入操作后的失效才能同步刷新本页列表。
   const sessions = useQuery({
-    queryKey: ["remote-access-sessions", host.id],
+    queryKey: ["remote-access", "sessions", "host", host.id],
     queryFn: async () =>
       (await api.remoteAccess.listSessions()).items.filter(
         (item) => item.host_id === host.id,
       ),
+    // 存在「终止中」会话时自动轮询，后端收敛后列表自动转历史。
+    refetchInterval: (query) =>
+      query.state.data?.some((item) => item.status === "terminating")
+        ? 2000
+        : false,
   });
+  const activeSessions = useMemo(
+    () =>
+      (sessions.data ?? []).filter((item) =>
+        activeStates.includes(item.status),
+      ),
+    [sessions.data],
+  );
   const protocol = host.connection_mode === "direct_winrm" ? "winrs" : "ssh";
   const options = (accounts.data ?? [])
     .filter((item) =>
@@ -90,109 +112,47 @@ export function RealTerminalTab({ host }: { host: Host }) {
     resolver: zodResolver(schema),
     defaultValues: { accountId: "", reason: "" },
   });
-  useEffect(() => () => connection.current?.close("component_destroyed"), []);
-
-  const refresh = () =>
-    void queryClient.invalidateQueries({
-      queryKey: ["remote-access-sessions"],
-    });
-  const openSession = async ({ accountId, reason }: SessionForm) => {
-    const request = await api.remoteAccess.createRequest({
-      host_id: host.id,
-      managed_account_id: accountId,
-      protocol,
-      action: "terminal",
-      reason,
-    });
-    if (request.status !== "authorized") {
-      setError(t("hosts.preview.awaitingApproval"));
-      refresh();
-      return;
-    }
-    const lease = (await api.remoteAccess.listLeases()).items.find(
-      (item) => item.request_id === request.id && !item.revoked,
-    );
-    if (!lease) {
-      setError(t("hosts.terminal.leaseExpired"));
-      return;
-    }
-    const session = await api.remoteAccess.createSession({
-      lease_id: lease.id,
-      terminal_cols: 100,
-      terminal_rows: 30,
-    });
-    const ticket = await api.remoteAccess.createTicket(session.id);
-    setLive(session);
-    connection.current = new RemoteAccessConnection(ticket, {
-      cols: 100,
-      rows: 30,
-      onFrame(frame) {
-        if (frame.type === "output")
-          setLines((value) => [
-            ...value,
-            { kind: frame.stream, content: frame.data },
-          ]);
-        if (frame.type === "error") setError(frame.code);
-        if (
-          frame.type === "state" &&
-          !activeStates.includes(frame.status as RemoteAccessSession["status"])
-        )
-          setLive(undefined);
-      },
-      onClose: () => {
-        setLive(undefined);
-        refresh();
-      },
-    });
-    refresh();
-  };
-
-  const presentStartError = (value: unknown, allowStepUp: boolean) => {
-    if (
-      allowStepUp &&
-      apiErrorPresentation(value)?.code === "REMOTE_ACCESS_MFA_REQUIRED"
-    ) {
-      setStepUpOpen(true);
-      return;
-    }
-    setError(
-      formatApiError(value, t("hosts.terminal.failed"), (requestId) =>
-        t("common.requestReference", { requestId }),
-      ),
-    );
-  };
+  const refresh = useCallback(
+    () =>
+      void queryClient.invalidateQueries({
+        queryKey: ["remote-access", "sessions"],
+      }),
+    [queryClient],
+  );
 
   const start = form.handleSubmit(async (values) => {
-    setStarting(true);
     setError("");
     try {
-      await openSession(values);
-    } catch (value) {
-      presentStartError(value, true);
-    } finally {
-      setStarting(false);
+      await terminalPanelRef.current?.createSession(values.accountId, values.reason);
+      form.reset();
+      refresh();
+    } catch (err) {
+      setError(
+        formatApiError(err, t("hosts.terminal.failed"), (requestId) =>
+          t("common.requestReference", { requestId }),
+        ),
+      );
     }
   });
 
-  const retryAfterStepUp = async () => {
-    setStarting(true);
+  const attach = async (session: RemoteAccessSession) => {
     setError("");
+    // 本地已有连接的会话只重新显示 Dock 标签页；authorized/active 会话
+    // 可签发票据接入或重接（刷新后重进同一终端）。
+    if (terminalSessions.has(session.id)) {
+      terminalPanelRef.current?.showSession(session.id);
+      return;
+    }
     try {
-      await openSession(form.getValues());
-    } catch (value) {
-      presentStartError(value, false);
-    } finally {
-      setStarting(false);
+      const ticket = await api.remoteAccess.createTicket(session.id);
+      await terminalPanelRef.current?.attachSession(session, ticket);
+    } catch (err) {
+      setError(
+        formatApiError(err, t("hosts.terminal.failed"), (requestId) =>
+          t("common.requestReference", { requestId }),
+        ),
+      );
     }
-  };
-
-  const terminate = async (session: RemoteAccessSession) => {
-    await api.remoteAccess.terminateSession(session.id, "user_requested");
-    if (live?.id === session.id) {
-      connection.current?.close("terminated");
-      setLive(undefined);
-    }
-    refresh();
   };
 
   return (
@@ -200,125 +160,93 @@ export function RealTerminalTab({ host }: { host: Host }) {
       <Card>
         <CardHeader title={t("hosts.terminal.sessionConfirmTitle")} />
         <CardContent className="argus-session-confirm">
-          {live ? (
-            <TerminalEmulator
-              host={host.name}
-              lines={lines}
-              mode={protocol === "ssh" ? "pty" : "line"}
-              onCommand={(command) =>
-                connection.current?.input(`${command}\r\n`)
-              }
-              onData={(data) => connection.current?.input(data)}
-              onResize={(cols, rows) => connection.current?.resize(cols, rows)}
-              prompt={protocol === "winrs" ? "PS>" : "$"}
-              protocol={protocol === "winrs" ? "WinRS PowerShell" : "SSH PTY"}
-              state="connected"
-            />
-          ) : (
-            <form onSubmit={start}>
-              {error && (
-                <Alert
-                  description={error}
-                  title={t("hosts.terminal.failedTitle")}
-                  tone="danger"
+          <form onSubmit={start}>
+            {error && (
+              <Alert
+                description={error}
+                title={t("hosts.terminal.failedTitle")}
+                tone="danger"
+              />
+            )}
+            <div className="argus-form-row">
+              <Controller
+                control={form.control}
+                name="accountId"
+                render={({ field, fieldState }) => (
+                  <Field
+                    error={fieldState.error?.message}
+                    requirement="required"
+                    label={t("hosts.terminal.account")}
+                  >
+                    <Select
+                      ariaLabel={t("hosts.terminal.account")}
+                      onValueChange={field.onChange}
+                      options={options}
+                      placeholder={t("hosts.terminal.accountPlaceholder")}
+                      value={field.value}
+                    />
+                  </Field>
+                )}
+              />
+              <Field
+                error={form.formState.errors.reason?.message}
+                requirement="required"
+                label={t("hosts.terminal.reason")}
+              >
+                <Input
+                  maxLength={reasonConstraint.maxLength}
+                  placeholder={t("hosts.terminal.reasonPlaceholder")}
+                  {...form.register("reason")}
                 />
-              )}
-              <div className="argus-form-row">
-                <Controller
-                  control={form.control}
-                  name="accountId"
-                  render={({ field, fieldState }) => (
-                    <Field
-                      error={fieldState.error?.message}
-                      requirement="required"
-                      label={t("hosts.terminal.account")}
-                    >
-                      <Select
-                        ariaLabel={t("hosts.terminal.account")}
-                        onValueChange={field.onChange}
-                        options={options}
-                        placeholder={t("hosts.terminal.accountPlaceholder")}
-                        value={field.value}
-                      />
-                    </Field>
-                  )}
-                />
-                <Field
-                  error={form.formState.errors.reason?.message}
-                  requirement="required"
-                  label={t("hosts.terminal.reason")}
-                >
-                  <Input
-                    maxLength={reasonConstraint.maxLength}
-                    placeholder={t("hosts.terminal.reasonPlaceholder")}
-                    {...form.register("reason")}
-                  />
-                </Field>
-              </div>
-              <Button loading={starting} type="submit" variant="primary">
-                {t("hosts.terminal.start")}
-              </Button>
-            </form>
-          )}
+              </Field>
+            </div>
+            <Button type="submit" variant="primary">
+              {t("hosts.terminal.start")}
+            </Button>
+          </form>
         </CardContent>
       </Card>
       <Card>
-        <CardHeader title={t("hosts.terminal.activeSessions")} />
+        <CardHeader
+          action={
+            <Button
+              aria-label={t("hosts.terminal.refreshList")}
+              loading={sessions.isFetching}
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ["remote-access", "sessions"] })}
+              size="sm"
+              title={t("hosts.terminal.refreshList")}
+              variant="ghost"
+            >
+              <RefreshCw size={14} />
+            </Button>
+          }
+          title={t("hosts.terminal.activeSessions")}
+        />
         <CardContent>
-          {(sessions.data?.length ?? 0) === 0 ? (
+          {activeSessions.length === 0 ? (
             <EmptyState
               description=""
               title={t("hosts.terminal.noActiveSessions")}
             />
           ) : (
-            sessions.data?.map((session) => (
-              <div className="argus-remote-session-row" key={session.id}>
-                <StatusBadge
-                  tone={
-                    activeStates.includes(session.status) ? "info" : "neutral"
-                  }
-                >
-                  {session.status}
-                </StatusBadge>
-                <span>
-                  {session.protocol === "winrs"
-                    ? "WinRS PowerShell"
-                    : "SSH PTY"}
-                </span>
-                {activeStates.includes(session.status) ? (
-                  <Button
-                    onClick={() => void terminate(session)}
-                    size="sm"
-                    variant="danger"
-                  >
-                    {t("hosts.terminal.terminate")}
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => setRecording(session)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    {t("remoteAccess.recording")}
-                  </Button>
-                )}
-              </div>
-            ))
+            <SessionTable
+              accountName={(id) =>
+                (accounts.data ?? []).find((item) => item.id === id)?.username ?? id
+              }
+              allowTerminate
+              hostName={(id) => (id === host.id ? host.name : id)}
+              onAttach={(session) => void attach(session)}
+              onRecording={setRecordingId}
+              sessions={activeSessions}
+              userName={(id) => userNames.get(id) ?? id}
+            />
           )}
         </CardContent>
       </Card>
-      {recording && (
-        <RemoteRecordingPlayer
-          host={host.name}
-          onClose={() => setRecording(undefined)}
-          protocol={recording.protocol}
-          recordingId={recording.recording_id}
-        />
-      )}
-      <MfaStepUpDialog
-        onComplete={retryAfterStepUp}
-        onOpenChange={setStepUpOpen}
-        open={stepUpOpen}
+      <TerminalPanel ref={terminalPanelRef} host={host} />
+      <RecordingDetailDialog
+        onOpenChange={(open) => { if (!open) setRecordingId(null); }}
+        recordingId={recordingId}
       />
     </div>
   );

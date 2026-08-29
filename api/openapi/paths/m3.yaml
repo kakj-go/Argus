@@ -102,7 +102,7 @@ managed_account_item:
 host_collection:
   get:
     operationId: listHosts
-    summary: List DataScope-filtered Hosts.
+    summary: List explicitly authorized Hosts.
     parameters:
       - {name: query, in: query, required: false, schema: {type: string, maxLength: 256}}
       - {name: connection_mode, in: query, required: false, schema: {$ref: "../components/m3.yaml#/components/schemas/HostConnectionMode"}}
@@ -117,7 +117,7 @@ host_item:
   parameters: [{$ref: "#/components/parameters/ResourceId"}]
   get:
     operationId: getHost
-    summary: Get a DataScope-filtered Host.
+    summary: Get an explicitly authorized Host.
     responses:
       "200": {description: Host., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/Host"}}}}
       default: {$ref: "#/components/responses/Error"}
@@ -170,7 +170,7 @@ connection_test_item:
 kubernetes_collection:
   get:
     operationId: listKubernetesClusters
-    summary: List DataScope-filtered Kubernetes clusters.
+    summary: List explicitly authorized Kubernetes clusters.
     parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
     responses:
       "200": {description: Cluster page., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/KubernetesClusterPage"}}}}
@@ -179,7 +179,7 @@ kubernetes_item:
   parameters: [{$ref: "#/components/parameters/ResourceId"}]
   get:
     operationId: getKubernetesCluster
-    summary: Get a DataScope-filtered Kubernetes cluster.
+    summary: Get an explicitly authorized Kubernetes cluster.
     responses:
       "200": {description: Kubernetes cluster., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/KubernetesCluster"}}}}
       default: {$ref: "#/components/responses/Error"}
@@ -225,7 +225,7 @@ kubernetes_resources:
   parameters: [{$ref: "#/components/parameters/ResourceId"}]
   get:
     operationId: listKubernetesResources
-    summary: List bounded Kubernetes resources after cluster and Namespace DataScope checks.
+    summary: List bounded Kubernetes resources after Kubernetes cluster authorization checks.
     parameters:
       - {name: resource_type, in: query, required: true, schema: {type: string, enum: [namespace, node, pod, deployment, statefulset, daemonset, service]}}
       - {name: namespace, in: query, required: false, schema: {type: string, maxLength: 253}}

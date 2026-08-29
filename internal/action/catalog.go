@@ -2,12 +2,10 @@ package action
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/kakj-go/Argus/internal/authorization"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
@@ -18,7 +16,6 @@ type PolicyInput struct {
 	ToolIDs             []string
 	Risks               []string
 	ResourceTypes       []string
-	LabelSelector       json.RawMessage
 	MinimumApprovers    int32
 	SeparationOfDuty    bool
 	ApproverRoleIDs     []uuid.UUID
@@ -44,29 +41,19 @@ func (service Service) ListPolicies(ctx context.Context, enterpriseID uuid.UUID)
 }
 
 func (service Service) CreatePolicy(ctx context.Context, actorID string, enterpriseID uuid.UUID, input PolicyInput, idempotencyKey string) (db.ApprovalPolicy, error) {
-	selector, _, err := authorization.NormalizeSelector(input.LabelSelector)
-	if err != nil {
-		return db.ApprovalPolicy{}, err
-	}
-	input.LabelSelector = selector
 	return postgresExecute(ctx, service, actorID, "approval_policy.create", idempotencyKey, input, func(q *db.Queries) (db.ApprovalPolicy, error) {
 		value, err := q.CreateApprovalPolicy(ctx, db.CreateApprovalPolicyParams{ID: newID(), EnterpriseID: enterpriseID, Name: input.Name,
 			Enabled: input.Enabled, ToolIds: input.ToolIDs, Risks: input.Risks, ResourceTypes: input.ResourceTypes,
-			LabelSelector: input.LabelSelector, MinimumApprovers: input.MinimumApprovers, SeparationOfDuty: input.SeparationOfDuty,
+			MinimumApprovers: input.MinimumApprovers, SeparationOfDuty: input.SeparationOfDuty,
 			ApproverRoleIds: input.ApproverRoleIDs, ExpiresAfterSeconds: expirySeconds(input.ExpiresAfterSeconds)})
 		return value, err
 	})
 }
 
 func (service Service) UpdatePolicy(ctx context.Context, enterpriseID, policyID uuid.UUID, input PolicyInput) (db.ApprovalPolicy, error) {
-	selector, _, err := authorization.NormalizeSelector(input.LabelSelector)
-	if err != nil {
-		return db.ApprovalPolicy{}, err
-	}
-	input.LabelSelector = selector
 	return service.Store.Queries.UpdateApprovalPolicy(ctx, db.UpdateApprovalPolicyParams{ID: policyID, EnterpriseID: enterpriseID,
 		Name: input.Name, Enabled: input.Enabled, ToolIds: input.ToolIDs, Risks: input.Risks, ResourceTypes: input.ResourceTypes,
-		LabelSelector: input.LabelSelector, MinimumApprovers: input.MinimumApprovers, SeparationOfDuty: input.SeparationOfDuty,
+		MinimumApprovers: input.MinimumApprovers, SeparationOfDuty: input.SeparationOfDuty,
 		ApproverRoleIds: input.ApproverRoleIDs, ExpiresAfterSeconds: expirySeconds(input.ExpiresAfterSeconds), Version: input.ExpectedVersion})
 }
 

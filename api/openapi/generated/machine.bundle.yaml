@@ -160,7 +160,6 @@ components:
       required:
         - name
         - allowed_tool_ids
-        - data_scope_ids
       properties:
         name:
           type: string
@@ -176,12 +175,6 @@ components:
             type: string
             minLength: 1
             maxLength: 256
-        data_scope_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
     ServiceAccountUpdate:
       type: object
       additionalProperties: false
@@ -198,12 +191,6 @@ components:
             type: string
             minLength: 1
             maxLength: 256
-        data_scope_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
         status:
           type: string
           enum:
@@ -337,12 +324,6 @@ components:
             - active
             - disabled
         allowed_tool_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            minLength: 1
-        data_scope_ids:
           type: array
           uniqueItems: true
           items:

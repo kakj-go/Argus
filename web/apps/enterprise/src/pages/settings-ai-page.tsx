@@ -30,6 +30,7 @@ import {
   FormDrawer,
   Input,
   PageShell,
+  RowAction,
   Select,
   StatCard,
   StatusBadge,
@@ -213,39 +214,25 @@ function ModelsView({ onDashboard }: { onDashboard: (id: string) => void }) {
               header: t("settings.common.actions"),
               render: (model) => (
                 <span className="argus-ai-actions">
-                  <Button
+                  <RowAction
                     onClick={() =>
                       void api.models
                         .test(model.id)
                         .then(() => models.refetch())
                     }
-                    size="sm"
-                    variant="ghost"
                   >
                     <RefreshCw size={14} />
                     {t("aiSettings.model.test")}
-                  </Button>
-                  <Button
-                    onClick={() => setDrawer({ mode: "edit", model })}
-                    size="sm"
-                    variant="ghost"
-                  >
+                  </RowAction>
+                  <RowAction onClick={() => setDrawer({ mode: "edit", model })}>
                     {t("aiSettings.model.edit")}
-                  </Button>
-                  <Button
-                    onClick={() => setQuotaModel(model)}
-                    size="sm"
-                    variant="ghost"
-                  >
+                  </RowAction>
+                  <RowAction onClick={() => setQuotaModel(model)}>
                     {t("aiSettings.model.quota")}
-                  </Button>
-                  <Button
-                    onClick={() => onDashboard(model.id)}
-                    size="sm"
-                    variant="ghost"
-                  >
+                  </RowAction>
+                  <RowAction onClick={() => onDashboard(model.id)}>
                     {t("aiSettings.model.dashboard")}
-                  </Button>
+                  </RowAction>
                   <Switch
                     checked={model.enabled}
                     label={

@@ -2,7 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@argus/api-client";
-import { Button, DataTable, EmptyState, FormDrawer, Spinner } from "@argus/ui";
+import { Button, DataTable, EmptyState, FormDrawer, RowAction, Spinner } from "@argus/ui";
 import { QuotaEditor } from "../quota-editor";
 
 type QuotaRow = {
@@ -108,18 +108,16 @@ export function QuotasTab() {
               key: "enterpriseId",
               header: t("common.actions"),
               render: (row) => (
-                <Button
+                <RowAction
                   onClick={() =>
                     setEditing({
                       id: row.enterpriseId,
                       name: row.enterpriseName,
                     })
                   }
-                  size="sm"
-                  variant="ghost"
                 >
                   {t("sandbox.quotas.edit")}
-                </Button>
+                </RowAction>
               ),
             },
           ]}

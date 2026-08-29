@@ -1,0 +1,46 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argus-web
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  ingressClassName: {{ .Values.ingressClassName }}
+  {{- if .Values.tls.enabled }}
+  tls:
+    # One multi-SAN certificate covers every browser-facing host, so the
+    # browser only has to trust a single self-signed CA locally.
+    - hosts:
+        - {{ .Values.hosts.enterprise }}
+        - {{ .Values.hosts.platform }}
+        - {{ .Values.hosts.cards }}
+      secretName: {{ if eq .Values.tls.mode "user-provided" }}{{ .Values.tls.secretName }}{{ else }}argus-web-tls{{ end }}
+  {{- end }}
+  rules:
+    # The remote-access WSS endpoint is served on the enterprise origin
+    # (same host as the page, no dedicated terminal domain): the browser
+    # reuses the page's TLS session and DNS mapping for the terminal too.
+    - host: {{ .Values.hosts.enterprise }}
+      http:
+        paths:
+          - path: /v1/sessions
+            pathType: Prefix
+            backend:
+              service: {name: argus-connector-gateway, port: {name: remote-wss}}
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: argus-web, port: {name: enterprise}}
+    - host: {{ .Values.hosts.platform }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: argus-web, port: {name: platform}}
+    - host: {{ .Values.hosts.cards }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: argus-web, port: {name: cards}}

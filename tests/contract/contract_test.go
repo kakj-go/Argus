@@ -55,6 +55,50 @@ func TestAutomationDomainIsRemoved(t *testing.T) {
 	}
 }
 
+func TestRemoteAccessGovernanceUsesLifecycleInsteadOfPhysicalDelete(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "api/openapi/generated/argus.bundle.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatalf("decode OpenAPI bundle: %v", err)
+	}
+	for _, path := range []string{
+		"/enterprise/remote-access-rules/{id}",
+		"/enterprise/approval-workflows/{id}",
+		"/enterprise/session-profiles/{id}",
+	} {
+		methods, ok := document.Paths[path]
+		if !ok {
+			t.Fatalf("governance path missing: %s", path)
+		}
+		if _, ok := methods["delete"]; ok {
+			t.Fatalf("governance path exposes physical delete: %s", path)
+		}
+	}
+	for _, path := range []string{
+		"/enterprise/remote-access-rules/{id}/archive",
+		"/enterprise/approval-workflows/{id}/archive",
+		"/enterprise/session-profiles/{id}/archive",
+	} {
+		methods, ok := document.Paths[path]
+		if !ok {
+			t.Fatalf("archive lifecycle path missing: %s", path)
+		}
+		if _, ok := methods["post"]; !ok {
+			t.Fatalf("archive lifecycle path is not POST: %s", path)
+		}
+	}
+	if _, ok := document.Paths["/enterprise/remote-access-policies"]; ok {
+		t.Fatal("legacy remote access policy collection still exposed")
+	}
+}
+
 func TestM4AgentActionsRetainTrustedRunBinding(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -830,6 +874,142 @@ func TestContractCompatibility(t *testing.T) {
 	}
 }
 
+// PlanV3 Task 02 is an explicitly approved direct cutover. Keep this list
+// exact so unrelated OpenAPI removals continue to fail the breaking gate.
+var intentionalContractRemovals = map[string]map[string]struct{}{
+	"api/openapi/generated/argus.bundle.json/paths": {
+		"/enterprise/remote-access-policies":      {},
+		"/enterprise/remote-access-policies/{id}": {},
+		"/enterprise/data-scopes":                 {},
+		"/enterprise/data-scopes/{id}":            {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas": {
+		"RemoteAccessPolicy":       {},
+		"RemoteAccessPolicyPage":   {},
+		"RemoteAccessPolicyWrite":  {},
+		"RemoteAccessPolicyUpdate": {},
+		"DataScope":                {},
+		"DataScopeCreate":          {},
+		"DataScopeUpdate":          {},
+		"DataScopePage":            {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RoleBinding": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/AuthorizationDecision": {
+		"matched_data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/AuthorizationDecision/properties": {
+		"matched_data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RoleBinding/properties": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RoleBindingCreate": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RoleBindingCreate/properties": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RoleBindingUpdate/properties": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RoleBindingUpdate": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ServiceAccount": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ServiceAccount/properties": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ServiceAccountCreate": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ServiceAccountCreate/properties": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ServiceAccountUpdate/properties": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ServiceAccountUpdate": {
+		"data_scope_ids": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ApprovalPolicy": {
+		"label_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ApprovalPolicy/properties": {
+		"label_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ApprovalPolicyWrite/properties": {
+		"label_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ApprovalPolicyWrite": {
+		"label_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrant/properties": {
+		"host_selector": {}, "enabled": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrant": {
+		"host_selector": {}, "enabled": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantWrite/properties": {
+		"host_selector": {}, "enabled": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantWrite": {
+		"host_selector": {}, "enabled": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantUpdate/properties": {
+		"host_selector": {}, "enabled": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantUpdate": {
+		"host_selector": {}, "enabled": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessRule/properties": {
+		"subject_selector": {}, "host_selector": {}, "managed_account_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessRuleWrite/properties": {
+		"subject_selector": {}, "host_selector": {}, "managed_account_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessRuleWrite": {
+		"subject_selector": {}, "host_selector": {}, "managed_account_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessRuleUpdate/properties": {
+		"subject_selector": {}, "host_selector": {}, "managed_account_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessRuleUpdate": {
+		"subject_selector": {}, "host_selector": {}, "managed_account_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessRule": {
+		"subject_selector": {}, "host_selector": {}, "managed_account_selector": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessRequirement": {
+		"policy_id":      {},
+		"policy_version": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessRequirement/properties": {
+		"policy_id":      {},
+		"policy_version": {},
+	},
+}
+
+func isIntentionalContractRemoval(path, name string) bool {
+	_, allowed := intentionalContractRemovals[path][name]
+	return allowed
+}
+
+var intentionalContractRequiredAdditions = map[string]map[string]struct{}{
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantWrite":  {"status": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantUpdate": {"status": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrant":       {"status": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessSession":     {"authorization_version": {}},
+}
+
+func isIntentionalContractRequiredAddition(path, name string) bool {
+	_, allowed := intentionalContractRequiredAdditions[path][name]
+	return allowed
+}
+
 func TestCompatibilityRules(t *testing.T) {
 	oldValue := map[string]any{"type": "object", "required": []any{"id"}, "properties": map[string]any{"id": map[string]any{"type": "string"}, "status": map[string]any{"enum": []any{"active", "disabled"}}}}
 	removed := map[string]any{"type": "object", "required": []any{"id"}, "properties": map[string]any{"id": map[string]any{"type": "string"}}}
@@ -1251,6 +1431,7 @@ func schemaString(node map[string]any, mode fixtureMode) string {
 		{"^\\$", "$.items"},
 		{"^[A-Za-z0-9", "request_00000001"},
 		{"^sha256:[a-f0-9]{64}$", "sha256:" + strings.Repeat("a", 64)},
+		{"^[0-9a-fA-F]{64}$", strings.Repeat("a", 64)},
 		{"^[a-f0-9]{64}$", strings.Repeat("a", 64)},
 		{"^argus_ak_", "argus_ak_ABC123.secret_abcdefghijklmnopqrstuvwxyz012345"},
 		{"^wss://", "wss://remote.argus.example/v1/sessions/0198b2b4-6dc0-7a2f-8d36-9f8ff244db18"},
@@ -1454,6 +1635,9 @@ func compatible(path string, oldValue, newValue any) error {
 			newProps, _ := newMap["properties"].(map[string]any)
 			for name := range oldProps {
 				if _, exists := newProps[name]; !exists {
+					if isIntentionalContractRemoval(path, name) {
+						continue
+					}
 					return fmt.Errorf("%s removed property %s", path, name)
 				}
 			}
@@ -1464,13 +1648,16 @@ func compatible(path string, oldValue, newValue any) error {
 					continue
 				}
 				if _, exists := newMap[name]; !exists {
+					if isIntentionalContractRemoval(path, name) {
+						continue
+					}
 					return fmt.Errorf("%s removed entry %s", path, name)
 				}
 			}
 		}
 		oldRequired := valueSet(oldMap["required"])
 		for name := range valueSet(newMap["required"]) {
-			if !oldRequired[name] {
+			if !oldRequired[name] && !isIntentionalContractRequiredAddition(path, name) {
 				return fmt.Errorf("%s added required field %s", path, name)
 			}
 		}

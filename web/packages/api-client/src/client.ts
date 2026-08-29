@@ -17,7 +17,6 @@ import type {
   CreateSecretInput,
   CreateServiceAccountInput,
   CreatedApiKey,
-  DataScope,
   Enterprise,
   EnterpriseAdmin,
   EnterpriseSandboxQuota,
@@ -39,7 +38,6 @@ import type {
   SandboxImage,
   SandboxProfile,
   SandboxSessionMeta,
-  SaveDataScopeInput,
   Secret,
   ServiceAccount,
   SessionInfo,
@@ -56,6 +54,10 @@ import type {
   UpdateSecretInput,
   UsageRange,
   User,
+  UserRoleAssignments,
+  DataAuthorizationPage,
+  DataAuthorizationResourceType,
+  DataAuthorizationSubjectType,
 } from "./types";
 import type { K8sWorkload, K8sWorkloadFilter } from "./provisional";
 import type { TaskEvent, TaskFilter, TaskViewModel } from "./provisional";
@@ -135,9 +137,18 @@ import type {
   RemoteAccessGrant,
   RemoteAccessGrantWrite,
   RemoteAccessGrantUpdate,
-  RemoteAccessPolicy,
-  RemoteAccessPolicyWrite,
-  RemoteAccessPolicyUpdate,
+  RemoteAccessRule,
+  RemoteAccessRuleWrite,
+  RemoteAccessRuleUpdate,
+  RemoteAccessRuleSimulationRequest,
+  RemoteAccessRuleSimulationResult,
+  ApprovalWorkflow,
+  ApprovalWorkflowWrite,
+  ApprovalWorkflowUpdate,
+  SessionProfile,
+  SessionProfileWrite,
+  SessionProfileUpdate,
+  RemoteAccessReferences,
   AccessRequest,
   AccessRequestCreate,
   RemoteAccessDecisionCreate,
@@ -158,15 +169,42 @@ import type {
 } from "./generated/contracts";
 
 export type CollectorAction =
-  | "install"
-  | "configure"
-  | "upgrade"
-  | "repair"
-  | "uninstall";
+  "install" | "configure" | "upgrade" | "repair" | "uninstall";
 
 export interface CursorListQuery {
   cursor?: string;
   limit?: number;
+}
+
+export interface RemoteAccessRequestListQuery extends CursorListQuery {
+  scope?: "mine" | "approver" | "processed";
+  status?: AccessRequest["status"];
+  created_by?: string;
+  host_id?: string;
+  protocol?: AccessRequest["protocol"];
+  created_from?: string;
+  created_to?: string;
+}
+
+export interface RemoteAccessSessionListQuery extends CursorListQuery {
+  scope?: "active" | "history" | "all";
+  status?: RemoteAccessSession["status"];
+  user_id?: string;
+  host_id?: string;
+  managed_account_id?: string;
+  protocol?: RemoteAccessSession["protocol"];
+  connection_mode?: RemoteAccessSession["connection_mode"];
+  created_from?: string;
+  created_to?: string;
+}
+
+export interface RemoteAccessRecordingListQuery extends CursorListQuery {
+  status?: RemoteAccessRecording["status"];
+  session_id?: string;
+  user_id?: string;
+  host_id?: string;
+  created_from?: string;
+  created_to?: string;
 }
 
 export interface HostListFilter extends CursorListQuery {
@@ -204,12 +242,18 @@ export interface ArgusApiClient {
     ): Promise<SessionInfo>;
     completeMfaLogin(input: MfaCompleteRequest): Promise<SessionInfo>;
     enrollTotp(): Promise<TotpEnrollment>;
-    verifyTotpEnrollment(input: TotpVerifyRequest): Promise<RecoveryCodesResult>;
-    regenerateRecoveryCodes(input: MfaCodeRequest): Promise<RecoveryCodesResult>;
+    verifyTotpEnrollment(
+      input: TotpVerifyRequest,
+    ): Promise<RecoveryCodesResult>;
+    regenerateRecoveryCodes(
+      input: MfaCodeRequest,
+    ): Promise<RecoveryCodesResult>;
     disableTotp(input: MfaCodeRequest): Promise<void>;
     stepUp(input: MfaCodeRequest): Promise<StepUpSession>;
     listBreakGlassSessions(): Promise<BreakGlassSession[]>;
-    createBreakGlassSession(input: BreakGlassCreate): Promise<BreakGlassSession>;
+    createBreakGlassSession(
+      input: BreakGlassCreate,
+    ): Promise<BreakGlassSession>;
     revokeBreakGlassSession(id: string): Promise<void>;
     changePassword(input: PasswordUpdateRequest): Promise<void>;
     logout(): Promise<void>;
@@ -291,26 +335,89 @@ export interface ArgusApiClient {
   /** Human-only remote access. Tickets never cross into Agent, Card, or Sandbox APIs. */
   remoteAccess: {
     listGrants(query?: CursorListQuery): Promise<Page<RemoteAccessGrant>>;
+    getGrant(id: string): Promise<RemoteAccessGrant>;
     createGrant(input: RemoteAccessGrantWrite): Promise<RemoteAccessGrant>;
-    updateGrant(id: string, input: RemoteAccessGrantUpdate): Promise<RemoteAccessGrant>;
-    disableGrant(id: string): Promise<void>;
-    listPolicies(query?: CursorListQuery): Promise<Page<RemoteAccessPolicy>>;
-    createPolicy(input: RemoteAccessPolicyWrite): Promise<RemoteAccessPolicy>;
-    updatePolicy(id: string, input: RemoteAccessPolicyUpdate): Promise<RemoteAccessPolicy>;
-    disablePolicy(id: string): Promise<void>;
-    listRequests(query?: CursorListQuery): Promise<Page<AccessRequest>>;
+    updateGrant(
+      id: string,
+      input: RemoteAccessGrantUpdate,
+    ): Promise<RemoteAccessGrant>;
+    enableGrant(id: string): Promise<RemoteAccessGrant>;
+    disableGrant(id: string): Promise<RemoteAccessGrant>;
+    restoreGrant(id: string): Promise<RemoteAccessGrant>;
+    archiveGrant(id: string): Promise<RemoteAccessGrant>;
+    getGrantReferences(id: string): Promise<RemoteAccessReferences>;
+    listRules(query?: CursorListQuery): Promise<Page<RemoteAccessRule>>;
+    getRule(id: string): Promise<RemoteAccessRule>;
+    createRule(input: RemoteAccessRuleWrite): Promise<RemoteAccessRule>;
+    updateRule(
+      id: string,
+      input: RemoteAccessRuleUpdate,
+    ): Promise<RemoteAccessRule>;
+    simulateRule(
+      input: RemoteAccessRuleSimulationRequest,
+    ): Promise<RemoteAccessRuleSimulationResult>;
+    enableRule(id: string): Promise<RemoteAccessRule>;
+    disableRule(id: string): Promise<RemoteAccessRule>;
+    restoreRule(id: string): Promise<RemoteAccessRule>;
+    archiveRule(id: string): Promise<RemoteAccessRule>;
+    getRuleReferences(id: string): Promise<RemoteAccessReferences>;
+    listApprovalWorkflows(
+      query?: CursorListQuery,
+    ): Promise<Page<ApprovalWorkflow>>;
+    getApprovalWorkflow(id: string): Promise<ApprovalWorkflow>;
+    createApprovalWorkflow(
+      input: ApprovalWorkflowWrite,
+    ): Promise<ApprovalWorkflow>;
+    updateApprovalWorkflow(
+      id: string,
+      input: ApprovalWorkflowUpdate,
+    ): Promise<ApprovalWorkflow>;
+    enableApprovalWorkflow(id: string): Promise<ApprovalWorkflow>;
+    disableApprovalWorkflow(id: string): Promise<ApprovalWorkflow>;
+    restoreApprovalWorkflow(id: string): Promise<ApprovalWorkflow>;
+    archiveApprovalWorkflow(id: string): Promise<ApprovalWorkflow>;
+    getApprovalWorkflowReferences(id: string): Promise<RemoteAccessReferences>;
+    listSessionProfiles(query?: CursorListQuery): Promise<Page<SessionProfile>>;
+    getSessionProfile(id: string): Promise<SessionProfile>;
+    createSessionProfile(input: SessionProfileWrite): Promise<SessionProfile>;
+    updateSessionProfile(
+      id: string,
+      input: SessionProfileUpdate,
+    ): Promise<SessionProfile>;
+    enableSessionProfile(id: string): Promise<SessionProfile>;
+    disableSessionProfile(id: string): Promise<SessionProfile>;
+    restoreSessionProfile(id: string): Promise<SessionProfile>;
+    archiveSessionProfile(id: string): Promise<SessionProfile>;
+    getSessionProfileReferences(id: string): Promise<RemoteAccessReferences>;
+    listRequests(
+      query?: RemoteAccessRequestListQuery,
+    ): Promise<Page<AccessRequest>>;
     createRequest(input: AccessRequestCreate): Promise<AccessRequest>;
     getRequest(id: string): Promise<AccessRequest>;
-    decideRequest(id: string, input: RemoteAccessDecisionCreate): Promise<AccessRequest>;
+    decideRequest(
+      id: string,
+      input: RemoteAccessDecisionCreate,
+    ): Promise<AccessRequest>;
+    resumeRequest(id: string): Promise<AccessRequest>;
     listLeases(query?: CursorListQuery): Promise<Page<AccessLease>>;
     revokeLease(id: string): Promise<AccessLease>;
-    listSessions(query?: CursorListQuery): Promise<Page<RemoteAccessSession>>;
-    createSession(input: RemoteAccessSessionCreate): Promise<RemoteAccessSession>;
+    listSessions(
+      query?: RemoteAccessSessionListQuery,
+    ): Promise<Page<RemoteAccessSession>>;
+    createSession(
+      input: RemoteAccessSessionCreate,
+    ): Promise<RemoteAccessSession>;
     getSession(id: string): Promise<RemoteAccessSession>;
     createTicket(id: string): Promise<SessionTicketResult>;
     terminateSession(id: string, reason: string): Promise<RemoteAccessSession>;
+    listRecordings(
+      query?: RemoteAccessRecordingListQuery,
+    ): Promise<Page<RemoteAccessRecording>>;
     getRecording(id: string): Promise<RemoteAccessRecording>;
-    listRecordingEvents(id: string, cursor?: string): Promise<RecordingEventPage>;
+    listRecordingEvents(
+      id: string,
+      cursor?: string,
+    ): Promise<RecordingEventPage>;
   };
 
   /** Connectors and Bastion Scopes. */
@@ -401,9 +508,13 @@ export interface ArgusApiClient {
     usage(): Promise<TelemetryUsage>;
     overview(input: TelemetryOverviewQuery): Promise<TelemetryOverview>;
     queryMetrics(input: PromQLInstantQuery): Promise<PrometheusQueryResponse>;
-    queryMetricsRange(input: PromQLRangeQuery): Promise<PrometheusQueryResponse>;
+    queryMetricsRange(
+      input: PromQLRangeQuery,
+    ): Promise<PrometheusQueryResponse>;
     queryLogs(input: KQLQuery): Promise<KQLQueryResponse>;
-    queryTraces(input: SkyWalkingTraceGraphQLQuery): Promise<SkyWalkingGraphQLResponse>;
+    queryTraces(
+      input: SkyWalkingTraceGraphQLQuery,
+    ): Promise<SkyWalkingGraphQLResponse>;
   };
 
   /** Execution tasks with steps, logs and progress subscriptions. */
@@ -500,7 +611,7 @@ export interface ArgusApiClient {
     invokeActionBinding(bindingId: string): Promise<CardBindingInvokeResult>;
   };
 
-  /** Organization: users, departments, roles, bindings, data scopes, policies, API keys. */
+  /** Organization: users, departments, roles, explicit resource grants, policies, API keys. */
   org: {
     listUsers(): Promise<User[]>;
     getEnterpriseUser(userId: string): Promise<EnterpriseUser | null>;
@@ -538,9 +649,29 @@ export interface ArgusApiClient {
       patch: UpdateRoleBindingInput,
     ): Promise<RoleBinding>;
     deleteRoleBinding(id: string): Promise<void>;
-    listDataScopes(): Promise<DataScope[]>;
-    saveDataScope(scope: SaveDataScopeInput): Promise<DataScope>;
-    deleteDataScope(id: string): Promise<void>;
+    getUserRoleAssignments(userId: string): Promise<UserRoleAssignments>;
+    replaceUserRoleAssignments(
+      userId: string,
+      departmentId: string,
+      roleIds: string[],
+      expectedUserVersion: number,
+      expectedAuthorizationVersion: number,
+    ): Promise<UserRoleAssignments>;
+    listDataAuthorization(
+      subjectType: DataAuthorizationSubjectType,
+      subjectId: string,
+      resourceType: DataAuthorizationResourceType,
+      cursor?: string,
+      limit?: number,
+    ): Promise<DataAuthorizationPage>;
+    updateDataAuthorization(
+      subjectType: DataAuthorizationSubjectType,
+      subjectId: string,
+      resourceType: DataAuthorizationResourceType,
+      resourceIds: string[],
+      remove: boolean,
+      expectedVersion: number,
+    ): Promise<void>;
     listApprovalPolicies(): Promise<ApprovalPolicy[]>;
     saveApprovalPolicy(
       policy: Omit<ApprovalPolicy, "id" | "enterpriseId" | "createdAt"> & {
@@ -557,7 +688,6 @@ export interface ArgusApiClient {
         description?: string;
         status?: "active" | "disabled";
         allowed_tool_ids?: string[];
-        data_scope_ids?: string[];
       },
     ): Promise<ServiceAccount>;
     listApiKeys(serviceAccountId: string): Promise<ApiKey[]>;

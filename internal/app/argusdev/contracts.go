@@ -133,7 +133,13 @@ func (a *App) contractGenerate(ctx context.Context) error {
 		if err := a.runner.Run(ctx, nil, "go", "tool", "oapi-codegen", "-generate", "types,skip-prune", "-package", domain, "-o", "internal/gen/openapi/"+domain+"/types.gen.go", bundle); err != nil {
 			return err
 		}
+		if err := a.runner.Run(ctx, nil, "node", "scripts/split-generated-go-types.mjs", "internal/gen/openapi/"+domain+"/types.gen.go"); err != nil {
+			return err
+		}
 		if err := a.runner.Run(ctx, nil, "node", "scripts/generate-openapi-types.mjs", bundle, "web/packages/api-client/src/generated/"+domain+".ts"); err != nil {
+			return err
+		}
+		if err := a.runner.Run(ctx, nil, "node", "scripts/split-generated-openapi-types.mjs", "web/packages/api-client/src/generated/"+domain+".ts"); err != nil {
 			return err
 		}
 	}

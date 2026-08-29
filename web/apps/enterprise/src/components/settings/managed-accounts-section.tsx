@@ -9,12 +9,12 @@ import type { Credential, ManagedAccount } from "@argus/api-client/contracts";
 import {
   Alert,
   Badge,
-  Button,
   DataTable,
   EmptyState,
   Field,
   FormDrawer,
   Input,
+  RowAction,
   Select,
   Spinner,
 } from "@argus/ui";
@@ -144,16 +144,14 @@ export function ManagedAccountsSection({
               key: "actions",
               header: t("settings.common.actions"),
               render: (row) => (
-                <Button
+                <RowAction
                   onClick={() => {
                     onCreateOpenChange(false);
                     setEditing(row);
                   }}
-                  size="sm"
-                  variant="ghost"
                 >
                   {t("settings.common.edit")}
-                </Button>
+                </RowAction>
               ),
             },
           ]}

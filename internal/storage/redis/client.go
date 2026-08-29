@@ -167,11 +167,26 @@ func (client *Client) PublishRemoteAccessTermination(ctx context.Context, gatewa
 	return client.Raw.Publish(ctx, "argus:remote-access:terminate:"+gatewayInstanceID, value).Err()
 }
 
+// PublishRemoteAccessTerminationBroadcast fans a termination out to every
+// Gateway instance. Direct-mode sessions have no route row, so the relay falls
+// back to this channel; Notify is fence-guarded, so instances that do not own
+// the session simply ignore it.
+func (client *Client) PublishRemoteAccessTerminationBroadcast(ctx context.Context, termination RemoteAccessTermination) error {
+	if client == nil || client.Raw == nil {
+		return errors.New("remote access termination: Redis client is unavailable")
+	}
+	value, err := json.Marshal(termination)
+	if err != nil {
+		return err
+	}
+	return client.Raw.Publish(ctx, "argus:remote-access:terminate:_all", value).Err()
+}
+
 func (client *Client) SubscribeRemoteAccessTermination(ctx context.Context, gatewayInstanceID string) (<-chan RemoteAccessTermination, func() error, error) {
 	if client == nil || client.Raw == nil {
 		return nil, nil, errors.New("remote access termination: Redis client is unavailable")
 	}
-	pubsub := client.Raw.Subscribe(ctx, "argus:remote-access:terminate:"+gatewayInstanceID)
+	pubsub := client.Raw.Subscribe(ctx, "argus:remote-access:terminate:"+gatewayInstanceID, "argus:remote-access:terminate:_all")
 	if _, err := pubsub.Receive(ctx); err != nil {
 		_ = pubsub.Close()
 		return nil, nil, err

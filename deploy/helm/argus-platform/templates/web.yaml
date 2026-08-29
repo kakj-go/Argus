@@ -26,6 +26,9 @@ spec:
       labels:
         app.kubernetes.io/name: argus-web
         app.kubernetes.io/part-of: argus
+      annotations:
+        checksum/runtime-config: {{ include (print $.Template.BasePath "/config.yaml") $ | sha256sum }}
+        checksum/web-runtime-config: {{ include (print $.Template.BasePath "/web-runtime-config.yaml") $ | sha256sum }}
     spec:
       {{- if eq .Values.profile "production" }}
       topologySpreadConstraints:
@@ -43,6 +46,8 @@ spec:
         - name: web
           image: {{ .Values.images.web }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
+          volumeMounts:
+            - {name: runtime-config, mountPath: /usr/share/nginx/runtime-config, readOnly: true}
           ports:
             - {name: enterprise, containerPort: 8080}
             - {name: platform, containerPort: 8081}
@@ -54,3 +59,7 @@ spec:
           resources:
             requests: {cpu: 50m, memory: 64Mi}
             limits: {cpu: 500m, memory: 256Mi}
+      volumes:
+        - name: runtime-config
+          configMap:
+            name: argus-web-runtime-config

@@ -1,3 +1,4 @@
+import { enterpriseOrigin, platformOrigin, cardOrigin } from "./origins";
 import { expect, test } from "@playwright/test";
 
 test.skip(
@@ -14,10 +15,10 @@ test.beforeEach(async ({ page }) => {
 
 test("all Web origins serve deep links after refresh", async ({ page }) => {
   for (const target of [
-    { url: "http://127.0.0.1:4173/hosts", root: "#root", populated: true },
-    { url: "http://127.0.0.1:4174/sandbox", root: "#root", populated: true },
+    { url: `${enterpriseOrigin}/hosts`, root: "#root", populated: true },
+    { url: `${platformOrigin}/sandbox`, root: "#root", populated: true },
     {
-      url: "http://127.0.0.1:4176/runtime",
+      url: `${cardOrigin}/runtime`,
       root: "#card-root",
       populated: false,
     },
@@ -34,7 +35,7 @@ test("all Web origins serve deep links after refresh", async ({ page }) => {
 test("platform login reaches enterprise and sandbox administration", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:4174/login?initialized=true&reset=1");
+  await page.goto(`${platformOrigin}/login?initialized=true&reset=1`);
   await page.getByLabel("用户名").fill("admin");
   await page.getByLabel("密码").fill("123456");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -56,15 +57,15 @@ test("setup completes once and remains permanently locked", async ({
   page,
 }) => {
   await page.goto(
-    "http://127.0.0.1:4174/login?initialized=false&reset=1#argus_setup_token=stp_e2e_release",
+    `${platformOrigin}/login?initialized=false&reset=1#argus_setup_token=stp_e2e_release`,
   );
   await expect(page).toHaveURL(
-    "http://127.0.0.1:4174/login?initialized=false&reset=1",
+    `${platformOrigin}/login?initialized=false&reset=1`,
   );
   await expect(page.getByLabel("Setup Token")).toHaveCount(0);
 
   await page.getByLabel("平台显示名称").fill("Argus Evaluation");
-  await page.getByLabel("外部访问地址").fill("http://127.0.0.1:4173");
+  await page.getByLabel("外部访问地址").fill(`${enterpriseOrigin}`);
   await page.getByLabel("登录名").fill("e2eadmin");
   await page.locator('input[name="admin.displayName"]').fill("E2E 管理员");
   await page.getByLabel("邮箱").fill("e2e@example.com");
@@ -75,9 +76,9 @@ test("setup completes once and remains permanently locked", async ({
   await page.getByRole("button", { name: "下一步" }).click();
   await page.getByRole("button", { name: "确认初始化" }).click();
 
-  await expect(page).toHaveURL("http://127.0.0.1:4174/login");
+  await expect(page).toHaveURL(`${platformOrigin}/login`);
   await expect(page.locator('input[autocomplete="username"]')).toBeVisible();
   await page.reload();
-  await expect(page).toHaveURL("http://127.0.0.1:4174/login");
+  await expect(page).toHaveURL(`${platformOrigin}/login`);
   await expect(page.getByLabel("Setup Token")).toHaveCount(0);
 });

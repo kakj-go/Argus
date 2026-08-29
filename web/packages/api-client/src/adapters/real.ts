@@ -13,7 +13,6 @@ import type {
   Credential,
   CredentialCreate,
   CredentialUpdate,
-  DataScope as DataScopeContract,
   Department as DepartmentContract,
   Enterprise as EnterpriseContract,
   EnterpriseUser as EnterpriseUserContract,
@@ -63,7 +62,7 @@ import type {
 } from "../generated/contracts";
 import type {
   AuditEvent,
-  DataScope,
+  DataAuthorizationPage,
   Department,
   Enterprise,
   EnterpriseAdmin,
@@ -75,6 +74,7 @@ import type {
   SessionInfo,
   Secret,
   User,
+  UserRoleAssignments,
 } from "../types";
 import {
   ClientOperationUnavailableError,
@@ -281,35 +281,82 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
       );
     },
     async completeMfaLogin(input: MfaCompleteRequest) {
-      return authenticated(await http.request<AuthenticatedSession>(`${requireAudience()}/auth/mfa/complete`, { method: "POST", body: input }));
+      return authenticated(
+        await http.request<AuthenticatedSession>(
+          `${requireAudience()}/auth/mfa/complete`,
+          { method: "POST", body: input },
+        ),
+      );
     },
     async enrollTotp(): Promise<TotpEnrollment> {
-      return http.request<TotpEnrollment>(`${requireAudience()}/account/mfa/totp/enroll`, { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() } });
+      return http.request<TotpEnrollment>(
+        `${requireAudience()}/account/mfa/totp/enroll`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+        },
+      );
     },
-    async verifyTotpEnrollment(input: TotpVerifyRequest): Promise<RecoveryCodesResult> {
-      return http.request<RecoveryCodesResult>(`${requireAudience()}/account/mfa/totp/verify`, { method: "POST", csrf: true, body: input });
+    async verifyTotpEnrollment(
+      input: TotpVerifyRequest,
+    ): Promise<RecoveryCodesResult> {
+      return http.request<RecoveryCodesResult>(
+        `${requireAudience()}/account/mfa/totp/verify`,
+        { method: "POST", csrf: true, body: input },
+      );
     },
-    async regenerateRecoveryCodes(input: MfaCodeRequest): Promise<RecoveryCodesResult> {
-      return http.request<RecoveryCodesResult>(`${requireAudience()}/account/mfa/recovery-codes/regenerate`, { method: "POST", csrf: true, body: input });
+    async regenerateRecoveryCodes(
+      input: MfaCodeRequest,
+    ): Promise<RecoveryCodesResult> {
+      return http.request<RecoveryCodesResult>(
+        `${requireAudience()}/account/mfa/recovery-codes/regenerate`,
+        { method: "POST", csrf: true, body: input },
+      );
     },
     async disableTotp(input: MfaCodeRequest): Promise<void> {
-      await http.request<void>(`${requireAudience()}/account/mfa/totp/disable`, { method: "POST", csrf: true, body: input });
+      await http.request<void>(
+        `${requireAudience()}/account/mfa/totp/disable`,
+        { method: "POST", csrf: true, body: input },
+      );
       csrfToken = undefined;
     },
     async stepUp(input: MfaCodeRequest): Promise<StepUpSession> {
-      return http.request<StepUpSession>(`${requireAudience()}/auth/step-up`, { method: "POST", csrf: true, body: input });
+      return http.request<StepUpSession>(`${requireAudience()}/auth/step-up`, {
+        method: "POST",
+        csrf: true,
+        body: input,
+      });
     },
     async listBreakGlassSessions(): Promise<BreakGlassSession[]> {
-      if (portal !== "enterprise") throw new ClientOperationUnavailableError("break-glass");
-      return http.request<BreakGlassSession[]>("enterprise/break-glass-sessions");
+      if (portal !== "enterprise")
+        throw new ClientOperationUnavailableError("break-glass");
+      return http.request<BreakGlassSession[]>(
+        "enterprise/break-glass-sessions",
+      );
     },
-    async createBreakGlassSession(input: BreakGlassCreate): Promise<BreakGlassSession> {
-      if (portal !== "enterprise") throw new ClientOperationUnavailableError("break-glass");
-      return http.request<BreakGlassSession>("enterprise/break-glass-sessions", { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() }, body: input });
+    async createBreakGlassSession(
+      input: BreakGlassCreate,
+    ): Promise<BreakGlassSession> {
+      if (portal !== "enterprise")
+        throw new ClientOperationUnavailableError("break-glass");
+      return http.request<BreakGlassSession>(
+        "enterprise/break-glass-sessions",
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
+      );
     },
     async revokeBreakGlassSession(id: string): Promise<void> {
-      if (portal !== "enterprise") throw new ClientOperationUnavailableError("break-glass");
-      await http.request<void>(`enterprise/break-glass-sessions/${encodeURIComponent(id)}/revoke`, { method: "POST", csrf: true });
+      if (portal !== "enterprise")
+        throw new ClientOperationUnavailableError("break-glass");
+      await http.request<void>(
+        `enterprise/break-glass-sessions/${encodeURIComponent(id)}/revoke`,
+        { method: "POST", csrf: true },
+      );
     },
     async changePassword(input) {
       await http.request<void>(`${requireAudience()}/account/password`, {
@@ -698,7 +745,12 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
     previewCollectorAction: (id, action, input) =>
       http.request<PendingActionPublic>(
         `enterprise/hosts/${id}/collector/actions/preview-${action}`,
-        { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() }, body: input },
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
       ),
     previewCollectorInstall: (id, input) =>
       client.hosts.previewCollectorAction(id, "install", input),
@@ -797,7 +849,12 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
     verifyNodeBinding: (bindingId, input) =>
       http.request<PendingActionPublic>(
         `enterprise/telemetry/node-host-bindings/${bindingId}/actions/preview-confirm`,
-        { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() }, body: input },
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
       ),
     listCollectionClaims: (clusterId) =>
       http.request<CollectionClaim[]>(
@@ -810,17 +867,29 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
     previewCollectorAction: (id, action, input) =>
       http.request<PendingActionPublic>(
         `enterprise/kubernetes-clusters/${id}/collector/actions/preview-${action}`,
-        { method: "POST", csrf: true, headers: { "Idempotency-Key": idempotencyKey() }, body: input },
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
       ),
     previewCollectorInstall: (id, input) =>
       client.kubernetes.previewCollectorAction(id, "install", input),
   };
 
   client.telemetry = {
-    listDistributions: () => http.request<CollectorDistributionVersion[]>("enterprise/telemetry/distributions"),
-    listProfiles: () => http.request<CollectionProfile[]>("enterprise/telemetry/profiles"),
-    listCollectors: async () => (await http.request<CollectorPage>("enterprise/telemetry/collectors")).items,
-    listRoutes: () => http.request<TelemetryRoute[]>("enterprise/telemetry/routes"),
+    listDistributions: () =>
+      http.request<CollectorDistributionVersion[]>(
+        "enterprise/telemetry/distributions",
+      ),
+    listProfiles: () =>
+      http.request<CollectionProfile[]>("enterprise/telemetry/profiles"),
+    listCollectors: async () =>
+      (await http.request<CollectorPage>("enterprise/telemetry/collectors"))
+        .items,
+    listRoutes: () =>
+      http.request<TelemetryRoute[]>("enterprise/telemetry/routes"),
     listClaims: (resourceId) =>
       http.request<CollectionClaim[]>(
         `enterprise/telemetry/collection-claims${resourceId ? `?resource_id=${encodeURIComponent(resourceId)}` : ""}`,
@@ -833,11 +902,31 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
         body: input,
       }),
     usage: () => http.request<TelemetryUsage>("enterprise/telemetry/usage"),
-    overview: (input) => http.request<TelemetryOverview>("enterprise/telemetry/query/overview", { method: "POST", body: input }),
-    queryMetrics: (input: PromQLInstantQuery) => http.request<PrometheusQueryResponse>("enterprise/metrics/query", { method: "POST", body: input }),
-    queryMetricsRange: (input: PromQLRangeQuery) => http.request<PrometheusQueryResponse>("enterprise/metrics/query_range", { method: "POST", body: input }),
-    queryLogs: (input: KQLQuery) => http.request<KQLQueryResponse>("enterprise/logs/query", { method: "POST", body: input }),
-    queryTraces: (input: SkyWalkingTraceGraphQLQuery) => http.request<SkyWalkingGraphQLResponse>("enterprise/traces/graphql", { method: "POST", body: input }),
+    overview: (input) =>
+      http.request<TelemetryOverview>("enterprise/telemetry/query/overview", {
+        method: "POST",
+        body: input,
+      }),
+    queryMetrics: (input: PromQLInstantQuery) =>
+      http.request<PrometheusQueryResponse>("enterprise/metrics/query", {
+        method: "POST",
+        body: input,
+      }),
+    queryMetricsRange: (input: PromQLRangeQuery) =>
+      http.request<PrometheusQueryResponse>("enterprise/metrics/query_range", {
+        method: "POST",
+        body: input,
+      }),
+    queryLogs: (input: KQLQuery) =>
+      http.request<KQLQueryResponse>("enterprise/logs/query", {
+        method: "POST",
+        body: input,
+      }),
+    queryTraces: (input: SkyWalkingTraceGraphQLQuery) =>
+      http.request<SkyWalkingGraphQLResponse>("enterprise/traces/graphql", {
+        method: "POST",
+        body: input,
+      }),
   };
 
   client.connectors = {
@@ -1117,36 +1206,68 @@ function createOrganizationClient(
         { method: "DELETE", csrf: true },
       );
     },
-    async listDataScopes() {
-      const value = await http.request<{ items: DataScopeContract[] }>(
-        "enterprise/data-scopes",
+    getUserRoleAssignments(userId) {
+      return http.request<UserRoleAssignments>(
+        `enterprise/users/${userId}/role-assignments`,
       );
-      return value.items.map(remember) as DataScope[];
     },
-    async saveDataScope(scope) {
-      if (!scope.id) {
-        return remember(
-          await http.request<DataScopeContract>("enterprise/data-scopes", {
-            method: "POST",
-            csrf: true,
-            headers: { "Idempotency-Key": idempotencyKey() },
-            body: scope,
-          }),
-        ) as DataScope;
-      }
-      const { id, ...body } = scope;
-      return remember(
-        await http.request<DataScopeContract>(`enterprise/data-scopes/${id}`, {
+    replaceUserRoleAssignments(
+      userId,
+      departmentId,
+      roleIds,
+      expectedUserVersion,
+      expectedAuthorizationVersion,
+    ) {
+      return http.request<UserRoleAssignments>(
+        `enterprise/users/${userId}/role-assignments`,
+        {
           method: "PUT",
           csrf: true,
-          body: { ...body, expected_version: expectedVersion(id) },
-        }),
-      ) as DataScope;
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: {
+            department_id: departmentId,
+            role_ids: roleIds,
+            expected_user_version: expectedUserVersion,
+            expected_authorization_version: expectedAuthorizationVersion,
+          },
+        },
+      );
     },
-    async deleteDataScope(id) {
+    async listDataAuthorization(
+      subjectType,
+      subjectId,
+      resourceType,
+      cursor,
+      limit,
+    ) {
+      const params = new URLSearchParams({ resource_type: resourceType });
+      if (cursor) params.set("cursor", cursor);
+      if (limit !== undefined) params.set("limit", String(limit));
+      return http.request<DataAuthorizationPage>(
+        `enterprise/data-authorizations/${subjectType}/${subjectId}?${params.toString()}`,
+      );
+    },
+    async updateDataAuthorization(
+      subjectType,
+      subjectId,
+      resourceType,
+      resourceIds,
+      remove,
+      expectedVersion,
+    ) {
       await http.request<void>(
-        `enterprise/data-scopes/${id}?expected_version=${expectedVersion(id)}`,
-        { method: "DELETE", csrf: true },
+        `enterprise/data-authorizations/${subjectType}/${subjectId}?resource_type=${resourceType}`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: {
+            resource_type: resourceType,
+            resource_ids: resourceIds,
+            remove,
+            expected_version: expectedVersion,
+          },
+        },
       );
     },
     listApprovalPolicies: () => unavailable("org.listApprovalPolicies"),
@@ -1168,7 +1289,6 @@ function createOrganizationClient(
             body: {
               ...input,
               allowed_tool_ids: input.allowed_tool_ids ?? [],
-              data_scope_ids: input.data_scope_ids ?? [],
             },
           },
         ),
@@ -1230,12 +1350,15 @@ function createUnavailableClient(): ArgusApiClient {
       completeMfaLogin: () => unavailable("auth.completeMfaLogin"),
       enrollTotp: () => unavailable("auth.enrollTotp"),
       verifyTotpEnrollment: () => unavailable("auth.verifyTotpEnrollment"),
-      regenerateRecoveryCodes: () => unavailable("auth.regenerateRecoveryCodes"),
+      regenerateRecoveryCodes: () =>
+        unavailable("auth.regenerateRecoveryCodes"),
       disableTotp: () => unavailable("auth.disableTotp"),
       stepUp: () => unavailable("auth.stepUp"),
       listBreakGlassSessions: () => unavailable("auth.listBreakGlassSessions"),
-      createBreakGlassSession: () => unavailable("auth.createBreakGlassSession"),
-      revokeBreakGlassSession: () => unavailable("auth.revokeBreakGlassSession"),
+      createBreakGlassSession: () =>
+        unavailable("auth.createBreakGlassSession"),
+      revokeBreakGlassSession: () =>
+        unavailable("auth.revokeBreakGlassSession"),
       changePassword: () => unavailable("auth.changePassword"),
       logout: () => unavailable("auth.logout"),
       me: () => unavailable("auth.me"),
@@ -1270,21 +1393,69 @@ function createUnavailableClient(): ArgusApiClient {
       previewDeleteResource: () => unavailable("hosts.previewDeleteResource"),
       getCollector: () => unavailable("hosts.getCollector"),
       previewCollectorAction: () => unavailable("hosts.previewCollectorAction"),
-      previewCollectorInstall: () => unavailable("hosts.previewCollectorInstall"),
+      previewCollectorInstall: () =>
+        unavailable("hosts.previewCollectorInstall"),
     },
     remoteAccess: {
       listGrants: () => unavailable("remoteAccess.listGrants"),
+      getGrant: () => unavailable("remoteAccess.getGrant"),
       createGrant: () => unavailable("remoteAccess.createGrant"),
       updateGrant: () => unavailable("remoteAccess.updateGrant"),
+      enableGrant: () => unavailable("remoteAccess.enableGrant"),
       disableGrant: () => unavailable("remoteAccess.disableGrant"),
-      listPolicies: () => unavailable("remoteAccess.listPolicies"),
-      createPolicy: () => unavailable("remoteAccess.createPolicy"),
-      updatePolicy: () => unavailable("remoteAccess.updatePolicy"),
-      disablePolicy: () => unavailable("remoteAccess.disablePolicy"),
+      restoreGrant: () => unavailable("remoteAccess.restoreGrant"),
+      archiveGrant: () => unavailable("remoteAccess.archiveGrant"),
+      getGrantReferences: () => unavailable("remoteAccess.getGrantReferences"),
+      listRules: () => unavailable("remoteAccess.listRules"),
+      getRule: () => unavailable("remoteAccess.getRule"),
+      createRule: () => unavailable("remoteAccess.createRule"),
+      updateRule: () => unavailable("remoteAccess.updateRule"),
+      simulateRule: () => unavailable("remoteAccess.simulateRule"),
+      enableRule: () => unavailable("remoteAccess.enableRule"),
+      disableRule: () => unavailable("remoteAccess.disableRule"),
+      restoreRule: () => unavailable("remoteAccess.restoreRule"),
+      archiveRule: () => unavailable("remoteAccess.archiveRule"),
+      getRuleReferences: () => unavailable("remoteAccess.getRuleReferences"),
+      listApprovalWorkflows: () =>
+        unavailable("remoteAccess.listApprovalWorkflows"),
+      getApprovalWorkflow: () =>
+        unavailable("remoteAccess.getApprovalWorkflow"),
+      createApprovalWorkflow: () =>
+        unavailable("remoteAccess.createApprovalWorkflow"),
+      updateApprovalWorkflow: () =>
+        unavailable("remoteAccess.updateApprovalWorkflow"),
+      enableApprovalWorkflow: () =>
+        unavailable("remoteAccess.enableApprovalWorkflow"),
+      disableApprovalWorkflow: () =>
+        unavailable("remoteAccess.disableApprovalWorkflow"),
+      restoreApprovalWorkflow: () =>
+        unavailable("remoteAccess.restoreApprovalWorkflow"),
+      archiveApprovalWorkflow: () =>
+        unavailable("remoteAccess.archiveApprovalWorkflow"),
+      getApprovalWorkflowReferences: () =>
+        unavailable("remoteAccess.getApprovalWorkflowReferences"),
+      listSessionProfiles: () =>
+        unavailable("remoteAccess.listSessionProfiles"),
+      getSessionProfile: () => unavailable("remoteAccess.getSessionProfile"),
+      createSessionProfile: () =>
+        unavailable("remoteAccess.createSessionProfile"),
+      updateSessionProfile: () =>
+        unavailable("remoteAccess.updateSessionProfile"),
+      enableSessionProfile: () =>
+        unavailable("remoteAccess.enableSessionProfile"),
+      disableSessionProfile: () =>
+        unavailable("remoteAccess.disableSessionProfile"),
+      restoreSessionProfile: () =>
+        unavailable("remoteAccess.restoreSessionProfile"),
+      archiveSessionProfile: () =>
+        unavailable("remoteAccess.archiveSessionProfile"),
+      getSessionProfileReferences: () =>
+        unavailable("remoteAccess.getSessionProfileReferences"),
       listRequests: () => unavailable("remoteAccess.listRequests"),
       createRequest: () => unavailable("remoteAccess.createRequest"),
       getRequest: () => unavailable("remoteAccess.getRequest"),
       decideRequest: () => unavailable("remoteAccess.decideRequest"),
+      resumeRequest: () => unavailable("remoteAccess.resumeRequest"),
       listLeases: () => unavailable("remoteAccess.listLeases"),
       revokeLease: () => unavailable("remoteAccess.revokeLease"),
       listSessions: () => unavailable("remoteAccess.listSessions"),
@@ -1292,8 +1463,10 @@ function createUnavailableClient(): ArgusApiClient {
       getSession: () => unavailable("remoteAccess.getSession"),
       createTicket: () => unavailable("remoteAccess.createTicket"),
       terminateSession: () => unavailable("remoteAccess.terminateSession"),
+      listRecordings: () => unavailable("remoteAccess.listRecordings"),
       getRecording: () => unavailable("remoteAccess.getRecording"),
-      listRecordingEvents: () => unavailable("remoteAccess.listRecordingEvents"),
+      listRecordingEvents: () =>
+        unavailable("remoteAccess.listRecordingEvents"),
     },
     connectors: {
       list: () => unavailable("connectors.list"),
@@ -1329,10 +1502,13 @@ function createUnavailableClient(): ArgusApiClient {
       listWorkloads: () => unavailable("kubernetes.listWorkloads"),
       listNodeBindings: () => unavailable("kubernetes.listNodeBindings"),
       verifyNodeBinding: () => unavailable("kubernetes.verifyNodeBinding"),
-      listCollectionClaims: () => unavailable("kubernetes.listCollectionClaims"),
+      listCollectionClaims: () =>
+        unavailable("kubernetes.listCollectionClaims"),
       getCollector: () => unavailable("kubernetes.getCollector"),
-      previewCollectorAction: () => unavailable("kubernetes.previewCollectorAction"),
-      previewCollectorInstall: () => unavailable("kubernetes.previewCollectorInstall"),
+      previewCollectorAction: () =>
+        unavailable("kubernetes.previewCollectorAction"),
+      previewCollectorInstall: () =>
+        unavailable("kubernetes.previewCollectorInstall"),
     },
     telemetry: {
       listDistributions: () => unavailable("telemetry.listDistributions"),
@@ -1418,9 +1594,11 @@ function createUnavailableClient(): ArgusApiClient {
       createRoleBinding: () => unavailable("org.createRoleBinding"),
       updateRoleBinding: () => unavailable("org.updateRoleBinding"),
       deleteRoleBinding: () => unavailable("org.deleteRoleBinding"),
-      listDataScopes: () => unavailable("org.listDataScopes"),
-      saveDataScope: () => unavailable("org.saveDataScope"),
-      deleteDataScope: () => unavailable("org.deleteDataScope"),
+      getUserRoleAssignments: () => unavailable("org.getUserRoleAssignments"),
+      replaceUserRoleAssignments: () =>
+        unavailable("org.replaceUserRoleAssignments"),
+      listDataAuthorization: () => unavailable("org.listDataAuthorization"),
+      updateDataAuthorization: () => unavailable("org.updateDataAuthorization"),
       listApprovalPolicies: () => unavailable("org.listApprovalPolicies"),
       saveApprovalPolicy: () => unavailable("org.saveApprovalPolicy"),
       listServiceAccounts: () => unavailable("org.listServiceAccounts"),

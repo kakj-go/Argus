@@ -1,3 +1,4 @@
+import { enterpriseOrigin } from "./origins";
 import { expect, test, type Page } from "@playwright/test";
 import { createMfaLogin } from "./helpers/mfa-login";
 
@@ -15,7 +16,7 @@ test.describe("M5 real Card publication flow", () => {
     page,
   }) => {
     await login(page);
-    await page.goto("http://127.0.0.1:4173/settings/interactive-cards");
+    await page.goto(`${enterpriseOrigin}/settings/interactive-cards`);
     const row = page.locator("article").filter({ hasText: cardName }).first();
     await expect(row).toBeVisible();
     await row.getByRole("button", { name: /配置|Configure/ }).click();
@@ -49,7 +50,7 @@ async function login(page: Page) {
   expect(cardName).not.toBe("");
   await loginWithMfa(
     page,
-    "http://127.0.0.1:4173/login",
+    `${enterpriseOrigin}/login`,
     username,
     password,
   );

@@ -168,77 +168,102 @@ paths:
           description: Binding disabled.
         default:
           $ref: '#/components/responses/Error'
-  /enterprise/data-scopes:
-    get:
-      operationId: listDataScopes
-      summary: listDataScopes.
-      parameters:
-        - $ref: '#/components/parameters/Cursor'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Data scopes.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DataScopePage'
-        default:
-          $ref: '#/components/responses/Error'
-    post:
-      operationId: createDataScope
-      summary: createDataScope.
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DataScopeCreate'
-      responses:
-        '201':
-          description: Data scope.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DataScope'
-        default:
-          $ref: '#/components/responses/Error'
-  /enterprise/data-scopes/{id}:
+  /enterprise/users/{id}/role-assignments:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: getUserRoleAssignments
+      summary: Get direct, inherited, and effective role assignments for an enterprise user.
+      responses:
+        '200':
+          description: User role assignments.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRoleAssignments'
+        default:
+          $ref: '#/components/responses/Error'
     put:
-      operationId: updateDataScope
-      summary: updateDataScope.
+      operationId: replaceUserRoleAssignments
+      summary: Atomically replace an enterprise user's direct role assignments.
       parameters:
         - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DataScopeUpdate'
+              $ref: '#/components/schemas/UserRoleAssignmentsUpdate'
       responses:
         '200':
-          description: Updated data scope.
+          description: Updated user role assignments.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DataScope'
+                $ref: '#/components/schemas/UserRoleAssignments'
         default:
           $ref: '#/components/responses/Error'
-    delete:
-      operationId: disableDataScope
-      summary: disableDataScope.
+  /enterprise/data-authorizations/{subject_type}/{subject_id}:
+    get:
+      operationId: listDataAuthorizationResources
+      summary: List explicit data authorization resources for a subject.
       parameters:
-        - $ref: '#/components/parameters/CsrfToken'
-        - $ref: '#/components/parameters/ExpectedVersion'
+        - name: subject_type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataAuthorizationSubjectType'
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: resource_type
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataAuthorizationResourceType'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/parameters-Limit'
+      responses:
+        '200':
+          description: Resource authorization page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataAuthorizationPage'
+        default:
+          $ref: '#/components/responses/responses-Error'
+    post:
+      operationId: updateDataAuthorization
+      summary: Add or remove explicit data authorization resources.
+      parameters:
+        - name: subject_type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataAuthorizationSubjectType'
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/parameters-CsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataAuthorizationBatch'
       responses:
         '204':
-          description: Data scope disabled.
+          description: Authorization updated.
         default:
-          $ref: '#/components/responses/Error'
+          $ref: '#/components/responses/responses-Error'
 components:
   securitySchemes:
     sessionCookie:
@@ -325,7 +350,6 @@ components:
         - subject_type
         - subject_id
         - role_id
-        - data_scope_ids
       properties:
         subject_type:
           type: string
@@ -339,12 +363,6 @@ components:
         role_id:
           type: string
           format: uuid
-        data_scope_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
         valid_from:
           type: string
           format: date-time
@@ -359,12 +377,6 @@ components:
         - valid_until
         - expected_version
       properties:
-        data_scope_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            format: uuid
         valid_from:
           type:
             - string
@@ -397,99 +409,149 @@ components:
             $ref: '#/components/schemas/RoleBinding'
         page:
           $ref: '#/components/schemas/CursorPage'
-    DataScopeCreate:
+    UserRoleAssignments:
       type: object
       additionalProperties: false
       required:
-        - name
-        - resource_types
-        - explicit_resource_ids
+        - direct_role_ids
+        - inherited_roles
+        - effective_role_ids
+        - authorization_version
       properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 128
-        description:
-          type: string
-          maxLength: 1024
-        resource_types:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          items:
-            type: string
-            enum:
-              - host
-              - kubernetes_cluster
-              - kubernetes_namespace
-        explicit_resource_ids:
+        direct_role_ids:
           type: array
           uniqueItems: true
           items:
             type: string
-            minLength: 1
-        match_all:
-          type: boolean
-        label_selector:
-          $ref: '#/components/schemas/LabelSelector'
-    DataScopeUpdate:
-      type: object
-      additionalProperties: false
-      required:
-        - name
-        - resource_types
-        - explicit_resource_ids
-        - expected_version
-      properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 128
-        description:
-          type: string
-          maxLength: 1024
-        resource_types:
+            format: uuid
+        inherited_roles:
           type: array
-          minItems: 1
-          uniqueItems: true
           items:
-            type: string
-            enum:
-              - host
-              - kubernetes_cluster
-              - kubernetes_namespace
-        explicit_resource_ids:
+            $ref: '#/components/schemas/InheritedRoleAssignment'
+        effective_role_ids:
           type: array
           uniqueItems: true
           items:
             type: string
-            minLength: 1
-        match_all:
-          type: boolean
-        label_selector:
-          $ref: '#/components/schemas/LabelSelector'
-        status:
-          type: string
-          enum:
-            - active
-            - disabled
-        expected_version:
+            format: uuid
+        authorization_version:
           type: integer
           format: int64
           minimum: 1
-    DataScopePage:
+    UserRoleAssignmentsUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - department_id
+        - role_ids
+        - expected_user_version
+        - expected_authorization_version
+      properties:
+        department_id:
+          type: string
+          format: uuid
+        role_ids:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        expected_user_version:
+          type: integer
+          format: int64
+          minimum: 1
+        expected_authorization_version:
+          type: integer
+          format: int64
+          minimum: 1
+    DataAuthorizationSubjectType:
+      type: string
+      enum:
+        - user
+        - department
+        - role
+        - service_account
+    DataAuthorizationResourceType:
+      type: string
+      enum:
+        - host
+        - kubernetes_cluster
+    DataAuthorizationResource:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_type
+        - resource_id
+        - name
+        - direct
+        - inherited
+        - sources
+      properties:
+        resource_type:
+          $ref: '#/components/schemas/DataAuthorizationResourceType'
+        resource_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        direct:
+          type: boolean
+        inherited:
+          type: boolean
+        sources:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+    DataAuthorizationPage:
       type: object
       additionalProperties: false
       required:
         - items
         - page
+        - authorization_version
+        - affected_member_count
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/DataScope'
+            $ref: '#/components/schemas/DataAuthorizationResource'
         page:
           $ref: '#/components/schemas/CursorPage'
+        authorization_version:
+          type: integer
+          format: int64
+          minimum: 1
+        affected_member_count:
+          type: integer
+          format: int64
+          minimum: 0
+    DataAuthorizationBatch:
+      type: object
+      additionalProperties: false
+      required:
+        - resource_type
+        - resource_ids
+        - remove
+        - expected_version
+      properties:
+        resource_type:
+          $ref: '#/components/schemas/DataAuthorizationResourceType'
+        resource_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        remove:
+          type: boolean
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
     RequestId:
       type: string
       minLength: 16
@@ -630,7 +692,6 @@ components:
         - subject_type
         - subject_id
         - role_id
-        - data_scope_ids
         - status
         - version
         - created_at
@@ -654,12 +715,6 @@ components:
         role_id:
           type: string
           minLength: 1
-        data_scope_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            minLength: 1
         valid_from:
           type: string
           format: date-time
@@ -681,154 +736,28 @@ components:
         updated_at:
           type: string
           format: date-time
-    UserLabelKey:
-      type: string
-      minLength: 1
-      maxLength: 63
-      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-    SystemLabelKey:
-      type: string
-      maxLength: 72
-      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-      readOnly: true
-    LabelValue:
-      type: string
-      minLength: 1
-      maxLength: 63
-      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
-    LabelRequirement:
-      oneOf:
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-            - values
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              const: eq
-            values:
-              type: array
-              minItems: 1
-              maxItems: 1
-              uniqueItems: true
-              items:
-                $ref: '#/components/schemas/LabelValue'
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-            - values
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              const: in
-            values:
-              type: array
-              minItems: 1
-              maxItems: 32
-              uniqueItems: true
-              items:
-                $ref: '#/components/schemas/LabelValue'
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              enum:
-                - exists
-                - not_exists
-    LabelSelector:
+    InheritedRoleAssignment:
       type: object
       additionalProperties: false
       required:
-        - schema_version
-        - requirements
+        - role_id
+        - source_type
+        - source_id
+        - source_name
       properties:
-        schema_version:
-          const: argus.label_selector/v1
-        requirements:
-          type: array
-          minItems: 1
-          maxItems: 16
-          items:
-            $ref: '#/components/schemas/LabelRequirement'
-    DataScope:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - enterprise_id
-        - name
-        - resource_types
-        - explicit_resource_ids
-        - status
-        - version
-        - created_at
-        - updated_at
-      properties:
-        id:
+        role_id:
           type: string
-          minLength: 1
-        enterprise_id:
+          format: uuid
+        source_type:
           type: string
-          minLength: 1
-        name:
+          const: department
+        source_id:
+          type: string
+          format: uuid
+        source_name:
           type: string
           minLength: 1
           maxLength: 128
-        description:
-          type: string
-          maxLength: 1024
-        resource_types:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          items:
-            type: string
-            enum:
-              - host
-              - kubernetes_cluster
-              - kubernetes_namespace
-        explicit_resource_ids:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            minLength: 1
-        match_all:
-          type: boolean
-        label_selector:
-          $ref: '#/components/schemas/LabelSelector'
-        status:
-          type: string
-          enum:
-            - active
-            - disabled
-        version:
-          type: integer
-          format: int64
-          minimum: 1
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
   parameters:
     Cursor:
       name: cursor
@@ -876,9 +805,32 @@ components:
         type: integer
         format: int64
         minimum: 1
+    parameters-Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 100
+    parameters-CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 256
   responses:
     Error:
       description: Stable Argus API error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    responses-Error:
+      description: Stable API error.
       content:
         application/json:
           schema:

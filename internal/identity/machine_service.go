@@ -25,13 +25,11 @@ type MachineService struct {
 }
 
 type ServiceAccountRecord struct {
-	Account      db.ServiceAccount
-	DataScopeIDs []uuid.UUID
+	Account db.ServiceAccount
 }
 type ServiceAccountInput struct {
 	Name, Description string
 	AllowedToolIDs    []string
-	DataScopeIDs      []uuid.UUID
 	Status            *string
 	ExpectedVersion   int64
 }
@@ -54,11 +52,7 @@ func (service MachineService) ListServiceAccounts(ctx context.Context, enterpris
 	}
 	result := make([]ServiceAccountRecord, 0, len(accounts))
 	for _, account := range accounts {
-		scopes, err := service.Store.Queries.ListServiceAccountDataScopes(ctx, account.ID)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, ServiceAccountRecord{Account: account, DataScopeIDs: scopes})
+		result = append(result, ServiceAccountRecord{Account: account})
 	}
 	return result, nil
 }
@@ -69,11 +63,6 @@ func (service MachineService) CreateServiceAccount(ctx context.Context, actorID 
 		if err != nil {
 			return ServiceAccountRecord{}, err
 		}
-		for _, scopeID := range input.DataScopeIDs {
-			if err := q.AddServiceAccountDataScope(ctx, db.AddServiceAccountDataScopeParams{ServiceAccountID: account.ID, DataScopeID: scopeID, EnterpriseID: enterpriseID}); err != nil {
-				return ServiceAccountRecord{}, err
-			}
-		}
 		if err := q.InitializeAuthorizationVersion(ctx, db.InitializeAuthorizationVersionParams{EnterpriseID: enterpriseID, SubjectType: "service_account", SubjectID: account.ID}); err != nil {
 			return ServiceAccountRecord{}, err
 		}
@@ -81,8 +70,20 @@ func (service MachineService) CreateServiceAccount(ctx context.Context, actorID 
 		if err != nil {
 			return ServiceAccountRecord{}, err
 		}
-		return ServiceAccountRecord{Account: account, DataScopeIDs: append([]uuid.UUID(nil), input.DataScopeIDs...)}, nil
+		return ServiceAccountRecord{Account: account}, nil
 	})
+}
+
+func (service MachineService) authorizedResourceIDs(ctx context.Context, enterpriseID, accountID uuid.UUID, permissions []string) ([]uuid.UUID, error) {
+	ids := make([]uuid.UUID, 0)
+	for _, typ := range []string{"host", "kubernetes_cluster"} {
+		values, err := service.Store.Queries.ListServiceAccountAuthorizedResourceIDs(ctx, db.ListServiceAccountAuthorizedResourceIDsParams{ServiceAccountID: accountID, EnterpriseID: enterpriseID, ResourceType: typ})
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, values...)
+	}
+	return ids, nil
 }
 
 func (service MachineService) UpdateServiceAccount(ctx context.Context, actorID string, enterpriseID, accountID uuid.UUID, input ServiceAccountInput) (ServiceAccountRecord, error) {
@@ -95,26 +96,12 @@ func (service MachineService) UpdateServiceAccount(ctx context.Context, actorID 
 		if err != nil {
 			return err
 		}
-		if input.DataScopeIDs != nil {
-			if err := q.ReplaceServiceAccountDataScopes(ctx, accountID); err != nil {
-				return err
-			}
-			for _, scopeID := range input.DataScopeIDs {
-				if err := q.AddServiceAccountDataScope(ctx, db.AddServiceAccountDataScopeParams{ServiceAccountID: accountID, DataScopeID: scopeID, EnterpriseID: enterpriseID}); err != nil {
-					return err
-				}
-			}
-		}
-		scopes, err := q.ListServiceAccountDataScopes(ctx, accountID)
-		if err != nil {
-			return err
-		}
 		payload, _ := json.Marshal(map[string]any{"enterprise_id": enterpriseID.String(), "service_account_id": accountID.String(), "authorization_version": account.AuthorizationVersion})
 		if err := q.InsertOutboxEvent(ctx, db.InsertOutboxEventParams{ID: mustUUIDV7(), Topic: "authorization.service_account.changed", AggregateType: "service_account", AggregateID: accountID.String(), Payload: payload}); err != nil {
 			return err
 		}
 		_, err = audit.Append(ctx, q, audit.Entry{Domain: "enterprise", EnterpriseID: uuid.NullUUID{UUID: enterpriseID, Valid: true}, ActorType: ActorTypeFromContext(ctx), ActorID: actorID, Action: "service_account.update", ResourceType: "service_account", ResourceID: accountID.String(), Result: "success", Details: map[string]any{"authorization_version": account.AuthorizationVersion}})
-		result = ServiceAccountRecord{Account: account, DataScopeIDs: scopes}
+		result = ServiceAccountRecord{Account: account}
 		return err
 	})
 	return result, err
@@ -241,14 +228,14 @@ func (service MachineService) AuthenticateAPIKey(ctx context.Context, value stri
 	if err != nil {
 		return Principal{}, err
 	}
-	scopes, err := service.Store.Queries.ListServiceAccountDataScopes(ctx, account.ID)
+	scopes, err := service.authorizedResourceIDs(ctx, account.EnterpriseID, account.ID, permissions)
 	if err != nil {
 		return Principal{}, err
 	}
 	if err := service.Store.Queries.MarkApiKeyUsed(ctx, record.ID); err != nil {
 		return Principal{}, err
 	}
-	return Principal{ServiceAccount: &account, Permissions: permissions, DataScopeIDs: scopes}, nil
+	return Principal{ServiceAccount: &account, Permissions: permissions, AuthorizedResourceIDs: scopes}, nil
 }
 
 func toReplay(value CreatedAPIKey) apiKeyReplay {

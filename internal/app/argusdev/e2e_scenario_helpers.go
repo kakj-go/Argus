@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-const (
-	enterpriseOrigin = "http://127.0.0.1:4173"
-	platformOrigin   = "http://127.0.0.1:4174"
-)
-
 func scenarioHTTP(env *E2EEnvironment) (*ScenarioHTTP, error) {
 	if env.State == nil || env.State.HTTP == nil {
 		return nil, fmt.Errorf("M2 scenario HTTP state is unavailable")
@@ -21,7 +16,7 @@ func scenarioHTTP(env *E2EEnvironment) (*ScenarioHTTP, error) {
 }
 
 func enterpriseHeaders(env *E2EEnvironment, idempotency string) map[string]string {
-	headers := map[string]string{"Origin": enterpriseOrigin, "X-CSRF-Token": env.State.Values["enterprise_csrf"]}
+	headers := map[string]string{"Origin": env.EnterpriseOrigin(), "X-CSRF-Token": env.State.Values["enterprise_csrf"]}
 	if idempotency != "" {
 		headers["Idempotency-Key"] = idempotency + "-" + env.Options.RunID
 	}
@@ -36,7 +31,7 @@ func (a *App) refreshEnterpriseLogin(ctx context.Context, env *E2EEnvironment) e
 	client.Reset("enterprise")
 	login, err := client.JSON(ctx, "enterprise-login-refresh", "enterprise", http.MethodPost, "/enterprise/auth/login", http.StatusOK, map[string]any{
 		"username": env.State.Values["enterprise_username"], "password": env.State.Values["enterprise_password"],
-	}, map[string]string{"Origin": enterpriseOrigin})
+	}, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -49,7 +44,7 @@ func (a *App) refreshEnterpriseLogin(ctx context.Context, env *E2EEnvironment) e
 		return err
 	}
 	completed, err := client.JSON(ctx, "enterprise-mfa-refresh", "enterprise", http.MethodPost, "/enterprise/auth/mfa/complete", http.StatusOK,
-		map[string]any{"challenge_id": challenge, "code": code}, map[string]string{"Origin": enterpriseOrigin})
+		map[string]any{"challenge_id": challenge, "code": code}, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -106,7 +101,7 @@ func (a *App) waitConnectionTest(ctx context.Context, env *E2EEnvironment, id st
 	}
 	deadline := time.Now().Add(2 * time.Minute)
 	for time.Now().Before(deadline) {
-		result, err := client.JSON(ctx, "connection-test-"+id, "enterprise", http.MethodGet, "/enterprise/connection-tests/"+id, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+		result, err := client.JSON(ctx, "connection-test-"+id, "enterprise", http.MethodGet, "/enterprise/connection-tests/"+id, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 		if err != nil {
 			return err
 		}

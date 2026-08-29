@@ -1,3 +1,4 @@
+import { enterpriseOrigin, platformOrigin } from "./origins";
 import { expect, test, type Page } from "@playwright/test";
 
 const enabled = process.env.ARGUS_M2_E2E === "1";
@@ -15,10 +16,16 @@ test.describe("M2 real identity flow", () => {
   test("platform setup route is locked after initialization", async ({
     page,
   }) => {
-    await page.goto("http://127.0.0.1:4174/setup");
-    await expect(page).toHaveURL("http://127.0.0.1:4174/login");
-    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    await page.goto(`${platformOrigin}/setup`);
+    await expect(page).toHaveURL(`${platformOrigin}/login`);
+    await expect(page.locator('input[name="admin.password"]')).toHaveCount(0);
+    await expect(
+      page.locator('input[name="admin.confirmPassword"]'),
+    ).toHaveCount(0);
     await expect(page.locator('input[autocomplete="username"]')).toBeVisible();
+    await expect(
+      page.locator('input[autocomplete="current-password"]'),
+    ).toBeVisible();
   });
 
   test("platform portal authenticates against the real audience", async ({
@@ -26,12 +33,12 @@ test.describe("M2 real identity flow", () => {
   }) => {
     await login(
       page,
-      "http://127.0.0.1:4174/login",
+      `${platformOrigin}/login`,
       platformUsername,
       platformPassword,
       platformMfaCode,
     );
-    await expect(page).toHaveURL("http://127.0.0.1:4174/");
+    await expect(page).toHaveURL(`${platformOrigin}/`);
     await expectNoCredentialInBrowserState(page, platformPassword);
   });
 
@@ -40,7 +47,7 @@ test.describe("M2 real identity flow", () => {
   }) => {
     await login(
       page,
-      "http://127.0.0.1:4173/login",
+      `${enterpriseOrigin}/login`,
       enterpriseUsername,
       enterprisePassword,
       enterpriseMfaCode,
@@ -48,7 +55,7 @@ test.describe("M2 real identity flow", () => {
     await expect(page).not.toHaveURL(/\/login/);
     await page.reload();
     await expect(page).not.toHaveURL(/\/login/);
-    await page.goto("http://127.0.0.1:4173/settings/org");
+    await page.goto(`${enterpriseOrigin}/settings/org`);
     await expect(page).not.toHaveURL(/\/login/);
     await expectNoCredentialInBrowserState(page, enterprisePassword);
   });

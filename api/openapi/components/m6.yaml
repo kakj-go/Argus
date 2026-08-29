@@ -8,24 +8,23 @@ components:
       enum: [requested, awaiting_approval, authorized, connecting, active, terminating, terminated, failed, expired, connection_lost, invalidated]
     RemoteAccessRequestStatus:
       type: string
-      enum: [requested, awaiting_approval, authorized, rejected, expired, invalidated]
+      enum: [requested, awaiting_mfa, awaiting_approval, authorized, rejected, expired, invalidated]
     RemoteAccessGrant:
       type: object
       additionalProperties: false
-      required: [id, enterprise_id, subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, enabled, version, created_at, updated_at]
+      required: [id, enterprise_id, subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, status, version, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         enterprise_id: {type: string, format: uuid, readOnly: true}
         subject_type: {$ref: '#/components/schemas/RemoteAccessSubjectType'}
         subject_id: {type: string, format: uuid}
         host_ids: {type: array, uniqueItems: true, maxItems: 256, items: {type: string, format: uuid}}
-        host_selector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}
         managed_account_ids: {type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: {type: string, format: uuid}}
         protocols: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessProtocol'}}
         actions: {type: array, minItems: 1, maxItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessAction'}}
         valid_from: {type: string, format: date-time}
         valid_until: {type: string, format: date-time}
-        enabled: {type: boolean}
+        status: {$ref: '#/components/schemas/RemoteAccessGovernanceStatus'}
         version: {type: integer, format: int64, minimum: 1}
         created_by: {type: string, format: uuid}
         created_at: {type: string, format: date-time}
@@ -33,33 +32,30 @@ components:
     RemoteAccessGrantWrite:
       type: object
       additionalProperties: false
-      required: [subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, enabled]
+      required: [subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, status]
       properties:
         subject_type: {$ref: '#/components/schemas/RemoteAccessSubjectType'}
         subject_id: {type: string, format: uuid}
         host_ids: {type: array, uniqueItems: true, maxItems: 256, items: {type: string, format: uuid}}
-        host_selector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}
         managed_account_ids: {type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: {type: string, format: uuid}}
         protocols: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessProtocol'}}
         actions: {type: array, minItems: 1, maxItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessAction'}}
         valid_from: {type: string, format: date-time}
         valid_until: {type: string, format: date-time}
-        enabled: {type: boolean}
+        status: {type: string, enum: [draft], default: draft}
     RemoteAccessGrantUpdate:
       type: object
       additionalProperties: false
-      required: [subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, enabled, expected_version]
+      required: [subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, expected_version]
       properties:
         subject_type: {$ref: '#/components/schemas/RemoteAccessSubjectType'}
         subject_id: {type: string, format: uuid}
         host_ids: {type: array, uniqueItems: true, maxItems: 256, items: {type: string, format: uuid}}
-        host_selector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}
         managed_account_ids: {type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: {type: string, format: uuid}}
         protocols: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessProtocol'}}
         actions: {type: array, minItems: 1, maxItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessAction'}}
         valid_from: {type: string, format: date-time}
         valid_until: {type: string, format: date-time}
-        enabled: {type: boolean}
         expected_version: {type: integer, format: int64, minimum: 1}
     RemoteAccessGrantPage:
       type: object
@@ -68,75 +64,297 @@ components:
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/RemoteAccessGrant'}}
         page: {$ref: ./common.yaml#/components/schemas/CursorPage}
-    RemoteAccessPolicy:
+    RemoteAccessGovernanceStatus:
+      type: string
+      enum: [draft, enabled, disabled, archived]
+    RemoteAccessRuleEffect:
+      type: string
+      enum: [deny, require_mfa, require_approval, notify]
+    RemoteAccessTimeWindow:
       type: object
       additionalProperties: false
-      required: [id, enterprise_id, name, enabled, priority, protocols, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, version, created_at, updated_at]
+      required: [day_of_week, start, end, timezone]
+      properties:
+        day_of_week: {type: integer, minimum: 0, maximum: 6}
+        start: {type: string, minLength: 5, maxLength: 5}
+        end: {type: string, minLength: 5, maxLength: 5}
+        timezone: {type: string, minLength: 1, maxLength: 64}
+    RemoteAccessRule:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, description, priority, protocols, actions, source_cidrs, time_windows, effects, status, version, created_by, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         enterprise_id: {type: string, format: uuid, readOnly: true}
         name: {type: string, minLength: 1, maxLength: 128}
-        enabled: {type: boolean}
+        description: {type: string, maxLength: 2048}
         priority: {type: integer, minimum: 0, maximum: 10000}
         protocols: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessProtocol'}}
-        host_selector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}
-        approver_role_ids: {type: array, uniqueItems: true, maxItems: 64, items: {type: string, format: uuid}}
-        minimum_approvals: {type: integer, minimum: 1, maximum: 16}
-        separation_of_duties: {type: boolean}
-        require_mfa: {type: boolean}
-        max_session_seconds: {type: integer, minimum: 60, maximum: 3600}
-        idle_timeout_seconds: {type: integer, minimum: 60, maximum: 900}
+        actions: {type: array, minItems: 1, maxItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessAction'}}
+        source_cidrs: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 64}}
+        time_windows: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/RemoteAccessTimeWindow'}}
+        effects: {type: array, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessRuleEffect'}}
+        approval_workflow_id: {type: string, format: uuid}
+        session_profile_id: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/RemoteAccessGovernanceStatus'}
         version: {type: integer, format: int64, minimum: 1}
+        created_by: {type: string, format: uuid}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
-    RemoteAccessPolicyWrite:
+    RemoteAccessRuleWrite:
       type: object
       additionalProperties: false
-      required: [name, enabled, priority, protocols, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds]
+      required: [name, description, priority, protocols, actions, source_cidrs, time_windows, effects, status]
       properties:
         name: {type: string, minLength: 1, maxLength: 128}
-        enabled: {type: boolean}
+        description: {type: string, maxLength: 2048}
         priority: {type: integer, minimum: 0, maximum: 10000}
         protocols: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessProtocol'}}
-        host_selector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}
-        approver_role_ids: {type: array, uniqueItems: true, maxItems: 64, items: {type: string, format: uuid}}
-        minimum_approvals: {type: integer, minimum: 1, maximum: 16}
-        separation_of_duties: {type: boolean}
-        require_mfa: {type: boolean}
-        max_session_seconds: {type: integer, minimum: 60, maximum: 3600}
-        idle_timeout_seconds: {type: integer, minimum: 60, maximum: 900}
-    RemoteAccessPolicyUpdate:
+        actions: {type: array, minItems: 1, maxItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessAction'}}
+        source_cidrs: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 64}}
+        time_windows: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/RemoteAccessTimeWindow'}}
+        effects: {type: array, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessRuleEffect'}}
+        approval_workflow_id: {type: string, format: uuid}
+        session_profile_id: {type: string, format: uuid}
+        status: {type: string, enum: [draft], default: draft}
+    RemoteAccessRuleUpdate:
       type: object
       additionalProperties: false
-      required: [name, enabled, priority, protocols, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, expected_version]
+      required: [name, description, priority, protocols, actions, source_cidrs, time_windows, effects, expected_version]
       properties:
         name: {type: string, minLength: 1, maxLength: 128}
-        enabled: {type: boolean}
+        description: {type: string, maxLength: 2048}
         priority: {type: integer, minimum: 0, maximum: 10000}
         protocols: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessProtocol'}}
-        host_selector: {$ref: ../../schemas/labels/labels.schema.json#/$defs/LabelSelector}
-        approver_role_ids: {type: array, uniqueItems: true, maxItems: 64, items: {type: string, format: uuid}}
-        minimum_approvals: {type: integer, minimum: 1, maximum: 16}
-        separation_of_duties: {type: boolean}
-        require_mfa: {type: boolean}
-        max_session_seconds: {type: integer, minimum: 60, maximum: 3600}
-        idle_timeout_seconds: {type: integer, minimum: 60, maximum: 900}
+        actions: {type: array, minItems: 1, maxItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessAction'}}
+        source_cidrs: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 64}}
+        time_windows: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/RemoteAccessTimeWindow'}}
+        effects: {type: array, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessRuleEffect'}}
+        approval_workflow_id: {type: string, format: uuid}
+        session_profile_id: {type: string, format: uuid}
         expected_version: {type: integer, format: int64, minimum: 1}
-    RemoteAccessPolicyPage:
+    RemoteAccessRulePage:
       type: object
       additionalProperties: false
       required: [items, page]
       properties:
-        items: {type: array, items: {$ref: '#/components/schemas/RemoteAccessPolicy'}}
+        items: {type: array, items: {$ref: '#/components/schemas/RemoteAccessRule'}}
         page: {$ref: ./common.yaml#/components/schemas/CursorPage}
+    ApprovalWorkflow:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, description, approver_role_ids, minimum_approvals, separation_of_duties, approval_timeout_seconds, escalation_after_seconds, timeout_effect, escalation_role_ids, status, version, created_by, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 2048}
+        approver_role_ids: {type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: {type: string, format: uuid}}
+        minimum_approvals: {type: integer, minimum: 1, maximum: 16}
+        separation_of_duties: {type: boolean}
+        approval_timeout_seconds: {type: integer, minimum: 60, maximum: 604800}
+        escalation_after_seconds: {type: integer, minimum: 30, maximum: 604799}
+        timeout_effect: {type: string, enum: [reject, expire]}
+        escalation_role_ids: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, format: uuid}}
+        status: {$ref: '#/components/schemas/RemoteAccessGovernanceStatus'}
+        version: {type: integer, format: int64, minimum: 1}
+        created_by: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ApprovalWorkflowWrite:
+      type: object
+      additionalProperties: false
+      required: [name, description, approver_role_ids, minimum_approvals, separation_of_duties, approval_timeout_seconds, escalation_after_seconds, timeout_effect, escalation_role_ids, status]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 2048}
+        approver_role_ids: {type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: {type: string, format: uuid}}
+        minimum_approvals: {type: integer, minimum: 1, maximum: 16}
+        separation_of_duties: {type: boolean}
+        approval_timeout_seconds: {type: integer, minimum: 60, maximum: 604800}
+        escalation_after_seconds: {type: integer, minimum: 30, maximum: 604799}
+        timeout_effect: {type: string, enum: [reject, expire]}
+        escalation_role_ids: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, format: uuid}}
+        status: {type: string, enum: [draft], default: draft}
+    ApprovalWorkflowUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, description, approver_role_ids, minimum_approvals, separation_of_duties, approval_timeout_seconds, escalation_after_seconds, timeout_effect, escalation_role_ids, expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 2048}
+        approver_role_ids: {type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: {type: string, format: uuid}}
+        minimum_approvals: {type: integer, minimum: 1, maximum: 16}
+        separation_of_duties: {type: boolean}
+        approval_timeout_seconds: {type: integer, minimum: 60, maximum: 604800}
+        escalation_after_seconds: {type: integer, minimum: 30, maximum: 604799}
+        timeout_effect: {type: string, enum: [reject, expire]}
+        escalation_role_ids: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, format: uuid}}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    ApprovalWorkflowPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ApprovalWorkflow'}}
+        page: {$ref: ./common.yaml#/components/schemas/CursorPage}
+    SessionProfile:
+      type: object
+      additionalProperties: false
+      required: [id, enterprise_id, name, description, max_session_seconds, idle_timeout_seconds, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, status, version, created_by, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        enterprise_id: {type: string, format: uuid, readOnly: true}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 2048}
+        max_session_seconds: {type: integer, minimum: 60, maximum: 86400}
+        idle_timeout_seconds: {type: integer, minimum: 60, maximum: 86400}
+        recording_mode: {type: string, enum: [required, optional, disabled]}
+        command_audit_mode: {type: string, enum: [required, optional, disabled]}
+        clipboard_mode: {type: string, enum: [enabled, disabled]}
+        file_upload_mode: {type: string, enum: [enabled, disabled]}
+        file_download_mode: {type: string, enum: [enabled, disabled]}
+        port_forward_mode: {type: string, enum: [enabled, disabled]}
+        session_share_mode: {type: string, enum: [enabled, disabled]}
+        retention_days: {type: integer, minimum: 1, maximum: 3650}
+        status: {$ref: '#/components/schemas/RemoteAccessGovernanceStatus'}
+        version: {type: integer, format: int64, minimum: 1}
+        created_by: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    SessionProfileWrite:
+      type: object
+      additionalProperties: false
+      required: [name, description, max_session_seconds, idle_timeout_seconds, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, status]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 2048}
+        max_session_seconds: {type: integer, minimum: 60, maximum: 86400}
+        idle_timeout_seconds: {type: integer, minimum: 60, maximum: 86400}
+        recording_mode: {type: string, enum: [required, optional, disabled]}
+        command_audit_mode: {type: string, enum: [required, optional, disabled]}
+        clipboard_mode: {type: string, enum: [enabled, disabled]}
+        file_upload_mode: {type: string, enum: [enabled, disabled]}
+        file_download_mode: {type: string, enum: [enabled, disabled]}
+        port_forward_mode: {type: string, enum: [enabled, disabled]}
+        session_share_mode: {type: string, enum: [enabled, disabled]}
+        retention_days: {type: integer, minimum: 1, maximum: 3650}
+        status: {type: string, enum: [draft], default: draft}
+    SessionProfileUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, description, max_session_seconds, idle_timeout_seconds, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, expected_version]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 2048}
+        max_session_seconds: {type: integer, minimum: 60, maximum: 86400}
+        idle_timeout_seconds: {type: integer, minimum: 60, maximum: 86400}
+        recording_mode: {type: string, enum: [required, optional, disabled]}
+        command_audit_mode: {type: string, enum: [required, optional, disabled]}
+        clipboard_mode: {type: string, enum: [enabled, disabled]}
+        file_upload_mode: {type: string, enum: [enabled, disabled]}
+        file_download_mode: {type: string, enum: [enabled, disabled]}
+        port_forward_mode: {type: string, enum: [enabled, disabled]}
+        session_share_mode: {type: string, enum: [enabled, disabled]}
+        retention_days: {type: integer, minimum: 1, maximum: 3650}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    SessionProfilePage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SessionProfile'}}
+        page: {$ref: ./common.yaml#/components/schemas/CursorPage}
+    RemoteAccessReferences:
+      type: object
+      additionalProperties: false
+      required: [rules, requests, leases, sessions]
+      properties:
+        rules: {type: integer, minimum: 0}
+        requests: {type: integer, minimum: 0}
+        leases: {type: integer, minimum: 0}
+        sessions: {type: integer, minimum: 0}
+    RemoteAccessObjectVersion:
+      type: object
+      additionalProperties: false
+      required: [id, version]
+      properties:
+        id: {type: string, format: uuid}
+        version: {type: integer, format: int64, minimum: 1}
+    RemoteAccessRuleSimulationRequest:
+      type: object
+      additionalProperties: false
+      required: [host_id, managed_account_id, protocol, action, step_up_authenticated]
+      properties:
+        host_id: {type: string, format: uuid}
+        managed_account_id: {type: string, format: uuid}
+        protocol: {$ref: '#/components/schemas/RemoteAccessProtocol'}
+        action: {$ref: '#/components/schemas/RemoteAccessAction'}
+        source_ip: {type: string, format: ip}
+        evaluation_time: {type: string, format: date-time}
+        step_up_authenticated: {type: boolean}
+    RemoteAccessApprovalRequirementSimulation:
+      type: object
+      additionalProperties: false
+      required: [workflow_id, workflow_version, approver_role_ids, minimum_approvals, separation_of_duties, approval_timeout_seconds, escalation_after_seconds, timeout_effect, escalation_role_ids, source_rule_ids]
+      properties:
+        workflow_id: {type: string, format: uuid}
+        workflow_version: {type: integer, format: int64, minimum: 1}
+        approver_role_ids: {type: array, uniqueItems: true, items: {type: string, format: uuid}}
+        minimum_approvals: {type: integer, minimum: 1, maximum: 16}
+        separation_of_duties: {type: boolean}
+        approval_timeout_seconds: {type: integer, minimum: 60, maximum: 604800}
+        escalation_after_seconds: {type: integer, minimum: 30, maximum: 604799}
+        timeout_effect: {type: string, enum: [reject, expire]}
+        escalation_role_ids: {type: array, uniqueItems: true, items: {type: string, format: uuid}}
+        source_rule_ids: {type: array, minItems: 1, uniqueItems: true, items: {type: string, format: uuid}}
+    RemoteAccessSessionProfileSnapshot:
+      type: object
+      additionalProperties: false
+      required: [source_profiles, max_session_seconds, idle_timeout_seconds, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days]
+      properties:
+        source_profiles: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/RemoteAccessObjectVersion'}}
+        max_session_seconds: {type: integer, minimum: 60, maximum: 86400}
+        idle_timeout_seconds: {type: integer, minimum: 60, maximum: 86400}
+        recording_mode: {type: string, enum: [required, optional, disabled]}
+        command_audit_mode: {type: string, enum: [required, optional, disabled]}
+        clipboard_mode: {type: string, enum: [enabled, disabled]}
+        file_upload_mode: {type: string, enum: [enabled, disabled]}
+        file_download_mode: {type: string, enum: [enabled, disabled]}
+        port_forward_mode: {type: string, enum: [enabled, disabled]}
+        session_share_mode: {type: string, enum: [enabled, disabled]}
+        retention_days: {type: integer, minimum: 1, maximum: 3650}
+    RemoteAccessRuleSimulationResult:
+      type: object
+      additionalProperties: false
+      required: [outcome, reason_codes, explanation, matched_grants, matched_rules, approval_requirements, session_profile, snapshot_hash]
+      properties:
+        outcome: {type: string, enum: [allowed, denied, awaiting_mfa, awaiting_approval]}
+        reason_codes: {type: array, items: {type: string}}
+        explanation: {type: array, items: {type: string}}
+        matched_grants: {type: array, items: {$ref: '#/components/schemas/RemoteAccessObjectVersion'}}
+        matched_rules: {type: array, items: {$ref: '#/components/schemas/RemoteAccessObjectVersion'}}
+        approval_requirements: {type: array, items: {$ref: '#/components/schemas/RemoteAccessApprovalRequirementSimulation'}}
+        session_profile: {$ref: '#/components/schemas/RemoteAccessSessionProfileSnapshot'}
+        snapshot_hash: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
     RemoteAccessRequirement:
       type: object
       additionalProperties: false
-      required: [id, policy_id, policy_version, minimum_approvals, separation_of_duties, require_mfa, status, approved_count]
+      required: [id, minimum_approvals, separation_of_duties, require_mfa, status, approved_count]
       properties:
         id: {type: string, format: uuid}
-        policy_id: {type: string, format: uuid}
-        policy_version: {type: integer, format: int64, minimum: 1}
+        rule_id: {type: string, format: uuid}
+        rule_version: {type: integer, format: int64, minimum: 1}
+        workflow_id: {type: string, format: uuid}
+        workflow_version: {type: integer, format: int64, minimum: 1}
+        session_profile_id: {type: string, format: uuid}
+        session_profile_version: {type: integer, format: int64, minimum: 1}
+        approval_snapshot: {type: object, additionalProperties: true}
+        deadline_at: {type: string, format: date-time}
+        escalation_at: {type: string, format: date-time}
+        escalated_at: {type: string, format: date-time}
+        timeout_effect: {type: string, enum: [reject, expire]}
+        escalation_role_ids: {type: array, uniqueItems: true, items: {type: string, format: uuid}}
         minimum_approvals: {type: integer, minimum: 1}
         separation_of_duties: {type: boolean}
         require_mfa: {type: boolean}
@@ -190,6 +408,13 @@ components:
         requirements: {type: array, items: {$ref: '#/components/schemas/RemoteAccessRequirement'}}
         decisions: {type: array, items: {$ref: '#/components/schemas/RemoteAccessDecision'}}
         authorization_version: {type: integer, format: int64, minimum: 1}
+        decision_outcome: {type: string, enum: [allowed, denied, awaiting_mfa, awaiting_approval]}
+        decision_reason_codes: {type: array, items: {type: string}}
+        decision_snapshot: {type: object, additionalProperties: true}
+        decision_snapshot_hash: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
+        matched_grant_snapshots: {type: array, items: {type: object, additionalProperties: true}}
+        matched_rule_snapshots: {type: array, items: {type: object, additionalProperties: true}}
+        decision_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -215,6 +440,7 @@ components:
         protocol: {$ref: '#/components/schemas/RemoteAccessProtocol'}
         action: {$ref: '#/components/schemas/RemoteAccessAction'}
         authorization_version: {type: integer, format: int64, minimum: 1}
+        decision_snapshot_hash: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
         issued_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
         revoked: {type: boolean}
@@ -237,7 +463,7 @@ components:
     RemoteAccessSession:
       type: object
       additionalProperties: false
-      required: [id, enterprise_id, user_id, lease_id, host_id, managed_account_id, protocol, connection_mode, status, session_fence, recording_id, idle_timeout_seconds, max_duration_seconds, connect_before, created_at, updated_at]
+      required: [id, enterprise_id, user_id, lease_id, host_id, managed_account_id, protocol, connection_mode, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, reason, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         enterprise_id: {type: string, format: uuid, readOnly: true}
@@ -247,11 +473,27 @@ components:
         managed_account_id: {type: string, format: uuid}
         protocol: {$ref: '#/components/schemas/RemoteAccessProtocol'}
         connection_mode: {type: string, enum: [via_bastion, connector_local, direct_ssh, direct_winrm]}
+        connector_id: {type: string, format: uuid}
+        connector_epoch: {type: integer, format: int64, minimum: 1}
+        gateway_instance: {type: string, maxLength: 256}
         status: {$ref: '#/components/schemas/RemoteAccessSessionStatus'}
         session_fence: {type: integer, format: int64, minimum: 1, readOnly: true}
+        authorization_version: {type: integer, format: int64, minimum: 1, readOnly: true}
+        reason: {type: string, maxLength: 2048, readOnly: true, description: 'Reason snapshot captured when the session was created.'}
         recording_id: {type: string, format: uuid}
         idle_timeout_seconds: {type: integer, minimum: 60, maximum: 900}
-        max_duration_seconds: {type: integer, minimum: 60, maximum: 3600}
+        max_duration_seconds: {type: integer, minimum: 60, maximum: 86400}
+        decision_snapshot_hash: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
+        decision_snapshot: {type: object, additionalProperties: true, readOnly: true}
+        session_profile_snapshot: {type: object, additionalProperties: true, readOnly: true}
+        recording_mode: {type: string, enum: [required, optional, disabled]}
+        command_audit_mode: {type: string, enum: [required, optional, disabled]}
+        clipboard_mode: {type: string, enum: [enabled, disabled]}
+        file_upload_mode: {type: string, enum: [enabled, disabled]}
+        file_download_mode: {type: string, enum: [enabled, disabled]}
+        port_forward_mode: {type: string, enum: [enabled, disabled]}
+        session_share_mode: {type: string, enum: [enabled, disabled]}
+        retention_days: {type: integer, minimum: 1, maximum: 3650}
         connect_before: {type: string, format: date-time}
         connected_at: {type: string, format: date-time}
         terminated_at: {type: string, format: date-time}
@@ -272,7 +514,7 @@ components:
       properties:
         session_id: {type: string, format: uuid}
         ticket: {type: string, minLength: 43, maxLength: 256, writeOnly: true}
-        websocket_url: {type: string, pattern: '^wss://[^[:space:]]+$'}
+        websocket_url: {type: string, pattern: '^wss?://[^[:space:]]+$'}
         protocol_version: {type: string, const: argus.remote_access/v1}
         expires_at: {type: string, format: date-time}
     SessionTerminate:
@@ -299,6 +541,13 @@ components:
         retention_until: {type: string, format: date-time}
         created_at: {type: string, format: date-time}
         completed_at: {type: string, format: date-time}
+    RemoteAccessRecordingPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/RemoteAccessRecording'}}
+        page: {$ref: ./common.yaml#/components/schemas/CursorPage}
     RecordingEventPage:
       type: object
       additionalProperties: false

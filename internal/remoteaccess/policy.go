@@ -2,11 +2,8 @@
 package remoteaccess
 
 import (
-	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,13 +13,13 @@ var (
 	ErrGrantRequired    = errors.New("REMOTE_ACCESS_GRANT_REQUIRED")
 	ErrScopeDenied      = errors.New("REMOTE_ACCESS_SCOPE_DENIED")
 	ErrApprovalRequired = errors.New("REMOTE_ACCESS_APPROVAL_REQUIRED")
-	ErrMFARequired      = errors.New("REMOTE_ACCESS_MFA_REQUIRED")
 	ErrLeaseExpired     = errors.New("REMOTE_ACCESS_LEASE_EXPIRED")
 	ErrCapacityExceeded = errors.New("REMOTE_ACCESS_CAPACITY_EXCEEDED")
 )
 
 const (
 	LeaseTTL           = 15 * time.Minute
+	RequestTTL         = 7 * 24 * time.Hour
 	TicketTTL          = time.Minute
 	ConnectionWindow   = 5 * time.Minute
 	DefaultIdleTimeout = 15 * time.Minute
@@ -35,13 +32,12 @@ type Grant struct {
 	SubjectType       string
 	SubjectID         uuid.UUID
 	HostIDs           []uuid.UUID
-	HostSelector      map[string][]string
 	ManagedAccountIDs []uuid.UUID
 	Protocols         []string
 	Actions           []string
 	ValidFrom         time.Time
 	ValidUntil        time.Time
-	Enabled           bool
+	Status            string
 	Version           int64
 }
 
@@ -62,7 +58,7 @@ func (grant Grant) Authorizes(intent Intent) bool {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	if !grant.Enabled || grant.EnterpriseID != intent.EnterpriseID || now.Before(grant.ValidFrom) || !now.Before(grant.ValidUntil) {
+	if grant.Status != GovernanceEnabled || grant.EnterpriseID != intent.EnterpriseID || now.Before(grant.ValidFrom) || !now.Before(grant.ValidUntil) {
 		return false
 	}
 	if grant.SubjectType == "user" && grant.SubjectID != intent.UserID {
@@ -77,81 +73,10 @@ func (grant Grant) Authorizes(intent Intent) bool {
 	if !slices.Contains(grant.ManagedAccountIDs, intent.ManagedAccountID) || !slices.Contains(grant.Protocols, intent.Protocol) || !slices.Contains(grant.Actions, intent.Action) {
 		return false
 	}
-	return slices.Contains(grant.HostIDs, intent.HostID) || matchesSelector(grant.HostSelector, intent.HostLabels)
-}
-
-func matchesSelector(selector map[string][]string, labels map[string]string) bool {
-	if len(selector) == 0 {
-		return false
+	if slices.Contains(grant.HostIDs, intent.HostID) {
+		return true
 	}
-	for key, allowed := range selector {
-		value, ok := labels[key]
-		if !ok || !slices.Contains(allowed, value) {
-			return false
-		}
-	}
-	return true
-}
-
-type Policy struct {
-	ID                 uuid.UUID
-	Version            int64
-	Enabled            bool
-	Priority           int
-	Protocols          []string
-	HostSelector       map[string][]string
-	ApproverRoleIDs    []uuid.UUID
-	MinimumApprovals   int
-	SeparationOfDuties bool
-	RequireMFA         bool
-	MaxSessionDuration time.Duration
-	IdleTimeout        time.Duration
-}
-
-type Requirement struct {
-	PolicyID           uuid.UUID
-	PolicyVersion      int64
-	ApproverRoleIDs    []uuid.UUID
-	MinimumApprovals   int
-	SeparationOfDuties bool
-	RequireMFA         bool
-}
-
-type PolicyResult struct {
-	Requirements       []Requirement
-	MaxSessionDuration time.Duration
-	IdleTimeout        time.Duration
-	SnapshotHash       [32]byte
-}
-
-func MatchPolicies(policies []Policy, intent Intent) (PolicyResult, error) {
-	result := PolicyResult{MaxSessionDuration: DefaultMaxDuration, IdleTimeout: DefaultIdleTimeout}
-	for _, policy := range policies {
-		if !policy.Enabled || !slices.Contains(policy.Protocols, intent.Protocol) {
-			continue
-		}
-		if len(policy.HostSelector) != 0 && !matchesSelector(policy.HostSelector, intent.HostLabels) {
-			continue
-		}
-		if policy.RequireMFA {
-			return PolicyResult{}, ErrMFARequired
-		}
-		minimum := max(policy.MinimumApprovals, 1)
-		result.Requirements = append(result.Requirements, Requirement{
-			PolicyID: policy.ID, PolicyVersion: policy.Version, ApproverRoleIDs: slices.Clone(policy.ApproverRoleIDs),
-			MinimumApprovals: minimum, SeparationOfDuties: policy.SeparationOfDuties,
-		})
-		if policy.MaxSessionDuration > 0 && policy.MaxSessionDuration < result.MaxSessionDuration {
-			result.MaxSessionDuration = policy.MaxSessionDuration
-		}
-		if policy.IdleTimeout > 0 && policy.IdleTimeout < result.IdleTimeout {
-			result.IdleTimeout = policy.IdleTimeout
-		}
-	}
-	slices.SortFunc(result.Requirements, func(a, b Requirement) int { return strings.Compare(a.PolicyID.String(), b.PolicyID.String()) })
-	canonical, _ := json.Marshal(result)
-	result.SnapshotHash = sha256.Sum256(canonical)
-	return result, nil
+	return false
 }
 
 type Capacity struct {

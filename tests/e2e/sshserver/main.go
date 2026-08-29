@@ -104,29 +104,39 @@ func serveSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 func runShell(channel ssh.Channel) {
 	_, _ = channel.Write([]byte("Argus M6 SSH PTY ready\r\n$ "))
 	reader := bufio.NewReader(channel)
+	var line []byte
 	for {
-		line, err := reader.ReadString('\n')
+		b, err := reader.ReadByte()
 		if err != nil {
 			return
 		}
-		command := strings.TrimSpace(strings.TrimRight(line, "\r\n"))
-		switch {
-		case command == "exit":
-			_, _ = channel.Write([]byte("logout\r\n"))
-			return
-		case command == "whoami":
-			_, _ = channel.Write([]byte("argus\r\n"))
-		case strings.HasPrefix(command, "echo "):
-			_, _ = channel.Write([]byte(strings.TrimPrefix(command, "echo ") + "\r\n"))
-		case command == "stream":
-			for index := 0; index < 45; index++ {
-				_, _ = channel.Write([]byte("stream-output\r\n"))
-				time.Sleep(time.Second)
+		// A real PTY echoes input and treats CR like a line terminator (ICRNL);
+		// browser terminals send \r on Enter, so both endings must close a line.
+		_, _ = channel.Write([]byte{b})
+		if b == '\r' || b == '\n' {
+			_, _ = channel.Write([]byte("\n"))
+			command := strings.TrimSpace(string(line))
+			line = line[:0]
+			switch {
+			case command == "exit":
+				_, _ = channel.Write([]byte("logout\r\n"))
+				return
+			case command == "whoami":
+				_, _ = channel.Write([]byte("argus\r\n"))
+			case strings.HasPrefix(command, "echo "):
+				_, _ = channel.Write([]byte(strings.TrimPrefix(command, "echo ") + "\r\n"))
+			case command == "stream":
+				for index := 0; index < 45; index++ {
+					_, _ = channel.Write([]byte("stream-output\r\n"))
+					time.Sleep(time.Second)
+				}
+			case command == "":
+			default:
+				_, _ = channel.Write([]byte("executed: " + command + "\r\n"))
 			}
-		case command == "":
-		default:
-			_, _ = channel.Write([]byte("executed: " + command + "\r\n"))
+			_, _ = channel.Write([]byte("$ "))
+			continue
 		}
-		_, _ = channel.Write([]byte("$ "))
+		line = append(line, b)
 	}
 }

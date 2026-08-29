@@ -32,7 +32,7 @@ AI 只负责理解、规划和调用工具，不能成为新的 Dashboard 存储
 
 - Dashboard、Revision、Panel、Variable、Binding Schema 已冻结。
 - ExecuteDashboard 能从 active Revision 执行 Metrics/Logs/Traces。
-- Catalog、Preview/Commit、权限、DataScope、AuthorizationVersion 已可调用。
+- Catalog、Preview/Commit、权限、explicit resource authorization、AuthorizationVersion 已可调用。
 - 至少有一个真实后台页面和 API E2E 证明手工创建闭环。
 - Tool Result Projection、PendingAction、Action Executor 和 Chatbox Mention 基座可复用。
 
@@ -69,7 +69,7 @@ Skill 生成 JSON Draft，不生成前端 HTML、Markdown 配置或直接可执�
 - Traces：确认服务、Span 属性、状态和时延范围。
 - Resources：确认 Host/Kubernetes 资源 ID、UID 和用户可用范围。
 
-Catalog 的候选不唯一时，Skill 必须返回澄清项，不允许模型自行选择相似名称。Catalog 结果只能作为 Draft 的来源证据，最终仍由服务端 Query Parser 和 DataScope 重新校验。
+Catalog 的候选不唯一时，Skill 必须返回澄清项，不允许模型自行选择相似名称。Catalog 结果只能作为 Draft 的来源证据，最终仍由服务端 Query Parser 和 explicit resource authorization 重新校验。
 
 ### T2.3 DashboardDraft JSON 接收与校验工具
 
@@ -101,7 +101,7 @@ Tool Input Schema 必须设置 additionalProperties=false，并拒绝 Skill 未�
 3. 每个 Signal、Query Language、expression、pipeline、operation_name 和 variables_schema。
 4. 变量 Key、查询依赖、未定义引用、循环依赖、默认值和最大选项数。
 5. 查询预算、时间范围、刷新频率和资源绑定范围。
-6. 资源 ID、Kubernetes UID、DataScope 和 AuthorizationVersion。
+6. 资源 ID、Kubernetes UID、explicit resource authorization 和 AuthorizationVersion。
 7. Catalog provenance、Parser/Validator 结果和样本返回类型。
 
 校验失败只能返回结构化错误和修复建议，不能创建 active Dashboard。
@@ -190,7 +190,7 @@ Agent 可以根据问题选择 Panel、决定先查错误率还是延迟、是�
 
 ~~~text
 DashboardBinding/Target Context
-∩ 当前用户 DataScope
+∩ 当前用户 explicit resource authorization
 ∩ 当前 AuthorizationVersion
 ∩ Query Tool Signal 与预算
 ~~~
@@ -260,7 +260,7 @@ telemetry.dashboard.create.commit
 telemetry.dashboard.update.commit
 ~~~
 
-权限至少包括 telemetry.dashboard.read、create、update、inspect、catalog.read；创建、更新、绑定和分析每次重新校验企业、可见性、Signal 权限、DataScope、字段脱敏权限和 AuthorizationVersion。
+权限至少包括 telemetry.dashboard.read、create、update、inspect、catalog.read；创建、更新、绑定和分析每次重新校验企业、可见性、Signal 权限、explicit resource authorization、字段脱敏权限和 AuthorizationVersion。
 
 ## 5. 测试与退出门禁
 
@@ -290,7 +290,7 @@ telemetry.dashboard.update.commit
 
 - 用户可以通过 /创建仪表盘 生成结构化 Draft，查看 Preview 后点击确认创建真实 Dashboard。
 - 用户可以通过 @ 明确引用 Dashboard，Agent 能读取 active Revision，自行选择 Panel 查询并总结三类信号证据。
-- Agent 不能调用未授权 Dashboard、修改已发布查询、绕过 Binding/DataScope 或把任意查询伪装成 Dashboard 证据。
+- Agent 不能调用未授权 Dashboard、修改已发布查询、绕过 Binding/explicit resource authorization 或把任意查询伪装成 Dashboard 证据。
 - 查询结果、模型总结、Preview 和 Commit 都能回溯到 Dashboard、Revision、Panel、query_hash、Target 和时间范围。
 - AI 创建和 AI 分析在模型重试、Worker 重启、Redis 清空、权限变化和部分查询失败时保持可恢复、可审计、可解释。
 

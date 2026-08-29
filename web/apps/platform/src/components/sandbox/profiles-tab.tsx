@@ -20,6 +20,7 @@ import {
   Field,
   FormDrawer,
   Input,
+  RowAction,
   Select,
   Spinner,
   Switch,
@@ -278,16 +279,14 @@ export function ProfilesTab() {
               key: "id",
               header: t("common.actions"),
               render: (row) => (
-                <Button
+                <RowAction
                   onClick={() => {
                     const profile = findProfile(row.id);
                     if (profile) setForm(formFromProfile(profile));
                   }}
-                  size="sm"
-                  variant="ghost"
                 >
                   {t("common.edit")}
-                </Button>
+                </RowAction>
               ),
             },
           ]}

@@ -86,7 +86,7 @@ Evaluation 合并 Worker 的默认资源为 `requests: 100m/256Mi`、`limits: 2 
 
 第一版不提供外部 PostgreSQL、Redis、Artifact Store、OpenSandbox、Kafka 或 ClickHouse 模式。Evaluation 与 Production 使用相同的组件和协议边界，差异只体现在副本、容量、持久化、拓扑分布和隔离等级。外部托管中间件接入作为后续能力，不能进入第一版配置 Schema、发布矩阵或 E2E 分支。
 
-安装器不应擅自安装或替换集群级 CNI、CSI/StorageClass、Ingress/Gateway Controller、LoadBalancer 实现、DNS 或证书 Issuer。这些能力与云厂商和集群发行版强相关；一键安装负责预检、选择已有实现并给出明确错误。Evaluation Profile 可以另提供针对 kind、k3s 等已知环境的配套脚本，但不能把它当作通用生产路径。
+安装器不应擅自安装或替换集群级 CNI、CSI/StorageClass、Ingress/Gateway Controller、LoadBalancer 实现、DNS 或证书 Issuer（cert-manager 例外，由安装器锁定版本安装）。这些能力与云厂商和集群发行版强相关；一键安装负责预检、选择已有实现并给出明确错误。安装器创建 Kubernetes Service 资源（例如 Connector 专用 LoadBalancer Service）不属于安装 LB 实现：它只是声明对外暴露意图，地址分配由集群已有实现完成。Evaluation Profile 可以另提供针对 kind、k3s 等已知环境的配套脚本，但不能把它当作通用生产路径。
 
 ## 3. 三条隔离链路
 
@@ -127,7 +127,7 @@ flowchart TB
 - Connector 仅连接 `argus-connector-gateway`，承载控制、Artifact 和独立的 Remote Session Stream，不发送遥测数据。
 - Direct Executor 通过 DNS/IP 双重校验访问用户目标，允许自定义端口和未命中保护集合的用户私网；应用层拒绝集群、Argus、云元数据、环回和链路本地地址。NetworkPolicy 负责内部服务隔离；固定出口、NAT、出口审计和额外 CIDR 防火墙由用户自行部署的 Egress Gateway 或网络防火墙负责。
 - `argus-server` 通过独立内部 CA 的 mTLS gRPC 向 Direct Executor 发送持久任务派发提示；PostgreSQL 队列是权威事实并负责断连恢复，RPC 不携带任意目标参数。
-- Remote Access 入口固定使用外部 WSS `9445`，只接受 `argus-server` 签发的短期一次性会话票据；Gateway peer 使用内部 mTLS `9446`，Connector 控制继续使用 `9443`，Direct Executor RPC 使用 `9444`。
+- Remote Access 入口固定使用外部 WSS `9445`（经企业门户域名 `argus.<domain>` 的 `/v1/sessions` Ingress 路径，与页面同源），只接受 `argus-server` 签发的短期一次性会话票据；Gateway peer 使用内部 mTLS `9446`；Connector 控制 `9443` 由专用 LoadBalancer Service（`argus-connector-gateway-public`，TCP 直通不做 TLS 终止，TLS 由网关自身 PKI 终结）在所有 Profile 统一暴露，地址为 `grpcs://<connectorHost>:9443`；Direct Executor RPC 使用 `9444`。
 - Gateway peer 通过 Kubernetes API 获取 Ready owner Pod IP，ServiceAccount 只允许读取同 Namespace Pod；NetworkPolicy 必须允许 Kubernetes API Endpoint、DNS、Gateway peer `9446`、PostgreSQL、Redis、Direct Executor 和 ObjectStore。
 - 录像按 asciicast v2 NDJSON 加密分片写 Artifact Store，不能依赖 Gateway Pod 本地磁盘；ObjectStore 连续不可用超过 30 秒时会话 fail closed。
 - Collector 仅连接 `argus-telemetry-ingest`，不接收远程控制命令。
@@ -191,7 +191,7 @@ flowchart LR
     B --> V
 ```
 
-`port-forward` 暴露模式安装完成后使用 `argusctl tunnel --config <profile>` 启动本地地址：Enterprise `4173`、Platform `4174`、Card Runtime `4176`。Platform 在未初始化时显示首次初始化向导，初始化完成后同一地址只进入登录页；Card Runtime 是 Enterprise 自动加载的隔离 Origin，不是用户门户。浏览器可以使用 `localhost` 或 `127.0.0.1` 访问这些地址，两组 loopback Origin 都必须进入本地 Profile 的精确允许列表。Web 容器以当前页面同源访问 `/api/v1/`，由 Nginx 代理到集群内 `argus-server`；本地部署不得把前端编译到占位 API 域名，也不依赖浏览器 mock 数据。
+对外访问只有域名模式：安装配置必须提供 `spec.exposure` 的 `enterpriseHost`、`platformHost`、`connectorHost` 并强制开启 `tls.enabled`（`cert-manager-selfsigned`、`cert-manager-issuer`、`user-provided` 三选一），不允许 HTTP 暴露。门户流量经 Ingress（默认 `nginx` IngressClass）路由到 `argus-web` 三个 server；Enterprise `argus.<domain>`、Platform `platform.<domain>`、Card Runtime `cards.<domain>`（由企业域派生）；Remote WSS 统一由企业门户域名 `argus.<domain>` 的 `/v1/sessions` 路径承载，与企业页面同源共用 TLS。浏览器 Origin 精确允许列表只包含三个 HTTPS 门户域名，loopback Origin 不再进入任何 Profile 的允许列表，`argusctl tunnel` port-forward 模式已移除。Web 容器以当前页面同源访问 `/api/v1/`（`VITE_API_BASE_URL=/`），由 Nginx 代理到集群内 `argus-server`；卡片 Origin 与 Platform 跳转地址由 Helm 渲染的 `/argus-runtime.json` 在运行时注入，Web 镜像不烧录任何域名。Platform 在未初始化时显示首次初始化向导，初始化完成后同一地址只进入登录页；Card Runtime 是 Enterprise 自动加载的隔离 Origin，不是用户门户。自签证书（`cert-manager-selfsigned`）首次访问需要信任 CA，安装输出的初始化链接固定 HTTPS。
 
 每一步写入 `ArgusInstallation` 状态或安装状态 ConfigMap。再次执行相同命令时，从未完成阶段继续，并对配置变更生成计划。自动化/GitOps 环境也可以直接使用对应 Helm Release 和 CR，不强制使用 `argusctl`。
 
@@ -203,7 +203,7 @@ go run ./cmd/argus-dev doctor e2e
 go run ./cmd/argus-dev e2e run --suite m2
 ```
 
-完整 E2E 要求可用容器引擎、Kubernetes Context、StorageClass、受支持节点架构、空闲端口和至少 25 GiB 主机磁盘。能力不足时 `doctor e2e` 与运行命令以退出码 2 明确失败，不静默跳过。
+完整 E2E 要求可用容器引擎、Kubernetes Context、StorageClass、受支持节点架构、可用的 Ingress Controller 与 LoadBalancer 实现以及至少 25 GiB 主机磁盘；E2E 与产品形态一致地通过域名访问 Ingress（浏览器用 host-resolver-rules 将测试域名钉到负载均衡地址），不再依赖宿主机端口转发。能力不足时 `doctor e2e` 与运行命令以退出码 2 明确失败，不静默跳过。
 
 ## 6. 安装配置
 
@@ -425,11 +425,11 @@ Writer 的 Kafka Receiver 配置 `message_marking.after: true`、`on_error: fals
 | ---------------------------------- | ------------------------- | ------------- | -------------------------------------------------------------------- |
 | `argus.example.com`                | `argus-server`/Web        | HTTPS/WSS     | 用户、API、Card Host                                                 |
 | `connector.argus.example.com`      | `argus-connector-gateway` | TLS 长连接    | Connector 控制链路                                                   |
-| `remote.argus.example.com`         | `argus-connector-gateway` | HTTPS/WSS     | 经短期票据授权的 SSH PTY/HTTPS WinRS；与 Connector 入口分端口和限流  |
+| `argus.example.com/v1/sessions`    | `argus-connector-gateway` | HTTPS/WSS     | 经短期票据授权的 SSH PTY/HTTPS WinRS；路径分流与门户同源，Listener/限流独立  |
 | `otlp.argus.example.com:4317`      | `argus-telemetry-ingest`  | OTLP/gRPC TLS | 遥测推送                                                             |
 | `otlp-http.argus.example.com:4318` | `argus-telemetry-ingest`  | OTLP/HTTP TLS | 遥测推送                                                             |
 
-`argus-direct-executor`、`argus-telemetry-query`、PostgreSQL、Redis、Kafka、ClickHouse、OpenSandbox Backend 和 Writer 都只暴露集群内 Service。即使部署在同一集群，也不能用一个 Ingress 路由混合 Connector、Remote Access 与 OTLP 流量；`remote.argus.example.com` 可以与 Connector Gateway 使用相同程序，但必须使用独立 Listener、证书策略、限流和 HPA 指标。
+`argus-direct-executor`、`argus-telemetry-query`、PostgreSQL、Redis、Kafka、ClickHouse、OpenSandbox Backend 和 Writer 都只暴露集群内 Service。所有对外入口强制 TLS：门户与 Remote WSS 走 Ingress 的 HTTPS/WSS（证书由 `spec.exposure.tls` 三种模式之一签发）；Connector 控制链路不走 Ingress，由专用 LoadBalancer Service `argus-connector-gateway-public` 做 TCP 直通（`grpcs://<connectorHost>:9443`，TLS 由网关自身 PKI 终结，网关证书 SAN 含公网 connectorHost 与集群内 Service 名）；OTLP 独立暴露。即使部署在同一集群，也不能用一个 Ingress 主机混合 Connector 与 OTLP 流量；Remote Access 的 `/v1/sessions` 路径可以与 Connector Gateway 使用相同程序，但必须使用独立 Listener、限流和 HPA 指标（TLS 与门户共用同一张多 SAN 证书）。
 
 ## 11. 初始化与超级管理员
 

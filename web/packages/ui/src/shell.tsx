@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode, Ref } from "react";
 import { ChevronDown } from "lucide-react";
 import { Avatar, Dropdown, Tooltip } from "./primitives";
 import { Button, type ButtonProps } from "./button";
@@ -13,27 +13,57 @@ export type UserMenuItem =
     }
   | "separator";
 
+/** Where a persistent dock panel attaches to the shell grid. */
+export type AppShellDockPlacement = {
+  position: "bottom" | "left" | "right";
+  /** Dock size as a percentage of the main column's matching dimension. */
+  sizePercent: number;
+};
+
 export function AppShell({
   sidebar,
   header,
   children,
   overlay,
+  dock,
   className,
+  style,
+  mainRef,
+  dockPlacement,
 }: {
   sidebar: ReactNode;
   header: ReactNode;
   children: ReactNode;
   overlay?: ReactNode;
+  dock?: ReactNode;
   className?: string;
+  style?: CSSProperties;
+  /** Ref to the page scroll container; the shell itself never scrolls. */
+  mainRef?: Ref<HTMLElement>;
+  /** When set, the dock joins the shell grid at this placement. */
+  dockPlacement?: AppShellDockPlacement;
 }) {
+  const rootStyle: CSSProperties | undefined = dockPlacement
+    ? ({
+        ...style,
+        "--terminal-dock-size": `${dockPlacement.sizePercent}%`,
+      } as CSSProperties)
+    : style;
   return (
-    <div className={cx("argus-app-shell", className)}>
+    <div
+      className={cx("argus-app-shell", className)}
+      data-terminal-dock={dockPlacement?.position}
+      style={rootStyle}
+    >
       {sidebar}
       <div className="argus-app-main">
         {header}
-        <main className="argus-page-content">{children}</main>
+        <main className="argus-page-content" ref={mainRef}>
+          <div className="argus-app-workspace">{children}</div>
+        </main>
       </div>
       {overlay}
+      {dock}
     </div>
   );
 }

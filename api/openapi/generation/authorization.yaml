@@ -8,5 +8,4 @@ components:
     AuthorizationVersion: {$ref: ../components/authorization.yaml#/components/schemas/AuthorizationVersion}
     Role: {$ref: ../components/authorization.yaml#/components/schemas/Role}
     RoleBinding: {$ref: ../components/authorization.yaml#/components/schemas/RoleBinding}
-    DataScope: {$ref: ../components/authorization.yaml#/components/schemas/DataScope}
     AuthorizationDecision: {$ref: ../components/authorization.yaml#/components/schemas/AuthorizationDecision}

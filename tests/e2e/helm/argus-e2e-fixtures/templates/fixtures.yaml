@@ -26,6 +26,7 @@ apiVersion: v1
 kind: Service
 metadata: {name: argus-e2e-ssh-target, namespace: {{ .Values.namespaces.system }}}
 spec:
+  type: LoadBalancer
   selector: {app.kubernetes.io/name: argus-e2e-ssh-target}
   ports: [{name: ssh, port: 22, targetPort: ssh}]
 {{- end }}

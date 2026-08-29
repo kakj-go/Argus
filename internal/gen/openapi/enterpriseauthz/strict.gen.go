@@ -7,23 +7,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"net/http"
 )
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// ListDataScopes listDataScopes.
-	// (GET /enterprise/data-scopes)
-	ListDataScopes(ctx context.Context, request ListDataScopesRequestObject) (ListDataScopesResponseObject, error)
-	// CreateDataScope createDataScope.
-	// (POST /enterprise/data-scopes)
-	CreateDataScope(ctx context.Context, request CreateDataScopeRequestObject) (CreateDataScopeResponseObject, error)
-	// DisableDataScope disableDataScope.
-	// (DELETE /enterprise/data-scopes/{id})
-	DisableDataScope(ctx context.Context, request DisableDataScopeRequestObject) (DisableDataScopeResponseObject, error)
-	// UpdateDataScope updateDataScope.
-	// (PUT /enterprise/data-scopes/{id})
-	UpdateDataScope(ctx context.Context, request UpdateDataScopeRequestObject) (UpdateDataScopeResponseObject, error)
+	// ListDataAuthorizationResources List explicit data authorization resources for a subject.
+	// (GET /enterprise/data-authorizations/{subject_type}/{subject_id})
+	ListDataAuthorizationResources(ctx context.Context, request ListDataAuthorizationResourcesRequestObject) (ListDataAuthorizationResourcesResponseObject, error)
+	// UpdateDataAuthorization Add or remove explicit data authorization resources.
+	// (POST /enterprise/data-authorizations/{subject_type}/{subject_id})
+	UpdateDataAuthorization(ctx context.Context, request UpdateDataAuthorizationRequestObject) (UpdateDataAuthorizationResponseObject, error)
 	// ListPermissions listPermissions.
 	// (GET /enterprise/permissions)
 	ListPermissions(ctx context.Context, request ListPermissionsRequestObject) (ListPermissionsResponseObject, error)
@@ -51,6 +46,12 @@ type StrictServerInterface interface {
 	// UpdateRole updateRole.
 	// (PUT /enterprise/roles/{id})
 	UpdateRole(ctx context.Context, request UpdateRoleRequestObject) (UpdateRoleResponseObject, error)
+	// GetUserRoleAssignments Get direct, inherited, and effective role assignments for an enterprise user.
+	// (GET /enterprise/users/{id}/role-assignments)
+	GetUserRoleAssignments(ctx context.Context, request GetUserRoleAssignmentsRequestObject) (GetUserRoleAssignmentsResponseObject, error)
+	// ReplaceUserRoleAssignments Atomically replace an enterprise user's direct role assignments.
+	// (PUT /enterprise/users/{id}/role-assignments)
+	ReplaceUserRoleAssignments(ctx context.Context, request ReplaceUserRoleAssignmentsRequestObject) (ReplaceUserRoleAssignmentsResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -92,25 +93,27 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// ListDataScopes operation middleware
-func (sh *strictHandler) ListDataScopes(w http.ResponseWriter, r *http.Request, params ListDataScopesParams) {
-	var request ListDataScopesRequestObject
+// ListDataAuthorizationResources operation middleware
+func (sh *strictHandler) ListDataAuthorizationResources(w http.ResponseWriter, r *http.Request, subjectType DataAuthorizationSubjectType, subjectId openapi_types.UUID, params ListDataAuthorizationResourcesParams) {
+	var request ListDataAuthorizationResourcesRequestObject
 
+	request.SubjectType = subjectType
+	request.SubjectId = subjectId
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListDataScopes(ctx, request.(ListDataScopesRequestObject))
+		return sh.ssi.ListDataAuthorizationResources(ctx, request.(ListDataAuthorizationResourcesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListDataScopes")
+		handler = middleware(handler, "ListDataAuthorizationResources")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListDataScopesResponseObject); ok {
-		if err := validResponse.VisitListDataScopesResponse(w); err != nil {
+	} else if validResponse, ok := response.(ListDataAuthorizationResourcesResponseObject); ok {
+		if err := validResponse.VisitListDataAuthorizationResourcesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -118,13 +121,15 @@ func (sh *strictHandler) ListDataScopes(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
-// CreateDataScope operation middleware
-func (sh *strictHandler) CreateDataScope(w http.ResponseWriter, r *http.Request, params CreateDataScopeParams) {
-	var request CreateDataScopeRequestObject
+// UpdateDataAuthorization operation middleware
+func (sh *strictHandler) UpdateDataAuthorization(w http.ResponseWriter, r *http.Request, subjectType DataAuthorizationSubjectType, subjectId openapi_types.UUID, params UpdateDataAuthorizationParams) {
+	var request UpdateDataAuthorizationRequestObject
 
+	request.SubjectType = subjectType
+	request.SubjectId = subjectId
 	request.Params = params
 
-	var body CreateDataScopeJSONRequestBody
+	var body UpdateDataAuthorizationJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -132,79 +137,18 @@ func (sh *strictHandler) CreateDataScope(w http.ResponseWriter, r *http.Request,
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateDataScope(ctx, request.(CreateDataScopeRequestObject))
+		return sh.ssi.UpdateDataAuthorization(ctx, request.(UpdateDataAuthorizationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateDataScope")
+		handler = middleware(handler, "UpdateDataAuthorization")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateDataScopeResponseObject); ok {
-		if err := validResponse.VisitCreateDataScopeResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DisableDataScope operation middleware
-func (sh *strictHandler) DisableDataScope(w http.ResponseWriter, r *http.Request, id ResourceId, params DisableDataScopeParams) {
-	var request DisableDataScopeRequestObject
-
-	request.Id = id
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DisableDataScope(ctx, request.(DisableDataScopeRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DisableDataScope")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DisableDataScopeResponseObject); ok {
-		if err := validResponse.VisitDisableDataScopeResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateDataScope operation middleware
-func (sh *strictHandler) UpdateDataScope(w http.ResponseWriter, r *http.Request, id ResourceId, params UpdateDataScopeParams) {
-	var request UpdateDataScopeRequestObject
-
-	request.Id = id
-	request.Params = params
-
-	var body UpdateDataScopeJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateDataScope(ctx, request.(UpdateDataScopeRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateDataScope")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdateDataScopeResponseObject); ok {
-		if err := validResponse.VisitUpdateDataScopeResponse(w); err != nil {
+	} else if validResponse, ok := response.(UpdateDataAuthorizationResponseObject); ok {
+		if err := validResponse.VisitUpdateDataAuthorizationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -471,6 +415,66 @@ func (sh *strictHandler) UpdateRole(w http.ResponseWriter, r *http.Request, id R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateRoleResponseObject); ok {
 		if err := validResponse.VisitUpdateRoleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetUserRoleAssignments operation middleware
+func (sh *strictHandler) GetUserRoleAssignments(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	var request GetUserRoleAssignmentsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetUserRoleAssignments(ctx, request.(GetUserRoleAssignmentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetUserRoleAssignments")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetUserRoleAssignmentsResponseObject); ok {
+		if err := validResponse.VisitGetUserRoleAssignmentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplaceUserRoleAssignments operation middleware
+func (sh *strictHandler) ReplaceUserRoleAssignments(w http.ResponseWriter, r *http.Request, id ResourceId, params ReplaceUserRoleAssignmentsParams) {
+	var request ReplaceUserRoleAssignmentsRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body ReplaceUserRoleAssignmentsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplaceUserRoleAssignments(ctx, request.(ReplaceUserRoleAssignmentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplaceUserRoleAssignments")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplaceUserRoleAssignmentsResponseObject); ok {
+		if err := validResponse.VisitReplaceUserRoleAssignmentsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

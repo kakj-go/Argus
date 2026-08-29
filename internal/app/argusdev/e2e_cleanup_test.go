@@ -2,7 +2,6 @@ package argusdev
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -10,15 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
-
-func TestIsPortForwardNotFoundTreatsDeletedServiceAsSuccessfulCleanup(t *testing.T) {
-	if !isPortForwardNotFound(fmt.Errorf(`services "argus-e2e-ssh-target" not found`)) {
-		t.Fatal("expected deleted Service error to be ignored")
-	}
-	if isPortForwardNotFound(fmt.Errorf("port-forward timed out")) {
-		t.Fatal("unexpectedly ignored a real port-forward failure")
-	}
-}
 
 func TestCleanupManagedCollectorRBACOnlyDeletesTemporaryNamespaceBindings(t *testing.T) {
 	ctx := context.Background()

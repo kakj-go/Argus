@@ -16,6 +16,7 @@ import {
   FormDrawer,
   KeyValueGrid,
   PageShell,
+  RowAction,
   Spinner,
   StatusBadge,
 } from "@argus/ui";
@@ -280,13 +281,9 @@ export function SettingsAuditPage() {
                   key: "id",
                   header: t("settings.audit.table.requestId"),
                   render: (row) => (
-                    <Button
-                      onClick={() => openDetail(row)}
-                      size="sm"
-                      variant="ghost"
-                    >
+                    <RowAction onClick={() => openDetail(row)}>
                       <code className="argus-mono">{row.id}</code>
-                    </Button>
+                    </RowAction>
                   ),
                 },
               ]}

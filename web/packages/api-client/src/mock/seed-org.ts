@@ -1,7 +1,6 @@
 import type {
   ApiKey,
   ApprovalPolicy,
-  DataScope,
   Department,
   Role,
   RoleBinding,
@@ -154,7 +153,6 @@ export interface OrgSeed {
   departments: Department[];
   roles: Role[];
   roleBindings: RoleBinding[];
-  dataScopes: DataScope[];
   approvalPolicies: ApprovalPolicy[];
   serviceAccounts: ServiceAccount[];
   apiKeys: ApiKey[];
@@ -351,7 +349,6 @@ export function createOrgSeed(now: number): OrgSeed {
           subject_type: "user",
           subject_id: "u-root",
           role_id: "role-ea",
-          data_scope_ids: [],
           status: "active",
           created_at: ago(120 * DAY),
         },
@@ -361,7 +358,6 @@ export function createOrgSeed(now: number): OrgSeed {
           subject_type: "user",
           subject_id: "u-chenxi",
           role_id: "role-ea",
-          data_scope_ids: [],
           status: "active",
           created_at: ago(120 * DAY),
         },
@@ -371,7 +367,6 @@ export function createOrgSeed(now: number): OrgSeed {
           subject_type: "user",
           subject_id: "u-wanglei",
           role_id: "role-da",
-          data_scope_ids: [],
           status: "active",
           created_at: ago(118 * DAY),
         },
@@ -381,7 +376,6 @@ export function createOrgSeed(now: number): OrgSeed {
           subject_type: "user",
           subject_id: "u-wanglei",
           role_id: "role-po",
-          data_scope_ids: ["ds-ops-nonprod"],
           status: "active",
           created_at: ago(118 * DAY),
         },
@@ -391,7 +385,6 @@ export function createOrgSeed(now: number): OrgSeed {
           subject_type: "user",
           subject_id: "u-lina",
           role_id: "role-pv",
-          data_scope_ids: ["ds-ops-nonprod"],
           status: "active",
           created_at: ago(90 * DAY),
         },
@@ -401,7 +394,6 @@ export function createOrgSeed(now: number): OrgSeed {
           subject_type: "department",
           subject_id: "dept-pay",
           role_id: "role-pv",
-          data_scope_ids: ["ds-ops-nonprod"],
           status: "active",
           created_at: ago(90 * DAY),
         },
@@ -411,7 +403,6 @@ export function createOrgSeed(now: number): OrgSeed {
           subject_type: "user",
           subject_id: "u-gadmin",
           role_id: "role-g-ea",
-          data_scope_ids: [],
           status: "active",
           created_at: ago(80 * DAY),
         },
@@ -421,31 +412,6 @@ export function createOrgSeed(now: number): OrgSeed {
       version: 1,
       updated_at: binding.created_at,
     })),
-    dataScopes: [
-      {
-        id: "ds-ops-nonprod",
-        enterprise_id: "ent-acme",
-        name: "ops 非生产范围",
-        description: "开发与预发布环境的运维资源",
-        resource_types: ["host", "kubernetes_cluster"],
-        explicit_resource_ids: [],
-        match_all: false,
-        label_selector: {
-          schema_version: "argus.label_selector/v1",
-          requirements: [
-            {
-              key: "environment",
-              operator: "in",
-              values: ["development", "staging"],
-            },
-          ],
-        },
-        status: "active",
-        version: 1,
-        created_at: ago(100 * DAY),
-        updated_at: ago(100 * DAY),
-      },
-    ],
     approvalPolicies: [
       {
         id: "ap-prod-danger",
@@ -477,7 +443,6 @@ export function createOrgSeed(now: number): OrgSeed {
         name: "sre-schedule",
         description: "自动化巡检任务",
         allowed_tool_ids: ["host.list", "telemetry.query"],
-        data_scope_ids: ["ds-ops-nonprod"],
         status: "active",
         authorization_version: 1,
         version: 1,

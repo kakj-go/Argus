@@ -33,16 +33,7 @@ func (a *App) runM3Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if err != nil {
 		return err
 	}
-	scope, err := client.JSON(ctx, "m3-admin-scope", "enterprise", http.MethodPost, "/enterprise/data-scopes", http.StatusCreated,
-		map[string]any{"name": "M3 administration scope", "resource_types": []string{"host", "kubernetes_cluster", "kubernetes_namespace"}, "explicit_resource_ids": []string{}, "label_selector": map[string]any{"schema_version": "argus.label_selector/v1", "requirements": []any{map[string]any{"key": "team", "operator": "eq", "values": []string{"m3"}}}}}, enterpriseHeaders(env, "m3-admin-scope"))
-	if err != nil {
-		return err
-	}
-	scopeID, err := stringField(scope, "id")
-	if err != nil {
-		return err
-	}
-	roles, err := client.JSON(ctx, "m3-roles", "enterprise", http.MethodGet, "/enterprise/roles", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	roles, err := client.JSON(ctx, "m3-roles", "enterprise", http.MethodGet, "/enterprise/roles", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -58,7 +49,7 @@ func (a *App) runM3Scenario(ctx context.Context, env *E2EEnvironment) error {
 	}
 	env.State.Values["m3_resource_admin_role_id"] = roleID
 	if _, err := client.JSON(ctx, "m3-admin-binding", "enterprise", http.MethodPost, "/enterprise/role-bindings", http.StatusCreated,
-		map[string]any{"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "role_id": roleID, "data_scope_ids": []string{scopeID}}, enterpriseHeaders(env, "m3-admin-binding")); err != nil {
+		map[string]any{"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "role_id": roleID}, enterpriseHeaders(env, "m3-admin-binding")); err != nil {
 		return err
 	}
 	if err := a.refreshEnterpriseLogin(ctx, env); err != nil {

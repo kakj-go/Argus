@@ -102,7 +102,6 @@ export interface components {
             /** @enum {string} */
             status: "active" | "disabled";
             allowed_tool_ids?: string[];
-            data_scope_ids?: string[];
             authorization_version: components["schemas"]["AuthorizationVersion"];
             /** Format: int64 */
             version: number;

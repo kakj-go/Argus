@@ -15,6 +15,7 @@ import {
   FormDrawer,
   KeyValueGrid,
   PageShell,
+  RowAction,
   Spinner,
   StatusBadge,
 } from "@argus/ui";
@@ -198,13 +199,9 @@ export function AuditPage() {
                   key: "id",
                   header: t("common.actions"),
                   render: (row) => (
-                    <Button
-                      onClick={() => openDetail(row)}
-                      size="sm"
-                      variant="ghost"
-                    >
+                    <RowAction onClick={() => openDetail(row)}>
                       {t("common.detail")}
-                    </Button>
+                    </RowAction>
                   ),
                 },
               ]}

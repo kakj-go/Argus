@@ -6,7 +6,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List DataScope-filtered Kubernetes clusters. */
+        /** List explicitly authorized Kubernetes clusters. */
         get: operations["listKubernetesClusters"];
         put?: never;
         post?: never;
@@ -25,7 +25,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Get a DataScope-filtered Kubernetes cluster. */
+        /** Get an explicitly authorized Kubernetes cluster. */
         get: operations["getKubernetesCluster"];
         put?: never;
         post?: never;
@@ -116,7 +116,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** List bounded Kubernetes resources after cluster and Namespace DataScope checks. */
+        /** List bounded Kubernetes resources after Kubernetes cluster authorization checks. */
         get: operations["listKubernetesResources"];
         put?: never;
         post?: never;

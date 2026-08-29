@@ -41,41 +41,4 @@ spec:
           type: Utilization
           averageUtilization: 70
 {{- end }}
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: argus-web
-  namespace: {{ .Values.namespaces.system }}
-spec:
-  ingressClassName: {{ .Values.production.ingressClassName }}
-  rules:
-    - host: {{ .Values.production.hosts.enterprise }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service: {name: argus-web, port: {name: enterprise}}
-    - host: {{ .Values.production.hosts.platform }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service: {name: argus-web, port: {name: platform}}
-    - host: {{ .Values.production.hosts.cards }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service: {name: argus-web, port: {name: cards}}
-    - host: {{ .Values.production.hosts.remote }}
-      http:
-        paths:
-          - path: /v1/sessions
-            pathType: Prefix
-            backend:
-              service: {name: argus-connector-gateway, port: {name: remote-wss}}
 {{- end }}

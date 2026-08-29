@@ -7,9 +7,101 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for AccessRequestDecisionOutcome.
+const (
+	AccessRequestDecisionOutcomeAllowed          AccessRequestDecisionOutcome = "allowed"
+	AccessRequestDecisionOutcomeAwaitingApproval AccessRequestDecisionOutcome = "awaiting_approval"
+	AccessRequestDecisionOutcomeAwaitingMfa      AccessRequestDecisionOutcome = "awaiting_mfa"
+	AccessRequestDecisionOutcomeDenied           AccessRequestDecisionOutcome = "denied"
+)
+
+// Valid indicates whether the value is a known member of the AccessRequestDecisionOutcome enum.
+func (e AccessRequestDecisionOutcome) Valid() bool {
+	switch e {
+	case AccessRequestDecisionOutcomeAllowed:
+		return true
+	case AccessRequestDecisionOutcomeAwaitingApproval:
+		return true
+	case AccessRequestDecisionOutcomeAwaitingMfa:
+		return true
+	case AccessRequestDecisionOutcomeDenied:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApprovalWorkflowTimeoutEffect.
+const (
+	ApprovalWorkflowTimeoutEffectExpire ApprovalWorkflowTimeoutEffect = "expire"
+	ApprovalWorkflowTimeoutEffectReject ApprovalWorkflowTimeoutEffect = "reject"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalWorkflowTimeoutEffect enum.
+func (e ApprovalWorkflowTimeoutEffect) Valid() bool {
+	switch e {
+	case ApprovalWorkflowTimeoutEffectExpire:
+		return true
+	case ApprovalWorkflowTimeoutEffectReject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApprovalWorkflowUpdateTimeoutEffect.
+const (
+	ApprovalWorkflowUpdateTimeoutEffectExpire ApprovalWorkflowUpdateTimeoutEffect = "expire"
+	ApprovalWorkflowUpdateTimeoutEffectReject ApprovalWorkflowUpdateTimeoutEffect = "reject"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalWorkflowUpdateTimeoutEffect enum.
+func (e ApprovalWorkflowUpdateTimeoutEffect) Valid() bool {
+	switch e {
+	case ApprovalWorkflowUpdateTimeoutEffectExpire:
+		return true
+	case ApprovalWorkflowUpdateTimeoutEffectReject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApprovalWorkflowWriteStatus.
+const (
+	ApprovalWorkflowWriteStatusDraft ApprovalWorkflowWriteStatus = "draft"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalWorkflowWriteStatus enum.
+func (e ApprovalWorkflowWriteStatus) Valid() bool {
+	switch e {
+	case ApprovalWorkflowWriteStatusDraft:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApprovalWorkflowWriteTimeoutEffect.
+const (
+	ApprovalWorkflowWriteTimeoutEffectExpire ApprovalWorkflowWriteTimeoutEffect = "expire"
+	ApprovalWorkflowWriteTimeoutEffectReject ApprovalWorkflowWriteTimeoutEffect = "reject"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalWorkflowWriteTimeoutEffect enum.
+func (e ApprovalWorkflowWriteTimeoutEffect) Valid() bool {
+	switch e {
+	case ApprovalWorkflowWriteTimeoutEffectExpire:
+		return true
+	case ApprovalWorkflowWriteTimeoutEffectReject:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for PartialMetadataReasons.
 const (
@@ -74,6 +166,24 @@ func (e RemoteAccessAction) Valid() bool {
 	}
 }
 
+// Defines values for RemoteAccessApprovalRequirementSimulationTimeoutEffect.
+const (
+	RemoteAccessApprovalRequirementSimulationTimeoutEffectExpire RemoteAccessApprovalRequirementSimulationTimeoutEffect = "expire"
+	RemoteAccessApprovalRequirementSimulationTimeoutEffectReject RemoteAccessApprovalRequirementSimulationTimeoutEffect = "reject"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessApprovalRequirementSimulationTimeoutEffect enum.
+func (e RemoteAccessApprovalRequirementSimulationTimeoutEffect) Valid() bool {
+	switch e {
+	case RemoteAccessApprovalRequirementSimulationTimeoutEffectExpire:
+		return true
+	case RemoteAccessApprovalRequirementSimulationTimeoutEffectReject:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RemoteAccessDecisionDecision.
 const (
 	RemoteAccessDecisionDecisionApprove RemoteAccessDecisionDecision = "approve"
@@ -104,6 +214,45 @@ func (e RemoteAccessDecisionCreateDecision) Valid() bool {
 	case RemoteAccessDecisionCreateDecisionApprove:
 		return true
 	case RemoteAccessDecisionCreateDecisionReject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessGovernanceStatus.
+const (
+	RemoteAccessGovernanceStatusArchived RemoteAccessGovernanceStatus = "archived"
+	RemoteAccessGovernanceStatusDisabled RemoteAccessGovernanceStatus = "disabled"
+	RemoteAccessGovernanceStatusDraft    RemoteAccessGovernanceStatus = "draft"
+	RemoteAccessGovernanceStatusEnabled  RemoteAccessGovernanceStatus = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessGovernanceStatus enum.
+func (e RemoteAccessGovernanceStatus) Valid() bool {
+	switch e {
+	case RemoteAccessGovernanceStatusArchived:
+		return true
+	case RemoteAccessGovernanceStatusDisabled:
+		return true
+	case RemoteAccessGovernanceStatusDraft:
+		return true
+	case RemoteAccessGovernanceStatusEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessGrantWriteStatus.
+const (
+	RemoteAccessGrantWriteStatusDraft RemoteAccessGrantWriteStatus = "draft"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessGrantWriteStatus enum.
+func (e RemoteAccessGrantWriteStatus) Valid() bool {
+	switch e {
+	case RemoteAccessGrantWriteStatusDraft:
 		return true
 	default:
 		return false
@@ -189,6 +338,7 @@ func (e RemoteAccessRecordingStatus) Valid() bool {
 const (
 	RemoteAccessRequestStatusAuthorized       RemoteAccessRequestStatus = "authorized"
 	RemoteAccessRequestStatusAwaitingApproval RemoteAccessRequestStatus = "awaiting_approval"
+	RemoteAccessRequestStatusAwaitingMfa      RemoteAccessRequestStatus = "awaiting_mfa"
 	RemoteAccessRequestStatusExpired          RemoteAccessRequestStatus = "expired"
 	RemoteAccessRequestStatusInvalidated      RemoteAccessRequestStatus = "invalidated"
 	RemoteAccessRequestStatusRejected         RemoteAccessRequestStatus = "rejected"
@@ -201,6 +351,8 @@ func (e RemoteAccessRequestStatus) Valid() bool {
 	case RemoteAccessRequestStatusAuthorized:
 		return true
 	case RemoteAccessRequestStatusAwaitingApproval:
+		return true
+	case RemoteAccessRequestStatusAwaitingMfa:
 		return true
 	case RemoteAccessRequestStatusExpired:
 		return true
@@ -239,24 +391,369 @@ func (e RemoteAccessRequirementStatus) Valid() bool {
 	}
 }
 
+// Defines values for RemoteAccessRequirementTimeoutEffect.
+const (
+	RemoteAccessRequirementTimeoutEffectExpire RemoteAccessRequirementTimeoutEffect = "expire"
+	RemoteAccessRequirementTimeoutEffectReject RemoteAccessRequirementTimeoutEffect = "reject"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessRequirementTimeoutEffect enum.
+func (e RemoteAccessRequirementTimeoutEffect) Valid() bool {
+	switch e {
+	case RemoteAccessRequirementTimeoutEffectExpire:
+		return true
+	case RemoteAccessRequirementTimeoutEffectReject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessRuleEffect.
+const (
+	Deny            RemoteAccessRuleEffect = "deny"
+	Notify          RemoteAccessRuleEffect = "notify"
+	RequireApproval RemoteAccessRuleEffect = "require_approval"
+	RequireMfa      RemoteAccessRuleEffect = "require_mfa"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessRuleEffect enum.
+func (e RemoteAccessRuleEffect) Valid() bool {
+	switch e {
+	case Deny:
+		return true
+	case Notify:
+		return true
+	case RequireApproval:
+		return true
+	case RequireMfa:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessRuleSimulationResultOutcome.
+const (
+	RemoteAccessRuleSimulationResultOutcomeAllowed          RemoteAccessRuleSimulationResultOutcome = "allowed"
+	RemoteAccessRuleSimulationResultOutcomeAwaitingApproval RemoteAccessRuleSimulationResultOutcome = "awaiting_approval"
+	RemoteAccessRuleSimulationResultOutcomeAwaitingMfa      RemoteAccessRuleSimulationResultOutcome = "awaiting_mfa"
+	RemoteAccessRuleSimulationResultOutcomeDenied           RemoteAccessRuleSimulationResultOutcome = "denied"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessRuleSimulationResultOutcome enum.
+func (e RemoteAccessRuleSimulationResultOutcome) Valid() bool {
+	switch e {
+	case RemoteAccessRuleSimulationResultOutcomeAllowed:
+		return true
+	case RemoteAccessRuleSimulationResultOutcomeAwaitingApproval:
+		return true
+	case RemoteAccessRuleSimulationResultOutcomeAwaitingMfa:
+		return true
+	case RemoteAccessRuleSimulationResultOutcomeDenied:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessRuleWriteStatus.
+const (
+	RemoteAccessRuleWriteStatusDraft RemoteAccessRuleWriteStatus = "draft"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessRuleWriteStatus enum.
+func (e RemoteAccessRuleWriteStatus) Valid() bool {
+	switch e {
+	case RemoteAccessRuleWriteStatusDraft:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionClipboardMode.
+const (
+	RemoteAccessSessionClipboardModeDisabled RemoteAccessSessionClipboardMode = "disabled"
+	RemoteAccessSessionClipboardModeEnabled  RemoteAccessSessionClipboardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionClipboardMode enum.
+func (e RemoteAccessSessionClipboardMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionClipboardModeDisabled:
+		return true
+	case RemoteAccessSessionClipboardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionCommandAuditMode.
+const (
+	RemoteAccessSessionCommandAuditModeDisabled RemoteAccessSessionCommandAuditMode = "disabled"
+	RemoteAccessSessionCommandAuditModeOptional RemoteAccessSessionCommandAuditMode = "optional"
+	RemoteAccessSessionCommandAuditModeRequired RemoteAccessSessionCommandAuditMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionCommandAuditMode enum.
+func (e RemoteAccessSessionCommandAuditMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionCommandAuditModeDisabled:
+		return true
+	case RemoteAccessSessionCommandAuditModeOptional:
+		return true
+	case RemoteAccessSessionCommandAuditModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RemoteAccessSessionConnectionMode.
 const (
-	ConnectorLocal RemoteAccessSessionConnectionMode = "connector_local"
-	DirectSsh      RemoteAccessSessionConnectionMode = "direct_ssh"
-	DirectWinrm    RemoteAccessSessionConnectionMode = "direct_winrm"
-	ViaBastion     RemoteAccessSessionConnectionMode = "via_bastion"
+	RemoteAccessSessionConnectionModeConnectorLocal RemoteAccessSessionConnectionMode = "connector_local"
+	RemoteAccessSessionConnectionModeDirectSsh      RemoteAccessSessionConnectionMode = "direct_ssh"
+	RemoteAccessSessionConnectionModeDirectWinrm    RemoteAccessSessionConnectionMode = "direct_winrm"
+	RemoteAccessSessionConnectionModeViaBastion     RemoteAccessSessionConnectionMode = "via_bastion"
 )
 
 // Valid indicates whether the value is a known member of the RemoteAccessSessionConnectionMode enum.
 func (e RemoteAccessSessionConnectionMode) Valid() bool {
 	switch e {
-	case ConnectorLocal:
+	case RemoteAccessSessionConnectionModeConnectorLocal:
 		return true
-	case DirectSsh:
+	case RemoteAccessSessionConnectionModeDirectSsh:
 		return true
-	case DirectWinrm:
+	case RemoteAccessSessionConnectionModeDirectWinrm:
 		return true
-	case ViaBastion:
+	case RemoteAccessSessionConnectionModeViaBastion:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionFileDownloadMode.
+const (
+	RemoteAccessSessionFileDownloadModeDisabled RemoteAccessSessionFileDownloadMode = "disabled"
+	RemoteAccessSessionFileDownloadModeEnabled  RemoteAccessSessionFileDownloadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionFileDownloadMode enum.
+func (e RemoteAccessSessionFileDownloadMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionFileDownloadModeDisabled:
+		return true
+	case RemoteAccessSessionFileDownloadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionFileUploadMode.
+const (
+	RemoteAccessSessionFileUploadModeDisabled RemoteAccessSessionFileUploadMode = "disabled"
+	RemoteAccessSessionFileUploadModeEnabled  RemoteAccessSessionFileUploadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionFileUploadMode enum.
+func (e RemoteAccessSessionFileUploadMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionFileUploadModeDisabled:
+		return true
+	case RemoteAccessSessionFileUploadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionPortForwardMode.
+const (
+	RemoteAccessSessionPortForwardModeDisabled RemoteAccessSessionPortForwardMode = "disabled"
+	RemoteAccessSessionPortForwardModeEnabled  RemoteAccessSessionPortForwardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionPortForwardMode enum.
+func (e RemoteAccessSessionPortForwardMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionPortForwardModeDisabled:
+		return true
+	case RemoteAccessSessionPortForwardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionRecordingMode.
+const (
+	RemoteAccessSessionRecordingModeDisabled RemoteAccessSessionRecordingMode = "disabled"
+	RemoteAccessSessionRecordingModeOptional RemoteAccessSessionRecordingMode = "optional"
+	RemoteAccessSessionRecordingModeRequired RemoteAccessSessionRecordingMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionRecordingMode enum.
+func (e RemoteAccessSessionRecordingMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionRecordingModeDisabled:
+		return true
+	case RemoteAccessSessionRecordingModeOptional:
+		return true
+	case RemoteAccessSessionRecordingModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionSessionShareMode.
+const (
+	RemoteAccessSessionSessionShareModeDisabled RemoteAccessSessionSessionShareMode = "disabled"
+	RemoteAccessSessionSessionShareModeEnabled  RemoteAccessSessionSessionShareMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionSessionShareMode enum.
+func (e RemoteAccessSessionSessionShareMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionSessionShareModeDisabled:
+		return true
+	case RemoteAccessSessionSessionShareModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionProfileSnapshotClipboardMode.
+const (
+	RemoteAccessSessionProfileSnapshotClipboardModeDisabled RemoteAccessSessionProfileSnapshotClipboardMode = "disabled"
+	RemoteAccessSessionProfileSnapshotClipboardModeEnabled  RemoteAccessSessionProfileSnapshotClipboardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionProfileSnapshotClipboardMode enum.
+func (e RemoteAccessSessionProfileSnapshotClipboardMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionProfileSnapshotClipboardModeDisabled:
+		return true
+	case RemoteAccessSessionProfileSnapshotClipboardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionProfileSnapshotCommandAuditMode.
+const (
+	RemoteAccessSessionProfileSnapshotCommandAuditModeDisabled RemoteAccessSessionProfileSnapshotCommandAuditMode = "disabled"
+	RemoteAccessSessionProfileSnapshotCommandAuditModeOptional RemoteAccessSessionProfileSnapshotCommandAuditMode = "optional"
+	RemoteAccessSessionProfileSnapshotCommandAuditModeRequired RemoteAccessSessionProfileSnapshotCommandAuditMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionProfileSnapshotCommandAuditMode enum.
+func (e RemoteAccessSessionProfileSnapshotCommandAuditMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionProfileSnapshotCommandAuditModeDisabled:
+		return true
+	case RemoteAccessSessionProfileSnapshotCommandAuditModeOptional:
+		return true
+	case RemoteAccessSessionProfileSnapshotCommandAuditModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionProfileSnapshotFileDownloadMode.
+const (
+	RemoteAccessSessionProfileSnapshotFileDownloadModeDisabled RemoteAccessSessionProfileSnapshotFileDownloadMode = "disabled"
+	RemoteAccessSessionProfileSnapshotFileDownloadModeEnabled  RemoteAccessSessionProfileSnapshotFileDownloadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionProfileSnapshotFileDownloadMode enum.
+func (e RemoteAccessSessionProfileSnapshotFileDownloadMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionProfileSnapshotFileDownloadModeDisabled:
+		return true
+	case RemoteAccessSessionProfileSnapshotFileDownloadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionProfileSnapshotFileUploadMode.
+const (
+	RemoteAccessSessionProfileSnapshotFileUploadModeDisabled RemoteAccessSessionProfileSnapshotFileUploadMode = "disabled"
+	RemoteAccessSessionProfileSnapshotFileUploadModeEnabled  RemoteAccessSessionProfileSnapshotFileUploadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionProfileSnapshotFileUploadMode enum.
+func (e RemoteAccessSessionProfileSnapshotFileUploadMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionProfileSnapshotFileUploadModeDisabled:
+		return true
+	case RemoteAccessSessionProfileSnapshotFileUploadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionProfileSnapshotPortForwardMode.
+const (
+	RemoteAccessSessionProfileSnapshotPortForwardModeDisabled RemoteAccessSessionProfileSnapshotPortForwardMode = "disabled"
+	RemoteAccessSessionProfileSnapshotPortForwardModeEnabled  RemoteAccessSessionProfileSnapshotPortForwardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionProfileSnapshotPortForwardMode enum.
+func (e RemoteAccessSessionProfileSnapshotPortForwardMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionProfileSnapshotPortForwardModeDisabled:
+		return true
+	case RemoteAccessSessionProfileSnapshotPortForwardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionProfileSnapshotRecordingMode.
+const (
+	RemoteAccessSessionProfileSnapshotRecordingModeDisabled RemoteAccessSessionProfileSnapshotRecordingMode = "disabled"
+	RemoteAccessSessionProfileSnapshotRecordingModeOptional RemoteAccessSessionProfileSnapshotRecordingMode = "optional"
+	RemoteAccessSessionProfileSnapshotRecordingModeRequired RemoteAccessSessionProfileSnapshotRecordingMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionProfileSnapshotRecordingMode enum.
+func (e RemoteAccessSessionProfileSnapshotRecordingMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionProfileSnapshotRecordingModeDisabled:
+		return true
+	case RemoteAccessSessionProfileSnapshotRecordingModeOptional:
+		return true
+	case RemoteAccessSessionProfileSnapshotRecordingModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteAccessSessionProfileSnapshotSessionShareMode.
+const (
+	RemoteAccessSessionProfileSnapshotSessionShareModeDisabled RemoteAccessSessionProfileSnapshotSessionShareMode = "disabled"
+	RemoteAccessSessionProfileSnapshotSessionShareModeEnabled  RemoteAccessSessionProfileSnapshotSessionShareMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteAccessSessionProfileSnapshotSessionShareMode enum.
+func (e RemoteAccessSessionProfileSnapshotSessionShareMode) Valid() bool {
+	switch e {
+	case RemoteAccessSessionProfileSnapshotSessionShareModeDisabled:
+		return true
+	case RemoteAccessSessionProfileSnapshotSessionShareModeEnabled:
 		return true
 	default:
 		return false
@@ -326,6 +823,417 @@ func (e RemoteAccessSubjectType) Valid() bool {
 	}
 }
 
+// Defines values for SessionProfileClipboardMode.
+const (
+	SessionProfileClipboardModeDisabled SessionProfileClipboardMode = "disabled"
+	SessionProfileClipboardModeEnabled  SessionProfileClipboardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileClipboardMode enum.
+func (e SessionProfileClipboardMode) Valid() bool {
+	switch e {
+	case SessionProfileClipboardModeDisabled:
+		return true
+	case SessionProfileClipboardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileCommandAuditMode.
+const (
+	SessionProfileCommandAuditModeDisabled SessionProfileCommandAuditMode = "disabled"
+	SessionProfileCommandAuditModeOptional SessionProfileCommandAuditMode = "optional"
+	SessionProfileCommandAuditModeRequired SessionProfileCommandAuditMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileCommandAuditMode enum.
+func (e SessionProfileCommandAuditMode) Valid() bool {
+	switch e {
+	case SessionProfileCommandAuditModeDisabled:
+		return true
+	case SessionProfileCommandAuditModeOptional:
+		return true
+	case SessionProfileCommandAuditModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileFileDownloadMode.
+const (
+	SessionProfileFileDownloadModeDisabled SessionProfileFileDownloadMode = "disabled"
+	SessionProfileFileDownloadModeEnabled  SessionProfileFileDownloadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileFileDownloadMode enum.
+func (e SessionProfileFileDownloadMode) Valid() bool {
+	switch e {
+	case SessionProfileFileDownloadModeDisabled:
+		return true
+	case SessionProfileFileDownloadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileFileUploadMode.
+const (
+	SessionProfileFileUploadModeDisabled SessionProfileFileUploadMode = "disabled"
+	SessionProfileFileUploadModeEnabled  SessionProfileFileUploadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileFileUploadMode enum.
+func (e SessionProfileFileUploadMode) Valid() bool {
+	switch e {
+	case SessionProfileFileUploadModeDisabled:
+		return true
+	case SessionProfileFileUploadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfilePortForwardMode.
+const (
+	SessionProfilePortForwardModeDisabled SessionProfilePortForwardMode = "disabled"
+	SessionProfilePortForwardModeEnabled  SessionProfilePortForwardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfilePortForwardMode enum.
+func (e SessionProfilePortForwardMode) Valid() bool {
+	switch e {
+	case SessionProfilePortForwardModeDisabled:
+		return true
+	case SessionProfilePortForwardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileRecordingMode.
+const (
+	SessionProfileRecordingModeDisabled SessionProfileRecordingMode = "disabled"
+	SessionProfileRecordingModeOptional SessionProfileRecordingMode = "optional"
+	SessionProfileRecordingModeRequired SessionProfileRecordingMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileRecordingMode enum.
+func (e SessionProfileRecordingMode) Valid() bool {
+	switch e {
+	case SessionProfileRecordingModeDisabled:
+		return true
+	case SessionProfileRecordingModeOptional:
+		return true
+	case SessionProfileRecordingModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileSessionShareMode.
+const (
+	SessionProfileSessionShareModeDisabled SessionProfileSessionShareMode = "disabled"
+	SessionProfileSessionShareModeEnabled  SessionProfileSessionShareMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileSessionShareMode enum.
+func (e SessionProfileSessionShareMode) Valid() bool {
+	switch e {
+	case SessionProfileSessionShareModeDisabled:
+		return true
+	case SessionProfileSessionShareModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileUpdateClipboardMode.
+const (
+	SessionProfileUpdateClipboardModeDisabled SessionProfileUpdateClipboardMode = "disabled"
+	SessionProfileUpdateClipboardModeEnabled  SessionProfileUpdateClipboardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileUpdateClipboardMode enum.
+func (e SessionProfileUpdateClipboardMode) Valid() bool {
+	switch e {
+	case SessionProfileUpdateClipboardModeDisabled:
+		return true
+	case SessionProfileUpdateClipboardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileUpdateCommandAuditMode.
+const (
+	SessionProfileUpdateCommandAuditModeDisabled SessionProfileUpdateCommandAuditMode = "disabled"
+	SessionProfileUpdateCommandAuditModeOptional SessionProfileUpdateCommandAuditMode = "optional"
+	SessionProfileUpdateCommandAuditModeRequired SessionProfileUpdateCommandAuditMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileUpdateCommandAuditMode enum.
+func (e SessionProfileUpdateCommandAuditMode) Valid() bool {
+	switch e {
+	case SessionProfileUpdateCommandAuditModeDisabled:
+		return true
+	case SessionProfileUpdateCommandAuditModeOptional:
+		return true
+	case SessionProfileUpdateCommandAuditModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileUpdateFileDownloadMode.
+const (
+	SessionProfileUpdateFileDownloadModeDisabled SessionProfileUpdateFileDownloadMode = "disabled"
+	SessionProfileUpdateFileDownloadModeEnabled  SessionProfileUpdateFileDownloadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileUpdateFileDownloadMode enum.
+func (e SessionProfileUpdateFileDownloadMode) Valid() bool {
+	switch e {
+	case SessionProfileUpdateFileDownloadModeDisabled:
+		return true
+	case SessionProfileUpdateFileDownloadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileUpdateFileUploadMode.
+const (
+	SessionProfileUpdateFileUploadModeDisabled SessionProfileUpdateFileUploadMode = "disabled"
+	SessionProfileUpdateFileUploadModeEnabled  SessionProfileUpdateFileUploadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileUpdateFileUploadMode enum.
+func (e SessionProfileUpdateFileUploadMode) Valid() bool {
+	switch e {
+	case SessionProfileUpdateFileUploadModeDisabled:
+		return true
+	case SessionProfileUpdateFileUploadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileUpdatePortForwardMode.
+const (
+	SessionProfileUpdatePortForwardModeDisabled SessionProfileUpdatePortForwardMode = "disabled"
+	SessionProfileUpdatePortForwardModeEnabled  SessionProfileUpdatePortForwardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileUpdatePortForwardMode enum.
+func (e SessionProfileUpdatePortForwardMode) Valid() bool {
+	switch e {
+	case SessionProfileUpdatePortForwardModeDisabled:
+		return true
+	case SessionProfileUpdatePortForwardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileUpdateRecordingMode.
+const (
+	SessionProfileUpdateRecordingModeDisabled SessionProfileUpdateRecordingMode = "disabled"
+	SessionProfileUpdateRecordingModeOptional SessionProfileUpdateRecordingMode = "optional"
+	SessionProfileUpdateRecordingModeRequired SessionProfileUpdateRecordingMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileUpdateRecordingMode enum.
+func (e SessionProfileUpdateRecordingMode) Valid() bool {
+	switch e {
+	case SessionProfileUpdateRecordingModeDisabled:
+		return true
+	case SessionProfileUpdateRecordingModeOptional:
+		return true
+	case SessionProfileUpdateRecordingModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileUpdateSessionShareMode.
+const (
+	SessionProfileUpdateSessionShareModeDisabled SessionProfileUpdateSessionShareMode = "disabled"
+	SessionProfileUpdateSessionShareModeEnabled  SessionProfileUpdateSessionShareMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileUpdateSessionShareMode enum.
+func (e SessionProfileUpdateSessionShareMode) Valid() bool {
+	switch e {
+	case SessionProfileUpdateSessionShareModeDisabled:
+		return true
+	case SessionProfileUpdateSessionShareModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileWriteClipboardMode.
+const (
+	SessionProfileWriteClipboardModeDisabled SessionProfileWriteClipboardMode = "disabled"
+	SessionProfileWriteClipboardModeEnabled  SessionProfileWriteClipboardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileWriteClipboardMode enum.
+func (e SessionProfileWriteClipboardMode) Valid() bool {
+	switch e {
+	case SessionProfileWriteClipboardModeDisabled:
+		return true
+	case SessionProfileWriteClipboardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileWriteCommandAuditMode.
+const (
+	SessionProfileWriteCommandAuditModeDisabled SessionProfileWriteCommandAuditMode = "disabled"
+	SessionProfileWriteCommandAuditModeOptional SessionProfileWriteCommandAuditMode = "optional"
+	SessionProfileWriteCommandAuditModeRequired SessionProfileWriteCommandAuditMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileWriteCommandAuditMode enum.
+func (e SessionProfileWriteCommandAuditMode) Valid() bool {
+	switch e {
+	case SessionProfileWriteCommandAuditModeDisabled:
+		return true
+	case SessionProfileWriteCommandAuditModeOptional:
+		return true
+	case SessionProfileWriteCommandAuditModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileWriteFileDownloadMode.
+const (
+	SessionProfileWriteFileDownloadModeDisabled SessionProfileWriteFileDownloadMode = "disabled"
+	SessionProfileWriteFileDownloadModeEnabled  SessionProfileWriteFileDownloadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileWriteFileDownloadMode enum.
+func (e SessionProfileWriteFileDownloadMode) Valid() bool {
+	switch e {
+	case SessionProfileWriteFileDownloadModeDisabled:
+		return true
+	case SessionProfileWriteFileDownloadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileWriteFileUploadMode.
+const (
+	SessionProfileWriteFileUploadModeDisabled SessionProfileWriteFileUploadMode = "disabled"
+	SessionProfileWriteFileUploadModeEnabled  SessionProfileWriteFileUploadMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileWriteFileUploadMode enum.
+func (e SessionProfileWriteFileUploadMode) Valid() bool {
+	switch e {
+	case SessionProfileWriteFileUploadModeDisabled:
+		return true
+	case SessionProfileWriteFileUploadModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileWritePortForwardMode.
+const (
+	SessionProfileWritePortForwardModeDisabled SessionProfileWritePortForwardMode = "disabled"
+	SessionProfileWritePortForwardModeEnabled  SessionProfileWritePortForwardMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileWritePortForwardMode enum.
+func (e SessionProfileWritePortForwardMode) Valid() bool {
+	switch e {
+	case SessionProfileWritePortForwardModeDisabled:
+		return true
+	case SessionProfileWritePortForwardModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileWriteRecordingMode.
+const (
+	SessionProfileWriteRecordingModeDisabled SessionProfileWriteRecordingMode = "disabled"
+	SessionProfileWriteRecordingModeOptional SessionProfileWriteRecordingMode = "optional"
+	SessionProfileWriteRecordingModeRequired SessionProfileWriteRecordingMode = "required"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileWriteRecordingMode enum.
+func (e SessionProfileWriteRecordingMode) Valid() bool {
+	switch e {
+	case SessionProfileWriteRecordingModeDisabled:
+		return true
+	case SessionProfileWriteRecordingModeOptional:
+		return true
+	case SessionProfileWriteRecordingModeRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileWriteSessionShareMode.
+const (
+	SessionProfileWriteSessionShareModeDisabled SessionProfileWriteSessionShareMode = "disabled"
+	SessionProfileWriteSessionShareModeEnabled  SessionProfileWriteSessionShareMode = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileWriteSessionShareMode enum.
+func (e SessionProfileWriteSessionShareMode) Valid() bool {
+	switch e {
+	case SessionProfileWriteSessionShareModeDisabled:
+		return true
+	case SessionProfileWriteSessionShareModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionProfileWriteStatus.
+const (
+	SessionProfileWriteStatusDraft SessionProfileWriteStatus = "draft"
+)
+
+// Valid indicates whether the value is a known member of the SessionProfileWriteStatus enum.
+func (e SessionProfileWriteStatus) Valid() bool {
+	switch e {
+	case SessionProfileWriteStatusDraft:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SessionTicketResultProtocolVersion.
 const (
 	ArgusRemoteAccessv1 SessionTicketResultProtocolVersion = "argus.remote_access/v1"
@@ -341,10 +1249,104 @@ func (e SessionTicketResultProtocolVersion) Valid() bool {
 	}
 }
 
+// Defines values for ListRemoteAccessRecordingsParamsStatus.
+const (
+	ListRemoteAccessRecordingsParamsStatusAvailable  ListRemoteAccessRecordingsParamsStatus = "available"
+	ListRemoteAccessRecordingsParamsStatusExpired    ListRemoteAccessRecordingsParamsStatus = "expired"
+	ListRemoteAccessRecordingsParamsStatusFailed     ListRemoteAccessRecordingsParamsStatus = "failed"
+	ListRemoteAccessRecordingsParamsStatusIncomplete ListRemoteAccessRecordingsParamsStatus = "incomplete"
+	ListRemoteAccessRecordingsParamsStatusRecording  ListRemoteAccessRecordingsParamsStatus = "recording"
+)
+
+// Valid indicates whether the value is a known member of the ListRemoteAccessRecordingsParamsStatus enum.
+func (e ListRemoteAccessRecordingsParamsStatus) Valid() bool {
+	switch e {
+	case ListRemoteAccessRecordingsParamsStatusAvailable:
+		return true
+	case ListRemoteAccessRecordingsParamsStatusExpired:
+		return true
+	case ListRemoteAccessRecordingsParamsStatusFailed:
+		return true
+	case ListRemoteAccessRecordingsParamsStatusIncomplete:
+		return true
+	case ListRemoteAccessRecordingsParamsStatusRecording:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListRemoteAccessRequestsParamsScope.
+const (
+	Approver  ListRemoteAccessRequestsParamsScope = "approver"
+	Mine      ListRemoteAccessRequestsParamsScope = "mine"
+	Processed ListRemoteAccessRequestsParamsScope = "processed"
+)
+
+// Valid indicates whether the value is a known member of the ListRemoteAccessRequestsParamsScope enum.
+func (e ListRemoteAccessRequestsParamsScope) Valid() bool {
+	switch e {
+	case Approver:
+		return true
+	case Mine:
+		return true
+	case Processed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListRemoteAccessSessionsParamsScope.
+const (
+	ListRemoteAccessSessionsParamsScopeActive  ListRemoteAccessSessionsParamsScope = "active"
+	ListRemoteAccessSessionsParamsScopeAll     ListRemoteAccessSessionsParamsScope = "all"
+	ListRemoteAccessSessionsParamsScopeHistory ListRemoteAccessSessionsParamsScope = "history"
+)
+
+// Valid indicates whether the value is a known member of the ListRemoteAccessSessionsParamsScope enum.
+func (e ListRemoteAccessSessionsParamsScope) Valid() bool {
+	switch e {
+	case ListRemoteAccessSessionsParamsScopeActive:
+		return true
+	case ListRemoteAccessSessionsParamsScopeAll:
+		return true
+	case ListRemoteAccessSessionsParamsScopeHistory:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListRemoteAccessSessionsParamsConnectionMode.
+const (
+	ListRemoteAccessSessionsParamsConnectionModeConnectorLocal ListRemoteAccessSessionsParamsConnectionMode = "connector_local"
+	ListRemoteAccessSessionsParamsConnectionModeDirectSsh      ListRemoteAccessSessionsParamsConnectionMode = "direct_ssh"
+	ListRemoteAccessSessionsParamsConnectionModeDirectWinrm    ListRemoteAccessSessionsParamsConnectionMode = "direct_winrm"
+	ListRemoteAccessSessionsParamsConnectionModeViaBastion     ListRemoteAccessSessionsParamsConnectionMode = "via_bastion"
+)
+
+// Valid indicates whether the value is a known member of the ListRemoteAccessSessionsParamsConnectionMode enum.
+func (e ListRemoteAccessSessionsParamsConnectionMode) Valid() bool {
+	switch e {
+	case ListRemoteAccessSessionsParamsConnectionModeConnectorLocal:
+		return true
+	case ListRemoteAccessSessionsParamsConnectionModeDirectSsh:
+		return true
+	case ListRemoteAccessSessionsParamsConnectionModeDirectWinrm:
+		return true
+	case ListRemoteAccessSessionsParamsConnectionModeViaBastion:
+		return true
+	default:
+		return false
+	}
+}
+
 // AccessLease defines model for AccessLease.
 type AccessLease struct {
 	Action               RemoteAccessAction   `json:"action"`
 	AuthorizationVersion int64                `json:"authorization_version"`
+	DecisionSnapshotHash *string              `json:"decision_snapshot_hash,omitempty"`
 	EnterpriseId         *openapi_types.UUID  `json:"enterprise_id,omitempty"`
 	ExpiresAt            time.Time            `json:"expires_at"`
 	GrantId              openapi_types.UUID   `json:"grant_id"`
@@ -367,23 +1369,33 @@ type AccessLeasePage struct {
 
 // AccessRequest defines model for AccessRequest.
 type AccessRequest struct {
-	Action               RemoteAccessAction        `json:"action"`
-	AuthorizationVersion int64                     `json:"authorization_version"`
-	CreatedAt            time.Time                 `json:"created_at"`
-	Decisions            []RemoteAccessDecision    `json:"decisions"`
-	EnterpriseId         *openapi_types.UUID       `json:"enterprise_id,omitempty"`
-	ExpiresAt            time.Time                 `json:"expires_at"`
-	GrantId              openapi_types.UUID        `json:"grant_id"`
-	HostId               openapi_types.UUID        `json:"host_id"`
-	Id                   openapi_types.UUID        `json:"id"`
-	ManagedAccountId     openapi_types.UUID        `json:"managed_account_id"`
-	Protocol             RemoteAccessProtocol      `json:"protocol"`
-	Reason               string                    `json:"reason"`
-	RequesterId          *openapi_types.UUID       `json:"requester_id,omitempty"`
-	Requirements         []RemoteAccessRequirement `json:"requirements"`
-	Status               RemoteAccessRequestStatus `json:"status"`
-	UpdatedAt            time.Time                 `json:"updated_at"`
+	Action                RemoteAccessAction            `json:"action"`
+	AuthorizationVersion  int64                         `json:"authorization_version"`
+	CreatedAt             time.Time                     `json:"created_at"`
+	DecisionAt            *time.Time                    `json:"decision_at,omitempty"`
+	DecisionOutcome       *AccessRequestDecisionOutcome `json:"decision_outcome,omitempty"`
+	DecisionReasonCodes   *[]string                     `json:"decision_reason_codes,omitempty"`
+	DecisionSnapshot      *map[string]interface{}       `json:"decision_snapshot,omitempty"`
+	DecisionSnapshotHash  *string                       `json:"decision_snapshot_hash,omitempty"`
+	Decisions             []RemoteAccessDecision        `json:"decisions"`
+	EnterpriseId          *openapi_types.UUID           `json:"enterprise_id,omitempty"`
+	ExpiresAt             time.Time                     `json:"expires_at"`
+	GrantId               openapi_types.UUID            `json:"grant_id"`
+	HostId                openapi_types.UUID            `json:"host_id"`
+	Id                    openapi_types.UUID            `json:"id"`
+	ManagedAccountId      openapi_types.UUID            `json:"managed_account_id"`
+	MatchedGrantSnapshots *[]map[string]interface{}     `json:"matched_grant_snapshots,omitempty"`
+	MatchedRuleSnapshots  *[]map[string]interface{}     `json:"matched_rule_snapshots,omitempty"`
+	Protocol              RemoteAccessProtocol          `json:"protocol"`
+	Reason                string                        `json:"reason"`
+	RequesterId           *openapi_types.UUID           `json:"requester_id,omitempty"`
+	Requirements          []RemoteAccessRequirement     `json:"requirements"`
+	Status                RemoteAccessRequestStatus     `json:"status"`
+	UpdatedAt             time.Time                     `json:"updated_at"`
 }
+
+// AccessRequestDecisionOutcome defines model for AccessRequest.DecisionOutcome.
+type AccessRequestDecisionOutcome string
 
 // AccessRequestCreate defines model for AccessRequestCreate.
 type AccessRequestCreate struct {
@@ -425,848 +1437,62 @@ type ApiError_Params_AdditionalProperties struct {
 	union json.RawMessage
 }
 
-// CursorPage defines model for CursorPage.
-type CursorPage struct {
-	HasMore    bool            `json:"has_more"`
-	NextCursor *string         `json:"next_cursor"`
-	Partial    PartialMetadata `json:"partial"`
-}
-
-// IdempotencyKey defines model for IdempotencyKey.
-type IdempotencyKey = string
-
-// LabelRequirement defines model for LabelRequirement.
-type LabelRequirement struct {
-	union json.RawMessage
-}
-
-// LabelRequirement0 defines model for LabelRequirement.0.
-type LabelRequirement0 struct {
-	Key      LabelRequirement_0_Key `json:"key"`
-	Operator interface{}            `json:"operator"`
-	Values   []LabelValue           `json:"values"`
-}
-
-// LabelRequirement_0_Key defines model for LabelRequirement.0.Key.
-type LabelRequirement_0_Key struct {
-	union json.RawMessage
-}
-
-// LabelRequirement1 defines model for LabelRequirement.1.
-type LabelRequirement1 struct {
-	Key      LabelRequirement_1_Key `json:"key"`
-	Operator interface{}            `json:"operator"`
-	Values   []LabelValue           `json:"values"`
-}
-
-// LabelRequirement_1_Key defines model for LabelRequirement.1.Key.
-type LabelRequirement_1_Key struct {
-	union json.RawMessage
-}
-
-// LabelRequirement2 defines model for LabelRequirement.2.
-type LabelRequirement2 struct {
-	Key      LabelRequirement_2_Key `json:"key"`
-	Operator interface{}            `json:"operator"`
-}
-
-// LabelRequirement_2_Key defines model for LabelRequirement.2.Key.
-type LabelRequirement_2_Key struct {
-	union json.RawMessage
-}
-
-// LabelSelector defines model for LabelSelector.
-type LabelSelector struct {
-	Requirements  []LabelRequirement `json:"requirements"`
-	SchemaVersion interface{}        `json:"schema_version"`
-}
-
-// LabelValue defines model for LabelValue.
-type LabelValue = string
-
-// PartialMetadata defines model for PartialMetadata.
-type PartialMetadata struct {
-	Partial bool                     `json:"partial"`
-	Reasons []PartialMetadataReasons `json:"reasons"`
-}
-
-// PartialMetadataReasons defines model for PartialMetadata.Reasons.
-type PartialMetadataReasons string
-
-// RecordingEventPage defines model for RecordingEventPage.
-type RecordingEventPage struct {
-	Complete bool `json:"complete"`
-	Events   []struct {
-		Data interface{}                  `json:"data"`
-		Time float32                      `json:"time"`
-		Type RecordingEventPageEventsType `json:"type"`
-	} `json:"events"`
-	NextCursor string                `json:"next_cursor"`
-	Recording  RemoteAccessRecording `json:"recording"`
-}
-
-// RecordingEventPageEventsType defines model for RecordingEventPage.Events.Type.
-type RecordingEventPageEventsType string
-
-// RemoteAccessAction defines model for RemoteAccessAction.
-type RemoteAccessAction string
-
-// RemoteAccessDecision defines model for RemoteAccessDecision.
-type RemoteAccessDecision struct {
-	Comment       *string                      `json:"comment,omitempty"`
-	DecidedAt     time.Time                    `json:"decided_at"`
-	DecidedBy     openapi_types.UUID           `json:"decided_by"`
-	Decision      RemoteAccessDecisionDecision `json:"decision"`
-	Id            openapi_types.UUID           `json:"id"`
-	RequestId     openapi_types.UUID           `json:"request_id"`
-	RequirementId openapi_types.UUID           `json:"requirement_id"`
-}
-
-// RemoteAccessDecisionDecision defines model for RemoteAccessDecision.Decision.
-type RemoteAccessDecisionDecision string
-
-// RemoteAccessDecisionCreate defines model for RemoteAccessDecisionCreate.
-type RemoteAccessDecisionCreate struct {
-	Comment       *string                            `json:"comment,omitempty"`
-	Decision      RemoteAccessDecisionCreateDecision `json:"decision"`
-	RequirementId openapi_types.UUID                 `json:"requirement_id"`
-}
-
-// RemoteAccessDecisionCreateDecision defines model for RemoteAccessDecisionCreate.Decision.
-type RemoteAccessDecisionCreateDecision string
-
-// RemoteAccessGrant defines model for RemoteAccessGrant.
-type RemoteAccessGrant struct {
-	Actions           []RemoteAccessAction    `json:"actions"`
-	CreatedAt         time.Time               `json:"created_at"`
-	CreatedBy         *openapi_types.UUID     `json:"created_by,omitempty"`
-	Enabled           bool                    `json:"enabled"`
-	EnterpriseId      *openapi_types.UUID     `json:"enterprise_id,omitempty"`
-	HostIds           []openapi_types.UUID    `json:"host_ids"`
-	HostSelector      *LabelSelector          `json:"host_selector,omitempty"`
-	Id                openapi_types.UUID      `json:"id"`
-	ManagedAccountIds []openapi_types.UUID    `json:"managed_account_ids"`
-	Protocols         []RemoteAccessProtocol  `json:"protocols"`
-	SubjectId         openapi_types.UUID      `json:"subject_id"`
-	SubjectType       RemoteAccessSubjectType `json:"subject_type"`
-	UpdatedAt         time.Time               `json:"updated_at"`
-	ValidFrom         time.Time               `json:"valid_from"`
-	ValidUntil        time.Time               `json:"valid_until"`
-	Version           int64                   `json:"version"`
-}
-
-// RemoteAccessGrantPage defines model for RemoteAccessGrantPage.
-type RemoteAccessGrantPage struct {
-	Items []RemoteAccessGrant `json:"items"`
-	Page  CursorPage          `json:"page"`
-}
-
-// RemoteAccessGrantUpdate defines model for RemoteAccessGrantUpdate.
-type RemoteAccessGrantUpdate struct {
-	Actions           []RemoteAccessAction    `json:"actions"`
-	Enabled           bool                    `json:"enabled"`
-	ExpectedVersion   int64                   `json:"expected_version"`
-	HostIds           []openapi_types.UUID    `json:"host_ids"`
-	HostSelector      *LabelSelector          `json:"host_selector,omitempty"`
-	ManagedAccountIds []openapi_types.UUID    `json:"managed_account_ids"`
-	Protocols         []RemoteAccessProtocol  `json:"protocols"`
-	SubjectId         openapi_types.UUID      `json:"subject_id"`
-	SubjectType       RemoteAccessSubjectType `json:"subject_type"`
-	ValidFrom         time.Time               `json:"valid_from"`
-	ValidUntil        time.Time               `json:"valid_until"`
-}
-
-// RemoteAccessGrantWrite defines model for RemoteAccessGrantWrite.
-type RemoteAccessGrantWrite struct {
-	Actions           []RemoteAccessAction    `json:"actions"`
-	Enabled           bool                    `json:"enabled"`
-	HostIds           []openapi_types.UUID    `json:"host_ids"`
-	HostSelector      *LabelSelector          `json:"host_selector,omitempty"`
-	ManagedAccountIds []openapi_types.UUID    `json:"managed_account_ids"`
-	Protocols         []RemoteAccessProtocol  `json:"protocols"`
-	SubjectId         openapi_types.UUID      `json:"subject_id"`
-	SubjectType       RemoteAccessSubjectType `json:"subject_type"`
-	ValidFrom         time.Time               `json:"valid_from"`
-	ValidUntil        time.Time               `json:"valid_until"`
-}
-
-// RemoteAccessPolicy defines model for RemoteAccessPolicy.
-type RemoteAccessPolicy struct {
-	ApproverRoleIds    *[]openapi_types.UUID  `json:"approver_role_ids,omitempty"`
-	CreatedAt          time.Time              `json:"created_at"`
-	Enabled            bool                   `json:"enabled"`
-	EnterpriseId       *openapi_types.UUID    `json:"enterprise_id,omitempty"`
-	HostSelector       *LabelSelector         `json:"host_selector,omitempty"`
-	Id                 openapi_types.UUID     `json:"id"`
-	IdleTimeoutSeconds int                    `json:"idle_timeout_seconds"`
-	MaxSessionSeconds  int                    `json:"max_session_seconds"`
-	MinimumApprovals   int                    `json:"minimum_approvals"`
-	Name               string                 `json:"name"`
-	Priority           int                    `json:"priority"`
-	Protocols          []RemoteAccessProtocol `json:"protocols"`
-	RequireMfa         bool                   `json:"require_mfa"`
-	SeparationOfDuties bool                   `json:"separation_of_duties"`
-	UpdatedAt          time.Time              `json:"updated_at"`
-	Version            int64                  `json:"version"`
-}
-
-// RemoteAccessPolicyPage defines model for RemoteAccessPolicyPage.
-type RemoteAccessPolicyPage struct {
-	Items []RemoteAccessPolicy `json:"items"`
-	Page  CursorPage           `json:"page"`
-}
-
-// RemoteAccessPolicyUpdate defines model for RemoteAccessPolicyUpdate.
-type RemoteAccessPolicyUpdate struct {
-	ApproverRoleIds    *[]openapi_types.UUID  `json:"approver_role_ids,omitempty"`
-	Enabled            bool                   `json:"enabled"`
-	ExpectedVersion    int64                  `json:"expected_version"`
-	HostSelector       *LabelSelector         `json:"host_selector,omitempty"`
-	IdleTimeoutSeconds int                    `json:"idle_timeout_seconds"`
-	MaxSessionSeconds  int                    `json:"max_session_seconds"`
-	MinimumApprovals   int                    `json:"minimum_approvals"`
-	Name               string                 `json:"name"`
-	Priority           int                    `json:"priority"`
-	Protocols          []RemoteAccessProtocol `json:"protocols"`
-	RequireMfa         bool                   `json:"require_mfa"`
-	SeparationOfDuties bool                   `json:"separation_of_duties"`
-}
-
-// RemoteAccessPolicyWrite defines model for RemoteAccessPolicyWrite.
-type RemoteAccessPolicyWrite struct {
-	ApproverRoleIds    *[]openapi_types.UUID  `json:"approver_role_ids,omitempty"`
-	Enabled            bool                   `json:"enabled"`
-	HostSelector       *LabelSelector         `json:"host_selector,omitempty"`
-	IdleTimeoutSeconds int                    `json:"idle_timeout_seconds"`
-	MaxSessionSeconds  int                    `json:"max_session_seconds"`
-	MinimumApprovals   int                    `json:"minimum_approvals"`
-	Name               string                 `json:"name"`
-	Priority           int                    `json:"priority"`
-	Protocols          []RemoteAccessProtocol `json:"protocols"`
-	RequireMfa         bool                   `json:"require_mfa"`
-	SeparationOfDuties bool                   `json:"separation_of_duties"`
-}
-
-// RemoteAccessProtocol defines model for RemoteAccessProtocol.
-type RemoteAccessProtocol string
-
-// RemoteAccessRecording defines model for RemoteAccessRecording.
-type RemoteAccessRecording struct {
-	ChunkCount     int                            `json:"chunk_count"`
-	CompletedAt    *time.Time                     `json:"completed_at,omitempty"`
-	CreatedAt      time.Time                      `json:"created_at"`
-	DurationMs     *int64                         `json:"duration_ms,omitempty"`
-	Encrypted      RemoteAccessRecordingEncrypted `json:"encrypted"`
-	EnterpriseId   *openapi_types.UUID            `json:"enterprise_id,omitempty"`
-	EventCount     int                            `json:"event_count"`
-	FinalHash      *string                        `json:"final_hash,omitempty"`
-	Format         RemoteAccessRecordingFormat    `json:"format"`
-	Id             openapi_types.UUID             `json:"id"`
-	RetentionUntil time.Time                      `json:"retention_until"`
-	SessionId      openapi_types.UUID             `json:"session_id"`
-	SizeBytes      int64                          `json:"size_bytes"`
-	Status         RemoteAccessRecordingStatus    `json:"status"`
-}
-
-// RemoteAccessRecordingEncrypted defines model for RemoteAccessRecording.Encrypted.
-type RemoteAccessRecordingEncrypted bool
-
-// RemoteAccessRecordingFormat defines model for RemoteAccessRecording.Format.
-type RemoteAccessRecordingFormat string
-
-// RemoteAccessRecordingStatus defines model for RemoteAccessRecording.Status.
-type RemoteAccessRecordingStatus string
-
-// RemoteAccessRequestStatus defines model for RemoteAccessRequestStatus.
-type RemoteAccessRequestStatus string
-
-// RemoteAccessRequirement defines model for RemoteAccessRequirement.
-type RemoteAccessRequirement struct {
-	ApprovedCount      int                           `json:"approved_count"`
-	Id                 openapi_types.UUID            `json:"id"`
-	MinimumApprovals   int                           `json:"minimum_approvals"`
-	PolicyId           openapi_types.UUID            `json:"policy_id"`
-	PolicyVersion      int64                         `json:"policy_version"`
-	RequireMfa         bool                          `json:"require_mfa"`
-	SeparationOfDuties bool                          `json:"separation_of_duties"`
-	Status             RemoteAccessRequirementStatus `json:"status"`
-}
-
-// RemoteAccessRequirementStatus defines model for RemoteAccessRequirement.Status.
-type RemoteAccessRequirementStatus string
-
-// RemoteAccessSession defines model for RemoteAccessSession.
-type RemoteAccessSession struct {
-	ConnectBefore      time.Time                         `json:"connect_before"`
-	ConnectedAt        *time.Time                        `json:"connected_at,omitempty"`
-	ConnectionMode     RemoteAccessSessionConnectionMode `json:"connection_mode"`
-	CreatedAt          time.Time                         `json:"created_at"`
-	EnterpriseId       *openapi_types.UUID               `json:"enterprise_id,omitempty"`
-	HostId             openapi_types.UUID                `json:"host_id"`
-	Id                 openapi_types.UUID                `json:"id"`
-	IdleTimeoutSeconds int                               `json:"idle_timeout_seconds"`
-	LeaseId            openapi_types.UUID                `json:"lease_id"`
-	ManagedAccountId   openapi_types.UUID                `json:"managed_account_id"`
-	MaxDurationSeconds int                               `json:"max_duration_seconds"`
-	Protocol           RemoteAccessProtocol              `json:"protocol"`
-	RecordingId        openapi_types.UUID                `json:"recording_id"`
-	SessionFence       *int64                            `json:"session_fence,omitempty"`
-	Status             RemoteAccessSessionStatus         `json:"status"`
-	TerminatedAt       *time.Time                        `json:"terminated_at,omitempty"`
-	TerminationReason  *string                           `json:"termination_reason,omitempty"`
-	UpdatedAt          time.Time                         `json:"updated_at"`
-	UserId             *openapi_types.UUID               `json:"user_id,omitempty"`
-}
-
-// RemoteAccessSessionConnectionMode defines model for RemoteAccessSession.ConnectionMode.
-type RemoteAccessSessionConnectionMode string
-
-// RemoteAccessSessionCreate defines model for RemoteAccessSessionCreate.
-type RemoteAccessSessionCreate struct {
-	LeaseId      openapi_types.UUID `json:"lease_id"`
-	TerminalCols int                `json:"terminal_cols"`
-	TerminalRows int                `json:"terminal_rows"`
-}
-
-// RemoteAccessSessionPage defines model for RemoteAccessSessionPage.
-type RemoteAccessSessionPage struct {
-	Items []RemoteAccessSession `json:"items"`
-	Page  CursorPage            `json:"page"`
-}
-
-// RemoteAccessSessionStatus defines model for RemoteAccessSessionStatus.
-type RemoteAccessSessionStatus string
-
-// RemoteAccessSubjectType defines model for RemoteAccessSubjectType.
-type RemoteAccessSubjectType string
-
-// RequestId defines model for RequestId.
-type RequestId = string
-
-// SessionTerminate defines model for SessionTerminate.
-type SessionTerminate struct {
-	Reason string `json:"reason"`
-}
-
-// SessionTicketResult defines model for SessionTicketResult.
-type SessionTicketResult struct {
-	ExpiresAt       time.Time                          `json:"expires_at"`
-	ProtocolVersion SessionTicketResultProtocolVersion `json:"protocol_version"`
-	SessionId       openapi_types.UUID                 `json:"session_id"`
-	Ticket          *string                            `json:"ticket,omitempty"`
-	WebsocketUrl    string                             `json:"websocket_url"`
-}
-
-// SessionTicketResultProtocolVersion defines model for SessionTicketResult.ProtocolVersion.
-type SessionTicketResultProtocolVersion string
-
-// SystemLabelKey defines model for SystemLabelKey.
-type SystemLabelKey = string
-
-// UserLabelKey defines model for UserLabelKey.
-type UserLabelKey = string
-
-// CsrfToken defines model for CsrfToken.
-type CsrfToken = string
-
-// Cursor defines model for Cursor.
-type Cursor = string
-
-// Limit defines model for Limit.
-type Limit = int
-
-// Error defines model for Error.
-type Error = ApiError
-
-// ListRemoteAccessGrantsParams defines parameters for ListRemoteAccessGrants.
-type ListRemoteAccessGrantsParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// CreateRemoteAccessGrantParams defines parameters for CreateRemoteAccessGrant.
-type CreateRemoteAccessGrantParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// DisableRemoteAccessGrantParams defines parameters for DisableRemoteAccessGrant.
-type DisableRemoteAccessGrantParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// UpdateRemoteAccessGrantParams defines parameters for UpdateRemoteAccessGrant.
-type UpdateRemoteAccessGrantParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// ListRemoteAccessLeasesParams defines parameters for ListRemoteAccessLeases.
-type ListRemoteAccessLeasesParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// RevokeRemoteAccessLeaseParams defines parameters for RevokeRemoteAccessLease.
-type RevokeRemoteAccessLeaseParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// ListRemoteAccessPoliciesParams defines parameters for ListRemoteAccessPolicies.
-type ListRemoteAccessPoliciesParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// CreateRemoteAccessPolicyParams defines parameters for CreateRemoteAccessPolicy.
-type CreateRemoteAccessPolicyParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// DisableRemoteAccessPolicyParams defines parameters for DisableRemoteAccessPolicy.
-type DisableRemoteAccessPolicyParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// UpdateRemoteAccessPolicyParams defines parameters for UpdateRemoteAccessPolicy.
-type UpdateRemoteAccessPolicyParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// ListRemoteAccessRecordingEventsParams defines parameters for ListRemoteAccessRecordingEvents.
-type ListRemoteAccessRecordingEventsParams struct {
-	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
-}
-
-// ListRemoteAccessRequestsParams defines parameters for ListRemoteAccessRequests.
-type ListRemoteAccessRequestsParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// CreateRemoteAccessRequestParams defines parameters for CreateRemoteAccessRequest.
-type CreateRemoteAccessRequestParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// DecideRemoteAccessRequestParams defines parameters for DecideRemoteAccessRequest.
-type DecideRemoteAccessRequestParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// ListRemoteAccessSessionsParams defines parameters for ListRemoteAccessSessions.
-type ListRemoteAccessSessionsParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// CreateRemoteAccessSessionParams defines parameters for CreateRemoteAccessSession.
-type CreateRemoteAccessSessionParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// TerminateRemoteAccessSessionParams defines parameters for TerminateRemoteAccessSession.
-type TerminateRemoteAccessSessionParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// CreateRemoteAccessSessionTicketParams defines parameters for CreateRemoteAccessSessionTicket.
-type CreateRemoteAccessSessionTicketParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// CreateRemoteAccessGrantJSONRequestBody defines body for CreateRemoteAccessGrant for application/json ContentType.
-type CreateRemoteAccessGrantJSONRequestBody = RemoteAccessGrantWrite
-
-// UpdateRemoteAccessGrantJSONRequestBody defines body for UpdateRemoteAccessGrant for application/json ContentType.
-type UpdateRemoteAccessGrantJSONRequestBody = RemoteAccessGrantUpdate
-
-// CreateRemoteAccessPolicyJSONRequestBody defines body for CreateRemoteAccessPolicy for application/json ContentType.
-type CreateRemoteAccessPolicyJSONRequestBody = RemoteAccessPolicyWrite
-
-// UpdateRemoteAccessPolicyJSONRequestBody defines body for UpdateRemoteAccessPolicy for application/json ContentType.
-type UpdateRemoteAccessPolicyJSONRequestBody = RemoteAccessPolicyUpdate
-
-// CreateRemoteAccessRequestJSONRequestBody defines body for CreateRemoteAccessRequest for application/json ContentType.
-type CreateRemoteAccessRequestJSONRequestBody = AccessRequestCreate
-
-// DecideRemoteAccessRequestJSONRequestBody defines body for DecideRemoteAccessRequest for application/json ContentType.
-type DecideRemoteAccessRequestJSONRequestBody = RemoteAccessDecisionCreate
-
-// CreateRemoteAccessSessionJSONRequestBody defines body for CreateRemoteAccessSession for application/json ContentType.
-type CreateRemoteAccessSessionJSONRequestBody = RemoteAccessSessionCreate
-
-// TerminateRemoteAccessSessionJSONRequestBody defines body for TerminateRemoteAccessSession for application/json ContentType.
-type TerminateRemoteAccessSessionJSONRequestBody = SessionTerminate
-
-// AsApiErrorParams0 returns the union data inside the ApiError_Params_AdditionalProperties as a ApiErrorParams0
-func (t ApiError_Params_AdditionalProperties) AsApiErrorParams0() (ApiErrorParams0, error) {
-	var body ApiErrorParams0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromApiErrorParams0 overwrites any union data inside the ApiError_Params_AdditionalProperties as the provided ApiErrorParams0
-func (t *ApiError_Params_AdditionalProperties) FromApiErrorParams0(v ApiErrorParams0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeApiErrorParams0 performs a merge with any union data inside the ApiError_Params_AdditionalProperties, using the provided ApiErrorParams0
-func (t *ApiError_Params_AdditionalProperties) MergeApiErrorParams0(v ApiErrorParams0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsApiErrorParams1 returns the union data inside the ApiError_Params_AdditionalProperties as a ApiErrorParams1
-func (t ApiError_Params_AdditionalProperties) AsApiErrorParams1() (ApiErrorParams1, error) {
-	var body ApiErrorParams1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromApiErrorParams1 overwrites any union data inside the ApiError_Params_AdditionalProperties as the provided ApiErrorParams1
-func (t *ApiError_Params_AdditionalProperties) FromApiErrorParams1(v ApiErrorParams1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeApiErrorParams1 performs a merge with any union data inside the ApiError_Params_AdditionalProperties, using the provided ApiErrorParams1
-func (t *ApiError_Params_AdditionalProperties) MergeApiErrorParams1(v ApiErrorParams1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsApiErrorParams2 returns the union data inside the ApiError_Params_AdditionalProperties as a ApiErrorParams2
-func (t ApiError_Params_AdditionalProperties) AsApiErrorParams2() (ApiErrorParams2, error) {
-	var body ApiErrorParams2
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromApiErrorParams2 overwrites any union data inside the ApiError_Params_AdditionalProperties as the provided ApiErrorParams2
-func (t *ApiError_Params_AdditionalProperties) FromApiErrorParams2(v ApiErrorParams2) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeApiErrorParams2 performs a merge with any union data inside the ApiError_Params_AdditionalProperties, using the provided ApiErrorParams2
-func (t *ApiError_Params_AdditionalProperties) MergeApiErrorParams2(v ApiErrorParams2) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t ApiError_Params_AdditionalProperties) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *ApiError_Params_AdditionalProperties) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsLabelRequirement0 returns the union data inside the LabelRequirement as a LabelRequirement0
-func (t LabelRequirement) AsLabelRequirement0() (LabelRequirement0, error) {
-	var body LabelRequirement0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromLabelRequirement0 overwrites any union data inside the LabelRequirement as the provided LabelRequirement0
-func (t *LabelRequirement) FromLabelRequirement0(v LabelRequirement0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeLabelRequirement0 performs a merge with any union data inside the LabelRequirement, using the provided LabelRequirement0
-func (t *LabelRequirement) MergeLabelRequirement0(v LabelRequirement0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsLabelRequirement1 returns the union data inside the LabelRequirement as a LabelRequirement1
-func (t LabelRequirement) AsLabelRequirement1() (LabelRequirement1, error) {
-	var body LabelRequirement1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromLabelRequirement1 overwrites any union data inside the LabelRequirement as the provided LabelRequirement1
-func (t *LabelRequirement) FromLabelRequirement1(v LabelRequirement1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeLabelRequirement1 performs a merge with any union data inside the LabelRequirement, using the provided LabelRequirement1
-func (t *LabelRequirement) MergeLabelRequirement1(v LabelRequirement1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsLabelRequirement2 returns the union data inside the LabelRequirement as a LabelRequirement2
-func (t LabelRequirement) AsLabelRequirement2() (LabelRequirement2, error) {
-	var body LabelRequirement2
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromLabelRequirement2 overwrites any union data inside the LabelRequirement as the provided LabelRequirement2
-func (t *LabelRequirement) FromLabelRequirement2(v LabelRequirement2) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeLabelRequirement2 performs a merge with any union data inside the LabelRequirement, using the provided LabelRequirement2
-func (t *LabelRequirement) MergeLabelRequirement2(v LabelRequirement2) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t LabelRequirement) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *LabelRequirement) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsUserLabelKey returns the union data inside the LabelRequirement_0_Key as a UserLabelKey
-func (t LabelRequirement_0_Key) AsUserLabelKey() (UserLabelKey, error) {
-	var body UserLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromUserLabelKey overwrites any union data inside the LabelRequirement_0_Key as the provided UserLabelKey
-func (t *LabelRequirement_0_Key) FromUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeUserLabelKey performs a merge with any union data inside the LabelRequirement_0_Key, using the provided UserLabelKey
-func (t *LabelRequirement_0_Key) MergeUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsSystemLabelKey returns the union data inside the LabelRequirement_0_Key as a SystemLabelKey
-func (t LabelRequirement_0_Key) AsSystemLabelKey() (SystemLabelKey, error) {
-	var body SystemLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromSystemLabelKey overwrites any union data inside the LabelRequirement_0_Key as the provided SystemLabelKey
-func (t *LabelRequirement_0_Key) FromSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeSystemLabelKey performs a merge with any union data inside the LabelRequirement_0_Key, using the provided SystemLabelKey
-func (t *LabelRequirement_0_Key) MergeSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t LabelRequirement_0_Key) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *LabelRequirement_0_Key) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsUserLabelKey returns the union data inside the LabelRequirement_1_Key as a UserLabelKey
-func (t LabelRequirement_1_Key) AsUserLabelKey() (UserLabelKey, error) {
-	var body UserLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromUserLabelKey overwrites any union data inside the LabelRequirement_1_Key as the provided UserLabelKey
-func (t *LabelRequirement_1_Key) FromUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeUserLabelKey performs a merge with any union data inside the LabelRequirement_1_Key, using the provided UserLabelKey
-func (t *LabelRequirement_1_Key) MergeUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsSystemLabelKey returns the union data inside the LabelRequirement_1_Key as a SystemLabelKey
-func (t LabelRequirement_1_Key) AsSystemLabelKey() (SystemLabelKey, error) {
-	var body SystemLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromSystemLabelKey overwrites any union data inside the LabelRequirement_1_Key as the provided SystemLabelKey
-func (t *LabelRequirement_1_Key) FromSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeSystemLabelKey performs a merge with any union data inside the LabelRequirement_1_Key, using the provided SystemLabelKey
-func (t *LabelRequirement_1_Key) MergeSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t LabelRequirement_1_Key) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *LabelRequirement_1_Key) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsUserLabelKey returns the union data inside the LabelRequirement_2_Key as a UserLabelKey
-func (t LabelRequirement_2_Key) AsUserLabelKey() (UserLabelKey, error) {
-	var body UserLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromUserLabelKey overwrites any union data inside the LabelRequirement_2_Key as the provided UserLabelKey
-func (t *LabelRequirement_2_Key) FromUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeUserLabelKey performs a merge with any union data inside the LabelRequirement_2_Key, using the provided UserLabelKey
-func (t *LabelRequirement_2_Key) MergeUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsSystemLabelKey returns the union data inside the LabelRequirement_2_Key as a SystemLabelKey
-func (t LabelRequirement_2_Key) AsSystemLabelKey() (SystemLabelKey, error) {
-	var body SystemLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromSystemLabelKey overwrites any union data inside the LabelRequirement_2_Key as the provided SystemLabelKey
-func (t *LabelRequirement_2_Key) FromSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeSystemLabelKey performs a merge with any union data inside the LabelRequirement_2_Key, using the provided SystemLabelKey
-func (t *LabelRequirement_2_Key) MergeSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t LabelRequirement_2_Key) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *LabelRequirement_2_Key) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
+// ApprovalWorkflow defines model for ApprovalWorkflow.
+type ApprovalWorkflow struct {
+	ApprovalTimeoutSeconds int                           `json:"approval_timeout_seconds"`
+	ApproverRoleIds        []openapi_types.UUID          `json:"approver_role_ids"`
+	CreatedAt              time.Time                     `json:"created_at"`
+	CreatedBy              openapi_types.UUID            `json:"created_by"`
+	Description            string                        `json:"description"`
+	EnterpriseId           *openapi_types.UUID           `json:"enterprise_id,omitempty"`
+	EscalationAfterSeconds int                           `json:"escalation_after_seconds"`
+	EscalationRoleIds      []openapi_types.UUID          `json:"escalation_role_ids"`
+	Id                     openapi_types.UUID            `json:"id"`
+	MinimumApprovals       int                           `json:"minimum_approvals"`
+	Name                   string                        `json:"name"`
+	SeparationOfDuties     bool                          `json:"separation_of_duties"`
+	Status                 RemoteAccessGovernanceStatus  `json:"status"`
+	TimeoutEffect          ApprovalWorkflowTimeoutEffect `json:"timeout_effect"`
+	UpdatedAt              time.Time                     `json:"updated_at"`
+	Version                int64                         `json:"version"`
+}
+
+// ApprovalWorkflowTimeoutEffect defines model for ApprovalWorkflow.TimeoutEffect.
+type ApprovalWorkflowTimeoutEffect string
+
+// ApprovalWorkflowPage defines model for ApprovalWorkflowPage.
+type ApprovalWorkflowPage struct {
+	Items []ApprovalWorkflow `json:"items"`
+	Page  CursorPage         `json:"page"`
+}
+
+// ApprovalWorkflowUpdate defines model for ApprovalWorkflowUpdate.
+type ApprovalWorkflowUpdate struct {
+	ApprovalTimeoutSeconds int                                 `json:"approval_timeout_seconds"`
+	ApproverRoleIds        []openapi_types.UUID                `json:"approver_role_ids"`
+	Description            string                              `json:"description"`
+	EscalationAfterSeconds int                                 `json:"escalation_after_seconds"`
+	EscalationRoleIds      []openapi_types.UUID                `json:"escalation_role_ids"`
+	ExpectedVersion        int64                               `json:"expected_version"`
+	MinimumApprovals       int                                 `json:"minimum_approvals"`
+	Name                   string                              `json:"name"`
+	SeparationOfDuties     bool                                `json:"separation_of_duties"`
+	TimeoutEffect          ApprovalWorkflowUpdateTimeoutEffect `json:"timeout_effect"`
+}
+
+// ApprovalWorkflowUpdateTimeoutEffect defines model for ApprovalWorkflowUpdate.TimeoutEffect.
+type ApprovalWorkflowUpdateTimeoutEffect string
+
+// ApprovalWorkflowWrite defines model for ApprovalWorkflowWrite.
+type ApprovalWorkflowWrite struct {
+	ApprovalTimeoutSeconds int                                `json:"approval_timeout_seconds"`
+	ApproverRoleIds        []openapi_types.UUID               `json:"approver_role_ids"`
+	Description            string                             `json:"description"`
+	EscalationAfterSeconds int                                `json:"escalation_after_seconds"`
+	EscalationRoleIds      []openapi_types.UUID               `json:"escalation_role_ids"`
+	MinimumApprovals       int                                `json:"minimum_approvals"`
+	Name                   string                             `json:"name"`
+	SeparationOfDuties     bool                               `json:"separation_of_duties"`
+	Status                 ApprovalWorkflowWriteStatus        `json:"status"`
+	TimeoutEffect          ApprovalWorkflowWriteTimeoutEffect `json:"timeout_effect"`
 }

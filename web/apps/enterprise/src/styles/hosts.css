@@ -15,19 +15,6 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.argus-recording-controls {
-  align-items: center;
-  display: grid;
-  gap: var(--space-2);
-  grid-template-columns: auto auto minmax(8rem, 1fr) auto minmax(6rem, auto);
-  margin-bottom: var(--space-3);
-}
-
-.argus-recording-controls input[type="range"] {
-  accent-color: var(--color-accent);
-  width: 100%;
-}
-
 /* ---- Bastion Scope 分组卡片 ---- */
 .argus-scope-card {
   padding: 0;

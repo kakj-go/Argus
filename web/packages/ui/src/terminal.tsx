@@ -1,10 +1,5 @@
 import { Ban } from "lucide-react";
-import {
-  type KeyboardEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Button } from "./button";
 import { cx } from "./lib";
 import { useUiText } from "./locale";
@@ -20,7 +15,8 @@ export type TerminalState = "connected" | "connecting" | "disconnected";
 type TerminalInstance = {
   clear(): void;
   dispose(): void;
-  writeln(value: string): void;
+  write(value: string): void;
+  focus(): void;
 };
 
 function formatDuration(ms: number): string {
@@ -33,6 +29,7 @@ function formatDuration(ms: number): string {
 export function TerminalEmulator({
   lines = [],
   host,
+  account,
   protocol = "ssh",
   state = "connected",
   startedAt,
@@ -46,10 +43,14 @@ export function TerminalEmulator({
   mode = "line",
   onData,
   onResize,
+  sessionId,
+  autoFocusKey,
 }: {
   /** Full output buffer; the source of truth for playback and live output. */
   lines?: TerminalLine[];
   host?: string;
+  /** Remote account shown in the status bar, e.g. root@web-01. */
+  account?: string;
   protocol?: string;
   state?: TerminalState;
   /** Session start time; when set, a live duration counter is shown. */
@@ -66,22 +67,39 @@ export function TerminalEmulator({
   mode?: "line" | "pty";
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
+  /** Stable identity used to preserve an xterm instance while output changes. */
+  sessionId?: string;
+  /** When this key changes the terminal is refocused (dock reopen, tab switch). */
+  autoFocusKey?: string;
 }) {
   const text = useUiText();
   const outputRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<TerminalInstance | null>(null);
+  const onDataRef = useRef(onData);
+  const onResizeRef = useRef(onResize);
+  const linesRef = useRef(lines);
+  const writtenChunksRef = useRef(0);
   const [typed, setTyped] = useState<TerminalLine[]>([]);
   const [draft, setDraft] = useState("");
   // Number of prop lines hidden by the last clear action.
   const [cleared, setCleared] = useState(0);
   const [now, setNow] = useState(() => Date.now());
 
+  onDataRef.current = onData;
+  onResizeRef.current = onResize;
+  linesRef.current = lines;
+
   useEffect(() => {
     if (startedAt === undefined) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [startedAt]);
+
+  useEffect(() => {
+    if (autoFocusKey === undefined) return;
+    terminalRef.current?.focus();
+  }, [autoFocusKey]);
 
   const visible = [...lines.slice(cleared), ...typed];
 
@@ -95,10 +113,15 @@ export function TerminalEmulator({
     const element = xtermRef.current;
     let disposed = false;
     let disposeTerminal: (() => void) | undefined;
-    void Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit"), import("@xterm/xterm/css/xterm.css")]).then(([xterm, fitModule]) => {
+    void Promise.all([
+      import("@xterm/xterm"),
+      import("@xterm/addon-fit"),
+      import("@xterm/xterm/css/xterm.css"),
+    ]).then(([xterm, fitModule]) => {
       if (disposed) return;
       const terminal = new xterm.Terminal({
-        convertEol: true,
+        // PTY data already contains the remote terminal's exact control bytes.
+        convertEol: false,
         cursorBlink: !readOnly,
         disableStdin: Boolean(readOnly),
         fontFamily: "var(--font-mono)",
@@ -110,9 +133,14 @@ export function TerminalEmulator({
       terminal.loadAddon(fit);
       terminal.open(element);
       fit.fit();
-      terminalRef.current = terminal;
-      const data = terminal.onData((value) => onData?.(value));
-      const resize = terminal.onResize(({ cols, rows }) => onResize?.(cols, rows));
+      terminalRef.current = terminal as unknown as TerminalInstance;
+      for (const line of linesRef.current) terminal.write(line.content);
+      writtenChunksRef.current = linesRef.current.length;
+      terminal.focus();
+      const data = terminal.onData((value) => onDataRef.current?.(value));
+      const resize = terminal.onResize(({ cols, rows }) =>
+        onResizeRef.current?.(cols, rows),
+      );
       const observer = new ResizeObserver(() => fit.fit());
       observer.observe(element);
       disposeTerminal = () => {
@@ -127,12 +155,19 @@ export function TerminalEmulator({
       disposed = true;
       disposeTerminal?.();
     };
-  }, [mode, onData, onResize, readOnly]);
+  }, [mode, readOnly, sessionId]);
 
   useEffect(() => {
     if (mode !== "pty" || !terminalRef.current) return;
-    terminalRef.current.clear();
-    for (const line of lines) terminalRef.current.writeln(line.content);
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    if (lines.length < writtenChunksRef.current) {
+      terminal.clear();
+      writtenChunksRef.current = 0;
+    }
+    for (const line of lines.slice(writtenChunksRef.current))
+      terminal.write(line.content);
+    writtenChunksRef.current = lines.length;
   }, [lines, mode]);
 
   const stateText: Record<TerminalState, string> = {
@@ -164,7 +199,7 @@ export function TerminalEmulator({
           title={stateText[state]}
         >
           <i aria-hidden />
-          {host && <b>{host}</b>}
+          {host && <b>{account ? `${account}@${host}` : host}</b>}
           <em>{protocol}</em>
         </span>
         <span className="argus-terminal__meta">
@@ -181,6 +216,10 @@ export function TerminalEmulator({
           onClick={() => {
             setCleared(lines.length);
             setTyped([]);
+            if (mode === "pty") {
+              terminalRef.current?.clear();
+              writtenChunksRef.current = lines.length;
+            }
           }}
           size="icon"
           variant="ghost"
@@ -189,24 +228,32 @@ export function TerminalEmulator({
         </Button>
       </header>
 
-      {mode === "pty" ? <div className="argus-terminal__xterm" ref={xtermRef} style={{ height }} /> : <div
-        className="argus-terminal__output"
-        ref={outputRef}
-        style={{ height }}
-      >
-        {visible.map((line, index) => (
-          <div
-            className={cx("argus-terminal__line", `is-${line.kind}`)}
-            key={index}
-          >
-            {line.kind === "stdin" && (
-              <span className="argus-terminal__prompt">{prompt}</span>
-            )}
-            {line.time && <time>{line.time}</time>}
-            <span>{line.content}</span>
-          </div>
-        ))}
-      </div>}
+      {mode === "pty" ? (
+        <div
+          className="argus-terminal__xterm"
+          ref={xtermRef}
+          style={{ height }}
+        />
+      ) : (
+        <div
+          className="argus-terminal__output"
+          ref={outputRef}
+          style={{ height }}
+        >
+          {visible.map((line, index) => (
+            <div
+              className={cx("argus-terminal__line", `is-${line.kind}`)}
+              key={index}
+            >
+              {line.kind === "stdin" && (
+                <span className="argus-terminal__prompt">{prompt}</span>
+              )}
+              {line.time && <time>{line.time}</time>}
+              <span>{line.content}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!readOnly && mode === "line" && (
         <div className="argus-terminal__input">
@@ -215,7 +262,10 @@ export function TerminalEmulator({
             aria-label={placeholder ?? text("输入命令", "Type a command")}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={placeholder ?? text("输入命令并回车…", "Type a command and press Enter…")}
+            placeholder={
+              placeholder ??
+              text("输入命令并回车…", "Type a command and press Enter…")
+            }
             spellCheck={false}
             value={draft}
           />

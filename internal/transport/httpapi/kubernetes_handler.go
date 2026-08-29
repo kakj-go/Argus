@@ -25,7 +25,7 @@ func (handler KubernetesHandler) ListKubernetesClusters(ctx context.Context, _ k
 	if apiError != nil {
 		return kubernetesapi.ListKubernetesClustersdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
 	}
-	items, err := handler.Service.ListKubernetesClusters(ctx, p.EnterpriseIDValue(), p.DataScopeIDs)
+	items, err := handler.Service.ListKubernetesClusters(ctx, p.EnterpriseIDValue(), p.AuthorizedResourceIDs)
 	if err != nil {
 		return kubernetesapi.ListKubernetesClustersdefaultJSONResponse{Body: kubernetesError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}
@@ -41,7 +41,7 @@ func (handler KubernetesHandler) GetKubernetesCluster(ctx context.Context, reque
 	if apiError != nil {
 		return kubernetesapi.GetKubernetesClusterdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
 	}
-	item, err := handler.Service.GetKubernetesCluster(ctx, p.EnterpriseIDValue(), uuid.UUID(request.Id), p.DataScopeIDs)
+	item, err := handler.Service.GetKubernetesCluster(ctx, p.EnterpriseIDValue(), uuid.UUID(request.Id), p.AuthorizedResourceIDs)
 	if err != nil {
 		return kubernetesapi.GetKubernetesClusterdefaultJSONResponse{Body: kubernetesError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}

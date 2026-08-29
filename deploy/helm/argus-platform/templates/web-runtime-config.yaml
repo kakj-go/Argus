@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argus-web-runtime-config
+  namespace: {{ .Values.namespaces.system }}
+  labels:
+    app.kubernetes.io/part-of: argus
+data:
+  argus-runtime.json: |
+    {
+      "cardOrigin": {{ printf "https://%s" .Values.hosts.cards | quote }},
+      "platformLoginUrl": {{ printf "https://%s/login" .Values.hosts.platform | quote }}
+    }

@@ -14,6 +14,7 @@ import {
 import type { Secret, SecretType } from "@argus/api-client";
 import type { Credential } from "@argus/api-client/contracts";
 import {
+  ActionGroup,
   Alert,
   Badge,
   Button,
@@ -25,6 +26,7 @@ import {
   FormDrawer,
   Input,
   PageShell,
+  RowAction,
   Select,
   Spinner,
   Tabs,
@@ -332,8 +334,8 @@ export function SettingsSecretsPage() {
                     key: "actions",
                     header: t("settings.common.actions"),
                     render: (row) => (
-                      <span className="argus-settings-inline-actions">
-                        <Button
+                      <ActionGroup>
+                        <RowAction
                           onClick={() => {
                             setEditing(
                               secrets.data?.items.find(
@@ -342,12 +344,11 @@ export function SettingsSecretsPage() {
                             );
                             setDrawerOpen(true);
                           }}
-                          size="sm"
-                          variant="ghost"
                         >
                           {t("settings.common.edit")}
-                        </Button>
-                        <Button
+                        </RowAction>
+                        <RowAction
+                          danger
                           onClick={() =>
                             setDeleting(
                               secrets.data?.items.find(
@@ -355,12 +356,10 @@ export function SettingsSecretsPage() {
                               ) ?? null,
                             )
                           }
-                          size="sm"
-                          variant="ghost"
                         >
                           {t("settings.common.delete")}
-                        </Button>
-                      </span>
+                        </RowAction>
+                      </ActionGroup>
                     ),
                   },
                 ]}
@@ -409,16 +408,14 @@ export function SettingsSecretsPage() {
                     key: "actions",
                     header: t("settings.common.actions"),
                     render: (row) => (
-                      <Button
+                      <RowAction
                         onClick={() => {
                           setEditingCredential(row);
                           setCredentialDrawerOpen(true);
                         }}
-                        size="sm"
-                        variant="ghost"
                       >
                         {t("settings.common.edit")}
-                      </Button>
+                      </RowAction>
                     ),
                   },
                 ]}

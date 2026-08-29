@@ -38,6 +38,23 @@ JOIN roles r ON r.id = rb.role_id AND r.identity_key = 'enterprise_admin'
 WHERE (sqlc.narg(enterprise_id)::uuid IS NULL OR eu.enterprise_id = sqlc.narg(enterprise_id))
 ORDER BY eu.created_at, eu.id;
 
+-- name: IsUserEnterpriseAdmin :one
+SELECT EXISTS (
+  SELECT 1
+  FROM role_bindings rb
+  JOIN roles role ON role.id = rb.role_id
+    AND role.enterprise_id = rb.enterprise_id
+    AND role.identity_key = 'enterprise_admin'
+    AND role.builtin = true
+    AND role.status = 'active'
+  WHERE rb.enterprise_id = sqlc.arg(enterprise_id)
+    AND rb.status = 'active'
+    AND (rb.valid_from IS NULL OR rb.valid_from <= now())
+    AND (rb.valid_until IS NULL OR rb.valid_until > now())
+    AND ((rb.subject_type = 'user' AND rb.subject_id = sqlc.arg(user_id))
+      OR (rb.subject_type = 'department' AND rb.subject_id = sqlc.arg(department_id)))
+);
+
 -- name: DisableEnterpriseUser :one
 UPDATE enterprise_users SET status = 'disabled', authorization_version = authorization_version + 1,
   version = version + 1, updated_at = now()

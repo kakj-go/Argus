@@ -92,25 +92,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/enterprise/data-scopes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** listDataScopes. */
-        get: operations["listDataScopes"];
-        put?: never;
-        /** createDataScope. */
-        post: operations["createDataScope"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/enterprise/data-scopes/{id}": {
+    "/enterprise/users/{id}/role-assignments": {
         parameters: {
             query?: never;
             header?: never;
@@ -119,12 +101,30 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
-        /** updateDataScope. */
-        put: operations["updateDataScope"];
+        /** Get direct, inherited, and effective role assignments for an enterprise user. */
+        get: operations["getUserRoleAssignments"];
+        /** Atomically replace an enterprise user's direct role assignments. */
+        put: operations["replaceUserRoleAssignments"];
         post?: never;
-        /** disableDataScope. */
-        delete: operations["disableDataScope"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/data-authorizations/{subject_type}/{subject_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List explicit data authorization resources for a subject. */
+        get: operations["listDataAuthorizationResources"];
+        put?: never;
+        /** Add or remove explicit data authorization resources. */
+        post: operations["updateDataAuthorization"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -163,14 +163,12 @@ export interface components {
             subject_id: string;
             /** Format: uuid */
             role_id: string;
-            data_scope_ids: string[];
             /** Format: date-time */
             valid_from?: string;
             /** Format: date-time */
             valid_until?: string;
         };
         RoleBindingUpdate: {
-            data_scope_ids?: string[];
             /** Format: date-time */
             valid_from: string | null;
             /** Format: date-time */
@@ -184,29 +182,49 @@ export interface components {
             items: components["schemas"]["RoleBinding"][];
             page: components["schemas"]["CursorPage"];
         };
-        DataScopeCreate: {
-            name: string;
-            description?: string;
-            resource_types: ("host" | "kubernetes_cluster" | "kubernetes_namespace")[];
-            explicit_resource_ids: string[];
-            match_all?: boolean;
-            label_selector?: components["schemas"]["LabelSelector"];
+        UserRoleAssignments: {
+            direct_role_ids: string[];
+            inherited_roles: components["schemas"]["InheritedRoleAssignment"][];
+            effective_role_ids: string[];
+            /** Format: int64 */
+            authorization_version: number;
         };
-        DataScopeUpdate: {
+        UserRoleAssignmentsUpdate: {
+            /** Format: uuid */
+            department_id: string;
+            role_ids: string[];
+            /** Format: int64 */
+            expected_user_version: number;
+            /** Format: int64 */
+            expected_authorization_version: number;
+        };
+        /** @enum {string} */
+        DataAuthorizationSubjectType: "user" | "department" | "role" | "service_account";
+        /** @enum {string} */
+        DataAuthorizationResourceType: "host" | "kubernetes_cluster";
+        DataAuthorizationResource: {
+            resource_type: components["schemas"]["DataAuthorizationResourceType"];
+            /** Format: uuid */
+            resource_id: string;
             name: string;
-            description?: string;
-            resource_types: ("host" | "kubernetes_cluster" | "kubernetes_namespace")[];
-            explicit_resource_ids: string[];
-            match_all?: boolean;
-            label_selector?: components["schemas"]["LabelSelector"];
-            /** @enum {string} */
-            status?: "active" | "disabled";
+            direct: boolean;
+            inherited: boolean;
+            sources: string[];
+        };
+        DataAuthorizationPage: {
+            items: components["schemas"]["DataAuthorizationResource"][];
+            page: components["schemas"]["CursorPage"];
+            /** Format: int64 */
+            authorization_version: number;
+            /** Format: int64 */
+            affected_member_count: number;
+        };
+        DataAuthorizationBatch: {
+            resource_type: components["schemas"]["DataAuthorizationResourceType"];
+            resource_ids: string[];
+            remove: boolean;
             /** Format: int64 */
             expected_version: number;
-        };
-        DataScopePage: {
-            items: components["schemas"]["DataScope"][];
-            page: components["schemas"]["CursorPage"];
         };
         RequestId: string;
         ApiError: {
@@ -256,7 +274,6 @@ export interface components {
             subject_type: "user" | "department" | "service_account";
             subject_id: string;
             role_id: string;
-            data_scope_ids: string[];
             /** Format: date-time */
             valid_from?: string;
             /** Format: date-time */
@@ -270,51 +287,28 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        UserLabelKey: string;
-        SystemLabelKey: string;
-        LabelValue: string;
-        LabelRequirement: {
-            key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
+        InheritedRoleAssignment: {
+            /** Format: uuid */
+            role_id: string;
             /** @constant */
-            operator: "eq";
-            values: components["schemas"]["LabelValue"][];
-        } | {
-            key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
-            /** @constant */
-            operator: "in";
-            values: components["schemas"]["LabelValue"][];
-        } | {
-            key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
-            /** @enum {unknown} */
-            operator: "exists" | "not_exists";
-        };
-        LabelSelector: {
-            /** @constant */
-            schema_version: "argus.label_selector/v1";
-            requirements: components["schemas"]["LabelRequirement"][];
-        };
-        DataScope: {
-            id: string;
-            enterprise_id: string;
-            name: string;
-            description?: string;
-            resource_types: ("host" | "kubernetes_cluster" | "kubernetes_namespace")[];
-            explicit_resource_ids: string[];
-            match_all?: boolean;
-            label_selector?: components["schemas"]["LabelSelector"];
-            /** @enum {string} */
-            status: "active" | "disabled";
-            /** Format: int64 */
-            version: number;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
+            source_type: "department";
+            /** Format: uuid */
+            source_id: string;
+            source_name: string;
         };
     };
     responses: {
         /** @description Stable Argus API error. */
         Error: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
+        /** @description Stable API error. */
+        "responses-Error": {
             headers: {
                 [name: string]: unknown;
             };
@@ -330,6 +324,8 @@ export interface components {
         CsrfToken: string;
         ResourceId: string;
         ExpectedVersion: number;
+        "parameters-Limit": number;
+        "parameters-CsrfToken": string;
     };
     requestBodies: never;
     headers: never;
@@ -573,63 +569,35 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
-    listDataScopes: {
+    getUserRoleAssignments: {
         parameters: {
-            query?: {
-                cursor?: components["parameters"]["Cursor"];
-                limit?: components["parameters"]["Limit"];
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Data scopes. */
+            /** @description User role assignments. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataScopePage"];
+                    "application/json": components["schemas"]["UserRoleAssignments"];
                 };
             };
             default: components["responses"]["Error"];
         };
     };
-    createDataScope: {
+    replaceUserRoleAssignments: {
         parameters: {
             query?: never;
             header: {
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DataScopeCreate"];
-            };
-        };
-        responses: {
-            /** @description Data scope. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DataScope"];
-                };
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    updateDataScope: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
             };
             path: {
                 id: components["parameters"]["ResourceId"];
@@ -638,45 +606,77 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DataScopeUpdate"];
+                "application/json": components["schemas"]["UserRoleAssignmentsUpdate"];
             };
         };
         responses: {
-            /** @description Updated data scope. */
+            /** @description Updated user role assignments. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataScope"];
+                    "application/json": components["schemas"]["UserRoleAssignments"];
                 };
             };
             default: components["responses"]["Error"];
         };
     };
-    disableDataScope: {
+    listDataAuthorizationResources: {
         parameters: {
             query: {
-                expected_version: components["parameters"]["ExpectedVersion"];
+                resource_type: components["schemas"]["DataAuthorizationResourceType"];
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["parameters-Limit"];
             };
-            header: {
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
+            header?: never;
             path: {
-                id: components["parameters"]["ResourceId"];
+                subject_type: components["schemas"]["DataAuthorizationSubjectType"];
+                subject_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Data scope disabled. */
+            /** @description Resource authorization page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataAuthorizationPage"];
+                };
+            };
+            default: components["responses"]["responses-Error"];
+        };
+    };
+    updateDataAuthorization: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["parameters-CsrfToken"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                subject_type: components["schemas"]["DataAuthorizationSubjectType"];
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataAuthorizationBatch"];
+            };
+        };
+        responses: {
+            /** @description Authorization updated. */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            default: components["responses"]["Error"];
+            default: components["responses"]["responses-Error"];
         };
     };
 }

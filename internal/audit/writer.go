@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
@@ -22,6 +23,22 @@ var allowedDetailKeys = map[string]bool{
 	"resource_count": true, "elapsed_ms": true, "scanned_bytes": true,
 	"scanned_rows": true, "loaded_samples": true, "returned_rows": true,
 	"success": true, "error": true,
+	"trace_id": true, "outcome": true, "reason_code": true, "reason_codes": true,
+	"snapshot_hash": true, "matched_grants": true, "matched_rules": true,
+	"approval_workflows": true, "session_profile_sources": true, "source_versions": true,
+	"request_id": true, "lease_id": true, "remote_session_id": true, "target_summary": true,
+	"recording_id": true, "grant_id": true, "host_id": true, "managed_account_id": true,
+	"protocol": true, "connection_mode": true, "session_fence": true,
+	"recording_status": true, "chunk_count": true, "event_count": true,
+	"retention_until": true, "result_count": true, "chunk_sequence": true,
+	"id": true, "version": true, "subject_type": true, "subject_id": true,
+	"host_ids": true, "managed_account_ids": true, "protocols": true, "actions": true,
+	"source_cidrs": true, "effects": true, "workflow_id": true, "profile_id": true,
+	"minimum_approvals": true, "approver_role_ids": true, "separation_of_duties": true,
+	"timeout_effect": true, "escalation_role_ids": true, "recording_mode": true,
+	"command_audit_mode": true, "clipboard_mode": true, "file_upload_mode": true,
+	"file_download_mode": true, "port_forward_mode": true, "session_share_mode": true,
+	"max_session_seconds": true, "idle_timeout_seconds": true, "retention_days": true,
 }
 
 type Entry struct {
@@ -34,6 +51,7 @@ type Entry struct {
 	ResourceID   string
 	Result       string
 	Details      map[string]any
+	TraceID      string
 }
 
 func InitializeChain(ctx context.Context, queries *db.Queries, domain string, enterpriseID uuid.NullUUID) error {
@@ -49,7 +67,12 @@ func Append(ctx context.Context, queries *db.Queries, entry Entry) (db.AuditEven
 	if err != nil {
 		return db.AuditEvent{}, fmt.Errorf("lock audit chain: %w", err)
 	}
-	details, err := json.Marshal(sanitizeDetails(entry.Details))
+	detailValues := make(map[string]any, len(entry.Details)+1)
+	for key, value := range entry.Details {
+		detailValues[key] = value
+	}
+	detailValues["trace_id"] = auditTraceID(ctx, entry.TraceID)
+	details, err := json.Marshal(sanitizeDetails(detailValues))
 	if err != nil {
 		return db.AuditEvent{}, fmt.Errorf("encode audit details: %w", err)
 	}
@@ -115,18 +138,36 @@ func sanitizeValue(value any) any {
 	case string, bool, float64, int, int64, nil:
 		return typed
 	default:
-		return fmt.Sprint(typed)
+		encoded, err := json.Marshal(typed)
+		if err != nil {
+			return fmt.Sprint(typed)
+		}
+		var normalized any
+		if json.Unmarshal(encoded, &normalized) != nil {
+			return fmt.Sprint(typed)
+		}
+		return sanitizeValue(normalized)
 	}
 }
 
 func sensitiveKey(key string) bool {
 	lower := strings.ToLower(key)
-	for _, fragment := range []string{"password", "token", "secret", "credential", "csrf", "session", "api_key"} {
+	for _, fragment := range []string{"password", "token", "secret", "credential", "csrf", "cookie", "http_session", "api_key"} {
 		if strings.Contains(lower, fragment) {
 			return true
 		}
 	}
 	return false
+}
+
+func auditTraceID(ctx context.Context, explicit string) string {
+	if value := strings.TrimSpace(explicit); value != "" {
+		return value
+	}
+	if spanContext := trace.SpanContextFromContext(ctx); spanContext.IsValid() {
+		return spanContext.TraceID().String()
+	}
+	return strings.ReplaceAll(uuid.NewString(), "-", "")
 }
 
 func chainKey(domain string, enterpriseID uuid.NullUUID) string {

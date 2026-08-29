@@ -47,14 +47,7 @@ spec:
     - argus-connector-gateway.{{ .Values.namespaces.system }}.svc
     - argus-connector-gateway-headless
     - argus-connector-gateway-headless.{{ .Values.namespaces.system }}.svc
-    {{- if eq .Values.profile "production" }}
-    - {{ .Values.production.hosts.connector }}
-    {{- else }}
-    - localhost
-  ipAddresses:
-    - 127.0.0.1
-    - ::1
-    {{- end }}
+    - {{ .Values.hosts.connector }}
   privateKey:
     algorithm: ECDSA
     size: 256

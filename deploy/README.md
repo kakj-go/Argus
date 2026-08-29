@@ -44,15 +44,16 @@ go run ./cmd/argusctl verify --config deploy/.cache/evaluation-<run-id>.yaml --o
 
 `images build` starts a run-owned local registry container. `images load` uses a privileged, run-labelled DaemonSet to import the exact images into the node containerd `k8s.io` namespace. Evaluation workloads use `imagePullPolicy: Never`.
 
-Expose the two portals and internal Card Runtime while testing:
+For iterative local development after the first install, `make dev-upgrade` chains the light-weight update path in one step: `images build` → `images load` → rollout restart of every Argus deployment → wait for readiness. It skips the full `install` flow (Helm stages, secrets, migrations). The install config defaults to `deploy/.cache/argus-install-dev.yaml`; override with `DEV_CONFIG=...` (also `DEV_SYSTEM_NAMESPACE`, `DEV_OBSERVABILITY_NAMESPACE`, `KUBECTL` for another kube context).
 
-```bash
-go run ./cmd/argusctl tunnel --config deploy/.cache/evaluation-<run-id>.yaml
-```
+Portals are exposed through the ingress with mandatory TLS; map the install-config hosts to the ingress load-balancer address (for example in `/etc/hosts` on Docker Desktop):
 
-- Enterprise: `http://127.0.0.1:4173`
-- Platform and first-time setup: `http://127.0.0.1:4174`
-- Card Runtime (internal): `http://127.0.0.1:4176`
+- Enterprise (terminal WSS is same-origin: `wss://argus.dev/v1/sessions`): `https://argus.dev`
+- Platform and first-time setup: `https://platform.argus.dev`
+- Card Runtime (internal): `https://cards.argus.dev`
+- Connector mTLS: `grpcs://connector.argus.dev:9443` (dedicated LoadBalancer service)
+
+With `tls.mode: cert-manager-selfsigned`, trust the generated CA (available in secret `argus-web-tls`, key `ca.crt`; one multi-SAN certificate covers all three hosts) before first browser access.
 
 首次安装成功时，`argusctl install` 会在最终摘要中只显示一次包含 Setup Token Fragment 的 Platform 初始化链接。初始化者直接打开该链接，无需手工输入 Token；Platform 会立即从地址栏移除 Fragment，Token 只在当前页面内存中保留。链接遗失或过期时，在系统仍未初始化的前提下运行：
 

@@ -102,12 +102,10 @@ export interface components {
             name: string;
             description?: string;
             allowed_tool_ids: string[];
-            data_scope_ids: string[];
         };
         ServiceAccountUpdate: {
             description?: string;
             allowed_tool_ids?: string[];
-            data_scope_ids?: string[];
             /** @enum {string} */
             status?: "active" | "disabled";
             /** Format: int64 */
@@ -153,7 +151,6 @@ export interface components {
             /** @enum {string} */
             status: "active" | "disabled";
             allowed_tool_ids?: string[];
-            data_scope_ids?: string[];
             authorization_version: components["schemas"]["AuthorizationVersion"];
             /** Format: int64 */
             version: number;

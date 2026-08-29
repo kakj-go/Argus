@@ -12,6 +12,7 @@ import {
   type EnterpriseAdmin,
 } from "@argus/api-client";
 import {
+  ActionGroup,
   Alert,
   Button,
   CodeBlock,
@@ -22,6 +23,7 @@ import {
   FormDrawer,
   Input,
   PageShell,
+  RowAction,
   Select,
   Spinner,
   StatusBadge,
@@ -271,28 +273,25 @@ export function AdminsPage() {
                 key: "id",
                 header: t("common.actions"),
                 render: (row) => (
-                  <div className="argus-row-actions">
-                    <Button
+                  <ActionGroup>
+                    <RowAction
                       onClick={() =>
                         setPendingAction({ type: "resetAuth", admin: row })
                       }
-                      size="sm"
-                      variant="ghost"
                     >
                       {t("admins.action.resetAuth")}
-                    </Button>
+                    </RowAction>
                     {row.credentialStatus !== "disabled" && (
-                      <Button
+                      <RowAction
+                        danger
                         onClick={() =>
                           setPendingAction({ type: "disable", admin: row })
                         }
-                        size="sm"
-                        variant="ghost"
                       >
                         {t("admins.action.disable")}
-                      </Button>
+                      </RowAction>
                     )}
-                  </div>
+                  </ActionGroup>
                 ),
               },
             ]}

@@ -10,6 +10,7 @@ import {
 } from "@argus/api-client";
 import {
   Badge,
+  ActionGroup,
   Button,
   Card,
   CardContent,
@@ -140,7 +141,7 @@ function ConnectorCard({
         action={
           !rotating &&
           !uninstallAction && (
-            <span className="argus-inline-actions">
+            <ActionGroup>
               <Button
                 onClick={() => {
                   setRotating(true);
@@ -159,7 +160,7 @@ function ConnectorCard({
                   {t("hosts.components.uninstall")}
                 </Button>
               ) : null}
-            </span>
+            </ActionGroup>
           )
         }
         title={

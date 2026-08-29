@@ -12,20 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const addRoleBindingDataScope = `-- name: AddRoleBindingDataScope :exec
-INSERT INTO role_binding_data_scopes (role_binding_id, data_scope_id, enterprise_id)
-VALUES ($1, $2, $3)
+const addDataAuthorizationGrant = `-- name: AddDataAuthorizationGrant :one
+INSERT INTO data_authorization_grants (id, enterprise_id, subject_type, subject_id, resource_type, resource_id, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (enterprise_id, subject_type, subject_id, resource_type, resource_id)
+DO UPDATE SET status = 'active', version = data_authorization_grants.version + 1, updated_at = now()
+RETURNING id, enterprise_id, subject_type, subject_id, resource_type, resource_id, status, version, created_by, created_at, updated_at
 `
 
-type AddRoleBindingDataScopeParams struct {
-	RoleBindingID uuid.UUID `json:"role_binding_id"`
-	DataScopeID   uuid.UUID `json:"data_scope_id"`
-	EnterpriseID  uuid.UUID `json:"enterprise_id"`
+type AddDataAuthorizationGrantParams struct {
+	ID           uuid.UUID     `json:"id"`
+	EnterpriseID uuid.UUID     `json:"enterprise_id"`
+	SubjectType  string        `json:"subject_type"`
+	SubjectID    uuid.UUID     `json:"subject_id"`
+	ResourceType string        `json:"resource_type"`
+	ResourceID   uuid.UUID     `json:"resource_id"`
+	CreatedBy    uuid.NullUUID `json:"created_by"`
 }
 
-func (q *Queries) AddRoleBindingDataScope(ctx context.Context, arg AddRoleBindingDataScopeParams) error {
-	_, err := q.db.Exec(ctx, addRoleBindingDataScope, arg.RoleBindingID, arg.DataScopeID, arg.EnterpriseID)
-	return err
+func (q *Queries) AddDataAuthorizationGrant(ctx context.Context, arg AddDataAuthorizationGrantParams) (DataAuthorizationGrant, error) {
+	row := q.db.QueryRow(ctx, addDataAuthorizationGrant,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.SubjectType,
+		arg.SubjectID,
+		arg.ResourceType,
+		arg.ResourceID,
+		arg.CreatedBy,
+	)
+	var i DataAuthorizationGrant
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.SubjectType,
+		&i.SubjectID,
+		&i.ResourceType,
+		&i.ResourceID,
+		&i.Status,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const addRolePermission = `-- name: AddRolePermission :exec
@@ -42,55 +71,80 @@ func (q *Queries) AddRolePermission(ctx context.Context, arg AddRolePermissionPa
 	return err
 }
 
-const createDataScope = `-- name: CreateDataScope :one
-INSERT INTO data_scopes (
-  id, enterprise_id, name, description, resource_types, explicit_resource_ids,
-  label_selector, selector_hash, match_all
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at, match_all
+const countEnterpriseIAMManagers = `-- name: CountEnterpriseIAMManagers :one
+SELECT count(*)::bigint
+FROM enterprise_users enterprise_user
+WHERE enterprise_user.enterprise_id = $1
+  AND enterprise_user.status = 'active'
+  AND EXISTS (
+    SELECT 1
+    FROM role_bindings binding
+    JOIN roles role ON role.id = binding.role_id AND role.enterprise_id = binding.enterprise_id AND role.status = 'active'
+    WHERE binding.enterprise_id = enterprise_user.enterprise_id
+      AND binding.status = 'active'
+      AND (binding.valid_from IS NULL OR binding.valid_from <= now())
+      AND (binding.valid_until IS NULL OR binding.valid_until > now())
+      AND ((binding.subject_type = 'user' AND binding.subject_id = enterprise_user.id)
+        OR (binding.subject_type = 'department' AND binding.subject_id = enterprise_user.department_id))
+      AND EXISTS (SELECT 1 FROM role_permissions permission WHERE permission.role_id = role.id AND permission.permission_id = 'identity.manage')
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM role_bindings binding
+    JOIN roles role ON role.id = binding.role_id AND role.enterprise_id = binding.enterprise_id AND role.status = 'active'
+    WHERE binding.enterprise_id = enterprise_user.enterprise_id
+      AND binding.status = 'active'
+      AND (binding.valid_from IS NULL OR binding.valid_from <= now())
+      AND (binding.valid_until IS NULL OR binding.valid_until > now())
+      AND ((binding.subject_type = 'user' AND binding.subject_id = enterprise_user.id)
+        OR (binding.subject_type = 'department' AND binding.subject_id = enterprise_user.department_id))
+      AND EXISTS (SELECT 1 FROM role_permissions permission WHERE permission.role_id = role.id AND permission.permission_id = 'role.manage')
+  )
 `
 
-type CreateDataScopeParams struct {
-	ID                  uuid.UUID `json:"id"`
-	EnterpriseID        uuid.UUID `json:"enterprise_id"`
-	Name                string    `json:"name"`
-	Description         string    `json:"description"`
-	ResourceTypes       []string  `json:"resource_types"`
-	ExplicitResourceIds []string  `json:"explicit_resource_ids"`
-	LabelSelector       []byte    `json:"label_selector"`
-	SelectorHash        []byte    `json:"selector_hash"`
-	MatchAll            bool      `json:"match_all"`
+func (q *Queries) CountEnterpriseIAMManagers(ctx context.Context, enterpriseID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countEnterpriseIAMManagers, enterpriseID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
-func (q *Queries) CreateDataScope(ctx context.Context, arg CreateDataScopeParams) (DataScope, error) {
-	row := q.db.QueryRow(ctx, createDataScope,
-		arg.ID,
-		arg.EnterpriseID,
-		arg.Name,
-		arg.Description,
-		arg.ResourceTypes,
-		arg.ExplicitResourceIds,
-		arg.LabelSelector,
-		arg.SelectorHash,
-		arg.MatchAll,
-	)
-	var i DataScope
-	err := row.Scan(
-		&i.ID,
-		&i.EnterpriseID,
-		&i.Name,
-		&i.Description,
-		&i.ResourceTypes,
-		&i.ExplicitResourceIds,
-		&i.LabelSelector,
-		&i.SelectorHash,
-		&i.Status,
-		&i.Version,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.MatchAll,
-	)
-	return i, err
+const countRoleMembers = `-- name: CountRoleMembers :one
+WITH members AS (
+  SELECT eu.id AS member_id
+  FROM enterprise_users eu
+  JOIN role_bindings rb ON rb.enterprise_id = eu.enterprise_id
+    AND rb.subject_type = 'user' AND rb.subject_id = eu.id
+    AND rb.role_id = $1 AND rb.status = 'active'
+  WHERE eu.enterprise_id = $2 AND eu.status = 'active'
+  UNION
+  SELECT eu.id
+  FROM enterprise_users eu
+  JOIN role_bindings rb ON rb.enterprise_id = eu.enterprise_id
+    AND rb.subject_type = 'department' AND rb.subject_id = eu.department_id
+    AND rb.role_id = $1 AND rb.status = 'active'
+  WHERE eu.enterprise_id = $2 AND eu.status = 'active'
+), machine_members AS (
+  SELECT sa.id AS member_id
+  FROM service_accounts sa
+  JOIN role_bindings rb ON rb.enterprise_id = sa.enterprise_id
+    AND rb.subject_type = 'service_account' AND rb.subject_id = sa.id
+    AND rb.role_id = $1 AND rb.status = 'active'
+  WHERE sa.enterprise_id = $2 AND sa.status = 'active'
+)
+SELECT ((SELECT count(*) FROM members) + (SELECT count(*) FROM machine_members))::bigint
+`
+
+type CountRoleMembersParams struct {
+	RoleID       uuid.UUID `json:"role_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) CountRoleMembers(ctx context.Context, arg CountRoleMembersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRoleMembers, arg.RoleID, arg.EnterpriseID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const createRole = `-- name: CreateRole :one
@@ -185,6 +239,77 @@ func (q *Queries) DeleteRolePermissions(ctx context.Context, roleID uuid.UUID) e
 	return err
 }
 
+const disableDataAuthorizationGrant = `-- name: DisableDataAuthorizationGrant :exec
+UPDATE data_authorization_grants
+SET status = 'disabled', version = version + 1, updated_at = now()
+WHERE enterprise_id = $1
+  AND subject_type = $2
+  AND subject_id = $3
+  AND resource_type = $4
+  AND resource_id = $5
+  AND status = 'active'
+`
+
+type DisableDataAuthorizationGrantParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	SubjectType  string    `json:"subject_type"`
+	SubjectID    uuid.UUID `json:"subject_id"`
+	ResourceType string    `json:"resource_type"`
+	ResourceID   uuid.UUID `json:"resource_id"`
+}
+
+func (q *Queries) DisableDataAuthorizationGrant(ctx context.Context, arg DisableDataAuthorizationGrantParams) error {
+	_, err := q.db.Exec(ctx, disableDataAuthorizationGrant,
+		arg.EnterpriseID,
+		arg.SubjectType,
+		arg.SubjectID,
+		arg.ResourceType,
+		arg.ResourceID,
+	)
+	return err
+}
+
+const disableUserRoleBindingsExcept = `-- name: DisableUserRoleBindingsExcept :exec
+UPDATE role_bindings
+SET status = 'disabled', version = version + 1, updated_at = now()
+WHERE enterprise_id = $1
+  AND subject_type = 'user'
+  AND subject_id = $2
+  AND status = 'active'
+  AND NOT (role_id = ANY($3::uuid[]))
+`
+
+type DisableUserRoleBindingsExceptParams struct {
+	EnterpriseID uuid.UUID   `json:"enterprise_id"`
+	UserID       uuid.UUID   `json:"user_id"`
+	RoleIds      []uuid.UUID `json:"role_ids"`
+}
+
+func (q *Queries) DisableUserRoleBindingsExcept(ctx context.Context, arg DisableUserRoleBindingsExceptParams) error {
+	_, err := q.db.Exec(ctx, disableUserRoleBindingsExcept, arg.EnterpriseID, arg.UserID, arg.RoleIds)
+	return err
+}
+
+const getAuthorizationVersion = `-- name: GetAuthorizationVersion :one
+SELECT COALESCE((SELECT version FROM authorization_versions
+WHERE enterprise_id = $1
+  AND subject_type = $2
+  AND subject_id = $3), 1)::bigint AS version
+`
+
+type GetAuthorizationVersionParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	SubjectType  string    `json:"subject_type"`
+	SubjectID    uuid.UUID `json:"subject_id"`
+}
+
+func (q *Queries) GetAuthorizationVersion(ctx context.Context, arg GetAuthorizationVersionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getAuthorizationVersion, arg.EnterpriseID, arg.SubjectType, arg.SubjectID)
+	var version int64
+	err := row.Scan(&version)
+	return version, err
+}
+
 const getBuiltinRole = `-- name: GetBuiltinRole :one
 SELECT id, enterprise_id, identity_key, name, description, builtin, status, version, created_at, updated_at FROM roles WHERE enterprise_id = $1 AND identity_key = $2 AND builtin = true
 `
@@ -208,36 +333,6 @@ func (q *Queries) GetBuiltinRole(ctx context.Context, arg GetBuiltinRoleParams) 
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getDataScope = `-- name: GetDataScope :one
-SELECT id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at, match_all FROM data_scopes WHERE id = $1 AND enterprise_id = $2
-`
-
-type GetDataScopeParams struct {
-	ID           uuid.UUID `json:"id"`
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-}
-
-func (q *Queries) GetDataScope(ctx context.Context, arg GetDataScopeParams) (DataScope, error) {
-	row := q.db.QueryRow(ctx, getDataScope, arg.ID, arg.EnterpriseID)
-	var i DataScope
-	err := row.Scan(
-		&i.ID,
-		&i.EnterpriseID,
-		&i.Name,
-		&i.Description,
-		&i.ResourceTypes,
-		&i.ExplicitResourceIds,
-		&i.LabelSelector,
-		&i.SelectorHash,
-		&i.Status,
-		&i.Version,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.MatchAll,
 	)
 	return i, err
 }
@@ -297,33 +392,49 @@ func (q *Queries) GetRoleBinding(ctx context.Context, arg GetRoleBindingParams) 
 	return i, err
 }
 
-const listDataScopes = `-- name: ListDataScopes :many
-SELECT id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at, match_all FROM data_scopes WHERE enterprise_id = $1 ORDER BY created_at, id
+const listDataAuthorizationGrants = `-- name: ListDataAuthorizationGrants :many
+SELECT id, enterprise_id, subject_type, subject_id, resource_type, resource_id, status, version, created_by, created_at, updated_at FROM data_authorization_grants
+WHERE enterprise_id = $1
+  AND subject_type = $2
+  AND subject_id = $3
+  AND resource_type = $4
+  AND status = 'active'
+ORDER BY resource_id
 `
 
-func (q *Queries) ListDataScopes(ctx context.Context, enterpriseID uuid.UUID) ([]DataScope, error) {
-	rows, err := q.db.Query(ctx, listDataScopes, enterpriseID)
+type ListDataAuthorizationGrantsParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	SubjectType  string    `json:"subject_type"`
+	SubjectID    uuid.UUID `json:"subject_id"`
+	ResourceType string    `json:"resource_type"`
+}
+
+func (q *Queries) ListDataAuthorizationGrants(ctx context.Context, arg ListDataAuthorizationGrantsParams) ([]DataAuthorizationGrant, error) {
+	rows, err := q.db.Query(ctx, listDataAuthorizationGrants,
+		arg.EnterpriseID,
+		arg.SubjectType,
+		arg.SubjectID,
+		arg.ResourceType,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []DataScope{}
+	items := []DataAuthorizationGrant{}
 	for rows.Next() {
-		var i DataScope
+		var i DataAuthorizationGrant
 		if err := rows.Scan(
 			&i.ID,
 			&i.EnterpriseID,
-			&i.Name,
-			&i.Description,
-			&i.ResourceTypes,
-			&i.ExplicitResourceIds,
-			&i.LabelSelector,
-			&i.SelectorHash,
+			&i.SubjectType,
+			&i.SubjectID,
+			&i.ResourceType,
+			&i.ResourceID,
 			&i.Status,
 			&i.Version,
+			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.MatchAll,
 		); err != nil {
 			return nil, err
 		}
@@ -335,43 +446,93 @@ func (q *Queries) ListDataScopes(ctx context.Context, enterpriseID uuid.UUID) ([
 	return items, nil
 }
 
-const listEffectiveUserDataScopes = `-- name: ListEffectiveUserDataScopes :many
-SELECT DISTINCT rbs.data_scope_id
-FROM role_bindings rb
-JOIN role_binding_data_scopes rbs
-  ON rbs.role_binding_id = rb.id AND rbs.enterprise_id = rb.enterprise_id
-JOIN roles r
-  ON r.id = rb.role_id AND r.enterprise_id = rb.enterprise_id AND r.status = 'active'
-JOIN data_scopes ds
-  ON ds.id = rbs.data_scope_id AND ds.enterprise_id = rb.enterprise_id AND ds.status = 'active'
-WHERE rb.enterprise_id = $1
-  AND rb.status = 'active'
-  AND (rb.valid_from IS NULL OR rb.valid_from <= now())
-  AND (rb.valid_until IS NULL OR rb.valid_until > now())
-  AND ((rb.subject_type = 'user' AND rb.subject_id = $2)
-    OR (rb.subject_type = 'department' AND rb.subject_id = $3))
-ORDER BY rbs.data_scope_id
+const listDepartmentAuthorizedResourceIDs = `-- name: ListDepartmentAuthorizedResourceIDs :many
+SELECT DISTINCT dag.resource_id
+FROM data_authorization_grants dag
+JOIN role_bindings rb
+  ON dag.subject_type = 'role'
+ AND rb.role_id = dag.subject_id
+ AND rb.enterprise_id = dag.enterprise_id
+ AND rb.subject_type = 'department'
+ AND rb.subject_id = $1
+ AND rb.status = 'active'
+WHERE dag.enterprise_id = $2
+  AND dag.resource_type = $3
+  AND dag.status = 'active'
+ORDER BY dag.resource_id
 `
 
-type ListEffectiveUserDataScopesParams struct {
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-	UserID       uuid.UUID `json:"user_id"`
+type ListDepartmentAuthorizedResourceIDsParams struct {
 	DepartmentID uuid.UUID `json:"department_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	ResourceType string    `json:"resource_type"`
 }
 
-func (q *Queries) ListEffectiveUserDataScopes(ctx context.Context, arg ListEffectiveUserDataScopesParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listEffectiveUserDataScopes, arg.EnterpriseID, arg.UserID, arg.DepartmentID)
+func (q *Queries) ListDepartmentAuthorizedResourceIDs(ctx context.Context, arg ListDepartmentAuthorizedResourceIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDepartmentAuthorizedResourceIDs, arg.DepartmentID, arg.EnterpriseID, arg.ResourceType)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	items := []uuid.UUID{}
 	for rows.Next() {
-		var data_scope_id uuid.UUID
-		if err := rows.Scan(&data_scope_id); err != nil {
+		var resource_id uuid.UUID
+		if err := rows.Scan(&resource_id); err != nil {
 			return nil, err
 		}
-		items = append(items, data_scope_id)
+		items = append(items, resource_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEffectiveRoleBindingsForSubject = `-- name: ListEffectiveRoleBindingsForSubject :many
+SELECT binding.id, binding.enterprise_id, binding.subject_type, binding.subject_id, binding.role_id, binding.valid_from, binding.valid_until, binding.status, binding.version, binding.created_at, binding.updated_at
+FROM role_bindings binding
+JOIN roles role ON role.id = binding.role_id AND role.enterprise_id = binding.enterprise_id
+WHERE binding.enterprise_id = $1
+  AND binding.subject_type = $2
+  AND binding.subject_id = $3
+  AND binding.status = 'active'
+  AND role.status = 'active'
+  AND (binding.valid_from IS NULL OR binding.valid_from <= now())
+  AND (binding.valid_until IS NULL OR binding.valid_until > now())
+ORDER BY binding.created_at, binding.id
+`
+
+type ListEffectiveRoleBindingsForSubjectParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	SubjectType  string    `json:"subject_type"`
+	SubjectID    uuid.UUID `json:"subject_id"`
+}
+
+func (q *Queries) ListEffectiveRoleBindingsForSubject(ctx context.Context, arg ListEffectiveRoleBindingsForSubjectParams) ([]RoleBinding, error) {
+	rows, err := q.db.Query(ctx, listEffectiveRoleBindingsForSubject, arg.EnterpriseID, arg.SubjectType, arg.SubjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RoleBinding{}
+	for rows.Next() {
+		var i RoleBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.SubjectType,
+			&i.SubjectID,
+			&i.RoleID,
+			&i.ValidFrom,
+			&i.ValidUntil,
+			&i.Status,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -396,30 +557,6 @@ func (q *Queries) ListPermissions(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRoleBindingDataScopes = `-- name: ListRoleBindingDataScopes :many
-SELECT data_scope_id FROM role_binding_data_scopes WHERE role_binding_id = $1 ORDER BY data_scope_id
-`
-
-func (q *Queries) ListRoleBindingDataScopes(ctx context.Context, roleBindingID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listRoleBindingDataScopes, roleBindingID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []uuid.UUID{}
-	for rows.Next() {
-		var data_scope_id uuid.UUID
-		if err := rows.Scan(&data_scope_id); err != nil {
-			return nil, err
-		}
-		items = append(items, data_scope_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -522,46 +659,45 @@ func (q *Queries) ListRoles(ctx context.Context, enterpriseID uuid.UUID) ([]Role
 	return items, nil
 }
 
-const listSubjectsForDataScope = `-- name: ListSubjectsForDataScope :many
-SELECT DISTINCT subject_type, subject_id FROM (
-  SELECT 'user'::text AS subject_type, rb.subject_id
-  FROM role_bindings rb JOIN role_binding_data_scopes rbs ON rbs.role_binding_id = rb.id
-  WHERE rbs.enterprise_id = $1 AND rbs.data_scope_id = $2 AND rb.subject_type = 'user' AND rb.status = 'active'
-  UNION ALL
-  SELECT 'user'::text, eu.id
-  FROM role_bindings rb JOIN role_binding_data_scopes rbs ON rbs.role_binding_id = rb.id
-  JOIN enterprise_users eu ON eu.department_id = rb.subject_id AND eu.enterprise_id = rb.enterprise_id
-  WHERE rbs.enterprise_id = $1 AND rbs.data_scope_id = $2 AND rb.subject_type = 'department' AND rb.status = 'active' AND eu.status = 'active'
-  UNION ALL
-  SELECT 'service_account'::text, sad.service_account_id
-  FROM service_account_data_scopes sad JOIN service_accounts sa ON sa.id = sad.service_account_id
-  WHERE sad.enterprise_id = $1 AND sad.data_scope_id = $2 AND sa.status = 'active'
-) affected ORDER BY subject_type, subject_id
+const listServiceAccountAuthorizedResourceIDs = `-- name: ListServiceAccountAuthorizedResourceIDs :many
+SELECT DISTINCT dag.resource_id
+FROM data_authorization_grants dag
+LEFT JOIN role_bindings rb
+  ON dag.subject_type = 'role'
+ AND rb.role_id = dag.subject_id
+ AND rb.enterprise_id = dag.enterprise_id
+ AND rb.subject_type = 'service_account'
+ AND rb.subject_id = $1
+ AND rb.status = 'active'
+WHERE dag.enterprise_id = $2
+  AND dag.resource_type = $3
+  AND dag.status = 'active'
+  AND (
+    (dag.subject_type = 'service_account' AND dag.subject_id = $1)
+    OR rb.id IS NOT NULL
+  )
+ORDER BY dag.resource_id
 `
 
-type ListSubjectsForDataScopeParams struct {
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-	DataScopeID  uuid.UUID `json:"data_scope_id"`
+type ListServiceAccountAuthorizedResourceIDsParams struct {
+	ServiceAccountID uuid.UUID `json:"service_account_id"`
+	EnterpriseID     uuid.UUID `json:"enterprise_id"`
+	ResourceType     string    `json:"resource_type"`
 }
 
-type ListSubjectsForDataScopeRow struct {
-	SubjectType string    `json:"subject_type"`
-	SubjectID   uuid.UUID `json:"subject_id"`
-}
-
-func (q *Queries) ListSubjectsForDataScope(ctx context.Context, arg ListSubjectsForDataScopeParams) ([]ListSubjectsForDataScopeRow, error) {
-	rows, err := q.db.Query(ctx, listSubjectsForDataScope, arg.EnterpriseID, arg.DataScopeID)
+func (q *Queries) ListServiceAccountAuthorizedResourceIDs(ctx context.Context, arg ListServiceAccountAuthorizedResourceIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listServiceAccountAuthorizedResourceIDs, arg.ServiceAccountID, arg.EnterpriseID, arg.ResourceType)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListSubjectsForDataScopeRow{}
+	items := []uuid.UUID{}
 	for rows.Next() {
-		var i ListSubjectsForDataScopeRow
-		if err := rows.Scan(&i.SubjectType, &i.SubjectID); err != nil {
+		var resource_id uuid.UUID
+		if err := rows.Scan(&resource_id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, resource_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -569,70 +705,165 @@ func (q *Queries) ListSubjectsForDataScope(ctx context.Context, arg ListSubjects
 	return items, nil
 }
 
-const replaceRoleBindingDataScopes = `-- name: ReplaceRoleBindingDataScopes :exec
-DELETE FROM role_binding_data_scopes WHERE role_binding_id = $1
+const listServiceAccountIDsForRole = `-- name: ListServiceAccountIDsForRole :many
+SELECT DISTINCT sa.id
+FROM service_accounts sa
+JOIN role_bindings rb ON rb.enterprise_id = sa.enterprise_id
+ AND rb.subject_type = 'service_account' AND rb.subject_id = sa.id
+ AND rb.role_id = $1 AND rb.status = 'active'
+WHERE sa.enterprise_id = $2 AND sa.status = 'active'
 `
 
-func (q *Queries) ReplaceRoleBindingDataScopes(ctx context.Context, roleBindingID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, replaceRoleBindingDataScopes, roleBindingID)
-	return err
+type ListServiceAccountIDsForRoleParams struct {
+	RoleID       uuid.UUID `json:"role_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
 }
 
-const updateDataScope = `-- name: UpdateDataScope :one
-UPDATE data_scopes SET
-  name = $3, description = $4, resource_types = $5,
-  explicit_resource_ids = $6, label_selector = $7, selector_hash = $8,
-  match_all = COALESCE($9, match_all),
-  status = COALESCE($10, status), version = version + 1, updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND version = $11
-RETURNING id, enterprise_id, name, description, resource_types, explicit_resource_ids, label_selector, selector_hash, status, version, created_at, updated_at, match_all
+func (q *Queries) ListServiceAccountIDsForRole(ctx context.Context, arg ListServiceAccountIDsForRoleParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listServiceAccountIDsForRole, arg.RoleID, arg.EnterpriseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserAuthorizedResourceIDs = `-- name: ListUserAuthorizedResourceIDs :many
+SELECT DISTINCT dag.resource_id
+FROM data_authorization_grants dag
+LEFT JOIN enterprise_users eu
+  ON dag.subject_type = 'department'
+ AND eu.department_id = dag.subject_id
+ AND eu.enterprise_id = dag.enterprise_id
+ AND eu.id = $1
+LEFT JOIN role_bindings rb
+  ON dag.subject_type = 'role'
+ AND rb.role_id = dag.subject_id
+ AND rb.enterprise_id = dag.enterprise_id
+ AND rb.subject_type IN ('user', 'department')
+ AND rb.status = 'active'
+LEFT JOIN enterprise_users role_eu
+  ON rb.subject_type = 'department'
+ AND role_eu.department_id = rb.subject_id
+ AND role_eu.enterprise_id = rb.enterprise_id
+ AND role_eu.id = $1
+WHERE dag.enterprise_id = $2
+  AND dag.resource_type = $3
+  AND dag.status = 'active'
+  AND (
+    (dag.subject_type = 'user' AND dag.subject_id = $1)
+    OR (dag.subject_type = 'department' AND eu.id IS NOT NULL)
+    OR (dag.subject_type = 'role' AND (
+      EXISTS (SELECT 1 FROM role_bindings rbu WHERE rbu.enterprise_id = dag.enterprise_id AND rbu.subject_type = 'user' AND rbu.subject_id = $1 AND rbu.role_id = dag.subject_id AND rbu.status = 'active')
+      OR role_eu.id IS NOT NULL
+    ))
+  )
+ORDER BY dag.resource_id
 `
 
-type UpdateDataScopeParams struct {
-	ID                  uuid.UUID   `json:"id"`
-	EnterpriseID        uuid.UUID   `json:"enterprise_id"`
-	Name                string      `json:"name"`
-	Description         string      `json:"description"`
-	ResourceTypes       []string    `json:"resource_types"`
-	ExplicitResourceIds []string    `json:"explicit_resource_ids"`
-	LabelSelector       []byte      `json:"label_selector"`
-	SelectorHash        []byte      `json:"selector_hash"`
-	MatchAll            pgtype.Bool `json:"match_all"`
-	Status              pgtype.Text `json:"status"`
-	ExpectedVersion     int64       `json:"expected_version"`
+type ListUserAuthorizedResourceIDsParams struct {
+	UserID       uuid.UUID `json:"user_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	ResourceType string    `json:"resource_type"`
 }
 
-func (q *Queries) UpdateDataScope(ctx context.Context, arg UpdateDataScopeParams) (DataScope, error) {
-	row := q.db.QueryRow(ctx, updateDataScope,
-		arg.ID,
-		arg.EnterpriseID,
-		arg.Name,
-		arg.Description,
-		arg.ResourceTypes,
-		arg.ExplicitResourceIds,
-		arg.LabelSelector,
-		arg.SelectorHash,
-		arg.MatchAll,
-		arg.Status,
-		arg.ExpectedVersion,
-	)
-	var i DataScope
-	err := row.Scan(
-		&i.ID,
-		&i.EnterpriseID,
-		&i.Name,
-		&i.Description,
-		&i.ResourceTypes,
-		&i.ExplicitResourceIds,
-		&i.LabelSelector,
-		&i.SelectorHash,
-		&i.Status,
-		&i.Version,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.MatchAll,
-	)
-	return i, err
+func (q *Queries) ListUserAuthorizedResourceIDs(ctx context.Context, arg ListUserAuthorizedResourceIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserAuthorizedResourceIDs, arg.UserID, arg.EnterpriseID, arg.ResourceType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var resource_id uuid.UUID
+		if err := rows.Scan(&resource_id); err != nil {
+			return nil, err
+		}
+		items = append(items, resource_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserIDsForDepartmentRole = `-- name: ListUserIDsForDepartmentRole :many
+SELECT DISTINCT eu.id
+FROM enterprise_users eu
+JOIN role_bindings rb ON rb.enterprise_id = eu.enterprise_id
+ AND rb.subject_type = 'department' AND rb.subject_id = eu.department_id
+ AND rb.role_id = $1 AND rb.status = 'active'
+WHERE eu.enterprise_id = $2 AND eu.status = 'active'
+`
+
+type ListUserIDsForDepartmentRoleParams struct {
+	RoleID       uuid.UUID `json:"role_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) ListUserIDsForDepartmentRole(ctx context.Context, arg ListUserIDsForDepartmentRoleParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserIDsForDepartmentRole, arg.RoleID, arg.EnterpriseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserIDsForRole = `-- name: ListUserIDsForRole :many
+SELECT DISTINCT eu.id
+FROM enterprise_users eu
+JOIN role_bindings rb ON rb.enterprise_id = eu.enterprise_id
+ AND rb.subject_type = 'user' AND rb.subject_id = eu.id
+ AND rb.role_id = $1 AND rb.status = 'active'
+WHERE eu.enterprise_id = $2
+`
+
+type ListUserIDsForRoleParams struct {
+	RoleID       uuid.UUID `json:"role_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) ListUserIDsForRole(ctx context.Context, arg ListUserIDsForRoleParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserIDsForRole, arg.RoleID, arg.EnterpriseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateRole = `-- name: UpdateRole :one
@@ -712,6 +943,46 @@ func (q *Queries) UpdateRoleBinding(ctx context.Context, arg UpdateRoleBindingPa
 		arg.ID,
 		arg.EnterpriseID,
 		arg.ExpectedVersion,
+	)
+	var i RoleBinding
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.SubjectType,
+		&i.SubjectID,
+		&i.RoleID,
+		&i.ValidFrom,
+		&i.ValidUntil,
+		&i.Status,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertPermanentUserRoleBinding = `-- name: UpsertPermanentUserRoleBinding :one
+INSERT INTO role_bindings (id, enterprise_id, subject_type, subject_id, role_id)
+VALUES ($1, $2, 'user', $3, $4)
+ON CONFLICT (enterprise_id, subject_type, subject_id, role_id)
+DO UPDATE SET status = 'active', valid_from = NULL, valid_until = NULL,
+  version = role_bindings.version + 1, updated_at = now()
+RETURNING id, enterprise_id, subject_type, subject_id, role_id, valid_from, valid_until, status, version, created_at, updated_at
+`
+
+type UpsertPermanentUserRoleBindingParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	UserID       uuid.UUID `json:"user_id"`
+	RoleID       uuid.UUID `json:"role_id"`
+}
+
+func (q *Queries) UpsertPermanentUserRoleBinding(ctx context.Context, arg UpsertPermanentUserRoleBindingParams) (RoleBinding, error) {
+	row := q.db.QueryRow(ctx, upsertPermanentUserRoleBinding,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.UserID,
+		arg.RoleID,
 	)
 	var i RoleBinding
 	err := row.Scan(

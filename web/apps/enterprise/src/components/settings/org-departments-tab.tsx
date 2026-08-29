@@ -11,6 +11,7 @@ import {
   type Department,
 } from "@argus/api-client";
 import {
+  ActionGroup,
   Alert,
   Badge,
   Button,
@@ -19,9 +20,11 @@ import {
   Field,
   FormDrawer,
   Input,
+  RowAction,
   StatusBadge,
 } from "@argus/ui";
 import { useOrgDepartments, useOrgUsers } from "./org-users-tab";
+import { DataAuthorizationDialog } from "./data-authorization-dialog";
 
 type DepartmentRow = {
   id: string;
@@ -42,6 +45,7 @@ export function OrgDepartmentsTab() {
     undefined,
   );
   const [statusTarget, setStatusTarget] = useState<DepartmentRow | null>(null);
+  const [authorizationTarget, setAuthorizationTarget] = useState<DepartmentRow | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["org"] });
   const save = useMutation({
     mutationFn: (input: { id?: string; name: string; description?: string }) =>
@@ -107,8 +111,11 @@ export function OrgDepartmentsTab() {
             key: "actions",
             header: t("settings.common.actions"),
             render: (row) => (
-              <span className="argus-settings-inline-actions">
-                <Button
+              <ActionGroup>
+                <RowAction onClick={() => setAuthorizationTarget(row)}>
+                  数据授权
+                </RowAction>
+                <RowAction
                   onClick={() =>
                     setEditing(
                       departments.data?.find(
@@ -116,18 +123,15 @@ export function OrgDepartmentsTab() {
                       ) ?? null,
                     )
                   }
-                  size="sm"
-                  variant="ghost"
                 >
                   {t("settings.common.edit")}
-                </Button>
-                <Button
+                </RowAction>
+                <RowAction
                   disabled={
                     row.status === "active" &&
                     (row.is_default || row.member_count > 0)
                   }
                   onClick={() => setStatusTarget(row)}
-                  size="sm"
                   title={
                     row.status === "active" && row.is_default
                       ? t("settings.org.departments.defaultLocked")
@@ -135,13 +139,12 @@ export function OrgDepartmentsTab() {
                         ? t("settings.org.departments.membersLocked")
                         : undefined
                   }
-                  variant="ghost"
                 >
                   {row.status === "active"
                     ? t("settings.org.departments.disable")
                     : t("settings.org.departments.enable")}
-                </Button>
-              </span>
+                </RowAction>
+              </ActionGroup>
             ),
           },
         ]}
@@ -182,6 +185,7 @@ export function OrgDepartmentsTab() {
             : t("settings.org.departments.enableTitle")
         }
       />
+      <DataAuthorizationDialog open={authorizationTarget !== null} onOpenChange={(open) => !open && setAuthorizationTarget(null)} subjectType="department" subjectId={authorizationTarget?.id ?? ""} subjectLabel={authorizationTarget?.name ?? ""} />
     </div>
   );
 }

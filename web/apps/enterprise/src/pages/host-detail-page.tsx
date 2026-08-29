@@ -239,7 +239,7 @@ export function HostDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ["bastion-scopes"] });
     void queryClient.invalidateQueries({ queryKey: ["connectors"] });
     void queryClient.invalidateQueries({ queryKey: ["host-collector"] });
-    void queryClient.invalidateQueries({ queryKey: ["remote-sessions"] });
+    void queryClient.invalidateQueries({ queryKey: ["remote-access", "sessions"] });
     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     void queryClient.invalidateQueries({ queryKey: ["audit"] });
   };

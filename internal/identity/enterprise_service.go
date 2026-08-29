@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kakj-go/Argus/internal/audit"
+	"github.com/kakj-go/Argus/internal/remoteaccess/revocation"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
@@ -88,29 +89,12 @@ func (service EnterpriseService) CreateUser(ctx context.Context, actorID string,
 			return CreatedEnterpriseCredential{}, err
 		}
 		if len(roleIDs) > 0 {
-			scopes, err := queries.ListDataScopes(ctx, enterpriseID)
-			if err != nil {
-				return CreatedEnterpriseCredential{}, err
-			}
-			var defaultScope uuid.UUID
-			for _, scope := range scopes {
-				if scope.Name == "Default empty scope" {
-					defaultScope = scope.ID
-					break
-				}
-			}
-			if defaultScope == uuid.Nil {
-				return CreatedEnterpriseCredential{}, errors.New("default data scope missing")
-			}
 			for _, roleID := range roleIDs {
 				if _, err := queries.GetRole(ctx, db.GetRoleParams{ID: roleID, EnterpriseID: enterpriseID}); err != nil {
 					return CreatedEnterpriseCredential{}, err
 				}
-				binding, err := queries.CreateRoleBinding(ctx, db.CreateRoleBindingParams{ID: mustUUIDV7(), EnterpriseID: enterpriseID, SubjectType: "user", SubjectID: user.ID, RoleID: roleID})
+				_, err := queries.CreateRoleBinding(ctx, db.CreateRoleBindingParams{ID: mustUUIDV7(), EnterpriseID: enterpriseID, SubjectType: "user", SubjectID: user.ID, RoleID: roleID})
 				if err != nil {
-					return CreatedEnterpriseCredential{}, err
-				}
-				if err := queries.AddRoleBindingDataScope(ctx, db.AddRoleBindingDataScopeParams{RoleBindingID: binding.ID, DataScopeID: defaultScope, EnterpriseID: enterpriseID}); err != nil {
 					return CreatedEnterpriseCredential{}, err
 				}
 			}
@@ -146,6 +130,9 @@ func (service EnterpriseService) UpdateUser(ctx context.Context, actorID string,
 			if err := queries.RevokeSubjectSessions(ctx, db.RevokeSubjectSessionsParams{Audience: "enterprise", UserID: userID, RevokeReason: pgtype.Text{String: "user_disabled", Valid: true}}); err != nil {
 				return err
 			}
+		}
+		if err := revocation.Users(ctx, queries, enterpriseID, []uuid.UUID{userID}, "user_changed"); err != nil {
+			return err
 		}
 		payload, _ := json.Marshal(map[string]any{"enterprise_id": enterpriseID.String(), "user_id": userID.String(), "authorization_version": user.AuthorizationVersion})
 		if err := queries.InsertOutboxEvent(ctx, db.InsertOutboxEventParams{ID: mustUUIDV7(), Topic: "authorization.user.changed", AggregateType: "enterprise_user", AggregateID: userID.String(), Payload: payload}); err != nil {

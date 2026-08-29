@@ -12,7 +12,7 @@ import (
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// ListKubernetesClusters List DataScope-filtered Kubernetes clusters.
+	// ListKubernetesClusters List explicitly authorized Kubernetes clusters.
 	// (GET /enterprise/kubernetes-clusters)
 	ListKubernetesClusters(ctx context.Context, request ListKubernetesClustersRequestObject) (ListKubernetesClustersResponseObject, error)
 	// PreviewCreateKubernetesCluster Freeze a Kubernetes cluster creation plan.
@@ -21,7 +21,7 @@ type StrictServerInterface interface {
 	// CreateKubernetesConnectionTest Start a bounded Kubernetes connection test.
 	// (POST /enterprise/kubernetes-clusters/connection-tests)
 	CreateKubernetesConnectionTest(ctx context.Context, request CreateKubernetesConnectionTestRequestObject) (CreateKubernetesConnectionTestResponseObject, error)
-	// GetKubernetesCluster Get a DataScope-filtered Kubernetes cluster.
+	// GetKubernetesCluster Get an explicitly authorized Kubernetes cluster.
 	// (GET /enterprise/kubernetes-clusters/{id})
 	GetKubernetesCluster(ctx context.Context, request GetKubernetesClusterRequestObject) (GetKubernetesClusterResponseObject, error)
 	// PreviewDeleteKubernetesCluster Freeze a Kubernetes cluster logical deletion.
@@ -33,7 +33,7 @@ type StrictServerInterface interface {
 	// GetKubernetesPodLogs Read at most one MiB of Pod logs.
 	// (GET /enterprise/kubernetes-clusters/{id}/pod-logs)
 	GetKubernetesPodLogs(ctx context.Context, request GetKubernetesPodLogsRequestObject) (GetKubernetesPodLogsResponseObject, error)
-	// ListKubernetesResources List bounded Kubernetes resources after cluster and Namespace DataScope checks.
+	// ListKubernetesResources List bounded Kubernetes resources after Kubernetes cluster authorization checks.
 	// (GET /enterprise/kubernetes-clusters/{id}/resources)
 	ListKubernetesResources(ctx context.Context, request ListKubernetesResourcesRequestObject) (ListKubernetesResourcesResponseObject, error)
 }

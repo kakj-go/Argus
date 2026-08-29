@@ -24,6 +24,7 @@ import { StatCard } from "./stat-card";
 import { StatusBadge } from "./status-badge";
 import { TerminalEmulator } from "./terminal";
 import { Wizard } from "./wizard";
+import { ResourceAuthorizationDualList } from "./dual-list";
 
 function Wrapper({ children }: { children: ReactNode }) {
   return <LocaleProvider>{children}</LocaleProvider>;
@@ -192,6 +193,29 @@ describe("FormDrawer", () => {
     );
     fireEvent.submit(screen.getByRole("dialog", { name: "New host" }));
     expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ResourceAuthorizationDualList", () => {
+  it("moves multiple selected resources and protects inherited grants", () => {
+    function Harness() {
+      const [value, setValue] = useState({ host: ["h2"], kubernetes_cluster: [] as string[] });
+      return <><ResourceAuthorizationDualList hosts={[{ id: "h1", label: "Host 1" }, { id: "h2", label: "Host 2", inherited: true, source: "部门：平台" }]} clusters={[]} value={value} onChange={setValue} /><output>{value.host.join(",")}</output></>;
+    }
+    render(<Harness />, { wrapper: Wrapper });
+    const checks = screen.getAllByRole("checkbox");
+    fireEvent.click(checks[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "批量移动" }));
+    expect(screen.getByText("已授权 (2)")).toBeInTheDocument();
+    expect(screen.getByText("部门：平台")).toBeInTheDocument();
+  });
+
+  it("paginates each side with a stable page size", () => {
+    const hosts = Array.from({ length: 21 }, (_, index) => ({ id: `h${index}`, label: `Host ${index}` }));
+    render(<ResourceAuthorizationDualList hosts={hosts} clusters={[]} value={{ host: [], kubernetes_cluster: [] }} onChange={() => {}} />, { wrapper: Wrapper });
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "下一页" })[0]!);
+    expect(screen.getByText("Host 20")).toBeInTheDocument();
   });
 });
 

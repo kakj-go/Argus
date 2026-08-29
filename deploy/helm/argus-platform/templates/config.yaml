@@ -33,7 +33,7 @@ data:
   ARGUS_CARD_VALIDATION_TTL: {{ .Values.runtime.cardValidationTtl | quote }}
   ARGUS_CARD_RUNTIME_VERSION: {{ .Values.runtime.cardRuntimeVersion | quote }}
   ARGUS_CARD_MAX_PRESENTATION_BYTES: {{ .Values.runtime.cardMaxPresentationBytes | int | quote }}
-  ARGUS_REMOTE_ORIGIN: {{ if eq .Values.profile "production" }}{{ printf "https://%s" .Values.production.hosts.remote | quote }}{{ else }}{{ .Values.runtime.remoteOrigin | quote }}{{ end }}
+  ARGUS_REMOTE_ORIGIN: {{ .Values.runtime.remoteOrigin | quote }}
   ARGUS_REMOTE_USER_LIMIT: {{ .Values.runtime.remoteUserLimit | int | quote }}
   ARGUS_REMOTE_HOST_LIMIT: {{ .Values.runtime.remoteHostLimit | int | quote }}
   ARGUS_REMOTE_ENTERPRISE_LIMIT: {{ .Values.runtime.remoteEnterpriseLimit | int | quote }}

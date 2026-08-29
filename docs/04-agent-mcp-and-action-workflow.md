@@ -1,5 +1,7 @@
 # Agent、MCP 与两阶段操作
 
+> Agent 查询和操作复用主体的显式资源授权结果。创建工具不要求已有显式资源授权，提交成功后创建事务授予创建主体只读授权；读取、编辑、删除均要求功能权限、读取权限和目标资源授权。
+
 ## 1. 职责边界
 
 Chatbox 和 Model Agent 负责：
@@ -14,7 +16,7 @@ Chatbox 和 Model Agent 负责：
 MCP Tool 和领域服务负责：
 
 - 业务校验。
-- 企业、资源、Tool、DataScope、授权版本和数据范围校验。
+- 企业、资源、Tool、显式资源授权、授权版本和显式资源授权校验。
 - 幂等与状态持久化。
 - 访问数据库、Connector 和第三方 API。
 - 返回结构化结果和结构化错误。
@@ -22,7 +24,7 @@ MCP Tool 和领域服务负责：
 
 人工 RemoteAccessSession 不属于 Model Agent 或 MCP Tool 能力。创建 SSH Web Terminal 使用管理 UI/OpenAPI 的独立授权接口、MFA/JIT/审批和短期一次性票据；AI、交互卡片和 OpenSandbox 不能获得该票据。当前版本不提供定时无人值守任务。交互式会话中的人工命令不逐条走 Tool Preview/Commit，必须由会话级权限、时长、录像、剪贴板/文件传输策略和审计约束。
 
-Conversation 和 Run 只绑定服务端确认的 `enterprise_id`。模型生成的企业、标签选择器、Host 或 Kubernetes ID 只是候选参数，不能切换当前身份域或扩大 DataScope；每个 ToolCall、Run、PendingAction 和 Execution 保存实际目标资源引用和授权范围快照。
+Conversation 和 Run 只绑定服务端确认的 `enterprise_id`。模型生成的企业、标签过滤条件、Host 或 Kubernetes ID 只是候选参数，不能切换当前身份域或扩大显式资源授权；每个 ToolCall、Run、PendingAction 和 Execution 保存实际目标资源引用和授权版本快照。
 
 ## 2. Tool 设计
 
@@ -78,7 +80,7 @@ card.render
 
 取消采用统一的 `pending_action.cancel`，它接收公开 `action_ref` 并再次检查用户和会话；取消不是业务 Commit，不需要向模型暴露私有 Token。查询、预览和提交必须显式区分，高风险 Tool 不应依靠模型记住“刚才已经确认”。
 
-Tool Registry 在执行前统一校验当前 Subject 的 Tool 权限、ServiceAccount `allowed_tool_ids`、严格 Input Schema、风险/执行模式和 DataScope。模型输出中的未知字段、非法类型、截断 JSON 或调用方自报来源均不能进入领域 Service。
+Tool Registry 在执行前统一校验当前 Subject 的 Tool 权限、ServiceAccount `allowed_tool_ids`、严格 Input Schema、风险/执行模式和显式资源授权。模型输出中的未知字段、非法类型、截断 JSON 或调用方自报来源均不能进入领域 Service。
 
 ### 2.1 Preview/Commit 强制配对约定
 
@@ -91,7 +93,7 @@ x.y.operation.commit(argus__token) -> execution/result
 
 `preview` 负责：
 
-1. 当前身份、企业、Tool 权限、DataScope、目标资源和 AuthorizationVersion 校验。
+1. 当前身份、企业、Tool 权限、显式资源授权、目标资源和 AuthorizationVersion 校验。
 2. 参数 Schema、业务规则、连接和资源状态检查。
 3. 根据真实资源计算最终风险与审批策略。
 4. 生成不可变执行计划、预览摘要、参数哈希和执行前置条件。
@@ -102,7 +104,7 @@ x.y.operation.commit(argus__token) -> execution/result
 
 1. 只接收私有 `argus__token`；调用者不能重新提交业务参数。
 2. 原子校验 Token 哈希、一次性状态、过期、目标 Commit Tool 和调用来源。
-3. 重新检查当前用户、企业状态、功能权限、DataScope、AuthorizationVersion、审批、资源标签/版本和前置条件。
+3. 重新检查当前用户、企业状态、功能权限、显式资源授权、AuthorizationVersion、审批、资源版本和前置条件。
 4. 把 Pending Action 原子推进到 Executing，并创建 Execution/ConnectorCommand。
 5. 使用服务端保存的不可变计划执行，返回可审计结果。
 
@@ -136,7 +138,7 @@ Commit 的 MCP 输入 Schema 固定为：
 而不是把返回值复制成没有来源的字面量。这样 `card.render` 可以校验：
 
 - Tool 来源。
-- 调用所属企业、会话、目标资源引用和 DataScope 快照。
+- 调用所属企业、会话、目标资源引用和显式授权版本快照。
 - 字段路径和类型。
 - Slot 允许的数据来源。
 - 字段是否敏感。
@@ -210,7 +212,7 @@ sequenceDiagram
     U->>H: 点击确认
     H->>E: 只发送 action_binding_id
     E->>S: 读取服务端私有 argus__token
-    E->>E: 校验用户、企业、DataScope、授权版本、权限、审批、资源标签/版本、过期和幂等
+    E->>E: 校验用户、企业、显式资源授权、授权版本、权限、审批、资源版本、过期和幂等
     E->>C: 代码直接使用 argus__token 调用 Commit
     C-->>E: 创建结果
     E-->>H: 更新卡片状态
@@ -309,7 +311,7 @@ Token 或 Pending Action 服务端记录应绑定：
 
 - 唯一 ID 和一次性使用状态。
 - enterprise_id、creator_user_id 和 conversation_id。
-- authorization_version、DataScope 版本和有效的目标资源/标签快照。
+- authorization_version、显式授权版本和有效的目标资源快照。
 - preview_call_id。
 - commit Tool。
 - 预览参数哈希。
@@ -393,7 +395,7 @@ stateDiagram-v2
 
 创建人确认不能自动满足“非创建人审批”规则。Approval Request 为每条命中策略保存独立 Requirement Snapshot；所有 Requirement 都满足后才可进入 `ready`，任一有效拒绝会拒绝整个请求。权限撤销、企业停用、策略版本、资源版本、标签影响或计划变化会使尚未执行的审批失效。
 
-Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为发起人补齐缺失的 Role、DataScope、Tool、资源或目标账号权限。M4 不直接实现 Break Glass；M8 本地加固提供 TOTP Step-up 和显式 Break Glass Session，但仍不能用单管理员场景降低基础权限或职责分离要求。
+Approval 只满足 Policy 对已经授权操作提出的附加条件，不能为发起人补齐缺失的 Role、显式资源授权、Tool、资源或目标账号权限。M4 不直接实现 Break Glass；M8 本地加固提供 TOTP Step-up 和显式 Break Glass Session，但仍不能用单管理员场景降低基础权限或职责分离要求。
 
 Execution 如果产生 Bastion 或 Kubernetes Connector Enrollment，公开对象只返回 `one_time_result_available`。原发起人使用独立幂等接口领取 AES-GCM 加密保存、最长五分钟有效的一次性结果；同一 Idempotency-Key 可以重放同一响应，新 Key 二次领取稳定失败。明文安装命令不得进入 PendingAction、Execution、ConversationEvent、审计、日志或 Redis。
 
@@ -420,7 +422,7 @@ Execution 如果产生 Bastion 或 Kubernetes Connector Enrollment，公开对�
 4. Commit Schema 不包含业务参数，只接受 `argus__token` 和内部执行上下文。
 5. Model Agent 的 Tool 列表中不存在 `.commit`。
 6. Token 只能使用一次，过期、取消、跨企业、跨用户或跨 Tool 使用均失败。
-7. Preview 后修改资源版本/授权敏感标签、DataScope、AuthorizationVersion 或撤销权限，Commit 必须失败并要求重新 Preview。
+7. Preview 后修改资源版本、显式资源授权、AuthorizationVersion 或撤销权限，Commit 必须失败并要求重新 Preview；标签变化不触发授权失效。
 8. 双击、超时重试和服务重启不会产生重复副作用。
 9. 审批不能补齐缺失的基础权限；Break Glass 只能用于 Policy 明确允许且绑定单个 Pending Action 的场景。
 10. Model Agent、Card 和 OpenSandbox 无法创建或消费人工远程会话票据。

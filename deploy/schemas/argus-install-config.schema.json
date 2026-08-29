@@ -30,8 +30,7 @@
         "storageClass",
         "images",
         "exposure",
-        "persistence",
-        "cleanup"
+        "persistence"
       ],
       "properties": {
         "profile": { "enum": ["evaluation", "local-hardening", "production"] },
@@ -67,20 +66,58 @@
         "exposure": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["mode"],
+          "required": ["ingressClassName", "enterpriseHost", "platformHost", "connectorHost", "tls"],
           "properties": {
-            "mode": { "enum": ["port-forward", "ingress"] },
             "ingressClassName": { "type": "string" },
-            "enterpriseHost": { "type": "string" },
-            "platformHost": { "type": "string" },
-            "connectorHost": { "type": "string" }
+            "enterpriseHost": { "type": "string", "minLength": 1 },
+            "platformHost": { "type": "string", "minLength": 1 },
+            "connectorHost": { "type": "string", "minLength": 1 },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "mode"],
+              "properties": {
+                "enabled": { "const": true },
+                "mode": {
+                  "enum": ["cert-manager-selfsigned", "cert-manager-issuer", "user-provided"]
+                },
+                "issuerRef": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": { "type": "string" },
+                    "kind": { "enum": ["Issuer", "ClusterIssuer"] }
+                  }
+                },
+                "secretName": { "type": "string" }
+              }
+            }
           }
         },
         "security": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "platformMfaRequired": { "type": "boolean", "default": false }
+            "platformMfaRequired": { "type": "boolean", "default": false },
+            "protectedCidrs": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "enum": ["auto", "portable", "network-policy", "external"] },
+            "egress": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "expectedIPs": { "type": "array", "items": { "type": "string" } },
+                "verificationURL": { "type": "string" }
+              }
+            }
           }
         },
         "openSandbox": {
@@ -141,15 +178,6 @@
             "kafka": { "type": "string" },
             "clickhouse": { "type": "string" },
             "keeper": { "type": "string" }
-          }
-        },
-        "cleanup": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["retainData", "deleteOwnedCrds"],
-          "properties": {
-            "retainData": { "type": "boolean" },
-            "deleteOwnedCrds": { "type": "boolean" }
           }
         }
       }

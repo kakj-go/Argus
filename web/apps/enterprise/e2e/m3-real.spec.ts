@@ -202,19 +202,12 @@ test.describe("M3 real resource flow", () => {
     const executionId = confirmed.execution?.execution_id ?? "";
     expect(executionId).not.toBe("");
 
-    await expect(page).toHaveURL(/\/login/, { timeout: 90_000 });
-    await login(page);
-    await page.goto("/tasks");
-    const executionRow = page.locator("tr").filter({ hasText: executionId });
-    const claim = executionRow.getByRole("button", {
-      name: /领取安装命令|Claim install command/i,
-    });
-    await expect(claim).toBeVisible({ timeout: 120_000 });
-    await claim.click();
     await expect(
-      page.getByText(/安装命令仅显示一次|Install command shown once/i),
-    ).toBeVisible();
-    const command = await page.locator(".argus-code code").textContent();
+      drawer.getByText(
+        /一次性集群 Connector 安装命令|One-time cluster Connector command/i,
+      ),
+    ).toBeVisible({ timeout: 90_000 });
+    const command = await drawer.locator(".argus-code code").textContent();
     expect(command).toContain("argus-connector");
     const browserState = await page.evaluate(() =>
       JSON.stringify({
@@ -224,7 +217,17 @@ test.describe("M3 real resource flow", () => {
       }),
     );
     expect(browserState).not.toContain(command);
-    await page.getByRole("button", { name: /关闭命令|Close command/i }).click();
+    await drawer
+      .getByRole("button", { name: /我已保存，关闭|I saved it, close/i })
+      .click();
+    await expect(drawer).toHaveCount(0);
+
+    await page.goto("/tasks");
+    const executionRow = page.locator("tr").filter({ hasText: executionId });
+    await expect(executionRow).toBeVisible();
+    const claim = executionRow.getByRole("button", {
+      name: /领取安装命令|Claim install command/i,
+    });
     await expect(claim).toHaveCount(0);
   });
 });

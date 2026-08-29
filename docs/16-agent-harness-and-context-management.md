@@ -29,7 +29,7 @@ Agent Harness 只负责：
 
 Agent Harness 不负责：
 
-- 决定企业、DataScope、Tool、Signal 或字段权限。
+- 决定企业、explicit resource authorization、Tool、Signal 或字段权限。
 - 保存 Secret、`argus__token`、PendingAction 私有参数或人工远程会话票据。
 - 直接调用 Commit Tool。
 - 把模型摘要当作授权、审批、执行计划或业务状态事实。
@@ -292,7 +292,7 @@ OpenAI Responses Compaction、Anthropic Server-side Compaction 或 Context Editi
 
 - ContextAssembler 只消费已经通过授权服务和字段脱敏的投影。
 - `argus__token`、PendingAction 私有参数、Secret、Credential、RemoteAccessTicket 永不进入 Ledger 正文、Snapshot 或模型上下文。
-- Narrative Summary 是不可信派生文本，不能作为 Commit、授权、审批、DataScope 或资源归属输入。
+- Narrative Summary 是不可信派生文本，不能作为 Commit、授权、审批、explicit resource authorization 或资源归属输入。
 - Tool 名称和 Tool Schema 由服务端 Registry 投影，模型不能通过摘要恢复已经撤销的 Tool。
 - AuthorizationVersion、资源版本或标签变化后，下一次 Model Call、Tool Call 和 Run 恢复都重新计算权限。
 - Compaction Prompt 必须防止摘要把历史 Tool 输出中的指令升级为 System Instruction。

@@ -16,7 +16,7 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// ListHosts List DataScope-filtered Hosts.
+	// ListHosts List explicitly authorized Hosts.
 	// (GET /enterprise/hosts)
 	ListHosts(w http.ResponseWriter, r *http.Request, params ListHostsParams)
 	// PreviewCreateHost Freeze a validated Host creation plan.
@@ -25,7 +25,7 @@ type ServerInterface interface {
 	// CreateHostConnectionTest Start a bounded Host connection test.
 	// (POST /enterprise/hosts/connection-tests)
 	CreateHostConnectionTest(w http.ResponseWriter, r *http.Request, params CreateHostConnectionTestParams)
-	// GetHost Get a DataScope-filtered Host.
+	// GetHost Get an explicitly authorized Host.
 	// (GET /enterprise/hosts/{id})
 	GetHost(w http.ResponseWriter, r *http.Request, id ResourceId)
 	// PreviewDeleteHost Freeze a Host logical deletion plan.
@@ -40,7 +40,7 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
-// ListHosts List DataScope-filtered Hosts.
+// ListHosts List explicitly authorized Hosts.
 // (GET /enterprise/hosts)
 func (_ Unimplemented) ListHosts(w http.ResponseWriter, r *http.Request, params ListHostsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -58,7 +58,7 @@ func (_ Unimplemented) CreateHostConnectionTest(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// GetHost Get a DataScope-filtered Host.
+// GetHost Get an explicitly authorized Host.
 // (GET /enterprise/hosts/{id})
 func (_ Unimplemented) GetHost(w http.ResponseWriter, r *http.Request, id ResourceId) {
 	w.WriteHeader(http.StatusNotImplemented)

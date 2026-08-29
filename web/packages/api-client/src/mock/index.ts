@@ -23,6 +23,7 @@ import { createKubernetesDomain } from "./kubernetes";
 import { createModelsDomain } from "./models";
 import { createOrgDomain } from "./org";
 import { createPlatformDomain } from "./platform";
+import { createRemoteAccessDomain } from "./remote-access";
 import { createSecretsDomain } from "./secrets";
 import { createSeedDb } from "./seed";
 import { createSetupDomain } from "./setup";
@@ -266,29 +267,7 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
       },
     },
     hosts: createHostsDomain(ctx),
-    remoteAccess: {
-      async listGrants() { throw new Error("mock remote access grants are unavailable"); },
-      async createGrant() { throw new Error("mock remote access grants are unavailable"); },
-      async updateGrant() { throw new Error("mock remote access grants are unavailable"); },
-      async disableGrant() { throw new Error("mock remote access grants are unavailable"); },
-      async listPolicies() { throw new Error("mock remote access policies are unavailable"); },
-      async createPolicy() { throw new Error("mock remote access policies are unavailable"); },
-      async updatePolicy() { throw new Error("mock remote access policies are unavailable"); },
-      async disablePolicy() { throw new Error("mock remote access policies are unavailable"); },
-      async listRequests() { throw new Error("mock remote access requests are unavailable"); },
-      async createRequest() { throw new Error("mock remote access requests are unavailable"); },
-      async getRequest() { throw new Error("mock remote access requests are unavailable"); },
-      async decideRequest() { throw new Error("mock remote access requests are unavailable"); },
-      async listLeases() { throw new Error("mock remote access leases are unavailable"); },
-      async revokeLease() { throw new Error("mock remote access leases are unavailable"); },
-      async listSessions() { throw new Error("mock remote access sessions are unavailable"); },
-      async createSession() { throw new Error("mock remote access sessions are unavailable"); },
-      async getSession() { throw new Error("mock remote access sessions are unavailable"); },
-      async createTicket() { throw new Error("mock remote access tickets are unavailable"); },
-      async terminateSession() { throw new Error("mock remote access sessions are unavailable"); },
-      async getRecording() { throw new Error("mock remote access recordings are unavailable"); },
-      async listRecordingEvents() { throw new Error("mock remote access recordings are unavailable"); },
-    },
+    remoteAccess: createRemoteAccessDomain(ctx),
     connectors: createConnectorsDomain(ctx),
     kubernetes: createKubernetesDomain(ctx),
     telemetry: createTelemetryDomain(ctx),

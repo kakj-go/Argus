@@ -101,7 +101,7 @@ func (a *App) runM7Scenario(ctx context.Context, env *E2EEnvironment) error {
 
 func (a *App) verifyM7Catalog(ctx context.Context, env *E2EEnvironment) (string, []string, []string, error) {
 	client, _ := scenarioHTTP(env)
-	distributions, err := client.JSONArray(ctx, "m7-distributions", "enterprise", http.MethodGet, "/enterprise/telemetry/distributions", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	distributions, err := client.JSONArray(ctx, "m7-distributions", "enterprise", http.MethodGet, "/enterprise/telemetry/distributions", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -127,7 +127,7 @@ func (a *App) verifyM7Catalog(ctx context.Context, env *E2EEnvironment) (string,
 	if distributionID == "" {
 		return "", nil, nil, fmt.Errorf("M7 supported Linux arm64 Collector distribution is missing")
 	}
-	profiles, err := client.JSONArray(ctx, "m7-profiles", "enterprise", http.MethodGet, "/enterprise/telemetry/profiles", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	profiles, err := client.JSONArray(ctx, "m7-profiles", "enterprise", http.MethodGet, "/enterprise/telemetry/profiles", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -142,7 +142,7 @@ func (a *App) verifyM7Catalog(ctx context.Context, env *E2EEnvironment) (string,
 	if len(host) != 3 || len(kubernetes) != 3 {
 		return "", nil, nil, fmt.Errorf("M7 Collector profiles are incomplete")
 	}
-	cards, err := client.JSON(ctx, "m7-telemetry-card", "enterprise", http.MethodGet, "/enterprise/interactive-cards", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	cards, err := client.JSON(ctx, "m7-telemetry-card", "enterprise", http.MethodGet, "/enterprise/interactive-cards", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -166,18 +166,7 @@ func collectProfileIDs(values map[string]string, keys ...string) []string {
 
 func (a *App) grantM7HostScope(ctx context.Context, env *E2EEnvironment) error {
 	client, _ := scenarioHTTP(env)
-	scope, err := client.JSON(ctx, "m7-host-scope", "enterprise", http.MethodPost, "/enterprise/data-scopes", http.StatusCreated, map[string]any{
-		"name": "M7 Linux arm64 hosts", "resource_types": []string{"host"}, "explicit_resource_ids": []string{},
-		"label_selector": map[string]any{"schema_version": "argus.label_selector/v1", "requirements": []any{map[string]any{"key": "team", "operator": "eq", "values": []string{"m7"}}}},
-	}, enterpriseHeaders(env, "m7-host-scope"))
-	if err != nil {
-		return err
-	}
-	scopeID, err := stringField(scope, "id")
-	if err != nil {
-		return err
-	}
-	roles, err := client.JSON(ctx, "m7-roles", "enterprise", http.MethodGet, "/enterprise/roles", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	roles, err := client.JSON(ctx, "m7-roles", "enterprise", http.MethodGet, "/enterprise/roles", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -189,7 +178,7 @@ func (a *App) grantM7HostScope(ctx context.Context, env *E2EEnvironment) error {
 	}
 	roleID, _ := stringField(role, "id")
 	if _, err := client.JSON(ctx, "m7-host-binding", "enterprise", http.MethodPost, "/enterprise/role-bindings", http.StatusCreated, map[string]any{
-		"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "role_id": roleID, "data_scope_ids": []string{scopeID},
+		"subject_type": "user", "subject_id": env.State.Values["admin_user_id"], "role_id": roleID,
 	}, enterpriseHeaders(env, "m7-host-binding")); err != nil {
 		return err
 	}
@@ -235,7 +224,7 @@ func (a *App) applyM7CollectorAction(ctx context.Context, env *E2EEnvironment, r
 	body := map[string]any{"distribution_version_id": distributionID, "profile_ids": profiles, "route_kind": "direct_argus"}
 	idempotencyKey := "m7-collector-" + resourceType + "-" + resourceID + "-" + action
 	if action != "install" {
-		current, err := client.JSON(ctx, "m7-collector-current-"+action, "enterprise", http.MethodGet, base, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+		current, err := client.JSON(ctx, "m7-collector-current-"+action, "enterprise", http.MethodGet, base, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 		if err != nil {
 			return err
 		}
@@ -262,7 +251,7 @@ func (a *App) waitM7HostCollector(ctx context.Context, env *E2EEnvironment, expe
 	client, _ := scenarioHTTP(env)
 	deadline := time.Now().Add(6 * time.Minute)
 	for time.Now().Before(deadline) {
-		current, err := client.JSON(ctx, "m7-host-collector-status", "enterprise", http.MethodGet, "/enterprise/hosts/"+env.State.Values["m7_host_id"]+"/collector", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+		current, err := client.JSON(ctx, "m7-host-collector-status", "enterprise", http.MethodGet, "/enterprise/hosts/"+env.State.Values["m7_host_id"]+"/collector", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 		if err != nil {
 			return err
 		}

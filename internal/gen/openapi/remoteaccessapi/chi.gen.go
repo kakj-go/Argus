@@ -15,42 +15,69 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// ListApprovalWorkflows List remote access approval workflows.
+	// (GET /enterprise/approval-workflows)
+	ListApprovalWorkflows(w http.ResponseWriter, r *http.Request, params ListApprovalWorkflowsParams)
+	// CreateApprovalWorkflow Create a remote access approval workflow.
+	// (POST /enterprise/approval-workflows)
+	CreateApprovalWorkflow(w http.ResponseWriter, r *http.Request, params CreateApprovalWorkflowParams)
+	// GetApprovalWorkflow Get a remote access approval workflow.
+	// (GET /enterprise/approval-workflows/{id})
+	GetApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// UpdateApprovalWorkflow Update a remote access approval workflow with optimistic concurrency.
+	// (PUT /enterprise/approval-workflows/{id})
+	UpdateApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateApprovalWorkflowParams)
+	// ArchiveApprovalWorkflow Archive an approval workflow.
+	// (POST /enterprise/approval-workflows/{id}/archive)
+	ArchiveApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveApprovalWorkflowParams)
+	// DisableApprovalWorkflow Disable an approval workflow.
+	// (POST /enterprise/approval-workflows/{id}/disable)
+	DisableApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableApprovalWorkflowParams)
+	// EnableApprovalWorkflow Enable an approval workflow.
+	// (POST /enterprise/approval-workflows/{id}/enable)
+	EnableApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableApprovalWorkflowParams)
+	// GetApprovalWorkflowReferences Get approval workflow references.
+	// (GET /enterprise/approval-workflows/{id}/references)
+	GetApprovalWorkflowReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// RestoreApprovalWorkflow Restore an archived approval workflow as a draft.
+	// (POST /enterprise/approval-workflows/{id}/restore)
+	RestoreApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreApprovalWorkflowParams)
 	// ListRemoteAccessGrants List remote access grants.
 	// (GET /enterprise/remote-access-grants)
 	ListRemoteAccessGrants(w http.ResponseWriter, r *http.Request, params ListRemoteAccessGrantsParams)
 	// CreateRemoteAccessGrant Create a remote access grant.
 	// (POST /enterprise/remote-access-grants)
 	CreateRemoteAccessGrant(w http.ResponseWriter, r *http.Request, params CreateRemoteAccessGrantParams)
-	// DisableRemoteAccessGrant Disable a remote access grant.
-	// (DELETE /enterprise/remote-access-grants/{id})
-	DisableRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessGrantParams)
 	// GetRemoteAccessGrant Get a remote access grant.
 	// (GET /enterprise/remote-access-grants/{id})
 	GetRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// UpdateRemoteAccessGrant Update a remote access grant with optimistic concurrency.
 	// (PUT /enterprise/remote-access-grants/{id})
 	UpdateRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateRemoteAccessGrantParams)
+	// ArchiveRemoteAccessGrant Archive a remote access grant.
+	// (POST /enterprise/remote-access-grants/{id}/archive)
+	ArchiveRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveRemoteAccessGrantParams)
+	// DisableRemoteAccessGrant Disable a remote access grant.
+	// (POST /enterprise/remote-access-grants/{id}/disable)
+	DisableRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessGrantParams)
+	// EnableRemoteAccessGrant Enable a remote access grant.
+	// (POST /enterprise/remote-access-grants/{id}/enable)
+	EnableRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableRemoteAccessGrantParams)
+	// GetRemoteAccessGrantReferences Get remote access grant references.
+	// (GET /enterprise/remote-access-grants/{id}/references)
+	GetRemoteAccessGrantReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// RestoreRemoteAccessGrant Restore an archived remote access grant as a draft.
+	// (POST /enterprise/remote-access-grants/{id}/restore)
+	RestoreRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreRemoteAccessGrantParams)
 	// ListRemoteAccessLeases List active and historical remote access leases.
 	// (GET /enterprise/remote-access-leases)
 	ListRemoteAccessLeases(w http.ResponseWriter, r *http.Request, params ListRemoteAccessLeasesParams)
 	// RevokeRemoteAccessLease Revoke a remote access lease and its sessions.
 	// (POST /enterprise/remote-access-leases/{id}/revoke)
 	RevokeRemoteAccessLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RevokeRemoteAccessLeaseParams)
-	// ListRemoteAccessPolicies List remote access approval policies.
-	// (GET /enterprise/remote-access-policies)
-	ListRemoteAccessPolicies(w http.ResponseWriter, r *http.Request, params ListRemoteAccessPoliciesParams)
-	// CreateRemoteAccessPolicy Create a remote access approval policy.
-	// (POST /enterprise/remote-access-policies)
-	CreateRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, params CreateRemoteAccessPolicyParams)
-	// DisableRemoteAccessPolicy Disable a remote access approval policy.
-	// (DELETE /enterprise/remote-access-policies/{id})
-	DisableRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessPolicyParams)
-	// GetRemoteAccessPolicy Get a remote access approval policy.
-	// (GET /enterprise/remote-access-policies/{id})
-	GetRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-	// UpdateRemoteAccessPolicy Update a remote access approval policy with optimistic concurrency.
-	// (PUT /enterprise/remote-access-policies/{id})
-	UpdateRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateRemoteAccessPolicyParams)
+	// ListRemoteAccessRecordings List remote access recordings.
+	// (GET /enterprise/remote-access-recordings)
+	ListRemoteAccessRecordings(w http.ResponseWriter, r *http.Request, params ListRemoteAccessRecordingsParams)
 	// GetRemoteAccessRecording Get authorized recording metadata.
 	// (GET /enterprise/remote-access-recordings/{id})
 	GetRemoteAccessRecording(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -69,6 +96,39 @@ type ServerInterface interface {
 	// DecideRemoteAccessRequest Approve or reject one remote access requirement.
 	// (POST /enterprise/remote-access-requests/{id}/decisions)
 	DecideRemoteAccessRequest(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DecideRemoteAccessRequestParams)
+	// ResumeRemoteAccessRequest Re-evaluate an access request after fresh step-up authentication.
+	// (POST /enterprise/remote-access-requests/{id}/resume)
+	ResumeRemoteAccessRequest(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ResumeRemoteAccessRequestParams)
+	// ListRemoteAccessRules List remote access rules.
+	// (GET /enterprise/remote-access-rules)
+	ListRemoteAccessRules(w http.ResponseWriter, r *http.Request, params ListRemoteAccessRulesParams)
+	// CreateRemoteAccessRule Create a remote access rule.
+	// (POST /enterprise/remote-access-rules)
+	CreateRemoteAccessRule(w http.ResponseWriter, r *http.Request, params CreateRemoteAccessRuleParams)
+	// SimulateRemoteAccessRule Simulate the current remote access decision without creating runtime state.
+	// (POST /enterprise/remote-access-rules/simulate)
+	SimulateRemoteAccessRule(w http.ResponseWriter, r *http.Request, params SimulateRemoteAccessRuleParams)
+	// GetRemoteAccessRule Get a remote access rule.
+	// (GET /enterprise/remote-access-rules/{id})
+	GetRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// UpdateRemoteAccessRule Update a remote access rule with optimistic concurrency.
+	// (PUT /enterprise/remote-access-rules/{id})
+	UpdateRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateRemoteAccessRuleParams)
+	// ArchiveRemoteAccessRule Archive a remote access rule.
+	// (POST /enterprise/remote-access-rules/{id}/archive)
+	ArchiveRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveRemoteAccessRuleParams)
+	// DisableRemoteAccessRule Disable a remote access rule.
+	// (POST /enterprise/remote-access-rules/{id}/disable)
+	DisableRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessRuleParams)
+	// EnableRemoteAccessRule Enable a remote access rule.
+	// (POST /enterprise/remote-access-rules/{id}/enable)
+	EnableRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableRemoteAccessRuleParams)
+	// GetRemoteAccessRuleReferences Get remote access rule references.
+	// (GET /enterprise/remote-access-rules/{id}/references)
+	GetRemoteAccessRuleReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// RestoreRemoteAccessRule Restore an archived remote access rule as a draft.
+	// (POST /enterprise/remote-access-rules/{id}/restore)
+	RestoreRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreRemoteAccessRuleParams)
 	// ListRemoteAccessSessions List remote access sessions.
 	// (GET /enterprise/remote-access-sessions)
 	ListRemoteAccessSessions(w http.ResponseWriter, r *http.Request, params ListRemoteAccessSessionsParams)
@@ -84,11 +144,92 @@ type ServerInterface interface {
 	// CreateRemoteAccessSessionTicket Issue a one-time short-lived WebSocket ticket.
 	// (POST /enterprise/remote-access-sessions/{id}/tickets)
 	CreateRemoteAccessSessionTicket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params CreateRemoteAccessSessionTicketParams)
+	// ListSessionProfiles List remote access session profiles.
+	// (GET /enterprise/session-profiles)
+	ListSessionProfiles(w http.ResponseWriter, r *http.Request, params ListSessionProfilesParams)
+	// CreateSessionProfile Create a remote access session profile.
+	// (POST /enterprise/session-profiles)
+	CreateSessionProfile(w http.ResponseWriter, r *http.Request, params CreateSessionProfileParams)
+	// GetSessionProfile Get a remote access session profile.
+	// (GET /enterprise/session-profiles/{id})
+	GetSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// UpdateSessionProfile Update a remote access session profile with optimistic concurrency.
+	// (PUT /enterprise/session-profiles/{id})
+	UpdateSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateSessionProfileParams)
+	// ArchiveSessionProfile Archive a session profile.
+	// (POST /enterprise/session-profiles/{id}/archive)
+	ArchiveSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveSessionProfileParams)
+	// DisableSessionProfile Disable a session profile.
+	// (POST /enterprise/session-profiles/{id}/disable)
+	DisableSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableSessionProfileParams)
+	// EnableSessionProfile Enable a session profile.
+	// (POST /enterprise/session-profiles/{id}/enable)
+	EnableSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableSessionProfileParams)
+	// GetSessionProfileReferences Get session profile references.
+	// (GET /enterprise/session-profiles/{id}/references)
+	GetSessionProfileReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// RestoreSessionProfile Restore an archived session profile as a draft.
+	// (POST /enterprise/session-profiles/{id}/restore)
+	RestoreSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreSessionProfileParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// ListApprovalWorkflows List remote access approval workflows.
+// (GET /enterprise/approval-workflows)
+func (_ Unimplemented) ListApprovalWorkflows(w http.ResponseWriter, r *http.Request, params ListApprovalWorkflowsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateApprovalWorkflow Create a remote access approval workflow.
+// (POST /enterprise/approval-workflows)
+func (_ Unimplemented) CreateApprovalWorkflow(w http.ResponseWriter, r *http.Request, params CreateApprovalWorkflowParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetApprovalWorkflow Get a remote access approval workflow.
+// (GET /enterprise/approval-workflows/{id})
+func (_ Unimplemented) GetApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateApprovalWorkflow Update a remote access approval workflow with optimistic concurrency.
+// (PUT /enterprise/approval-workflows/{id})
+func (_ Unimplemented) UpdateApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateApprovalWorkflowParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ArchiveApprovalWorkflow Archive an approval workflow.
+// (POST /enterprise/approval-workflows/{id}/archive)
+func (_ Unimplemented) ArchiveApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveApprovalWorkflowParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DisableApprovalWorkflow Disable an approval workflow.
+// (POST /enterprise/approval-workflows/{id}/disable)
+func (_ Unimplemented) DisableApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableApprovalWorkflowParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// EnableApprovalWorkflow Enable an approval workflow.
+// (POST /enterprise/approval-workflows/{id}/enable)
+func (_ Unimplemented) EnableApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableApprovalWorkflowParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetApprovalWorkflowReferences Get approval workflow references.
+// (GET /enterprise/approval-workflows/{id}/references)
+func (_ Unimplemented) GetApprovalWorkflowReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RestoreApprovalWorkflow Restore an archived approval workflow as a draft.
+// (POST /enterprise/approval-workflows/{id}/restore)
+func (_ Unimplemented) RestoreApprovalWorkflow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreApprovalWorkflowParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // ListRemoteAccessGrants List remote access grants.
 // (GET /enterprise/remote-access-grants)
@@ -99,12 +240,6 @@ func (_ Unimplemented) ListRemoteAccessGrants(w http.ResponseWriter, r *http.Req
 // CreateRemoteAccessGrant Create a remote access grant.
 // (POST /enterprise/remote-access-grants)
 func (_ Unimplemented) CreateRemoteAccessGrant(w http.ResponseWriter, r *http.Request, params CreateRemoteAccessGrantParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// DisableRemoteAccessGrant Disable a remote access grant.
-// (DELETE /enterprise/remote-access-grants/{id})
-func (_ Unimplemented) DisableRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessGrantParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -120,6 +255,36 @@ func (_ Unimplemented) UpdateRemoteAccessGrant(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ArchiveRemoteAccessGrant Archive a remote access grant.
+// (POST /enterprise/remote-access-grants/{id}/archive)
+func (_ Unimplemented) ArchiveRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveRemoteAccessGrantParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DisableRemoteAccessGrant Disable a remote access grant.
+// (POST /enterprise/remote-access-grants/{id}/disable)
+func (_ Unimplemented) DisableRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessGrantParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// EnableRemoteAccessGrant Enable a remote access grant.
+// (POST /enterprise/remote-access-grants/{id}/enable)
+func (_ Unimplemented) EnableRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableRemoteAccessGrantParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetRemoteAccessGrantReferences Get remote access grant references.
+// (GET /enterprise/remote-access-grants/{id}/references)
+func (_ Unimplemented) GetRemoteAccessGrantReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RestoreRemoteAccessGrant Restore an archived remote access grant as a draft.
+// (POST /enterprise/remote-access-grants/{id}/restore)
+func (_ Unimplemented) RestoreRemoteAccessGrant(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreRemoteAccessGrantParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListRemoteAccessLeases List active and historical remote access leases.
 // (GET /enterprise/remote-access-leases)
 func (_ Unimplemented) ListRemoteAccessLeases(w http.ResponseWriter, r *http.Request, params ListRemoteAccessLeasesParams) {
@@ -132,33 +297,9 @@ func (_ Unimplemented) RevokeRemoteAccessLease(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// ListRemoteAccessPolicies List remote access approval policies.
-// (GET /enterprise/remote-access-policies)
-func (_ Unimplemented) ListRemoteAccessPolicies(w http.ResponseWriter, r *http.Request, params ListRemoteAccessPoliciesParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// CreateRemoteAccessPolicy Create a remote access approval policy.
-// (POST /enterprise/remote-access-policies)
-func (_ Unimplemented) CreateRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, params CreateRemoteAccessPolicyParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// DisableRemoteAccessPolicy Disable a remote access approval policy.
-// (DELETE /enterprise/remote-access-policies/{id})
-func (_ Unimplemented) DisableRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessPolicyParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetRemoteAccessPolicy Get a remote access approval policy.
-// (GET /enterprise/remote-access-policies/{id})
-func (_ Unimplemented) GetRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// UpdateRemoteAccessPolicy Update a remote access approval policy with optimistic concurrency.
-// (PUT /enterprise/remote-access-policies/{id})
-func (_ Unimplemented) UpdateRemoteAccessPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateRemoteAccessPolicyParams) {
+// ListRemoteAccessRecordings List remote access recordings.
+// (GET /enterprise/remote-access-recordings)
+func (_ Unimplemented) ListRemoteAccessRecordings(w http.ResponseWriter, r *http.Request, params ListRemoteAccessRecordingsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -198,6 +339,72 @@ func (_ Unimplemented) DecideRemoteAccessRequest(w http.ResponseWriter, r *http.
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ResumeRemoteAccessRequest Re-evaluate an access request after fresh step-up authentication.
+// (POST /enterprise/remote-access-requests/{id}/resume)
+func (_ Unimplemented) ResumeRemoteAccessRequest(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ResumeRemoteAccessRequestParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListRemoteAccessRules List remote access rules.
+// (GET /enterprise/remote-access-rules)
+func (_ Unimplemented) ListRemoteAccessRules(w http.ResponseWriter, r *http.Request, params ListRemoteAccessRulesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateRemoteAccessRule Create a remote access rule.
+// (POST /enterprise/remote-access-rules)
+func (_ Unimplemented) CreateRemoteAccessRule(w http.ResponseWriter, r *http.Request, params CreateRemoteAccessRuleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// SimulateRemoteAccessRule Simulate the current remote access decision without creating runtime state.
+// (POST /enterprise/remote-access-rules/simulate)
+func (_ Unimplemented) SimulateRemoteAccessRule(w http.ResponseWriter, r *http.Request, params SimulateRemoteAccessRuleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetRemoteAccessRule Get a remote access rule.
+// (GET /enterprise/remote-access-rules/{id})
+func (_ Unimplemented) GetRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateRemoteAccessRule Update a remote access rule with optimistic concurrency.
+// (PUT /enterprise/remote-access-rules/{id})
+func (_ Unimplemented) UpdateRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateRemoteAccessRuleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ArchiveRemoteAccessRule Archive a remote access rule.
+// (POST /enterprise/remote-access-rules/{id}/archive)
+func (_ Unimplemented) ArchiveRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveRemoteAccessRuleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DisableRemoteAccessRule Disable a remote access rule.
+// (POST /enterprise/remote-access-rules/{id}/disable)
+func (_ Unimplemented) DisableRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableRemoteAccessRuleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// EnableRemoteAccessRule Enable a remote access rule.
+// (POST /enterprise/remote-access-rules/{id}/enable)
+func (_ Unimplemented) EnableRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableRemoteAccessRuleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetRemoteAccessRuleReferences Get remote access rule references.
+// (GET /enterprise/remote-access-rules/{id}/references)
+func (_ Unimplemented) GetRemoteAccessRuleReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RestoreRemoteAccessRule Restore an archived remote access rule as a draft.
+// (POST /enterprise/remote-access-rules/{id}/restore)
+func (_ Unimplemented) RestoreRemoteAccessRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreRemoteAccessRuleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListRemoteAccessSessions List remote access sessions.
 // (GET /enterprise/remote-access-sessions)
 func (_ Unimplemented) ListRemoteAccessSessions(w http.ResponseWriter, r *http.Request, params ListRemoteAccessSessionsParams) {
@@ -228,6 +435,60 @@ func (_ Unimplemented) CreateRemoteAccessSessionTicket(w http.ResponseWriter, r 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ListSessionProfiles List remote access session profiles.
+// (GET /enterprise/session-profiles)
+func (_ Unimplemented) ListSessionProfiles(w http.ResponseWriter, r *http.Request, params ListSessionProfilesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateSessionProfile Create a remote access session profile.
+// (POST /enterprise/session-profiles)
+func (_ Unimplemented) CreateSessionProfile(w http.ResponseWriter, r *http.Request, params CreateSessionProfileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetSessionProfile Get a remote access session profile.
+// (GET /enterprise/session-profiles/{id})
+func (_ Unimplemented) GetSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateSessionProfile Update a remote access session profile with optimistic concurrency.
+// (PUT /enterprise/session-profiles/{id})
+func (_ Unimplemented) UpdateSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params UpdateSessionProfileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ArchiveSessionProfile Archive a session profile.
+// (POST /enterprise/session-profiles/{id}/archive)
+func (_ Unimplemented) ArchiveSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ArchiveSessionProfileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DisableSessionProfile Disable a session profile.
+// (POST /enterprise/session-profiles/{id}/disable)
+func (_ Unimplemented) DisableSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DisableSessionProfileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// EnableSessionProfile Enable a session profile.
+// (POST /enterprise/session-profiles/{id}/enable)
+func (_ Unimplemented) EnableSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params EnableSessionProfileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetSessionProfileReferences Get session profile references.
+// (GET /enterprise/session-profiles/{id}/references)
+func (_ Unimplemented) GetSessionProfileReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RestoreSessionProfile Restore an archived session profile as a draft.
+// (POST /enterprise/session-profiles/{id}/restore)
+func (_ Unimplemented) RestoreSessionProfile(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params RestoreSessionProfileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
 	Handler            ServerInterface
@@ -236,6 +497,609 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListApprovalWorkflows operation middleware
+func (siw *ServerInterfaceWrapper) ListApprovalWorkflows(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListApprovalWorkflowsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListApprovalWorkflows(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateApprovalWorkflow operation middleware
+func (siw *ServerInterfaceWrapper) CreateApprovalWorkflow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateApprovalWorkflowParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateApprovalWorkflow(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetApprovalWorkflow operation middleware
+func (siw *ServerInterfaceWrapper) GetApprovalWorkflow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetApprovalWorkflow(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateApprovalWorkflow operation middleware
+func (siw *ServerInterfaceWrapper) UpdateApprovalWorkflow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateApprovalWorkflowParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateApprovalWorkflow(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveApprovalWorkflow operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveApprovalWorkflow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ArchiveApprovalWorkflowParams
+
+	// ------------- Required query parameter "expected_version" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "expected_version", r.URL.Query(), &params.ExpectedVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expected_version"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expected_version", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveApprovalWorkflow(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DisableApprovalWorkflow operation middleware
+func (siw *ServerInterfaceWrapper) DisableApprovalWorkflow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DisableApprovalWorkflowParams
+
+	// ------------- Required query parameter "expected_version" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "expected_version", r.URL.Query(), &params.ExpectedVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expected_version"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expected_version", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DisableApprovalWorkflow(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EnableApprovalWorkflow operation middleware
+func (siw *ServerInterfaceWrapper) EnableApprovalWorkflow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EnableApprovalWorkflowParams
+
+	// ------------- Required query parameter "expected_version" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "expected_version", r.URL.Query(), &params.ExpectedVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expected_version"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expected_version", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EnableApprovalWorkflow(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetApprovalWorkflowReferences operation middleware
+func (siw *ServerInterfaceWrapper) GetApprovalWorkflowReferences(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetApprovalWorkflowReferences(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RestoreApprovalWorkflow operation middleware
+func (siw *ServerInterfaceWrapper) RestoreApprovalWorkflow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RestoreApprovalWorkflowParams
+
+	// ------------- Required query parameter "expected_version" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "expected_version", r.URL.Query(), &params.ExpectedVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expected_version"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expected_version", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RestoreApprovalWorkflow(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // ListRemoteAccessGrants operation middleware
 func (siw *ServerInterfaceWrapper) ListRemoteAccessGrants(w http.ResponseWriter, r *http.Request) {
@@ -351,83 +1215,6 @@ func (siw *ServerInterfaceWrapper) CreateRemoteAccessGrant(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// DisableRemoteAccessGrant operation middleware
-func (siw *ServerInterfaceWrapper) DisableRemoteAccessGrant(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DisableRemoteAccessGrantParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DisableRemoteAccessGrant(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetRemoteAccessGrant operation middleware
 func (siw *ServerInterfaceWrapper) GetRemoteAccessGrant(w http.ResponseWriter, r *http.Request) {
 
@@ -531,54 +1318,8 @@ func (siw *ServerInterfaceWrapper) UpdateRemoteAccessGrant(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// ListRemoteAccessLeases operation middleware
-func (siw *ServerInterfaceWrapper) ListRemoteAccessLeases(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListRemoteAccessLeasesParams
-
-	// ------------- Optional query parameter "cursor" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRemoteAccessLeases(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// RevokeRemoteAccessLease operation middleware
-func (siw *ServerInterfaceWrapper) RevokeRemoteAccessLease(w http.ResponseWriter, r *http.Request) {
+// ArchiveRemoteAccessGrant operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveRemoteAccessGrant(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -593,7 +1334,20 @@ func (siw *ServerInterfaceWrapper) RevokeRemoteAccessLease(w http.ResponseWriter
 	}
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params RevokeRemoteAccessLeaseParams
+	var params ArchiveRemoteAccessGrantParams
+
+	// ------------- Required query parameter "expected_version" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "expected_version", r.URL.Query(), &params.ExpectedVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expected_version"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expected_version", Err: err})
+		}
+		return
+	}
 
 	headers := r.Header
 
@@ -644,7 +1398,7 @@ func (siw *ServerInterfaceWrapper) RevokeRemoteAccessLease(w http.ResponseWriter
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RevokeRemoteAccessLease(w, r, id, params)
+		siw.Handler.ArchiveRemoteAccessGrant(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -654,60 +1408,126 @@ func (siw *ServerInterfaceWrapper) RevokeRemoteAccessLease(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// ListRemoteAccessPolicies operation middleware
-func (siw *ServerInterfaceWrapper) ListRemoteAccessPolicies(w http.ResponseWriter, r *http.Request) {
+// DisableRemoteAccessGrant operation middleware
+func (siw *ServerInterfaceWrapper) DisableRemoteAccessGrant(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
 	// Parameter object where we will unmarshal all parameters from the context
-	var params ListRemoteAccessPoliciesParams
+	var params DisableRemoteAccessGrantParams
 
-	// ------------- Optional query parameter "cursor" -------------
+	// ------------- Required query parameter "expected_version" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "expected_version", r.URL.Query(), &params.ExpectedVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expected_version"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expected_version", Err: err})
 		}
 		return
 	}
 
-	// ------------- Optional query parameter "limit" -------------
+	headers := r.Header
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DisableRemoteAccessGrant(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EnableRemoteAccessGrant operation middleware
+func (siw *ServerInterfaceWrapper) EnableRemoteAccessGrant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EnableRemoteAccessGrantParams
+
+	// ------------- Required query parameter "expected_version" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "expected_version", r.URL.Query(), &params.ExpectedVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expected_version"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expected_version", Err: err})
 		}
 		return
 	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRemoteAccessPolicies(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateRemoteAccessPolicy operation middleware
-func (siw *ServerInterfaceWrapper) CreateRemoteAccessPolicy(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateRemoteAccessPolicyParams
 
 	headers := r.Header
 
@@ -758,7 +1578,7 @@ func (siw *ServerInterfaceWrapper) CreateRemoteAccessPolicy(w http.ResponseWrite
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateRemoteAccessPolicy(w, r, params)
+		siw.Handler.EnableRemoteAccessGrant(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -768,8 +1588,34 @@ func (siw *ServerInterfaceWrapper) CreateRemoteAccessPolicy(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
-// DisableRemoteAccessPolicy operation middleware
-func (siw *ServerInterfaceWrapper) DisableRemoteAccessPolicy(w http.ResponseWriter, r *http.Request) {
+// GetRemoteAccessGrantReferences operation middleware
+func (siw *ServerInterfaceWrapper) GetRemoteAccessGrantReferences(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRemoteAccessGrantReferences(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RestoreRemoteAccessGrant operation middleware
+func (siw *ServerInterfaceWrapper) RestoreRemoteAccessGrant(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -784,292 +1630,20 @@ func (siw *ServerInterfaceWrapper) DisableRemoteAccessPolicy(w http.ResponseWrit
 	}
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params DisableRemoteAccessPolicyParams
+	var params RestoreRemoteAccessGrantParams
 
-	headers := r.Header
+	// ------------- Required query parameter "expected_version" -------------
 
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DisableRemoteAccessPolicy(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetRemoteAccessPolicy operation middleware
-func (siw *ServerInterfaceWrapper) GetRemoteAccessPolicy(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRemoteAccessPolicy(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateRemoteAccessPolicy operation middleware
-func (siw *ServerInterfaceWrapper) UpdateRemoteAccessPolicy(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params UpdateRemoteAccessPolicyParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateRemoteAccessPolicy(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetRemoteAccessRecording operation middleware
-func (siw *ServerInterfaceWrapper) GetRemoteAccessRecording(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRemoteAccessRecording(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListRemoteAccessRecordingEvents operation middleware
-func (siw *ServerInterfaceWrapper) ListRemoteAccessRecordingEvents(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListRemoteAccessRecordingEventsParams
-
-	// ------------- Optional query parameter "cursor" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "expected_version", r.URL.Query(), &params.ExpectedVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expected_version"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expected_version", Err: err})
 		}
 		return
 	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRemoteAccessRecordingEvents(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListRemoteAccessRequests operation middleware
-func (siw *ServerInterfaceWrapper) ListRemoteAccessRequests(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListRemoteAccessRequestsParams
-
-	// ------------- Optional query parameter "cursor" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRemoteAccessRequests(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateRemoteAccessRequest operation middleware
-func (siw *ServerInterfaceWrapper) CreateRemoteAccessRequest(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateRemoteAccessRequestParams
 
 	headers := r.Header
 
@@ -1120,7 +1694,7 @@ func (siw *ServerInterfaceWrapper) CreateRemoteAccessRequest(w http.ResponseWrit
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateRemoteAccessRequest(w, r, params)
+		siw.Handler.RestoreRemoteAccessGrant(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1129,588 +1703,3 @@ func (siw *ServerInterfaceWrapper) CreateRemoteAccessRequest(w http.ResponseWrit
 
 	handler.ServeHTTP(w, r)
 }
-
-// GetRemoteAccessRequest operation middleware
-func (siw *ServerInterfaceWrapper) GetRemoteAccessRequest(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRemoteAccessRequest(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DecideRemoteAccessRequest operation middleware
-func (siw *ServerInterfaceWrapper) DecideRemoteAccessRequest(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DecideRemoteAccessRequestParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DecideRemoteAccessRequest(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListRemoteAccessSessions operation middleware
-func (siw *ServerInterfaceWrapper) ListRemoteAccessSessions(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListRemoteAccessSessionsParams
-
-	// ------------- Optional query parameter "cursor" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRemoteAccessSessions(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateRemoteAccessSession operation middleware
-func (siw *ServerInterfaceWrapper) CreateRemoteAccessSession(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateRemoteAccessSessionParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateRemoteAccessSession(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetRemoteAccessSession operation middleware
-func (siw *ServerInterfaceWrapper) GetRemoteAccessSession(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRemoteAccessSession(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// TerminateRemoteAccessSession operation middleware
-func (siw *ServerInterfaceWrapper) TerminateRemoteAccessSession(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params TerminateRemoteAccessSessionParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.TerminateRemoteAccessSession(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateRemoteAccessSessionTicket operation middleware
-func (siw *ServerInterfaceWrapper) CreateRemoteAccessSessionTicket(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateRemoteAccessSessionTicketParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "Idempotency-Key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
-		var IdempotencyKey IdempotencyKey
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
-			return
-		}
-
-		params.IdempotencyKey = IdempotencyKey
-
-	} else {
-		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
-		return
-	}
-
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateRemoteAccessSessionTicket(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-type UnescapedCookieParamError struct {
-	ParamName string
-	Err       error
-}
-
-func (e *UnescapedCookieParamError) Error() string {
-	return fmt.Sprintf("error unescaping cookie parameter '%s'", e.ParamName)
-}
-
-func (e *UnescapedCookieParamError) Unwrap() error {
-	return e.Err
-}
-
-type UnmarshalingParamError struct {
-	ParamName string
-	Err       error
-}
-
-func (e *UnmarshalingParamError) Error() string {
-	return fmt.Sprintf("Error unmarshaling parameter %s as JSON: %s", e.ParamName, e.Err.Error())
-}
-
-func (e *UnmarshalingParamError) Unwrap() error {
-	return e.Err
-}
-
-type RequiredParamError struct {
-	ParamName string
-}
-
-func (e *RequiredParamError) Error() string {
-	return fmt.Sprintf("Query argument %s is required, but not found", e.ParamName)
-}
-
-type RequiredHeaderError struct {
-	ParamName string
-	Err       error
-}
-
-func (e *RequiredHeaderError) Error() string {
-	return fmt.Sprintf("Header parameter %s is required, but not found", e.ParamName)
-}
-
-func (e *RequiredHeaderError) Unwrap() error {
-	return e.Err
-}
-
-type InvalidParamFormatError struct {
-	ParamName string
-	Err       error
-}
-
-func (e *InvalidParamFormatError) Error() string {
-	return fmt.Sprintf("Invalid format for parameter %s: %s", e.ParamName, e.Err.Error())
-}
-
-func (e *InvalidParamFormatError) Unwrap() error {
-	return e.Err
-}
-
-type TooManyValuesForParamError struct {
-	ParamName string
-	Count     int
-}
-
-func (e *TooManyValuesForParamError) Error() string {
-	return fmt.Sprintf("Expected one value for %s, got %d", e.ParamName, e.Count)
-}
-
-// Handler creates http.Handler with routing matching OpenAPI spec.
-func Handler(si ServerInterface) http.Handler {
-	return HandlerWithOptions(si, ChiServerOptions{})
-}
-
-type ChiServerOptions struct {
-	BaseURL          string
-	BaseRouter       chi.Router
-	Middlewares      []MiddlewareFunc
-	ErrorHandlerFunc func(w http.ResponseWriter, r *http.Request, err error)
-}
-
-// HandlerFromMux creates http.Handler with routing matching OpenAPI spec based on the provided mux.
-func HandlerFromMux(si ServerInterface, r chi.Router) http.Handler {
-	return HandlerWithOptions(si, ChiServerOptions{
-		BaseRouter: r,
-	})
-}
-
-func HandlerFromMuxWithBaseURL(si ServerInterface, r chi.Router, baseURL string) http.Handler {
-	return HandlerWithOptions(si, ChiServerOptions{
-		BaseURL:    baseURL,
-		BaseRouter: r,
-	})
-}
-
-// HandlerWithOptions creates http.Handler with additional options
-func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handler {
-	r := options.BaseRouter
-
-	if r == nil {
-		r = chi.NewRouter()
-	}
-	if options.ErrorHandlerFunc == nil {
-		options.ErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-	}
-	wrapper := ServerInterfaceWrapper{
-		Handler:            si,
-		HandlerMiddlewares: options.Middlewares,
-		ErrorHandlerFunc:   options.ErrorHandlerFunc,
-	}
-
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-grants", wrapper.ListRemoteAccessGrants)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/remote-access-grants", wrapper.CreateRemoteAccessGrant)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/enterprise/remote-access-grants/{id}", wrapper.DisableRemoteAccessGrant)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-grants/{id}", wrapper.GetRemoteAccessGrant)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/enterprise/remote-access-grants/{id}", wrapper.UpdateRemoteAccessGrant)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-policies", wrapper.ListRemoteAccessPolicies)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/remote-access-policies", wrapper.CreateRemoteAccessPolicy)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/enterprise/remote-access-policies/{id}", wrapper.DisableRemoteAccessPolicy)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-policies/{id}", wrapper.GetRemoteAccessPolicy)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/enterprise/remote-access-policies/{id}", wrapper.UpdateRemoteAccessPolicy)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-requests", wrapper.ListRemoteAccessRequests)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/remote-access-requests", wrapper.CreateRemoteAccessRequest)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-requests/{id}", wrapper.GetRemoteAccessRequest)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/remote-access-requests/{id}/decisions", wrapper.DecideRemoteAccessRequest)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-leases", wrapper.ListRemoteAccessLeases)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/remote-access-leases/{id}/revoke", wrapper.RevokeRemoteAccessLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-sessions", wrapper.ListRemoteAccessSessions)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/remote-access-sessions", wrapper.CreateRemoteAccessSession)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-sessions/{id}", wrapper.GetRemoteAccessSession)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/remote-access-sessions/{id}/tickets", wrapper.CreateRemoteAccessSessionTicket)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/remote-access-sessions/{id}/terminate", wrapper.TerminateRemoteAccessSession)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-recordings/{id}", wrapper.GetRemoteAccessRecording)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/remote-access-recordings/{id}/events", wrapper.ListRemoteAccessRecordingEvents)
-	})
-
-	return r
-}
-
-type ErrorJSONResponse ApiError

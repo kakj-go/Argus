@@ -2,7 +2,6 @@ package platform
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"github.com/kakj-go/Argus/internal/audit"
 	"github.com/kakj-go/Argus/internal/authorization"
 	"github.com/kakj-go/Argus/internal/identity"
+	"github.com/kakj-go/Argus/internal/remoteaccess/revocation"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
@@ -53,7 +53,6 @@ func (service EnterpriseService) CreateEnterprise(ctx context.Context, actorID s
 	enterprise, err := postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "platform", actorID, "enterprise.create", idempotencyKey, input, 201, func(queries *db.Queries) (db.Enterprise, error) {
 		enterpriseID := newUUID()
 		departmentID := newUUID()
-		scopeID := newUUID()
 		enterprise, err := queries.CreateEnterprise(ctx, db.CreateEnterpriseParams{
 			ID: enterpriseID, Name: input.Name, Code: input.Code, Timezone: input.Timezone,
 			DefaultLocale: input.DefaultLocale, Remark: input.Remark,
@@ -84,13 +83,6 @@ func (service EnterpriseService) CreateEnterprise(ctx context.Context, actorID s
 					return db.Enterprise{}, err
 				}
 			}
-		}
-		emptyHash := sha256.Sum256([]byte("null"))
-		if _, err := queries.CreateDataScope(ctx, db.CreateDataScopeParams{
-			ID: scopeID, EnterpriseID: enterpriseID, Name: "Default resource scope", Description: "Matches all host and Kubernetes resources",
-			ResourceTypes: []string{"host", "kubernetes_cluster"}, ExplicitResourceIds: []string{}, SelectorHash: emptyHash[:], MatchAll: true,
-		}); err != nil {
-			return db.Enterprise{}, err
 		}
 		if err := audit.InitializeChain(ctx, queries, "enterprise", uuid.NullUUID{UUID: enterpriseID, Valid: true}); err != nil {
 			return db.Enterprise{}, err
@@ -154,6 +146,9 @@ func (service EnterpriseService) DisableAdmin(ctx context.Context, actorID strin
 		if err := queries.RevokeSubjectSessions(ctx, db.RevokeSubjectSessionsParams{Audience: "enterprise", UserID: userID, RevokeReason: pgtype.Text{String: "user_disabled", Valid: true}}); err != nil {
 			return err
 		}
+		if err := revocation.Users(ctx, queries, user.EnterpriseID, []uuid.UUID{userID}, "user_disabled"); err != nil {
+			return err
+		}
 		_, err = audit.Append(ctx, queries, audit.Entry{Domain: "platform", ActorType: "platform_user", ActorID: actorID,
 			Action: "enterprise_admin.disable", ResourceType: "enterprise_user", ResourceID: userID.String(), Result: "success", Details: map[string]any{"status": "disabled"}})
 		return err
@@ -180,6 +175,13 @@ func (service EnterpriseService) ChangeStatus(ctx context.Context, actorID strin
 		}
 		if status != "active" {
 			if err := queries.RevokeEnterpriseSessions(ctx, db.RevokeEnterpriseSessionsParams{EnterpriseID: uuid.NullUUID{UUID: enterpriseID, Valid: true}, RevokeReason: pgtype.Text{String: "enterprise_" + status, Valid: true}}); err != nil {
+				return err
+			}
+			affected, err := queries.BumpEnterpriseUsersAuthorizationVersion(ctx, enterpriseID)
+			if err != nil {
+				return err
+			}
+			if err := revocation.Users(ctx, queries, enterpriseID, affected, "enterprise_"+status); err != nil {
 				return err
 			}
 		}
@@ -246,15 +248,8 @@ func (service EnterpriseService) CreateAdmin(ctx context.Context, actorID string
 		if err != nil {
 			return CreatedCredential{}, err
 		}
-		binding, err := queries.CreateRoleBinding(ctx, db.CreateRoleBindingParams{ID: newUUID(), EnterpriseID: enterpriseID, SubjectType: "user", SubjectID: user.ID, RoleID: role.ID})
+		_, err = queries.CreateRoleBinding(ctx, db.CreateRoleBindingParams{ID: newUUID(), EnterpriseID: enterpriseID, SubjectType: "user", SubjectID: user.ID, RoleID: role.ID})
 		if err != nil {
-			return CreatedCredential{}, err
-		}
-		defaultScope, err := service.defaultScope(ctx, queries, enterpriseID)
-		if err != nil {
-			return CreatedCredential{}, err
-		}
-		if err := queries.AddRoleBindingDataScope(ctx, db.AddRoleBindingDataScopeParams{RoleBindingID: binding.ID, DataScopeID: defaultScope.ID, EnterpriseID: enterpriseID}); err != nil {
 			return CreatedCredential{}, err
 		}
 		_, err = audit.Append(ctx, queries, audit.Entry{Domain: "platform", ActorType: "platform_user", ActorID: actorID,
@@ -301,28 +296,6 @@ func (service EnterpriseService) ResetAdminPassword(ctx context.Context, actorID
 		}
 		return CreatedCredential{User: user, TemporaryPassword: password, ExpiresAt: expiresAt}, nil
 	})
-}
-
-func (service EnterpriseService) defaultScope(ctx context.Context, queries *db.Queries, enterpriseID uuid.UUID) (db.DataScope, error) {
-	scopes, err := queries.ListDataScopes(ctx, enterpriseID)
-	if err != nil {
-		return db.DataScope{}, err
-	}
-	for _, scope := range scopes {
-		if scope.MatchAll && containsString(scope.ResourceTypes, "host") && containsString(scope.ResourceTypes, "kubernetes_cluster") {
-			return scope, nil
-		}
-	}
-	return db.DataScope{}, fmt.Errorf("default data scope missing")
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }
 
 var ErrEnterpriseUnavailable = errors.New("enterprise unavailable")

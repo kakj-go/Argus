@@ -76,6 +76,13 @@
 .argus-button--danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 17%, transparent);
 }
+/* RowAction：行内文字操作，danger 仅以红色文字区分 */
+.argus-row-action--danger {
+  color: var(--danger);
+}
+.argus-row-action--danger:hover:not(:disabled) {
+  color: var(--danger);
+}
 .argus-button--sm {
   min-height: 30px;
   padding: 0 var(--space-px-11);
@@ -429,6 +436,46 @@
   animation: argus-dialog-in var(--motion-normal);
   overflow: hidden;
 }
+.argus-dialog--lg {
+  width: min(960px, calc(100vw - 48px));
+}
+
+/* ErrorBoundary */
+.argus-error-boundary {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-px-12);
+  padding: var(--space-px-48) var(--space-px-20);
+  text-align: center;
+}
+.argus-error-boundary h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-16);
+  font-weight: 680;
+}
+.argus-error-boundary p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-13);
+}
+.argus-error-boundary pre {
+  max-width: 100%;
+  margin: 0;
+  overflow: auto;
+  padding: var(--space-px-12);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-code);
+  color: var(--text-console);
+  font-size: var(--font-size-12);
+  text-align: left;
+  white-space: pre-wrap;
+}
+.argus-error-boundary__actions {
+  display: flex;
+  gap: var(--space-px-9);
+}
 .argus-dialog__top {
   display: flex;
   align-items: flex-start;
@@ -462,6 +509,8 @@
 }
 .argus-dialog__body {
   padding: var(--space-px-20);
+  max-height: calc(100dvh - 220px);
+  overflow-y: auto;
 }
 .argus-dialog__footer {
   display: flex;

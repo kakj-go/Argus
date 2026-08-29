@@ -55,6 +55,8 @@ paths:
     $ref: ./paths/m2.yaml#/enterprise_users
   /enterprise/users/{id}:
     $ref: ./paths/m2.yaml#/enterprise_user
+  /enterprise/users/{id}/role-assignments:
+    $ref: ./paths/m2.yaml#/enterprise_user_role_assignments
   /enterprise/departments:
     $ref: ./paths/m2.yaml#/enterprise_departments
   /enterprise/departments/{id}:
@@ -69,10 +71,6 @@ paths:
     $ref: ./paths/m2.yaml#/enterprise_role_bindings
   /enterprise/role-bindings/{id}:
     $ref: ./paths/m2.yaml#/enterprise_role_binding
-  /enterprise/data-scopes:
-    $ref: ./paths/m2.yaml#/enterprise_data_scopes
-  /enterprise/data-scopes/{id}:
-    $ref: ./paths/m2.yaml#/enterprise_data_scope
   /enterprise/service-accounts:
     $ref: ./paths/m2.yaml#/enterprise_service_accounts
   /enterprise/service-accounts/{id}:
@@ -251,16 +249,68 @@ paths:
     $ref: ./paths/m6.yaml#/grant_collection
   /enterprise/remote-access-grants/{id}:
     $ref: ./paths/m6.yaml#/grant_item
-  /enterprise/remote-access-policies:
-    $ref: ./paths/m6.yaml#/policy_collection
-  /enterprise/remote-access-policies/{id}:
-    $ref: ./paths/m6.yaml#/policy_item
+  /enterprise/remote-access-grants/{id}/enable:
+    $ref: ./paths/m6.yaml#/grant_enable
+  /enterprise/remote-access-grants/{id}/disable:
+    $ref: ./paths/m6.yaml#/grant_disable
+  /enterprise/remote-access-grants/{id}/restore:
+    $ref: ./paths/m6.yaml#/grant_restore
+  /enterprise/remote-access-grants/{id}/archive:
+    $ref: ./paths/m6.yaml#/grant_archive
+  /enterprise/remote-access-grants/{id}/references:
+    $ref: ./paths/m6.yaml#/grant_references
+  /enterprise/remote-access-rules:
+    $ref: ./paths/m6.yaml#/rule_collection
+  /enterprise/remote-access-rules/simulate:
+    $ref: ./paths/m6.yaml#/rule_simulate
+  /enterprise/remote-access-rules/{id}:
+    $ref: ./paths/m6.yaml#/rule_item
+  /enterprise/remote-access-rules/{id}/enable:
+    $ref: ./paths/m6.yaml#/rule_enable
+  /enterprise/remote-access-rules/{id}/disable:
+    $ref: ./paths/m6.yaml#/rule_disable
+  /enterprise/remote-access-rules/{id}/restore:
+    $ref: ./paths/m6.yaml#/rule_restore
+  /enterprise/remote-access-rules/{id}/archive:
+    $ref: ./paths/m6.yaml#/rule_archive
+  /enterprise/remote-access-rules/{id}/references:
+    $ref: ./paths/m6.yaml#/rule_references
+  /enterprise/approval-workflows:
+    $ref: ./paths/m6.yaml#/workflow_collection
+  /enterprise/approval-workflows/{id}:
+    $ref: ./paths/m6.yaml#/workflow_item
+  /enterprise/approval-workflows/{id}/enable:
+    $ref: ./paths/m6.yaml#/workflow_enable
+  /enterprise/approval-workflows/{id}/disable:
+    $ref: ./paths/m6.yaml#/workflow_disable
+  /enterprise/approval-workflows/{id}/restore:
+    $ref: ./paths/m6.yaml#/workflow_restore
+  /enterprise/approval-workflows/{id}/archive:
+    $ref: ./paths/m6.yaml#/workflow_archive
+  /enterprise/approval-workflows/{id}/references:
+    $ref: ./paths/m6.yaml#/workflow_references
+  /enterprise/session-profiles:
+    $ref: ./paths/m6.yaml#/profile_collection
+  /enterprise/session-profiles/{id}:
+    $ref: ./paths/m6.yaml#/profile_item
+  /enterprise/session-profiles/{id}/enable:
+    $ref: ./paths/m6.yaml#/profile_enable
+  /enterprise/session-profiles/{id}/disable:
+    $ref: ./paths/m6.yaml#/profile_disable
+  /enterprise/session-profiles/{id}/restore:
+    $ref: ./paths/m6.yaml#/profile_restore
+  /enterprise/session-profiles/{id}/archive:
+    $ref: ./paths/m6.yaml#/profile_archive
+  /enterprise/session-profiles/{id}/references:
+    $ref: ./paths/m6.yaml#/profile_references
   /enterprise/remote-access-requests:
     $ref: ./paths/m6.yaml#/request_collection
   /enterprise/remote-access-requests/{id}:
     $ref: ./paths/m6.yaml#/request_item
   /enterprise/remote-access-requests/{id}/decisions:
     $ref: ./paths/m6.yaml#/request_decisions
+  /enterprise/remote-access-requests/{id}/resume:
+    $ref: ./paths/m6.yaml#/request_resume
   /enterprise/remote-access-leases:
     $ref: ./paths/m6.yaml#/lease_collection
   /enterprise/remote-access-leases/{id}/revoke:
@@ -275,6 +325,8 @@ paths:
     $ref: ./paths/m6.yaml#/session_terminate
   /enterprise/remote-access-recordings/{id}:
     $ref: ./paths/m6.yaml#/recording_item
+  /enterprise/remote-access-recordings:
+    $ref: ./paths/m6.yaml#/recording_collection
   /enterprise/remote-access-recordings/{id}/events:
     $ref: ./paths/m6.yaml#/recording_events
   /telemetry/collectors/enroll:
@@ -387,8 +439,6 @@ components:
       $ref: ./components/authorization.yaml#/components/schemas/AuthorizationVersion
     RoleBinding:
       $ref: ./components/authorization.yaml#/components/schemas/RoleBinding
-    DataScope:
-      $ref: ./components/authorization.yaml#/components/schemas/DataScope
     AuthorizationDecision:
       $ref: ./components/authorization.yaml#/components/schemas/AuthorizationDecision
     Labels:
@@ -441,8 +491,12 @@ components:
       $ref: ./components/m5.yaml#/components/schemas/CardPresentation
     RemoteAccessGrant:
       $ref: ./components/m6.yaml#/components/schemas/RemoteAccessGrant
-    RemoteAccessPolicy:
-      $ref: ./components/m6.yaml#/components/schemas/RemoteAccessPolicy
+    RemoteAccessRule:
+      $ref: ./components/m6.yaml#/components/schemas/RemoteAccessRule
+    ApprovalWorkflow:
+      $ref: ./components/m6.yaml#/components/schemas/ApprovalWorkflow
+    SessionProfile:
+      $ref: ./components/m6.yaml#/components/schemas/SessionProfile
     AccessRequest:
       $ref: ./components/m6.yaml#/components/schemas/AccessRequest
     AccessLease:
@@ -563,12 +617,10 @@ components:
       $ref: ./components/m2.yaml#/components/schemas/RoleBindingUpdate
     RoleBindingPage:
       $ref: ./components/m2.yaml#/components/schemas/RoleBindingPage
-    DataScopeCreate:
-      $ref: ./components/m2.yaml#/components/schemas/DataScopeCreate
-    DataScopeUpdate:
-      $ref: ./components/m2.yaml#/components/schemas/DataScopeUpdate
-    DataScopePage:
-      $ref: ./components/m2.yaml#/components/schemas/DataScopePage
+    UserRoleAssignments:
+      $ref: ./components/m2.yaml#/components/schemas/UserRoleAssignments
+    UserRoleAssignmentsUpdate:
+      $ref: ./components/m2.yaml#/components/schemas/UserRoleAssignmentsUpdate
     PermissionPage:
       $ref: ./components/m2.yaml#/components/schemas/PermissionPage
     AuditEvent:
@@ -645,6 +697,11 @@ components:
       in: header
       required: true
       schema: {type: string, minLength: 16, maxLength: 256}
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema: {type: integer, format: int64, minimum: 1}
     ResourceId:
       name: id
       in: path

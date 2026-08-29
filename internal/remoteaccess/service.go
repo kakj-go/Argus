@@ -3,20 +3,23 @@ package remoteaccess
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kakj-go/Argus/internal/audit"
-	"github.com/kakj-go/Argus/internal/authorization"
+	"github.com/kakj-go/Argus/internal/remoteaccess/revocation"
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
@@ -29,45 +32,31 @@ var (
 	ErrApprovalNotEligible = errors.New("REMOTE_ACCESS_APPROVAL_NOT_ELIGIBLE")
 	ErrAuthorizationStale  = errors.New("AUTHORIZATION_VERSION_STALE")
 	ErrSessionUnavailable  = errors.New("REMOTE_ACCESS_CONNECTION_LOST")
+	ErrInvalidTransition   = errors.New("REMOTE_ACCESS_INVALID_STATE_TRANSITION")
 )
 
 type Actor struct {
-	EnterpriseID         uuid.UUID
-	UserID               uuid.UUID
-	DepartmentID         uuid.UUID
-	HTTPSessionID        uuid.UUID
-	AuthorizationVersion int64
-	DataScopeIDs         []uuid.UUID
-	StepUpAuthenticated  bool
+	EnterpriseID          uuid.UUID
+	UserID                uuid.UUID
+	DepartmentID          uuid.UUID
+	HTTPSessionID         uuid.UUID
+	AuthorizationVersion  int64
+	AuthorizedResourceIDs []uuid.UUID
+	StepUpAuthenticated   bool
+	SourceIP              netip.Addr
 }
 
 type GrantInput struct {
-	SubjectType       string          `json:"subject_type"`
-	SubjectID         uuid.UUID       `json:"subject_id"`
-	HostIDs           []uuid.UUID     `json:"host_ids"`
-	HostSelector      json.RawMessage `json:"host_selector,omitempty"`
-	ManagedAccountIDs []uuid.UUID     `json:"managed_account_ids"`
-	Protocols         []string        `json:"protocols"`
-	Actions           []string        `json:"actions"`
-	ValidFrom         time.Time       `json:"valid_from"`
-	ValidUntil        time.Time       `json:"valid_until"`
-	Enabled           bool            `json:"enabled"`
-	ExpectedVersion   int64           `json:"expected_version,omitempty"`
-}
-
-type PolicyInput struct {
-	Name               string          `json:"name"`
-	Enabled            bool            `json:"enabled"`
-	Priority           int32           `json:"priority"`
-	Protocols          []string        `json:"protocols"`
-	HostSelector       json.RawMessage `json:"host_selector,omitempty"`
-	ApproverRoleIDs    []uuid.UUID     `json:"approver_role_ids"`
-	MinimumApprovals   int32           `json:"minimum_approvals"`
-	SeparationOfDuties bool            `json:"separation_of_duties"`
-	RequireMFA         bool            `json:"require_mfa"`
-	MaxSessionSeconds  int32           `json:"max_session_seconds"`
-	IdleTimeoutSeconds int32           `json:"idle_timeout_seconds"`
-	ExpectedVersion    int64           `json:"expected_version,omitempty"`
+	SubjectType       string      `json:"subject_type"`
+	SubjectID         uuid.UUID   `json:"subject_id"`
+	HostIDs           []uuid.UUID `json:"host_ids"`
+	ManagedAccountIDs []uuid.UUID `json:"managed_account_ids"`
+	Protocols         []string    `json:"protocols"`
+	Actions           []string    `json:"actions"`
+	ValidFrom         time.Time   `json:"valid_from"`
+	ValidUntil        time.Time   `json:"valid_until"`
+	Status            string      `json:"status"`
+	ExpectedVersion   int64       `json:"expected_version,omitempty"`
 }
 
 type RequestInput struct {
@@ -106,11 +95,36 @@ type SessionView struct {
 	RecordingID uuid.UUID
 }
 
+type createRequestResult struct {
+	View              RequestView `json:"view"`
+	DeniedReasonCodes []string    `json:"denied_reason_codes,omitempty"`
+}
+
 type RecordingEventPage struct {
 	Recording db.RemoteAccessRecording
 	Events    []RecordingEvent
 	Next      int64
 	Complete  bool
+}
+
+type RequestListFilter struct {
+	Scope                  string
+	Status, Protocol       string
+	CreatedBy, HostID      uuid.UUID
+	CreatedFrom, CreatedTo *time.Time
+}
+
+type SessionListFilter struct {
+	Scope                            string
+	Status, Protocol, ConnectionMode string
+	UserID, HostID, ManagedAccountID uuid.UUID
+	CreatedFrom, CreatedTo           *time.Time
+}
+
+type RecordingListFilter struct {
+	Status                    string
+	SessionID, UserID, HostID uuid.UUID
+	CreatedFrom, CreatedTo    *time.Time
 }
 
 type Service struct {
@@ -125,8 +139,8 @@ type Service struct {
 	Now             func() time.Time
 }
 
-func (service Service) ListGrants(ctx context.Context, enterpriseID uuid.UUID, limit int32) ([]db.RemoteAccessGrant, error) {
-	return service.Store.Queries.ListRemoteAccessGrants(ctx, db.ListRemoteAccessGrantsParams{EnterpriseID: enterpriseID, Limit: boundedLimit(limit)})
+func (service Service) ListGrants(ctx context.Context, enterpriseID uuid.UUID) ([]db.RemoteAccessGrant, error) {
+	return service.Store.Queries.ListRemoteAccessGrants(ctx, enterpriseID)
 }
 
 func (service Service) GetGrant(ctx context.Context, enterpriseID, id uuid.UUID) (db.RemoteAccessGrant, error) {
@@ -134,15 +148,14 @@ func (service Service) GetGrant(ctx context.Context, enterpriseID, id uuid.UUID)
 }
 
 func (service Service) CreateGrant(ctx context.Context, actor Actor, input GrantInput, idempotencyKey string) (db.RemoteAccessGrant, error) {
-	normalized, hash, err := normalizeOptionalSelector(input.HostSelector)
-	if err != nil || !validGrantInput(input, normalized) {
+	if !validGrantInput(input) || input.Status != GovernanceDraft {
 		return db.RemoteAccessGrant{}, ErrInvalidRequest
 	}
 	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.grant.create", idempotencyKey, input, 201, func(q *db.Queries) (db.RemoteAccessGrant, error) {
 		value, err := q.CreateRemoteAccessGrant(ctx, db.CreateRemoteAccessGrantParams{ID: newID(), EnterpriseID: actor.EnterpriseID,
-			SubjectType: input.SubjectType, SubjectID: input.SubjectID, HostIds: input.HostIDs, HostSelector: normalized, HostSelectorHash: hash,
+			SubjectType: input.SubjectType, SubjectID: input.SubjectID, HostIds: input.HostIDs,
 			ManagedAccountIds: input.ManagedAccountIDs, Protocols: input.Protocols, Actions: input.Actions,
-			ValidFrom: timestamp(input.ValidFrom), ValidUntil: timestamp(input.ValidUntil), Enabled: input.Enabled, CreatedBy: actor.UserID})
+			ValidFrom: timestamp(input.ValidFrom), ValidUntil: timestamp(input.ValidUntil), Status: input.Status, CreatedBy: actor.UserID})
 		if err != nil {
 			return db.RemoteAccessGrant{}, err
 		}
@@ -150,194 +163,105 @@ func (service Service) CreateGrant(ctx context.Context, actor Actor, input Grant
 	})
 }
 
-func (service Service) UpdateGrant(ctx context.Context, actor Actor, id uuid.UUID, input GrantInput) (db.RemoteAccessGrant, error) {
-	normalized, hash, err := normalizeOptionalSelector(input.HostSelector)
-	if err != nil || input.ExpectedVersion < 1 || !validGrantInput(input, normalized) {
+func (service Service) UpdateGrant(ctx context.Context, actor Actor, id uuid.UUID, input GrantInput, idempotencyKey string) (db.RemoteAccessGrant, error) {
+	if input.ExpectedVersion < 1 || !validGrantFields(input) {
 		return db.RemoteAccessGrant{}, ErrInvalidRequest
 	}
-	var value db.RemoteAccessGrant
-	err = service.Store.InTx(ctx, func(q *db.Queries) error {
-		var updateErr error
-		value, updateErr = q.UpdateRemoteAccessGrant(ctx, db.UpdateRemoteAccessGrantParams{ID: id, EnterpriseID: actor.EnterpriseID,
-			SubjectType: input.SubjectType, SubjectID: input.SubjectID, HostIds: input.HostIDs, HostSelector: normalized, HostSelectorHash: hash,
+	request := struct {
+		ID    uuid.UUID  `json:"id"`
+		Input GrantInput `json:"input"`
+	}{ID: id, Input: input}
+	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.grant.update", idempotencyKey, request, 200, func(q *db.Queries) (db.RemoteAccessGrant, error) {
+		current, err := q.GetRemoteAccessGrant(ctx, db.GetRemoteAccessGrantParams{ID: id, EnterpriseID: actor.EnterpriseID})
+		if err != nil {
+			return db.RemoteAccessGrant{}, err
+		}
+		if current.Status == GovernanceArchived {
+			return db.RemoteAccessGrant{}, ErrInvalidTransition
+		}
+		value, updateErr := q.UpdateRemoteAccessGrant(ctx, db.UpdateRemoteAccessGrantParams{ID: id, EnterpriseID: actor.EnterpriseID,
+			SubjectType: input.SubjectType, SubjectID: input.SubjectID, HostIds: input.HostIDs,
 			ManagedAccountIds: input.ManagedAccountIDs, Protocols: input.Protocols, Actions: input.Actions,
-			ValidFrom: timestamp(input.ValidFrom), ValidUntil: timestamp(input.ValidUntil), Enabled: input.Enabled, Version: input.ExpectedVersion})
+			ValidFrom: timestamp(input.ValidFrom), ValidUntil: timestamp(input.ValidUntil), Version: input.ExpectedVersion})
 		if errors.Is(updateErr, pgx.ErrNoRows) {
-			return ErrVersionConflict
+			return db.RemoteAccessGrant{}, ErrVersionConflict
 		}
 		if updateErr != nil {
-			return updateErr
+			return db.RemoteAccessGrant{}, updateErr
 		}
 		if err := service.invalidateGrant(ctx, q, actor.EnterpriseID, id, "grant_changed"); err != nil {
-			return err
+			return db.RemoteAccessGrant{}, err
 		}
-		return appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.grant.update", "remote_access_grant", id, "updated")
-	})
-	return value, err
-}
-
-func (service Service) DisableGrant(ctx context.Context, actor Actor, id uuid.UUID) error {
-	return service.Store.InTx(ctx, func(q *db.Queries) error {
-		if _, err := q.DisableRemoteAccessGrant(ctx, db.DisableRemoteAccessGrantParams{ID: id, EnterpriseID: actor.EnterpriseID}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrVersionConflict
-			}
-			return err
-		}
-		if err := service.invalidateGrant(ctx, q, actor.EnterpriseID, id, "grant_disabled"); err != nil {
-			return err
-		}
-		return appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.grant.disable", "remote_access_grant", id, "disabled")
+		return value, appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.grant.update", "remote_access_grant", id, "updated")
 	})
 }
 
-func (service Service) ListPolicies(ctx context.Context, enterpriseID uuid.UUID) ([]db.RemoteAccessPolicy, error) {
-	return service.Store.Queries.ListRemoteAccessPolicies(ctx, enterpriseID)
-}
-
-func (service Service) GetPolicy(ctx context.Context, enterpriseID, id uuid.UUID) (db.RemoteAccessPolicy, error) {
-	return service.Store.Queries.GetRemoteAccessPolicy(ctx, db.GetRemoteAccessPolicyParams{ID: id, EnterpriseID: enterpriseID})
-}
-
-func (service Service) CreatePolicy(ctx context.Context, actor Actor, input PolicyInput, idempotencyKey string) (db.RemoteAccessPolicy, error) {
-	normalized, hash, err := normalizeOptionalSelector(input.HostSelector)
-	if err != nil || !validPolicyInput(input) {
-		return db.RemoteAccessPolicy{}, ErrInvalidRequest
+func (service Service) TransitionGrant(ctx context.Context, actor Actor, id uuid.UUID, from, to string, expectedVersion int64, key string) (db.RemoteAccessGrant, error) {
+	if expectedVersion < 1 || !ValidGovernanceTransition(from, to) {
+		return db.RemoteAccessGrant{}, ErrInvalidTransition
 	}
-	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.policy.create", idempotencyKey, input, 201, func(q *db.Queries) (db.RemoteAccessPolicy, error) {
-		value, err := q.CreateRemoteAccessPolicy(ctx, db.CreateRemoteAccessPolicyParams{ID: newID(), EnterpriseID: actor.EnterpriseID, Name: input.Name,
-			Enabled: input.Enabled, Priority: input.Priority, Protocols: input.Protocols, HostSelector: normalized, HostSelectorHash: hash,
-			ApproverRoleIds: input.ApproverRoleIDs, MinimumApprovals: input.MinimumApprovals, SeparationOfDuties: input.SeparationOfDuties,
-			RequireMfa: input.RequireMFA, MaxSessionSeconds: input.MaxSessionSeconds, IdleTimeoutSeconds: input.IdleTimeoutSeconds, CreatedBy: actor.UserID})
-		if err != nil {
-			return db.RemoteAccessPolicy{}, err
-		}
-		return value, appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.policy.create", "remote_access_policy", value.ID, "created")
-	})
-}
-
-func (service Service) UpdatePolicy(ctx context.Context, actor Actor, id uuid.UUID, input PolicyInput) (db.RemoteAccessPolicy, error) {
-	normalized, hash, err := normalizeOptionalSelector(input.HostSelector)
-	if err != nil || input.ExpectedVersion < 1 || !validPolicyInput(input) {
-		return db.RemoteAccessPolicy{}, ErrInvalidRequest
-	}
-	var value db.RemoteAccessPolicy
-	err = service.Store.InTx(ctx, func(q *db.Queries) error {
-		var updateErr error
-		value, updateErr = q.UpdateRemoteAccessPolicy(ctx, db.UpdateRemoteAccessPolicyParams{ID: id, EnterpriseID: actor.EnterpriseID, Name: input.Name,
-			Enabled: input.Enabled, Priority: input.Priority, Protocols: input.Protocols, HostSelector: normalized, HostSelectorHash: hash,
-			ApproverRoleIds: input.ApproverRoleIDs, MinimumApprovals: input.MinimumApprovals, SeparationOfDuties: input.SeparationOfDuties,
-			RequireMfa: input.RequireMFA, MaxSessionSeconds: input.MaxSessionSeconds, IdleTimeoutSeconds: input.IdleTimeoutSeconds, Version: input.ExpectedVersion})
-		if errors.Is(updateErr, pgx.ErrNoRows) {
-			return ErrVersionConflict
-		}
-		if updateErr != nil {
-			return updateErr
-		}
-		if err := service.invalidateEnterprise(ctx, q, actor.EnterpriseID, "policy_changed"); err != nil {
-			return err
-		}
-		return appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.policy.update", "remote_access_policy", id, "updated")
-	})
-	return value, err
-}
-
-func (service Service) DisablePolicy(ctx context.Context, actor Actor, id uuid.UUID) error {
-	return service.Store.InTx(ctx, func(q *db.Queries) error {
-		if _, err := q.DisableRemoteAccessPolicy(ctx, db.DisableRemoteAccessPolicyParams{ID: id, EnterpriseID: actor.EnterpriseID}); err != nil {
+	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.grant."+to, key,
+		map[string]any{"id": id, "from": from, "to": to, "expected_version": expectedVersion}, 200, func(q *db.Queries) (db.RemoteAccessGrant, error) {
+			value, err := q.TransitionRemoteAccessGrant(ctx, db.TransitionRemoteAccessGrantParams{ID: id, EnterpriseID: actor.EnterpriseID, Status: to, Status_2: from, Version: expectedVersion})
 			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrVersionConflict
+				return db.RemoteAccessGrant{}, ErrVersionConflict
 			}
-			return err
-		}
-		if err := service.invalidateEnterprise(ctx, q, actor.EnterpriseID, "policy_disabled"); err != nil {
-			return err
-		}
-		return appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.policy.disable", "remote_access_policy", id, "disabled")
-	})
+			if err != nil {
+				return db.RemoteAccessGrant{}, err
+			}
+			if err := service.invalidateGrant(ctx, q, actor.EnterpriseID, id, "grant_"+to); err != nil {
+				return db.RemoteAccessGrant{}, err
+			}
+			return value, appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.grant."+to, "remote_access_grant", id, to)
+		})
+}
+
+func (service Service) GrantReferences(ctx context.Context, enterpriseID, id uuid.UUID) (db.CountRemoteAccessGrantReferencesRow, error) {
+	if _, err := service.GetGrant(ctx, enterpriseID, id); err != nil {
+		return db.CountRemoteAccessGrantReferencesRow{}, err
+	}
+	return service.Store.Queries.CountRemoteAccessGrantReferences(ctx, id)
 }
 
 func (service Service) CreateRequest(ctx context.Context, actor Actor, input RequestInput, idempotencyKey string) (RequestView, error) {
-	if !actor.StepUpAuthenticated {
-		return RequestView{}, ErrMFARequired
-	}
 	if actor.UserID == uuid.Nil || input.HostID == uuid.Nil || input.ManagedAccountID == uuid.Nil || !validProtocol(input.Protocol) || input.Action != "terminal" || strings.TrimSpace(input.Reason) == "" {
 		return RequestView{}, ErrInvalidRequest
 	}
-	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.request.create", idempotencyKey, input, 201, func(q *db.Queries) (RequestView, error) {
-		host, err := q.GetHost(ctx, db.GetHostParams{ID: input.HostID, EnterpriseID: actor.EnterpriseID})
-		if err != nil || host.Status != "active" {
-			return RequestView{}, ErrScopeDenied
-		}
-		labels, err := resource.DecodeLabels(host.Labels)
+	result, err := postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.request.create", idempotencyKey, input, 201, func(q *db.Queries) (createRequestResult, error) {
+		evaluated, err := service.evaluateAccess(ctx, q, actor, input, service.now())
 		if err != nil {
-			return RequestView{}, err
+			return createRequestResult{}, err
 		}
-		allowed, _, err := service.Access.CanAccess(ctx, actor.EnterpriseID, actor.DataScopeIDs, "host", host.ID.String(), labels)
-		if err != nil || !allowed {
-			return RequestView{}, ErrScopeDenied
-		}
-		account, err := q.GetManagedAccount(ctx, db.GetManagedAccountParams{ID: input.ManagedAccountID, EnterpriseID: actor.EnterpriseID})
-		if err != nil || account.Status != "active" || account.HostID != host.ID || !slices.Contains(account.AllowedProtocols, accountProtocol(input.Protocol)) {
-			return RequestView{}, ErrScopeDenied
-		}
-		grants, err := q.ListCandidateRemoteAccessGrants(ctx, db.ListCandidateRemoteAccessGrantsParams{EnterpriseID: actor.EnterpriseID, ActorID: actor.UserID})
-		if err != nil {
-			return RequestView{}, err
-		}
-		grant, ok := selectGrant(grants, input, labels, actor.EnterpriseID)
-		if !ok {
-			return RequestView{}, ErrGrantRequired
-		}
-		policies, err := q.ListRemoteAccessPolicies(ctx, actor.EnterpriseID)
-		if err != nil {
-			return RequestView{}, err
-		}
-		matched, err := matchPolicyRecords(policies, actor.EnterpriseID, input.HostID, labels, input.Protocol, actor.StepUpAuthenticated)
-		if err != nil {
-			return RequestView{}, err
-		}
-		now := service.now()
-		expires := now.Add(LeaseTTL)
-		if grant.ValidUntil.Valid && grant.ValidUntil.Time.Before(expires) {
-			expires = grant.ValidUntil.Time
-		}
-		status := "authorized"
-		if len(matched) > 0 {
-			status = "awaiting_approval"
-		}
-		request, err := q.CreateRemoteAccessRequest(ctx, db.CreateRemoteAccessRequestParams{ID: newID(), EnterpriseID: actor.EnterpriseID,
-			RequesterID: actor.UserID, GrantID: grant.ID, HostID: input.HostID, ManagedAccountID: input.ManagedAccountID,
-			Protocol: input.Protocol, Action: input.Action, Reason: strings.TrimSpace(input.Reason), Status: status,
-			AuthorizationVersion: actor.AuthorizationVersion, ExpiresAt: timestamp(expires)})
-		if err != nil {
-			return RequestView{}, err
-		}
-		view := RequestView{Request: request}
-		for _, policy := range matched {
-			requirement, err := q.CreateRemoteAccessRequirement(ctx, db.CreateRemoteAccessRequirementParams{ID: newID(), RequestID: request.ID,
-				PolicyID: policy.ID, PolicyVersion: policy.Version, ApproverRoleIds: policy.ApproverRoleIds, MinimumApprovals: policy.MinimumApprovals,
-				SeparationOfDuties: policy.SeparationOfDuties, RequireMfa: policy.RequireMfa, MaxSessionSeconds: policy.MaxSessionSeconds,
-				IdleTimeoutSeconds: policy.IdleTimeoutSeconds})
-			if err != nil {
-				return RequestView{}, err
+		if err := decisionError(evaluated.Decision); err != nil {
+			if auditErr := appendDecisionAudit(ctx, q, actor, uuid.Nil, "remote_access.request.evaluate", "denied", evaluated.Decision, evaluated.SnapshotHash); auditErr != nil {
+				return createRequestResult{}, auditErr
 			}
-			view.Requirements = append(view.Requirements, RequirementView{Requirement: requirement})
+			return createRequestResult{DeniedReasonCodes: slices.Clone(evaluated.Decision.ReasonCodes)}, nil
 		}
-		if len(matched) == 0 {
-			if _, err := service.issueLease(ctx, q, request, nil); err != nil {
-				return RequestView{}, err
-			}
-		}
-		if err := appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.request.create", "remote_access_request", request.ID, status); err != nil {
-			return RequestView{}, err
-		}
-		return view, nil
+		view, err := service.createEvaluatedRequest(ctx, q, actor, input, evaluated)
+		return createRequestResult{View: view}, err
 	})
+	if err != nil {
+		return RequestView{}, err
+	}
+	if len(result.DeniedReasonCodes) > 0 {
+		return RequestView{}, decisionError(AccessDecision{Outcome: DecisionDenied, ReasonCodes: result.DeniedReasonCodes})
+	}
+	return result.View, nil
 }
 
-func (service Service) ListRequests(ctx context.Context, actor Actor, all bool, limit int32) ([]RequestView, error) {
-	rows, err := service.Store.Queries.ListRemoteAccessRequests(ctx, db.ListRemoteAccessRequestsParams{EnterpriseID: actor.EnterpriseID, RequesterID: actor.UserID, Column3: all, Limit: boundedLimit(limit)})
+func (service Service) ListRequests(ctx context.Context, actor Actor, filter RequestListFilter) ([]RequestView, error) {
+	if filter.Scope == "" {
+		filter.Scope = "mine"
+	}
+	if filter.Scope != "mine" && filter.Scope != "approver" && filter.Scope != "processed" {
+		return nil, ErrInvalidRequest
+	}
+	rows, err := service.Store.Queries.ListRemoteAccessRequests(ctx, db.ListRemoteAccessRequestsParams{
+		EnterpriseID: actor.EnterpriseID, ActorID: actor.UserID, DepartmentID: actor.DepartmentID, Scope: filter.Scope,
+		Status: optionalText(filter.Status), CreatedBy: optionalUUID(filter.CreatedBy), HostID: optionalUUID(filter.HostID),
+		Protocol: optionalText(filter.Protocol), CreatedFrom: optionalTime(filter.CreatedFrom), CreatedTo: optionalTime(filter.CreatedTo),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -352,13 +276,36 @@ func (service Service) ListRequests(ctx context.Context, actor Actor, all bool, 
 	return result, nil
 }
 
-func (service Service) GetRequest(ctx context.Context, actor Actor, id uuid.UUID, all bool) (RequestView, error) {
+func optionalText(value string) pgtype.Text {
+	return pgtype.Text{String: value, Valid: value != ""}
+}
+
+func optionalUUID(value uuid.UUID) uuid.NullUUID {
+	return uuid.NullUUID{UUID: value, Valid: value != uuid.Nil}
+}
+
+func optionalTime(value *time.Time) pgtype.Timestamptz {
+	if value == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *value, Valid: true}
+}
+
+func (service Service) GetRequest(ctx context.Context, actor Actor, id uuid.UUID, admin bool) (RequestView, error) {
 	request, err := service.Store.Queries.GetRemoteAccessRequest(ctx, db.GetRemoteAccessRequestParams{ID: id, EnterpriseID: actor.EnterpriseID})
 	if err != nil {
 		return RequestView{}, err
 	}
-	if request.RequesterID != actor.UserID && !all {
-		return RequestView{}, pgx.ErrNoRows
+	if request.RequesterID != actor.UserID && !admin {
+		allowed, accessErr := service.Store.Queries.CanReadRemoteAccessRequestAsApprover(ctx, db.CanReadRemoteAccessRequestAsApproverParams{
+			RequestID: id, EnterpriseID: actor.EnterpriseID, ApproverID: actor.UserID,
+		})
+		if accessErr != nil {
+			return RequestView{}, accessErr
+		}
+		if !allowed {
+			return RequestView{}, pgx.ErrNoRows
+		}
 	}
 	return service.loadRequest(ctx, service.Store.Queries, request)
 }
@@ -373,7 +320,33 @@ func (service Service) DecideRequest(ctx context.Context, actor Actor, requestID
 	}{requestID, input}
 	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.request.decide", idempotencyKey, requestKey, 200, func(q *db.Queries) (RequestView, error) {
 		request, err := q.GetRemoteAccessRequestForUpdate(ctx, db.GetRemoteAccessRequestForUpdateParams{ID: requestID, EnterpriseID: actor.EnterpriseID})
-		if err != nil || request.Status != "awaiting_approval" || !service.now().Before(request.ExpiresAt.Time) {
+		if err != nil {
+			return RequestView{}, err
+		}
+		currentVersion, err := q.GetCurrentRemoteAccessAuthorizationVersion(ctx, db.GetCurrentRemoteAccessAuthorizationVersionParams{
+			UserID: request.RequesterID, EnterpriseID: request.EnterpriseID,
+		})
+		if err != nil {
+			return RequestView{}, ErrAuthorizationStale
+		}
+		if stateErr := validateApprovalRequestState(request, currentVersion, service.now()); stateErr != nil {
+			return RequestView{}, stateErr
+		}
+		if _, err := DecodeAccessDecision(request.DecisionSnapshot, request.DecisionSnapshotHash); err != nil {
+			return RequestView{}, ErrAuthorizationStale
+		}
+		requirements, err := q.ListRemoteAccessRequirements(ctx, requestID)
+		if err != nil {
+			return RequestView{}, err
+		}
+		var target *db.RemoteAccessRequirementSnapshot
+		for i := range requirements {
+			if requirements[i].ID == input.RequirementID {
+				target = &requirements[i]
+				break
+			}
+		}
+		if target == nil || target.Status != "pending" || !target.DeadlineAt.Valid || !service.now().Before(target.DeadlineAt.Time) {
 			return RequestView{}, ErrApprovalRequired
 		}
 		eligible, err := q.IsRemoteAccessApproverEligible(ctx, db.IsRemoteAccessApproverEligibleParams{RequirementID: input.RequirementID, RequestID: requestID, ApproverID: actor.UserID})
@@ -382,6 +355,10 @@ func (service Service) DecideRequest(ctx context.Context, actor Actor, requestID
 		}
 		if _, err := q.CreateRemoteAccessDecision(ctx, db.CreateRemoteAccessDecisionParams{ID: newID(), RequestID: requestID, RequirementID: input.RequirementID,
 			Decision: input.Decision, Comment: input.Comment, DecidedBy: actor.UserID}); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return RequestView{}, ErrInvalidTransition
+			}
 			return RequestView{}, err
 		}
 		if input.Decision == "reject" {
@@ -394,10 +371,6 @@ func (service Service) DecideRequest(ctx context.Context, actor Actor, requestID
 			}
 		} else {
 			count, err := q.CountRemoteAccessApprovals(ctx, input.RequirementID)
-			if err != nil {
-				return RequestView{}, err
-			}
-			requirements, err := q.ListRemoteAccessRequirements(ctx, requestID)
 			if err != nil {
 				return RequestView{}, err
 			}
@@ -431,110 +404,153 @@ func (service Service) DecideRequest(ctx context.Context, actor Actor, requestID
 	})
 }
 
+func validateApprovalRequestState(request db.RemoteAccessRequest, currentAuthorizationVersion int64, now time.Time) error {
+	if request.Status != "awaiting_approval" || !request.ExpiresAt.Valid || !now.Before(request.ExpiresAt.Time) {
+		return ErrApprovalRequired
+	}
+	if request.AuthorizationVersion < 1 || currentAuthorizationVersion != request.AuthorizationVersion {
+		return ErrAuthorizationStale
+	}
+	return nil
+}
+
 func (service Service) ListLeases(ctx context.Context, actor Actor, all bool, limit int32) ([]db.RemoteAccessLease, error) {
 	return service.Store.Queries.ListRemoteAccessLeases(ctx, db.ListRemoteAccessLeasesParams{EnterpriseID: actor.EnterpriseID, UserID: actor.UserID, Column3: all, Limit: boundedLimit(limit)})
 }
 
-func (service Service) RevokeLease(ctx context.Context, actor Actor, id uuid.UUID, reason string) (db.RemoteAccessLease, error) {
-	var result db.RemoteAccessLease
-	err := service.Store.InTx(ctx, func(q *db.Queries) error {
-		var err error
-		result, err = q.RevokeRemoteAccessLease(ctx, db.RevokeRemoteAccessLeaseParams{ID: id, EnterpriseID: actor.EnterpriseID, RevokeReason: text(reason)})
+func (service Service) RevokeLease(ctx context.Context, actor Actor, id uuid.UUID, reason, idempotencyKey string) (db.RemoteAccessLease, error) {
+	request := map[string]any{"id": id, "reason": reason}
+	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.lease.revoke", idempotencyKey, request, 200, func(q *db.Queries) (db.RemoteAccessLease, error) {
+		result, err := q.RevokeRemoteAccessLease(ctx, db.RevokeRemoteAccessLeaseParams{ID: id, EnterpriseID: actor.EnterpriseID, RevokeReason: text(reason)})
 		if err != nil {
-			return err
+			return db.RemoteAccessLease{}, err
 		}
 		sessions, err := q.TerminateRemoteAccessSessionsByLease(ctx, db.TerminateRemoteAccessSessionsByLeaseParams{LeaseID: id, EnterpriseID: actor.EnterpriseID, Reason: text("lease_revoked")})
 		if err != nil {
-			return err
+			return db.RemoteAccessLease{}, err
 		}
 		if err := service.publishTerminations(ctx, q, sessions, "lease_revoked"); err != nil {
-			return err
+			return db.RemoteAccessLease{}, err
 		}
-		return appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.lease.revoke", "remote_access_lease", id, "revoked")
+		return result, appendAuditDetails(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.lease.revoke", "remote_access_lease", id, map[string]any{
+			"status": "revoked", "reason_code": reason, "request_id": result.RequestID, "lease_id": result.ID,
+			"authorization_version": result.AuthorizationVersion, "snapshot_hash": hex.EncodeToString(result.DecisionSnapshotHash),
+			"grant_id": result.GrantID, "host_id": result.HostID, "managed_account_id": result.ManagedAccountID, "protocol": result.Protocol,
+		})
 	})
-	return result, err
 }
 
-func (service Service) CreateSession(ctx context.Context, actor Actor, leaseID uuid.UUID) (SessionView, error) {
-	var result SessionView
-	err := service.Store.InTx(ctx, func(q *db.Queries) error {
+func (service Service) CreateSession(ctx context.Context, actor Actor, leaseID uuid.UUID, idempotencyKey string) (SessionView, error) {
+	result, err := postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.session.create", idempotencyKey, map[string]any{"lease_id": leaseID}, 201, func(q *db.Queries) (SessionView, error) {
 		lease, err := q.GetRemoteAccessLeaseForSession(ctx, db.GetRemoteAccessLeaseForSessionParams{ID: leaseID, EnterpriseID: actor.EnterpriseID, UserID: actor.UserID})
 		if err != nil {
-			return ErrLeaseExpired
+			return SessionView{}, ErrLeaseExpired
 		}
 		if lease.AuthorizationVersion != actor.AuthorizationVersion {
-			return ErrAuthorizationStale
+			return SessionView{}, ErrAuthorizationStale
+		}
+		request, err := q.GetRemoteAccessRequestForUpdate(ctx, db.GetRemoteAccessRequestForUpdateParams{ID: lease.RequestID, EnterpriseID: actor.EnterpriseID})
+		if err != nil || request.Status != "authorized" || request.RequesterID != actor.UserID || !slices.Equal(request.DecisionSnapshotHash, lease.DecisionSnapshotHash) {
+			return SessionView{}, ErrAuthorizationStale
+		}
+		previousDecision, err := DecodeAccessDecision(lease.DecisionSnapshot, lease.DecisionSnapshotHash)
+		if err != nil {
+			return SessionView{}, ErrAuthorizationStale
+		}
+		var profile SessionProfileSnapshot
+		if json.Unmarshal(lease.SessionProfileSnapshot, &profile) != nil || profile.MaxSessionSeconds < 60 || profile.IdleTimeoutSeconds < 60 || profile.IdleTimeoutSeconds > profile.MaxSessionSeconds || !reflect.DeepEqual(profile, previousDecision.SessionProfile) {
+			return SessionView{}, ErrAuthorizationStale
+		}
+		current, err := service.evaluateAccess(ctx, q, actor, RequestInput{HostID: lease.HostID, ManagedAccountID: lease.ManagedAccountID, Protocol: lease.Protocol, Action: lease.Action, Reason: request.Reason}, service.now())
+		if err != nil || !decisionSourcesEqual(previousDecision, current.Decision) {
+			return SessionView{}, ErrAuthorizationStale
 		}
 		host, err := q.GetHost(ctx, db.GetHostParams{ID: lease.HostID, EnterpriseID: actor.EnterpriseID})
 		if err != nil {
-			return ErrScopeDenied
+			return SessionView{}, ErrScopeDenied
 		}
-		labels, err := resource.DecodeLabels(host.Labels)
-		if err != nil {
-			return err
-		}
-		allowed, _, err := service.Access.CanAccess(ctx, actor.EnterpriseID, actor.DataScopeIDs, "host", host.ID.String(), labels)
-		if err != nil || !allowed {
-			return ErrScopeDenied
+		if !service.Access.CanAccess(actor.AuthorizedResourceIDs, host.ID) {
+			return SessionView{}, ErrScopeDenied
 		}
 		capacity, err := q.CountRemoteAccessCapacity(ctx, db.CountRemoteAccessCapacityParams{EnterpriseID: actor.EnterpriseID, UserID: actor.UserID, HostID: lease.HostID})
 		if err != nil {
-			return err
+			return SessionView{}, err
 		}
 		if err := (Capacity{UserActive: int(capacity.UserActive), HostActive: int(capacity.HostActive), EnterpriseActive: int(capacity.EnterpriseActive),
 			UserLimit: service.UserLimit, HostLimit: service.HostLimit, EnterpriseLimit: service.EnterpriseLimit}).Check(); err != nil {
-			return err
-		}
-		maxDuration, idleTimeout, err := service.sessionLimits(ctx, q, lease.RequestID)
-		if err != nil {
-			return err
+			return SessionView{}, err
 		}
 		if !connectionModeSupports(lease.ConnectionMode, lease.Protocol) {
-			return ErrScopeDenied
+			return SessionView{}, ErrScopeDenied
 		}
 		session, err := q.CreateRemoteAccessSession(ctx, db.CreateRemoteAccessSessionParams{ID: newID(), EnterpriseID: actor.EnterpriseID, UserID: actor.UserID,
 			HttpSessionID: actor.HTTPSessionID, LeaseID: lease.ID, HostID: lease.HostID, ManagedAccountID: lease.ManagedAccountID,
 			Protocol: lease.Protocol, ConnectionMode: lease.ConnectionMode, ConnectorID: lease.ConnectorID, AuthorizationVersion: actor.AuthorizationVersion,
-			IdleTimeoutSeconds: int32(idleTimeout / time.Second), MaxDurationSeconds: int32(maxDuration / time.Second), ConnectBefore: timestamp(service.now().Add(ConnectionWindow))})
+			IdleTimeoutSeconds: int32(profile.IdleTimeoutSeconds), MaxDurationSeconds: int32(profile.MaxSessionSeconds), ConnectBefore: timestamp(service.now().Add(ConnectionWindow)),
+			DecisionSnapshot: lease.DecisionSnapshot, SessionProfileSnapshot: lease.SessionProfileSnapshot, DecisionSnapshotHash: lease.DecisionSnapshotHash,
+			RecordingMode: profile.RecordingMode, CommandAuditMode: profile.CommandAuditMode, ClipboardMode: profile.ClipboardMode,
+			FileUploadMode: profile.FileUploadMode, FileDownloadMode: profile.FileDownloadMode, PortForwardMode: profile.PortForwardMode,
+			SessionShareMode: profile.SessionShareMode, RetentionDays: int32(profile.RetentionDays), Reason: request.Reason})
 		if err != nil {
-			return err
+			return SessionView{}, err
 		}
-		recordingID := newID()
-		dek := make([]byte, 32)
-		if _, err := rand.Read(dek); err != nil {
-			return err
+		recordingID := uuid.Nil
+		if profile.RecordingMode == "required" {
+			recordingID, err = service.createSessionRecording(ctx, q, actor.EnterpriseID, session.ID)
+			if err != nil {
+				return SessionView{}, ErrRecordingUnavailable
+			}
 		}
-		envelope, err := service.Keyring.EncryptContext(ctx, dek, recordingKeyAAD(actor.EnterpriseID, recordingID, session.ID))
-		clear(dek)
-		if err != nil {
-			return err
-		}
-		wrapped, err := json.Marshal(envelope)
-		if err != nil {
-			return err
-		}
-		if _, err := q.CreateRemoteAccessRecording(ctx, db.CreateRemoteAccessRecordingParams{ID: recordingID, EnterpriseID: actor.EnterpriseID,
-			SessionID: session.ID, KeyProvider: envelope.Provider, KeyID: envelope.KeyID, KeyVersion: int32(envelope.KeyVersion), WrappedDek: wrapped}); err != nil {
-			return err
-		}
-		result = SessionView{Session: session, RecordingID: recordingID}
-		return appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.session.create", "remote_access_session", session.ID, "authorized")
+		result := SessionView{Session: session, RecordingID: recordingID}
+		return result, appendAuditDetails(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.session.create", "remote_access_session", session.ID, sessionAuditDetails(session, "authorized"))
 	})
+	if err == nil && result.Session.RecordingMode == "optional" {
+		recordingID, optionalErr := service.ensureOptionalRecording(ctx, actor.EnterpriseID, result.Session.ID)
+		if optionalErr == nil {
+			result.RecordingID = recordingID
+		} else {
+			_ = service.recordOptionalRecordingDegradation(ctx, actor, result.Session.ID)
+		}
+	}
 	return result, err
 }
 
-func (service Service) ListSessions(ctx context.Context, actor Actor, all bool, limit int32) ([]SessionView, error) {
-	rows, err := service.Store.Queries.ListRemoteAccessSessions(ctx, db.ListRemoteAccessSessionsParams{EnterpriseID: actor.EnterpriseID, UserID: actor.UserID, Column3: all, Limit: boundedLimit(limit)})
+func (service Service) ensureOptionalRecording(ctx context.Context, enterpriseID, sessionID uuid.UUID) (uuid.UUID, error) {
+	if existing, err := service.recordingIDForSession(ctx, service.Store.Queries, enterpriseID, sessionID); err != nil || existing != uuid.Nil {
+		return existing, err
+	}
+	var recordingID uuid.UUID
+	err := service.Store.InTx(ctx, func(q *db.Queries) error {
+		var createErr error
+		recordingID, createErr = service.createSessionRecording(ctx, q, enterpriseID, sessionID)
+		return createErr
+	})
+	return recordingID, err
+}
+
+func (service Service) ListSessions(ctx context.Context, actor Actor, all bool, filter SessionListFilter) ([]SessionView, error) {
+	if filter.Scope == "" {
+		filter.Scope = "all"
+	}
+	if filter.Scope != "active" && filter.Scope != "history" && filter.Scope != "all" {
+		return nil, ErrInvalidRequest
+	}
+	rows, err := service.Store.Queries.ListRemoteAccessSessions(ctx, db.ListRemoteAccessSessionsParams{
+		EnterpriseID: actor.EnterpriseID, ActorID: actor.UserID, AllSessions: all, Scope: filter.Scope,
+		Status: optionalText(filter.Status), UserID: optionalUUID(filter.UserID), HostID: optionalUUID(filter.HostID),
+		ManagedAccountID: optionalUUID(filter.ManagedAccountID), Protocol: optionalText(filter.Protocol),
+		ConnectionMode: optionalText(filter.ConnectionMode), CreatedFrom: optionalTime(filter.CreatedFrom), CreatedTo: optionalTime(filter.CreatedTo),
+	})
 	if err != nil {
 		return nil, err
 	}
 	result := make([]SessionView, 0, len(rows))
 	for _, row := range rows {
-		recording, err := service.Store.Queries.GetRemoteAccessRecordingBySession(ctx, db.GetRemoteAccessRecordingBySessionParams{SessionID: row.ID, EnterpriseID: actor.EnterpriseID})
+		recordingID, err := service.recordingIDForSession(ctx, service.Store.Queries, actor.EnterpriseID, row.ID)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, SessionView{Session: row, RecordingID: recording.ID})
+		result = append(result, SessionView{Session: row, RecordingID: recordingID})
 	}
 	return result, nil
 }
@@ -547,72 +563,149 @@ func (service Service) GetSession(ctx context.Context, actor Actor, id uuid.UUID
 	if err != nil {
 		return SessionView{}, err
 	}
-	recording, err := service.Store.Queries.GetRemoteAccessRecordingBySession(ctx, db.GetRemoteAccessRecordingBySessionParams{SessionID: id, EnterpriseID: actor.EnterpriseID})
-	return SessionView{Session: value, RecordingID: recording.ID}, err
+	recordingID, err := service.recordingIDForSession(ctx, service.Store.Queries, actor.EnterpriseID, id)
+	return SessionView{Session: value, RecordingID: recordingID}, err
 }
 
-func (service Service) TerminateSession(ctx context.Context, actor Actor, id uuid.UUID, reason string, all bool) (SessionView, error) {
-	var result SessionView
-	err := service.Store.InTx(ctx, func(q *db.Queries) error {
+func (service Service) TerminateSession(ctx context.Context, actor Actor, id uuid.UUID, reason string, all bool, idempotencyKey string) (SessionView, error) {
+	request := map[string]any{"id": id, "reason": reason, "all": all}
+	result, err := postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.session.terminate", idempotencyKey, request, 200, func(q *db.Queries) (SessionView, error) {
 		current, err := q.GetRemoteAccessSession(ctx, db.GetRemoteAccessSessionParams{ID: id, EnterpriseID: actor.EnterpriseID})
-		if err != nil || (current.UserID != actor.UserID && !all) {
-			return pgx.ErrNoRows
+		if err != nil {
+			return SessionView{}, err
+		}
+		if current.UserID != actor.UserID && !all {
+			return SessionView{}, pgx.ErrNoRows
+		}
+		if terminalSessionStatus(current.Status) {
+			recordingID, recordingErr := service.recordingIDForSession(ctx, q, actor.EnterpriseID, id)
+			if recordingErr != nil {
+				return SessionView{}, recordingErr
+			}
+			return SessionView{Session: current, RecordingID: recordingID}, nil
 		}
 		session, err := q.TerminateRemoteAccessSession(ctx, db.TerminateRemoteAccessSessionParams{ID: id, EnterpriseID: actor.EnterpriseID, TerminationReason: text(reason)})
-		if err != nil {
-			return err
+		if errors.Is(err, pgx.ErrNoRows) {
+			latest, latestErr := q.GetRemoteAccessSession(ctx, db.GetRemoteAccessSessionParams{ID: id, EnterpriseID: actor.EnterpriseID})
+			if latestErr == nil && terminalSessionStatus(latest.Status) {
+				recordingID, recordingErr := service.recordingIDForSession(ctx, q, actor.EnterpriseID, id)
+				if recordingErr != nil {
+					return SessionView{}, recordingErr
+				}
+				return SessionView{Session: latest, RecordingID: recordingID}, nil
+			}
 		}
-		recording, err := q.GetRemoteAccessRecordingBySession(ctx, db.GetRemoteAccessRecordingBySessionParams{SessionID: id, EnterpriseID: actor.EnterpriseID})
 		if err != nil {
-			return err
+			return SessionView{}, err
 		}
-		result = SessionView{Session: session, RecordingID: recording.ID}
+		// A session still in "authorized" never had a WebSocket attach (the
+		// ticket is unconsumed), so no Gateway will confirm the termination.
+		// Finalize immediately instead of waiting for the two-minute
+		// stuck-terminating reconciler convergence.
+		if current.Status == "authorized" {
+			if finished, finishErr := q.FinishRemoteAccessSession(ctx, db.FinishRemoteAccessSessionParams{
+				ID: id, SessionFence: session.SessionFence, Status: "terminated", TerminationReason: text(reason),
+			}); finishErr == nil {
+				session = finished
+			}
+		}
+		recordingID, err := service.recordingIDForSession(ctx, q, actor.EnterpriseID, id)
+		if err != nil {
+			return SessionView{}, err
+		}
+		result := SessionView{Session: session, RecordingID: recordingID}
 		if err := service.publishTermination(ctx, q, session, reason); err != nil {
-			return err
+			return SessionView{}, err
 		}
-		return appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.session.terminate", "remote_access_session", id, "terminating")
+		details := sessionAuditDetails(session, "terminating")
+		details["reason_code"] = reason
+		return result, appendAuditDetails(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.session.terminate", "remote_access_session", id, details)
 	})
+	if err == nil {
+		return result, nil
+	}
+	// A prior request may have moved the session to a terminal state while its
+	// idempotency transaction was interrupted. Treat the durable session state
+	// as authoritative so a repeated terminate remains safe and successful.
+	latest, latestErr := service.Store.Queries.GetRemoteAccessSession(ctx, db.GetRemoteAccessSessionParams{ID: id, EnterpriseID: actor.EnterpriseID})
+	if latestErr == nil && (latest.UserID == actor.UserID || all) && terminalSessionStatus(latest.Status) {
+		recordingID, _ := service.recordingIDForSession(ctx, service.Store.Queries, actor.EnterpriseID, id)
+		return SessionView{Session: latest, RecordingID: recordingID}, nil
+	}
 	return result, err
 }
 
-func (service Service) IssueTicket(ctx context.Context, actor Actor, sessionID uuid.UUID) (TicketResult, error) {
-	var result TicketResult
-	err := service.Store.InTx(ctx, func(q *db.Queries) error {
+func terminalSessionStatus(status string) bool {
+	switch status {
+	case "terminating", "terminated", "failed", "connection_lost", "invalidated", "expired":
+		return true
+	default:
+		return false
+	}
+}
+
+func (service Service) IssueTicket(ctx context.Context, actor Actor, sessionID uuid.UUID, idempotencyKey string) (TicketResult, error) {
+	return postgres.ExecuteIdempotent(ctx, service.Store, service.Idempotency, "enterprise", actor.UserID.String(), "remote_access.ticket.issue", idempotencyKey, map[string]any{"session_id": sessionID}, 201, func(q *db.Queries) (TicketResult, error) {
 		session, err := q.GetRemoteAccessSession(ctx, db.GetRemoteAccessSessionParams{ID: sessionID, EnterpriseID: actor.EnterpriseID})
-		if err != nil || session.UserID != actor.UserID || session.HttpSessionID != actor.HTTPSessionID || session.Status != "authorized" || !service.now().Before(session.ConnectBefore.Time) {
-			return ErrSessionUnavailable
+		// status='authorized' 是首次接入票据；status='active' 支持浏览器断开后的
+		// 重接票据（会话驻留在 Gateway 内，PTY 后端不因页面关闭而终止）。
+		attachable := session.Status == "authorized" && service.now().Before(session.ConnectBefore.Time) ||
+			session.Status == "active"
+		if err != nil || session.UserID != actor.UserID || session.HttpSessionID != actor.HTTPSessionID || !attachable {
+			return TicketResult{}, ErrSessionUnavailable
 		}
 		version, err := q.GetCurrentRemoteAccessAuthorizationVersion(ctx, db.GetCurrentRemoteAccessAuthorizationVersionParams{UserID: actor.UserID, EnterpriseID: actor.EnterpriseID})
 		if err != nil || version != session.AuthorizationVersion || version != actor.AuthorizationVersion {
-			return ErrAuthorizationStale
+			return TicketResult{}, ErrAuthorizationStale
 		}
 		issuer := TicketIssuer{Store: ticketStore{queries: q}, Now: service.Now}
 		value, binding, err := issuer.Issue(ctx, TicketBinding{SessionID: session.ID, HTTPSessionID: actor.HTTPSessionID, EnterpriseID: actor.EnterpriseID,
 			UserID: actor.UserID, HostID: session.HostID, ManagedAccountID: session.ManagedAccountID, LeaseID: session.LeaseID, Protocol: session.Protocol,
 			AuthorizationVersion: session.AuthorizationVersion, SessionFence: session.SessionFence})
 		if err != nil {
+			return TicketResult{}, err
+		}
+		result := TicketResult{SessionID: session.ID, Ticket: value, ExpiresAt: binding.ExpiresAt}
+		return result, appendAuditDetails(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.ticket.issue", "remote_access_session", session.ID, map[string]any{
+			"status": "issued", "remote_session_id": session.ID, "lease_id": session.LeaseID, "authorization_version": session.AuthorizationVersion,
+			"session_fence": session.SessionFence, "snapshot_hash": hex.EncodeToString(session.DecisionSnapshotHash),
+			"host_id": session.HostID, "managed_account_id": session.ManagedAccountID, "protocol": session.Protocol,
+		})
+	})
+}
+
+func (service Service) GetRecording(ctx context.Context, actor Actor, id uuid.UUID, all bool) (db.RemoteAccessRecording, error) {
+	var recording db.RemoteAccessRecording
+	err := service.Store.InTx(ctx, func(q *db.Queries) error {
+		var err error
+		recording, err = service.getRecording(ctx, q, actor, id, all)
+		if err != nil {
 			return err
 		}
-		result = TicketResult{SessionID: session.ID, Ticket: value, ExpiresAt: binding.ExpiresAt}
-		return appendAudit(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.ticket.issue", "remote_access_session", session.ID, "issued")
+		return appendAuditDetails(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.recording.read", "remote_access_recording", recording.ID, recordingAuditDetails(recording, "metadata_read"))
+	})
+	return recording, err
+}
+
+func (service Service) ListRecordings(ctx context.Context, actor Actor, filter RecordingListFilter) ([]db.RemoteAccessRecording, error) {
+	var result []db.RemoteAccessRecording
+	err := service.Store.InTx(ctx, func(q *db.Queries) error {
+		var err error
+		result, err = q.ListRemoteAccessRecordings(ctx, db.ListRemoteAccessRecordingsParams{
+			EnterpriseID: actor.EnterpriseID, Status: optionalText(filter.Status), SessionID: optionalUUID(filter.SessionID),
+			UserID: optionalUUID(filter.UserID), HostID: optionalUUID(filter.HostID),
+			CreatedFrom: optionalTime(filter.CreatedFrom), CreatedTo: optionalTime(filter.CreatedTo),
+		})
+		if err != nil {
+			return err
+		}
+		return appendAuditDetails(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.recording.read", "remote_access_recording", uuid.Nil, map[string]any{"status": "list", "result_count": len(result)})
 	})
 	return result, err
 }
 
-func (service Service) GetRecording(ctx context.Context, actor Actor, id uuid.UUID, all bool) (db.RemoteAccessRecording, error) {
-	recording, err := service.Store.Queries.GetRemoteAccessRecording(ctx, db.GetRemoteAccessRecordingParams{ID: id, EnterpriseID: actor.EnterpriseID})
-	if err != nil {
-		return db.RemoteAccessRecording{}, err
-	}
-	session, err := service.Store.Queries.GetRemoteAccessSession(ctx, db.GetRemoteAccessSessionParams{ID: recording.SessionID, EnterpriseID: actor.EnterpriseID})
-	if err != nil || (session.UserID != actor.UserID && !all) {
-		return db.RemoteAccessRecording{}, pgx.ErrNoRows
-	}
-	return recording, nil
-}
-
 func (service Service) ListRecordingChunks(ctx context.Context, actor Actor, id uuid.UUID, after int64, limit int32, all bool) (db.RemoteAccessRecording, []db.RemoteAccessRecordingChunk, error) {
-	recording, err := service.GetRecording(ctx, actor, id, all)
+	recording, err := service.getRecording(ctx, service.Store.Queries, actor, id, all)
 	if err != nil {
 		return db.RemoteAccessRecording{}, nil, err
 	}
@@ -626,6 +719,11 @@ func (service Service) ReadRecordingEvents(ctx context.Context, actor Actor, id 
 		return RecordingEventPage{}, err
 	}
 	if len(chunks) == 0 {
+		if err := service.Store.InTx(ctx, func(q *db.Queries) error {
+			return appendAuditDetails(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.recording.read", "remote_access_recording", recording.ID, recordingAuditDetails(recording, "events_read"))
+		}); err != nil {
+			return RecordingEventPage{}, err
+		}
 		return RecordingEventPage{Recording: recording, Events: []RecordingEvent{}, Next: after, Complete: recording.Status == "available" || recording.Status == "incomplete"}, nil
 	}
 	envelope, err := recordingEnvelope(recording)
@@ -652,8 +750,27 @@ func (service Service) ReadRecordingEvents(ctx context.Context, actor Actor, id 
 	if err != nil {
 		return RecordingEventPage{}, err
 	}
+	if err := service.Store.InTx(ctx, func(q *db.Queries) error {
+		details := recordingAuditDetails(recording, "events_read")
+		details["chunk_sequence"] = chunk.Sequence
+		return appendAuditDetails(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.recording.read", "remote_access_recording", recording.ID, details)
+	}); err != nil {
+		return RecordingEventPage{}, err
+	}
 	complete := chunk.Sequence >= int64(recording.ChunkCount) && recording.Status != "recording"
 	return RecordingEventPage{Recording: recording, Events: events, Next: chunk.Sequence, Complete: complete}, nil
+}
+
+func (service Service) getRecording(ctx context.Context, q *db.Queries, actor Actor, id uuid.UUID, all bool) (db.RemoteAccessRecording, error) {
+	recording, err := q.GetRemoteAccessRecording(ctx, db.GetRemoteAccessRecordingParams{ID: id, EnterpriseID: actor.EnterpriseID})
+	if err != nil {
+		return db.RemoteAccessRecording{}, err
+	}
+	session, err := q.GetRemoteAccessSession(ctx, db.GetRemoteAccessSessionParams{ID: recording.SessionID, EnterpriseID: actor.EnterpriseID})
+	if err != nil || (session.UserID != actor.UserID && !all) {
+		return db.RemoteAccessRecording{}, pgx.ErrNoRows
+	}
+	return recording, nil
 }
 
 func (service Service) loadRequest(ctx context.Context, q *db.Queries, request db.RemoteAccessRequest) (RequestView, error) {
@@ -677,60 +794,51 @@ func (service Service) loadRequest(ctx context.Context, q *db.Queries, request d
 }
 
 func (service Service) issueLease(ctx context.Context, q *db.Queries, request db.RemoteAccessRequest, requirements []db.RemoteAccessRequirementSnapshot) (db.RemoteAccessLease, error) {
-	if request.AuthorizationVersion < 1 || !service.now().Before(request.ExpiresAt.Time) {
+	if request.Status != "authorized" || request.AuthorizationVersion < 1 || !service.now().Before(request.ExpiresAt.Time) {
 		return db.RemoteAccessLease{}, ErrAuthorizationStale
 	}
-	hash := sha256.Sum256([]byte("no_remote_access_policy"))
-	if len(requirements) > 0 {
-		encoded, err := json.Marshal(requirements)
-		if err != nil {
-			return db.RemoteAccessLease{}, err
+	for _, requirement := range requirements {
+		if requirement.Status != "satisfied" {
+			return db.RemoteAccessLease{}, ErrApprovalRequired
 		}
-		hash = sha256.Sum256(encoded)
+	}
+	currentVersion, err := q.GetCurrentRemoteAccessAuthorizationVersion(ctx, db.GetCurrentRemoteAccessAuthorizationVersionParams{UserID: request.RequesterID, EnterpriseID: request.EnterpriseID})
+	if err != nil || currentVersion != request.AuthorizationVersion {
+		return db.RemoteAccessLease{}, ErrAuthorizationStale
+	}
+	decision, err := DecodeAccessDecision(request.DecisionSnapshot, request.DecisionSnapshotHash)
+	if err != nil || decision.AuthorizationVersion != request.AuthorizationVersion || decision.Outcome == DecisionDenied || decision.Outcome == DecisionAwaitingMFA {
+		return db.RemoteAccessLease{}, ErrAuthorizationStale
+	}
+	profileJSON, err := json.Marshal(decision.SessionProfile)
+	if err != nil {
+		return db.RemoteAccessLease{}, err
 	}
 	expires := service.now().Add(LeaseTTL)
 	if request.ExpiresAt.Time.Before(expires) {
 		expires = request.ExpiresAt.Time
 	}
-	return q.CreateRemoteAccessLease(ctx, db.CreateRemoteAccessLeaseParams{ID: newID(), RequestID: request.ID, EnterpriseID: request.EnterpriseID,
+	lease, err := q.CreateRemoteAccessLease(ctx, db.CreateRemoteAccessLeaseParams{ID: newID(), RequestID: request.ID, EnterpriseID: request.EnterpriseID,
 		UserID: request.RequesterID, GrantID: request.GrantID, HostID: request.HostID, ManagedAccountID: request.ManagedAccountID,
-		Protocol: request.Protocol, Action: request.Action, AuthorizationVersion: request.AuthorizationVersion, PolicySnapshotHash: hash[:], ExpiresAt: timestamp(expires)})
-}
-
-func (service Service) sessionLimits(ctx context.Context, q *db.Queries, requestID uuid.UUID) (time.Duration, time.Duration, error) {
-	requirements, err := q.ListRemoteAccessRequirements(ctx, requestID)
+		Protocol: request.Protocol, Action: request.Action, AuthorizationVersion: request.AuthorizationVersion, ExpiresAt: timestamp(expires),
+		DecisionSnapshot: request.DecisionSnapshot, SessionProfileSnapshot: profileJSON, DecisionSnapshotHash: request.DecisionSnapshotHash})
 	if err != nil {
-		return 0, 0, err
+		return db.RemoteAccessLease{}, err
 	}
-	maxDuration, idle := DefaultMaxDuration, DefaultIdleTimeout
-	for _, requirement := range requirements {
-		if requirement.Status != "satisfied" || requirement.RequireMfa {
-			return 0, 0, ErrApprovalRequired
-		}
-		candidateMax := time.Duration(requirement.MaxSessionSeconds) * time.Second
-		candidateIdle := time.Duration(requirement.IdleTimeoutSeconds) * time.Second
-		if candidateMax > 0 && candidateMax < maxDuration {
-			maxDuration = candidateMax
-		}
-		if candidateIdle > 0 && candidateIdle < idle {
-			idle = candidateIdle
-		}
+	if err := appendAuditDetails(ctx, q, request.RequesterID, request.EnterpriseID, "remote_access.lease.issue", "remote_access_lease", lease.ID, map[string]any{
+		"status": "issued", "request_id": request.ID, "lease_id": lease.ID, "authorization_version": lease.AuthorizationVersion,
+		"snapshot_hash": hex.EncodeToString(lease.DecisionSnapshotHash), "matched_grants": decision.MatchedGrantSnapshots,
+		"matched_rules": decision.MatchedRuleSnapshots, "approval_workflows": decision.ApprovalRequirements,
+		"session_profile_sources": decision.SessionProfile.SourceProfiles, "grant_id": lease.GrantID,
+		"host_id": lease.HostID, "managed_account_id": lease.ManagedAccountID, "protocol": lease.Protocol,
+	}); err != nil {
+		return db.RemoteAccessLease{}, err
 	}
-	return maxDuration, idle, nil
+	return lease, nil
 }
 
 func (service Service) invalidateGrant(ctx context.Context, q *db.Queries, enterpriseID, grantID uuid.UUID, reason string) error {
-	if err := q.InvalidateRemoteAccessRequestsByGrant(ctx, db.InvalidateRemoteAccessRequestsByGrantParams{GrantID: grantID, EnterpriseID: enterpriseID}); err != nil {
-		return err
-	}
-	if err := q.RevokeRemoteAccessLeasesByGrant(ctx, db.RevokeRemoteAccessLeasesByGrantParams{GrantID: grantID, EnterpriseID: enterpriseID, Reason: text(reason)}); err != nil {
-		return err
-	}
-	sessions, err := q.TerminateRemoteAccessSessionsByGrant(ctx, db.TerminateRemoteAccessSessionsByGrantParams{GrantID: grantID, EnterpriseID: enterpriseID, Reason: text(reason)})
-	if err != nil {
-		return err
-	}
-	return service.publishTerminations(ctx, q, sessions, reason)
+	return revocation.Source(ctx, q, enterpriseID, "grant", grantID, reason)
 }
 
 func (service Service) invalidateEnterprise(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, reason string) error {
@@ -748,6 +856,10 @@ func (service Service) invalidateEnterprise(ctx context.Context, q *db.Queries, 
 		return err
 	}
 	return service.publishTerminations(ctx, q, sessions, reason)
+}
+
+func (service Service) invalidateGovernanceSource(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, sourceType string, sourceID uuid.UUID, reason string) error {
+	return revocation.Source(ctx, q, enterpriseID, sourceType, sourceID, reason)
 }
 
 func (service Service) publishTerminations(ctx context.Context, q *db.Queries, sessions []db.RemoteAccessSession, reason string) error {
@@ -798,52 +910,22 @@ func selectGrant(grants []db.RemoteAccessGrant, input RequestInput, labels map[s
 		if !slices.Contains(grant.ManagedAccountIds, input.ManagedAccountID) || !slices.Contains(grant.Protocols, input.Protocol) || !slices.Contains(grant.Actions, input.Action) {
 			continue
 		}
-		if slices.Contains(grant.HostIds, input.HostID) || selectorMatches(grant.HostSelector, enterpriseID, input.HostID, labels) {
+		if slices.Contains(grant.HostIds, input.HostID) {
 			return grant, true
 		}
 	}
 	return db.RemoteAccessGrant{}, false
 }
 
-func matchPolicyRecords(policies []db.RemoteAccessPolicy, enterpriseID, hostID uuid.UUID, labels map[string]string, protocol string, stepUp bool) ([]db.RemoteAccessPolicy, error) {
-	result := make([]db.RemoteAccessPolicy, 0, len(policies))
-	for _, policy := range policies {
-		if !policy.Enabled || !slices.Contains(policy.Protocols, protocol) || (len(policy.HostSelector) > 0 && string(policy.HostSelector) != "{}" && !selectorMatches(policy.HostSelector, enterpriseID, hostID, labels)) {
-			continue
-		}
-		if policy.RequireMfa && !stepUp {
-			return nil, ErrMFARequired
-		}
-		result = append(result, policy)
-	}
-	return result, nil
+func validGrantInput(input GrantInput) bool {
+	return validGrantFields(input) &&
+		(input.Status == GovernanceDraft || input.Status == GovernanceEnabled || input.Status == GovernanceDisabled || input.Status == GovernanceArchived)
 }
 
-func selectorMatches(raw []byte, enterpriseID, hostID uuid.UUID, labels map[string]string) bool {
-	if len(raw) == 0 || string(raw) == "{}" || string(raw) == "null" {
-		return false
-	}
-	return authorization.ScopeMatches(authorization.Scope{ID: "remote-access", EnterpriseID: enterpriseID.String(), ResourceTypes: []string{"host"}, LabelSelector: raw, Status: "active"},
-		authorization.Resource{EnterpriseID: enterpriseID.String(), Type: "host", ID: hostID.String(), Labels: labels})
-}
-
-func normalizeOptionalSelector(raw json.RawMessage) ([]byte, []byte, error) {
-	if len(raw) == 0 || string(raw) == "null" || string(raw) == "{}" {
-		hash := sha256.Sum256([]byte("{}"))
-		return []byte("{}"), hash[:], nil
-	}
-	return authorization.NormalizeSelector(raw)
-}
-
-func validGrantInput(input GrantInput, selector []byte) bool {
+func validGrantFields(input GrantInput) bool {
 	return (input.SubjectType == "user" || input.SubjectType == "department") && input.SubjectID != uuid.Nil &&
-		(len(input.HostIDs) > 0 || string(selector) != "{}") && len(input.ManagedAccountIDs) > 0 && validProtocols(input.Protocols) &&
+		len(input.HostIDs) > 0 && len(input.ManagedAccountIDs) > 0 && validProtocols(input.Protocols) &&
 		len(input.Actions) == 1 && input.Actions[0] == "terminal" && input.ValidUntil.After(input.ValidFrom)
-}
-
-func validPolicyInput(input PolicyInput) bool {
-	return strings.TrimSpace(input.Name) != "" && validProtocols(input.Protocols) && len(input.ApproverRoleIDs) > 0 && input.MinimumApprovals >= 1 &&
-		input.MinimumApprovals <= 16 && input.MaxSessionSeconds >= 60 && input.MaxSessionSeconds <= 3600 && input.IdleTimeoutSeconds >= 60 && input.IdleTimeoutSeconds <= 900
 }
 
 func validProtocols(values []string) bool {
@@ -877,9 +959,109 @@ func connectionModeSupports(mode, protocol string) bool {
 }
 
 func appendAudit(ctx context.Context, q *db.Queries, actorID, enterpriseID uuid.UUID, actionName, resourceType string, resourceID uuid.UUID, status string) error {
+	return appendAuditDetails(ctx, q, actorID, enterpriseID, actionName, resourceType, resourceID, map[string]any{"status": status})
+}
+
+func appendAuditDetails(ctx context.Context, q *db.Queries, actorID, enterpriseID uuid.UUID, actionName, resourceType string, resourceID uuid.UUID, details map[string]any) error {
 	_, err := audit.Append(ctx, q, audit.Entry{Domain: "enterprise", EnterpriseID: uuid.NullUUID{UUID: enterpriseID, Valid: true}, ActorType: "enterprise_user",
-		ActorID: actorID.String(), Action: actionName, ResourceType: resourceType, ResourceID: resourceID.String(), Result: "success", Details: map[string]any{"status": status}})
+		ActorID: actorID.String(), Action: actionName, ResourceType: resourceType, ResourceID: resourceID.String(), Result: "success", Details: details})
 	return err
+}
+
+func sessionAuditDetails(session db.RemoteAccessSession, status string) map[string]any {
+	return map[string]any{
+		"status": status, "remote_session_id": session.ID, "lease_id": session.LeaseID,
+		"authorization_version": session.AuthorizationVersion, "snapshot_hash": hex.EncodeToString(session.DecisionSnapshotHash),
+		"host_id": session.HostID, "managed_account_id": session.ManagedAccountID, "protocol": session.Protocol,
+		"connection_mode": session.ConnectionMode, "session_fence": session.SessionFence,
+		"recording_mode": session.RecordingMode, "command_audit_mode": session.CommandAuditMode,
+		"clipboard_mode": session.ClipboardMode, "file_upload_mode": session.FileUploadMode,
+		"file_download_mode": session.FileDownloadMode, "port_forward_mode": session.PortForwardMode,
+		"session_share_mode": session.SessionShareMode,
+	}
+}
+
+func recordingAuditDetails(recording db.RemoteAccessRecording, status string) map[string]any {
+	return map[string]any{
+		"status": status, "recording_id": recording.ID, "remote_session_id": recording.SessionID,
+		"recording_status": recording.Status, "chunk_count": recording.ChunkCount, "event_count": recording.EventCount,
+		"retention_until": recording.RetentionUntil,
+	}
+}
+
+func (service Service) createSessionRecording(ctx context.Context, q *db.Queries, enterpriseID, sessionID uuid.UUID) (uuid.UUID, error) {
+	recordingID := newID()
+	dek := make([]byte, 32)
+	if _, err := rand.Read(dek); err != nil {
+		return uuid.Nil, err
+	}
+	envelope, err := service.Keyring.EncryptContext(ctx, dek, recordingKeyAAD(enterpriseID, recordingID, sessionID))
+	clear(dek)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	wrapped, err := json.Marshal(envelope)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	_, err = q.CreateRemoteAccessRecording(ctx, db.CreateRemoteAccessRecordingParams{ID: recordingID, EnterpriseID: enterpriseID,
+		SessionID: sessionID, KeyProvider: envelope.Provider, KeyID: envelope.KeyID, KeyVersion: int32(envelope.KeyVersion), WrappedDek: wrapped})
+	return recordingID, err
+}
+
+func (service Service) recordingIDForSession(ctx context.Context, q *db.Queries, enterpriseID, sessionID uuid.UUID) (uuid.UUID, error) {
+	recording, err := q.GetRemoteAccessRecordingBySession(ctx, db.GetRemoteAccessRecordingBySessionParams{SessionID: sessionID, EnterpriseID: enterpriseID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, nil
+	}
+	return recording.ID, err
+}
+
+func (service Service) recordOptionalRecordingDegradation(ctx context.Context, actor Actor, sessionID uuid.UUID) error {
+	return service.Store.InTx(ctx, func(q *db.Queries) error {
+		payload, err := json.Marshal(map[string]any{"enterprise_id": actor.EnterpriseID, "session_id": sessionID, "recording_mode": "optional"})
+		if err != nil {
+			return err
+		}
+		if err := q.InsertOutboxEvent(ctx, db.InsertOutboxEventParams{ID: newID(), Topic: "remote_access.recording.degraded",
+			AggregateType: "remote_access_session", AggregateID: sessionID.String(), Payload: payload}); err != nil {
+			return err
+		}
+		return appendAuditDetails(ctx, q, actor.UserID, actor.EnterpriseID, "remote_access.recording.degrade", "remote_access_session", sessionID, map[string]any{
+			"status": "optional_unavailable", "remote_session_id": sessionID, "recording_mode": "optional",
+		})
+	})
+}
+
+func appendDecisionAudit(ctx context.Context, q *db.Queries, actor Actor, requestID uuid.UUID, actionName, status string, decision AccessDecision, snapshotHash []byte) error {
+	resourceType, resourceID := "remote_access_request", requestID.String()
+	result := "success"
+	if requestID == uuid.Nil {
+		resourceType, resourceID = "remote_access_decision", hex.EncodeToString(snapshotHash)
+	}
+	if decision.Outcome == DecisionDenied {
+		result = "denied"
+	}
+	_, err := audit.Append(ctx, q, audit.Entry{Domain: "enterprise", EnterpriseID: uuid.NullUUID{UUID: actor.EnterpriseID, Valid: true},
+		ActorType: "enterprise_user", ActorID: actor.UserID.String(), Action: actionName, ResourceType: resourceType, ResourceID: resourceID,
+		Result: result, Details: map[string]any{"status": status, "outcome": decision.Outcome, "reason_codes": decision.ReasonCodes,
+			"snapshot_hash": hex.EncodeToString(snapshotHash), "matched_grants": decision.MatchedGrantSnapshots,
+			"matched_rules": decision.MatchedRuleSnapshots, "approval_workflows": decision.ApprovalRequirements,
+			"session_profile_sources": decision.SessionProfile.SourceProfiles, "authorization_version": decision.AuthorizationVersion}})
+	return err
+}
+
+func publishDecisionNotification(ctx context.Context, q *db.Queries, requestID uuid.UUID, decision AccessDecision, snapshotHash []byte) error {
+	if !decision.Notifications {
+		return nil
+	}
+	payload, err := json.Marshal(map[string]any{"request_id": requestID, "outcome": decision.Outcome, "reason_codes": decision.ReasonCodes,
+		"snapshot_hash": hex.EncodeToString(snapshotHash), "matched_grants": decision.MatchedGrantSnapshots, "matched_rules": decision.MatchedRuleSnapshots})
+	if err != nil {
+		return err
+	}
+	return q.InsertOutboxEvent(ctx, db.InsertOutboxEventParams{ID: newID(), Topic: "remote_access.decision.notify",
+		AggregateType: "remote_access_request", AggregateID: requestID.String(), Payload: payload})
 }
 
 func (service Service) now() time.Time {

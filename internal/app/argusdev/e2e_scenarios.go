@@ -46,9 +46,10 @@ func (a *App) runPlaywright(ctx context.Context, env *E2EEnvironment, spec strin
 	variables["ARGUS_E2E_EXTERNAL"] = "1"
 	artifactDir := filepath.Join(env.Options.Artifacts, "playwright-"+env.Options.Suite)
 	variables["ARGUS_E2E_ARTIFACTS"] = artifactDir
-	variables["ARGUS_E2E_ENTERPRISE_ORIGIN"] = "http://127.0.0.1:4173"
-	variables["ARGUS_E2E_PLATFORM_ORIGIN"] = "http://127.0.0.1:4174"
-	variables["ARGUS_E2E_CARD_ORIGIN"] = "http://127.0.0.1:4176"
+	variables["ARGUS_E2E_ENTERPRISE_ORIGIN"] = env.Endpoints.EnterpriseOrigin
+	variables["ARGUS_E2E_PLATFORM_ORIGIN"] = env.Endpoints.PlatformOrigin
+	variables["ARGUS_E2E_CARD_ORIGIN"] = env.Endpoints.CardOrigin
+	variables["ARGUS_E2E_HOST_RESOLVER"] = env.Endpoints.HostResolver
 	variables["ARGUS_E2E_ENTERPRISE_TOTP_SECRET"] = env.State.Values["enterprise_mfa_secret"]
 	variables["ARGUS_E2E_ENTERPRISE_TOTP_LAST_CODE"] = env.State.Values["enterprise_mfa_last"]
 	variables["ARGUS_E2E_PLATFORM_TOTP_SECRET"] = env.State.Values["platform_mfa_secret"]

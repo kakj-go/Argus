@@ -116,7 +116,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 			Opener: direct, HandshakeTimeout: 15 * time.Second, Logger: logger,
 		}, Connector: connectorBackends},
 		ObjectStore: objects, AllowedOrigins: cfg.RemoteAllowedOrigins, RejectNew: rejectNewRemote, Drain: forceRemoteDrain,
-		Sessions: remoteSessions, Terminations: terminationHub, Logger: logger}, ReadHeaderTimeout: 5 * time.Second}
+		Sessions: remoteSessions, Terminations: terminationHub, Parks: remoteaccess.NewSessionParks(), Logger: logger}, ReadHeaderTimeout: 5 * time.Second}
 	healthServer := &http.Server{Addr: cfg.HealthAddress, Handler: component.HealthHandler("argus-connector-gateway"), ReadHeaderTimeout: 5 * time.Second}
 	errorsChannel := make(chan error, 4)
 	go func() {

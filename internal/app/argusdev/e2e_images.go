@@ -60,8 +60,7 @@ func (a *App) prepareE2EImages(ctx context.Context, env *E2EEnvironment) error {
 	if err := a.retryE2EImageBuild(ctx, "E2E web image", func(buildCtx context.Context) error {
 		return a.runner.Run(buildCtx, nil, "docker", "buildx", "build", "--platform", env.ImagePlatform, "--file", "deploy/docker/web.Dockerfile",
 			"--tag", localPrefix+"argus-web:"+env.ImageTag, "--label", buildLabel, "--push",
-			"--build-arg", "VITE_API_MODE=real", "--build-arg", "VITE_API_BASE_URL=http://127.0.0.1:4180",
-			"--build-arg", "VITE_CARD_ORIGIN=http://127.0.0.1:4176", "--build-arg", "VITE_PLATFORM_URL=http://127.0.0.1:4174/login",
+			"--build-arg", "VITE_API_MODE=real", "--build-arg", "VITE_API_BASE_URL=/",
 			"--build-arg", "VITE_DIRECT_EGRESS_ADDRESSES=127.0.0.1", ".")
 	}); err != nil {
 		return err

@@ -216,9 +216,9 @@ func TestRefreshM4ApproverLoginReadsAuthenticatedSession(t *testing.T) {
 	defer server.Close()
 
 	state := NewScenarioState("test")
-	state.HTTP = NewScenarioHTTP(server.URL, t.TempDir())
+	state.HTTP = NewScenarioHTTP(server.URL, t.TempDir(), nil)
 	state.Values["m4_approver_password"] = "Q8!mV4@rT7#pL2$x"
-	env := &E2EEnvironment{State: state}
+	env := &E2EEnvironment{State: state, Endpoints: &E2EEndpoints{EnterpriseOrigin: "http://enterprise.example"}}
 	if err := (&App{}).refreshM4ApproverLogin(context.Background(), env); err != nil {
 		t.Fatal(err)
 	}

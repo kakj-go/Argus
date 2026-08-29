@@ -24,7 +24,7 @@ import (
 var (
 	ErrUnavailable         = errors.New("telemetry service unavailable")
 	ErrNotFound            = errors.New("telemetry resource not found")
-	ErrDenied              = errors.New("telemetry resource outside data scope")
+	ErrDenied              = errors.New("telemetry resource is not explicitly authorized")
 	ErrDistributionPending = errors.New("collector distribution validation pending")
 	ErrQueryInvalid        = errors.New("telemetry query invalid")
 	ErrQueryBudget         = errors.New("telemetry query budget exceeded")
@@ -36,10 +36,10 @@ var (
 )
 
 type Actor struct {
-	EnterpriseID         uuid.UUID
-	SubjectID            uuid.UUID
-	AuthorizationVersion int64
-	DataScopeIDs         []uuid.UUID
+	EnterpriseID          uuid.UUID
+	SubjectID             uuid.UUID
+	AuthorizationVersion  int64
+	AuthorizedResourceIDs []uuid.UUID
 }
 
 type Service struct {
@@ -440,40 +440,27 @@ func (service Service) canAccessCollector(ctx context.Context, actor Actor, coll
 }
 
 func (service Service) requireResource(ctx context.Context, actor Actor, resourceType string, resourceID uuid.UUID) error {
-	var labels map[string]string
 	switch resourceType {
 	case "host":
-		item, err := service.Store.Queries.GetHost(ctx, db.GetHostParams{ID: resourceID, EnterpriseID: actor.EnterpriseID})
+		_, err := service.Store.Queries.GetHost(ctx, db.GetHostParams{ID: resourceID, EnterpriseID: actor.EnterpriseID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
-		if err != nil {
-			return err
-		}
-		labels, err = resource.DecodeLabels(item.Labels)
 		if err != nil {
 			return err
 		}
 	case "kubernetes_cluster":
-		item, err := service.Store.Queries.GetKubernetesCluster(ctx, db.GetKubernetesClusterParams{ID: resourceID, EnterpriseID: actor.EnterpriseID})
+		_, err := service.Store.Queries.GetKubernetesCluster(ctx, db.GetKubernetesClusterParams{ID: resourceID, EnterpriseID: actor.EnterpriseID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
-		if err != nil {
-			return err
-		}
-		labels, err = resource.DecodeLabels(item.Labels)
 		if err != nil {
 			return err
 		}
 	default:
 		return ErrNotFound
 	}
-	allowed, _, err := service.Access.CanAccess(ctx, actor.EnterpriseID, actor.DataScopeIDs, resourceType, resourceID.String(), labels)
-	if err != nil {
-		return err
-	}
-	if !allowed {
+	if !service.Access.CanAccess(actor.AuthorizedResourceIDs, resourceID) {
 		return ErrNotFound
 	}
 	return nil

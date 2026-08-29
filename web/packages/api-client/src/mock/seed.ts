@@ -1,6 +1,7 @@
 import type { PendingActionPublic, ModelUsagePoint } from "../types";
 import type { TaskViewModel } from "../provisional";
 import { calculateModelAmount } from "../types";
+import type { RemoteAccessRecording } from "../generated/contracts";
 import { createOrgSeed } from "./seed-org";
 import type { MockDb } from "./store";
 import type { MockInteractiveCard } from "./internal-types";
@@ -606,6 +607,58 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     );
   }
 
+  // 会话录像种子：一段可直接回放的 asciicast v2 事件流（约 14 秒），
+  // 供录像列表 / 详情弹框 / TerminalPlayer 的 mock 演示与 E2E 使用。
+  const recordingEvents: unknown[] = [
+    { time: 0, type: "r", data: "120x30" },
+    { time: 0.2, type: "o", data: "\u001b[?2004h\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
+    { time: 1.0, type: "i", data: "uptime\r" },
+    { time: 1.6, type: "o", data: "uptime\r\n" },
+    { time: 1.7, type: "o", data: " 21:32:01 up 42 days,  3:17,  2 users,  load average: 0.18, 0.12, 0.09\r\n" },
+    { time: 2.2, type: "o", data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
+    { time: 3.0, type: "i", data: "df -h /data\r" },
+    { time: 3.7, type: "o", data: "df -h /data\r\n" },
+    { time: 3.8, type: "o", data: "Filesystem      Size  Used Avail Use% Mounted on\r\n" },
+    { time: 3.9, type: "o", data: "/dev/sdb1       200G   87G  103G  46% /data\r\n" },
+    { time: 4.4, type: "o", data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
+    { time: 5.2, type: "i", data: "tail -n 3 /var/log/nginx/error.log\r" },
+    { time: 5.9, type: "o", data: "tail -n 3 /var/log/nginx/error.log\r\n" },
+    { time: 6.0, type: "o", data: "\u001b[31m2026-08-29 21:18:44\u001b[0m [warn] 3101#3101: *8192 upstream server temporarily disabled while connecting to upstream\r\n" },
+    { time: 6.1, type: "o", data: "\u001b[31m2026-08-29 21:18:45\u001b[0m [warn] 3101#3101: *8194 upstream server temporarily disabled while connecting to upstream\r\n" },
+    { time: 6.2, type: "o", data: "\u001b[31m2026-08-29 21:18:47\u001b[0m [error] 3101#3101: *8196 connect() failed (111: Connection refused) while connecting to upstream\r\n" },
+    { time: 6.8, type: "o", data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
+    { time: 7.6, type: "i", data: "systemctl status argus-connector --no-pager\r" },
+    { time: 8.3, type: "o", data: "systemctl status argus-connector --no-pager\r\n" },
+    { time: 8.4, type: "o", data: "\u001b[1m● argus-connector.service - Argus Connector\u001b[0m\r\n" },
+    { time: 8.5, type: "o", data: "     Loaded: loaded (/etc/systemd/system/argus-connector.service; \u001b[32menabled\u001b[0m; preset: enabled)\r\n" },
+    { time: 8.6, type: "o", data: "     Active: \u001b[32mactive (running)\u001b[0m since Mon 2026-08-24 09:00:12 CST; 5 days ago\r\n" },
+    { time: 8.7, type: "o", data: "   Main PID: 3101 (argus-connector)\r\n" },
+    { time: 8.8, type: "o", data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
+    { time: 9.6, type: "i", data: "exit\r" },
+    { time: 10.2, type: "o", data: "exit\r\n" },
+    { time: 10.3, type: "m", data: { status: "closed", reason: "user_exit" } },
+    { time: 10.4, type: "o", data: "\r\n\u001b[33m[Argus] 会话已结束，连接关闭。\u001b[0m\r\n" },
+  ];
+  const remoteAccessRecordings: RemoteAccessRecording[] = [
+    {
+      id: "rar-seed-1",
+      enterprise_id: "ent-acme",
+      session_id: "ras-seed-1",
+      status: "available",
+      format: "asciicast_v2",
+      encrypted: true,
+      chunk_count: 2,
+      event_count: recordingEvents.length,
+      size_bytes: 48_211,
+      duration_ms: 10_400,
+      final_hash: "3f7a1c9d2e5b8406a1c3f9e7d2b58046c9a1e3f7d2b58046c9a1e3f7d2b58046",
+      retention_until: iso(180 * DAY),
+      created_at: ago(2 * HOUR),
+      completed_at: ago(2 * HOUR - 10_400),
+    },
+  ];
+  const remoteAccessRecordingEvents: Record<string, unknown[]> = { "rar-seed-1": recordingEvents };
+
   const db: MockDb = {
     schemaVersion: 11,
     seq: {},
@@ -673,7 +726,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       },
     ],
     // users/credentials/enterpriseUsers/departments/roles/roleBindings/
-    // dataScopes/approvalPolicies/serviceAccounts/apiKeys 来自 seed-org.ts。
+    // approvalPolicies/serviceAccounts/apiKeys 来自 seed-org.ts。
     ...createOrgSeed(now),
     secrets: [
       {
@@ -758,6 +811,8 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         updated_at: ago(70 * DAY),
       },
     ],
+    remoteAccessRecordings,
+    remoteAccessRecordingEvents,
     hosts,
     connectors: [
       {

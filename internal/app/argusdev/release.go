@@ -135,8 +135,7 @@ func (a *App) releaseLocal(ctx context.Context, version, out string) (returnErr 
 		return err
 	}
 	if err := a.runner.Run(ctx, nil, "docker", "build", "--quiet", "--platform", "linux/arm64", "--file", "deploy/docker/web.Dockerfile", "--tag", webImage,
-		"--build-arg", "VITE_API_MODE=real", "--build-arg", "VITE_API_BASE_URL=/", "--build-arg", "VITE_CARD_ORIGIN=http://localhost:4176",
-		"--build-arg", "VITE_PLATFORM_URL=http://localhost:4174/login", "."); err != nil {
+		"--build-arg", "VITE_API_MODE=real", "--build-arg", "VITE_API_BASE_URL=/", "."); err != nil {
 		return err
 	}
 	if err := a.saveDockerImage(ctx, backendImage, filepath.Join(out, "images", "argus-backend-linux-arm64.tar.gz")); err != nil {

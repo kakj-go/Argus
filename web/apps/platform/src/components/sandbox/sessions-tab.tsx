@@ -4,10 +4,10 @@ import { useTranslation } from "react-i18next";
 import { useApi, type SandboxSessionMeta } from "@argus/api-client";
 import {
   Alert,
-  Button,
   ConfirmDialog,
   DataTable,
   EmptyState,
+  RowAction,
   Spinner,
   StatusBadge,
 } from "@argus/ui";
@@ -156,13 +156,9 @@ export function SessionsTab() {
               header: t("common.actions"),
               render: (row) =>
                 isActive(row.status) ? (
-                  <Button
-                    onClick={() => setTerminating(row)}
-                    size="sm"
-                    variant="ghost"
-                  >
+                  <RowAction danger onClick={() => setTerminating(row)}>
                     {t("sandbox.sessions.terminate")}
-                  </Button>
+                  </RowAction>
                 ) : (
                   t("common.none")
                 ),

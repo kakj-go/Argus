@@ -6,9 +6,11 @@ import {
   ApiProvider,
   createConfiguredApiClient,
   setApiErrorTranslator,
+  TerminalSessionProvider,
 } from "@argus/api-client";
 import { useEnterpriseAuthStore } from "@argus/auth";
 import {
+  ErrorBoundary,
   initializeTheme,
   LocaleProvider,
   ThemeProvider,
@@ -19,6 +21,7 @@ import i18n from "./i18n";
 import "./styles.css";
 import "./styles/shell-layout.css";
 import { AuthProvider } from "./components/auth-provider";
+import { loadRuntimeConfig } from "./lib/runtime-config";
 import { router } from "./router";
 
 const queryClient = new QueryClient({
@@ -41,8 +44,13 @@ function syncLocale(locale: SupportedLocale) {
 
 async function bootstrap() {
   const mode = import.meta.env.VITE_API_MODE;
-  if (mode === "real" && !import.meta.env.VITE_CARD_ORIGIN) {
-    throw new Error("VITE_CARD_ORIGIN is required when VITE_API_MODE=real");
+  if (mode === "real") {
+    const runtime = await loadRuntimeConfig();
+    if (!runtime.cardOrigin && !import.meta.env.VITE_CARD_ORIGIN) {
+      throw new Error(
+        "Card runtime origin is unavailable: /argus-runtime.json served neither cardOrigin nor VITE_CARD_ORIGIN was set",
+      );
+    }
   }
   const apiClient = await createConfiguredApiClient({
     portal: "enterprise",
@@ -60,17 +68,21 @@ async function bootstrap() {
   });
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <ThemeProvider>
-        <LocaleProvider onLocaleChange={syncLocale}>
-          <ApiProvider client={apiClient}>
-            <QueryClientProvider client={queryClient}>
-              <AuthProvider>
-                <RouterProvider router={router} />
-              </AuthProvider>
-            </QueryClientProvider>
-          </ApiProvider>
-        </LocaleProvider>
-      </ThemeProvider>
+      <ErrorBoundary onReset={() => queryClient.clear()}>
+        <ThemeProvider>
+          <LocaleProvider onLocaleChange={syncLocale}>
+            <ApiProvider client={apiClient}>
+              <TerminalSessionProvider>
+                <QueryClientProvider client={queryClient}>
+                  <AuthProvider>
+                    <RouterProvider router={router} />
+                  </AuthProvider>
+                </QueryClientProvider>
+              </TerminalSessionProvider>
+            </ApiProvider>
+          </LocaleProvider>
+        </ThemeProvider>
+      </ErrorBoundary>
     </StrictMode>,
   );
 }

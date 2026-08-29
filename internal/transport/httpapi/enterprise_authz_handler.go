@@ -2,9 +2,9 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,13 +13,99 @@ import (
 	authzapi "github.com/kakj-go/Argus/internal/gen/openapi/enterpriseauthz"
 	"github.com/kakj-go/Argus/internal/identity"
 	"github.com/kakj-go/Argus/internal/pagination"
-	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
 type EnterpriseAuthorizationHandler struct {
 	Identity EnterpriseIdentityHandler
 	Service  authorization.Service
 	Cursor   pagination.Signer
+}
+
+func (handler EnterpriseAuthorizationHandler) ListDataAuthorizationResources(ctx context.Context, request authzapi.ListDataAuthorizationResourcesRequestObject) (authzapi.ListDataAuthorizationResourcesResponseObject, error) {
+	principal, apiError := handler.auth(ctx, false, "", "data_authorization.read")
+	if apiError != nil {
+		return authzapi.ListDataAuthorizationResourcesdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
+	}
+	subjectType := string(request.SubjectType)
+	resourceType := string(request.Params.ResourceType)
+	if !validDataAuthorizationSubjectType(subjectType) || !validDataAuthorizationResourceType(resourceType) {
+		return authzapi.ListDataAuthorizationResourcesdefaultJSONResponse{Body: authzError(ctx, errors.New("invalid data authorization target")), StatusCode: http.StatusBadRequest}, nil
+	}
+	items, err := handler.Service.ListGrantResources(principal.Context(ctx), principal.EnterpriseIDValue(), uuid.UUID(request.SubjectId), subjectType, resourceType)
+	if err != nil {
+		return authzapi.ListDataAuthorizationResourcesdefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusInternalServerError}, nil
+	}
+	filter := map[string]any{"subject_type": subjectType, "subject_id": request.SubjectId.String(), "resource_type": resourceType}
+	items, next, hasMore, err := paginate(handler.Cursor, items, cursorValue(request.Params.Cursor), listLimit(request.Params.Limit), enterpriseCursorBinding(principal, filter, "resource_id_asc"), func(value authorization.GrantResource) pageKey {
+		return pageKey{ID: value.ResourceID.String()}
+	})
+	if err != nil {
+		body, status := authzPaginationError(ctx, err)
+		return authzapi.ListDataAuthorizationResourcesdefaultJSONResponse{Body: body, StatusCode: status}, nil
+	}
+	version, err := handler.Service.CurrentAuthorizationVersion(principal.Context(ctx), principal.EnterpriseIDValue(), uuid.UUID(request.SubjectId), subjectType)
+	if err != nil {
+		return authzapi.ListDataAuthorizationResourcesdefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusInternalServerError}, nil
+	}
+	affected, err := handler.Service.AffectedMemberCount(principal.Context(ctx), principal.EnterpriseIDValue(), uuid.UUID(request.SubjectId), subjectType)
+	if err != nil {
+		return authzapi.ListDataAuthorizationResourcesdefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusInternalServerError}, nil
+	}
+	converted := make([]authzapi.DataAuthorizationResource, 0, len(items))
+	for _, item := range items {
+		converted = append(converted, authzapi.DataAuthorizationResource{
+			ResourceType: authzapi.DataAuthorizationResourceType(item.ResourceType),
+			ResourceId:   authzapi.ResourceId(item.ResourceID),
+			Name:         item.Name, Direct: item.Direct, Inherited: item.Inherited, Sources: item.Sources,
+		})
+	}
+	return authzapi.ListDataAuthorizationResources200JSONResponse{Items: converted, Page: authzapi.CursorPage{NextCursor: next, HasMore: hasMore, Partial: emptyAuthzPage().Partial}, AuthorizationVersion: version, AffectedMemberCount: affected}, nil
+}
+
+func (handler EnterpriseAuthorizationHandler) UpdateDataAuthorization(ctx context.Context, request authzapi.UpdateDataAuthorizationRequestObject) (authzapi.UpdateDataAuthorizationResponseObject, error) {
+	principal, apiError := handler.auth(ctx, true, string(request.Params.XCSRFToken), "data_authorization.manage")
+	if apiError != nil {
+		return authzapi.UpdateDataAuthorizationdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
+	}
+	if request.Body == nil {
+		return authzapi.UpdateDataAuthorizationdefaultJSONResponse{Body: authzError(ctx, errors.New("invalid request")), StatusCode: http.StatusBadRequest}, nil
+	}
+	subjectType := string(request.SubjectType)
+	resourceType := string(request.Body.ResourceType)
+	if !validDataAuthorizationSubjectType(subjectType) || !validDataAuthorizationResourceType(resourceType) {
+		return authzapi.UpdateDataAuthorizationdefaultJSONResponse{Body: authzError(ctx, errors.New("invalid data authorization target")), StatusCode: http.StatusBadRequest}, nil
+	}
+	if request.Body.ExpectedVersion < 1 || len(request.Body.ResourceIds) == 0 {
+		return authzapi.UpdateDataAuthorizationdefaultJSONResponse{Body: authzError(ctx, errors.New("expected_version and resource_ids are required")), StatusCode: http.StatusBadRequest}, nil
+	}
+	ids := make([]uuid.UUID, 0, len(request.Body.ResourceIds))
+	for _, id := range request.Body.ResourceIds {
+		ids = append(ids, uuid.UUID(id))
+	}
+	err := handler.Service.UpdateGrantBatch(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), authorization.GrantBatchInput{
+		SubjectType: subjectType, SubjectID: uuid.UUID(request.SubjectId), ResourceType: resourceType, ResourceIDs: ids, Remove: request.Body.Remove, ExpectedVersion: request.Body.ExpectedVersion,
+	})
+	if err != nil {
+		status := http.StatusConflict
+		if errors.Is(err, authorization.ErrInvalidResource) {
+			status = http.StatusUnprocessableEntity
+		}
+		return authzapi.UpdateDataAuthorizationdefaultJSONResponse{Body: authzError(ctx, err), StatusCode: status}, nil
+	}
+	return authzapi.UpdateDataAuthorization204Response{}, nil
+}
+
+func validDataAuthorizationSubjectType(value string) bool {
+	switch value {
+	case "user", "department", "role", "service_account":
+		return true
+	default:
+		return false
+	}
+}
+
+func validDataAuthorizationResourceType(value string) bool {
+	return value == "host" || value == "kubernetes_cluster"
 }
 
 func (handler EnterpriseAuthorizationHandler) ListPermissions(ctx context.Context, request authzapi.ListPermissionsRequestObject) (authzapi.ListPermissionsResponseObject, error) {
@@ -131,103 +217,6 @@ func (handler EnterpriseAuthorizationHandler) DisableRole(ctx context.Context, r
 	return authzapi.DisableRole204Response{}, nil
 }
 
-func (handler EnterpriseAuthorizationHandler) ListDataScopes(ctx context.Context, request authzapi.ListDataScopesRequestObject) (authzapi.ListDataScopesResponseObject, error) {
-	principal, apiError := handler.auth(ctx, false, "", "data_scope.read")
-	if apiError != nil {
-		return authzapi.ListDataScopesdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
-	}
-	items, err := handler.Service.ListScopes(principal.Context(ctx), principal.EnterpriseIDValue())
-	if err != nil {
-		return authzapi.ListDataScopesdefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusInternalServerError}, nil
-	}
-	items, next, hasMore, err := paginate(handler.Cursor, items, cursorValue(request.Params.Cursor), listLimit(request.Params.Limit), enterpriseCursorBinding(principal, nil, "created_at_asc"), func(value db.DataScope) pageKey {
-		return pageKey{Time: value.CreatedAt.Time, ID: value.ID.String()}
-	})
-	if err != nil {
-		body, status := authzPaginationError(ctx, err)
-		return authzapi.ListDataScopesdefaultJSONResponse{Body: body, StatusCode: status}, nil
-	}
-	converted := make([]authzapi.DataScope, 0, len(items))
-	for _, item := range items {
-		converted = append(converted, toAuthzScope(item))
-	}
-	return authzapi.ListDataScopes200JSONResponse{Items: converted, Page: authzapi.CursorPage{NextCursor: next, HasMore: hasMore, Partial: emptyAuthzPage().Partial}}, nil
-}
-
-func (handler EnterpriseAuthorizationHandler) CreateDataScope(ctx context.Context, request authzapi.CreateDataScopeRequestObject) (authzapi.CreateDataScopeResponseObject, error) {
-	principal, apiError := handler.auth(ctx, true, request.Params.XCSRFToken, "data_scope.manage")
-	if apiError != nil {
-		return authzapi.CreateDataScopedefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
-	}
-	if request.Body == nil {
-		return authzapi.CreateDataScopedefaultJSONResponse{Body: authzError(ctx, errors.New("invalid request")), StatusCode: http.StatusBadRequest}, nil
-	}
-	input, err := scopeCreateInput(*request.Body)
-	if err != nil {
-		return authzapi.CreateDataScopedefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusUnprocessableEntity}, nil
-	}
-	value, err := handler.Service.CreateScope(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), input, request.Params.IdempotencyKey)
-	if err != nil {
-		return authzapi.CreateDataScopedefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusUnprocessableEntity}, nil
-	}
-	return authzapi.CreateDataScope201JSONResponse(toAuthzScope(value)), nil
-}
-
-func (handler EnterpriseAuthorizationHandler) UpdateDataScope(ctx context.Context, request authzapi.UpdateDataScopeRequestObject) (authzapi.UpdateDataScopeResponseObject, error) {
-	principal, apiError := handler.auth(ctx, true, request.Params.XCSRFToken, "data_scope.manage")
-	if apiError != nil {
-		return authzapi.UpdateDataScopedefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
-	}
-	if request.Body == nil {
-		return authzapi.UpdateDataScopedefaultJSONResponse{Body: authzError(ctx, errors.New("invalid request")), StatusCode: http.StatusBadRequest}, nil
-	}
-	raw, _ := json.Marshal(request.Body.LabelSelector)
-	if request.Body.LabelSelector == nil {
-		raw = nil
-	}
-	resourceTypes := make([]string, len(request.Body.ResourceTypes))
-	for i, v := range request.Body.ResourceTypes {
-		resourceTypes[i] = string(v)
-	}
-	description := ""
-	if request.Body.Description != nil {
-		description = *request.Body.Description
-	}
-	var status *string
-	if request.Body.Status != nil {
-		v := string(*request.Body.Status)
-		status = &v
-	}
-	value, err := handler.Service.UpdateScope(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), uuid.UUID(request.Id), authorization.ScopeInput{Name: request.Body.Name, Description: description, ResourceTypes: resourceTypes, ExplicitResourceIDs: request.Body.ExplicitResourceIds, LabelSelector: raw, MatchAll: request.Body.MatchAll, Status: status, ExpectedVersion: request.Body.ExpectedVersion})
-	if err != nil {
-		return authzapi.UpdateDataScopedefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusConflict}, nil
-	}
-	return authzapi.UpdateDataScope200JSONResponse(toAuthzScope(value)), nil
-}
-
-func (handler EnterpriseAuthorizationHandler) DisableDataScope(ctx context.Context, request authzapi.DisableDataScopeRequestObject) (authzapi.DisableDataScopeResponseObject, error) {
-	principal, apiError := handler.auth(ctx, true, request.Params.XCSRFToken, "data_scope.manage")
-	if apiError != nil {
-		return authzapi.DisableDataScopedefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
-	}
-	current, err := handler.Service.ListScopes(principal.Context(ctx), principal.EnterpriseIDValue())
-	if err != nil {
-		return authzapi.DisableDataScopedefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusInternalServerError}, nil
-	}
-	for _, scope := range current {
-		if scope.ID == uuid.UUID(request.Id) {
-			status := "disabled"
-			matchAll := scope.MatchAll
-			_, err = handler.Service.UpdateScope(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), scope.ID, authorization.ScopeInput{Name: scope.Name, Description: scope.Description, ResourceTypes: scope.ResourceTypes, ExplicitResourceIDs: scope.ExplicitResourceIds, LabelSelector: scope.LabelSelector, MatchAll: &matchAll, Status: &status, ExpectedVersion: request.Params.ExpectedVersion})
-			break
-		}
-	}
-	if err != nil {
-		return authzapi.DisableDataScopedefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusConflict}, nil
-	}
-	return authzapi.DisableDataScope204Response{}, nil
-}
-
 func (handler EnterpriseAuthorizationHandler) ListRoleBindings(ctx context.Context, request authzapi.ListRoleBindingsRequestObject) (authzapi.ListRoleBindingsResponseObject, error) {
 	principal, apiError := handler.auth(ctx, false, "", "role.read")
 	if apiError != nil {
@@ -259,8 +248,7 @@ func (handler EnterpriseAuthorizationHandler) CreateRoleBinding(ctx context.Cont
 	if request.Body == nil {
 		return authzapi.CreateRoleBindingdefaultJSONResponse{Body: authzError(ctx, errors.New("invalid request")), StatusCode: http.StatusBadRequest}, nil
 	}
-	scopes := uuidSlice(request.Body.DataScopeIds)
-	result, err := handler.Service.CreateBinding(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), authorization.BindingInput{SubjectType: string(request.Body.SubjectType), SubjectID: uuid.UUID(request.Body.SubjectId), RoleID: uuid.UUID(request.Body.RoleId), DataScopeIDs: scopes, ValidFrom: request.Body.ValidFrom, ValidUntil: request.Body.ValidUntil}, request.Params.IdempotencyKey)
+	result, err := handler.Service.CreateBinding(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), authorization.BindingInput{SubjectType: string(request.Body.SubjectType), SubjectID: uuid.UUID(request.Body.SubjectId), RoleID: uuid.UUID(request.Body.RoleId), ValidFrom: request.Body.ValidFrom, ValidUntil: request.Body.ValidUntil}, request.Params.IdempotencyKey)
 	if err != nil {
 		return authzapi.CreateRoleBindingdefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusConflict}, nil
 	}
@@ -275,16 +263,12 @@ func (handler EnterpriseAuthorizationHandler) UpdateRoleBinding(ctx context.Cont
 	if request.Body == nil {
 		return authzapi.UpdateRoleBindingdefaultJSONResponse{Body: authzError(ctx, errors.New("invalid request")), StatusCode: http.StatusBadRequest}, nil
 	}
-	var scopes []uuid.UUID
-	if request.Body.DataScopeIds != nil {
-		scopes = uuidSlice(*request.Body.DataScopeIds)
-	}
 	var status *string
 	if request.Body.Status != nil {
 		v := string(*request.Body.Status)
 		status = &v
 	}
-	result, err := handler.Service.UpdateBinding(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), uuid.UUID(request.Id), authorization.BindingInput{DataScopeIDs: scopes, ValidFrom: request.Body.ValidFrom, ValidUntil: request.Body.ValidUntil, SetValidFrom: true, SetValidUntil: true, Status: status, ExpectedVersion: request.Body.ExpectedVersion})
+	result, err := handler.Service.UpdateBinding(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), uuid.UUID(request.Id), authorization.BindingInput{ValidFrom: request.Body.ValidFrom, ValidUntil: request.Body.ValidUntil, SetValidFrom: true, SetValidUntil: true, Status: status, ExpectedVersion: request.Body.ExpectedVersion})
 	if err != nil {
 		return authzapi.UpdateRoleBindingdefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusConflict}, nil
 	}
@@ -304,6 +288,46 @@ func (handler EnterpriseAuthorizationHandler) DisableRoleBinding(ctx context.Con
 	return authzapi.DisableRoleBinding204Response{}, nil
 }
 
+func (handler EnterpriseAuthorizationHandler) GetUserRoleAssignments(ctx context.Context, request authzapi.GetUserRoleAssignmentsRequestObject) (authzapi.GetUserRoleAssignmentsResponseObject, error) {
+	principal, apiError := handler.auth(ctx, false, "", "role.read")
+	if apiError != nil {
+		return authzapi.GetUserRoleAssignmentsdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
+	}
+	result, err := handler.Service.GetUserRoleAssignments(principal.Context(ctx), principal.EnterpriseIDValue(), uuid.UUID(request.Id))
+	if err != nil {
+		return authzapi.GetUserRoleAssignmentsdefaultJSONResponse{Body: authzError(ctx, err), StatusCode: http.StatusNotFound}, nil
+	}
+	return authzapi.GetUserRoleAssignments200JSONResponse(toUserRoleAssignments(result)), nil
+}
+
+func (handler EnterpriseAuthorizationHandler) ReplaceUserRoleAssignments(ctx context.Context, request authzapi.ReplaceUserRoleAssignmentsRequestObject) (authzapi.ReplaceUserRoleAssignmentsResponseObject, error) {
+	principal, apiError := handler.auth(ctx, true, request.Params.XCSRFToken, "role.manage")
+	if apiError != nil {
+		return authzapi.ReplaceUserRoleAssignmentsdefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
+	}
+	if !hasAllPermissions(principal, "identity.manage", "role.manage") {
+		return authzapi.ReplaceUserRoleAssignmentsdefaultJSONResponse{Body: authzError(ctx, errors.New("authorization denied")), StatusCode: http.StatusForbidden}, nil
+	}
+	if request.Body == nil {
+		return authzapi.ReplaceUserRoleAssignmentsdefaultJSONResponse{Body: authzError(ctx, errors.New("invalid request")), StatusCode: http.StatusBadRequest}, nil
+	}
+	roleIDs := make([]uuid.UUID, 0, len(request.Body.RoleIds))
+	for _, roleID := range request.Body.RoleIds {
+		roleIDs = append(roleIDs, uuid.UUID(roleID))
+	}
+	result, err := handler.Service.ReplaceUserRoleAssignments(principal.Context(ctx), principal.ActorID(), principal.EnterpriseIDValue(), uuid.UUID(request.Id), authorization.UserRoleAssignmentsUpdate{
+		DepartmentID: uuid.UUID(request.Body.DepartmentId), RoleIDs: roleIDs, ExpectedUserVersion: request.Body.ExpectedUserVersion, ExpectedAuthorizationVersion: request.Body.ExpectedAuthorizationVersion,
+	}, request.Params.IdempotencyKey)
+	if err != nil {
+		status := http.StatusConflict
+		if errors.Is(err, authorization.ErrInvalidRoleAssignment) {
+			status = http.StatusUnprocessableEntity
+		}
+		return authzapi.ReplaceUserRoleAssignmentsdefaultJSONResponse{Body: authzError(ctx, err), StatusCode: status}, nil
+	}
+	return authzapi.ReplaceUserRoleAssignments200JSONResponse(toUserRoleAssignments(result)), nil
+}
+
 func (handler EnterpriseAuthorizationHandler) auth(ctx context.Context, mutation bool, csrf, permission string) (identity.Principal, *authzapi.ApiError) {
 	p, e := handler.Identity.enterprisePrincipal(ctx, mutation, csrf, permission)
 	if e == nil {
@@ -311,6 +335,18 @@ func (handler EnterpriseAuthorizationHandler) auth(ctx context.Context, mutation
 	}
 	v := authzapi.ApiError{Code: e.Code, MessageKey: e.MessageKey, RequestId: e.RequestId, Retryable: e.Retryable}
 	return identity.Principal{}, &v
+}
+
+func hasAllPermissions(principal identity.Principal, permissions ...string) bool {
+	if slices.Contains(principal.Permissions, "*") {
+		return true
+	}
+	for _, permission := range permissions {
+		if !slices.Contains(principal.Permissions, permission) {
+			return false
+		}
+	}
+	return true
 }
 
 func toAuthzRole(value authorization.RoleRecord) authzapi.Role {
@@ -325,30 +361,8 @@ func toAuthzRole(value authorization.RoleRecord) authzapi.Role {
 	}
 	return r
 }
-func toAuthzScope(value db.DataScope) authzapi.DataScope {
-	types := make([]authzapi.DataScopeResourceTypes, len(value.ResourceTypes))
-	for i, v := range value.ResourceTypes {
-		types[i] = authzapi.DataScopeResourceTypes(v)
-	}
-	matchAll := value.MatchAll
-	r := authzapi.DataScope{Id: value.ID.String(), EnterpriseId: value.EnterpriseID.String(), Name: value.Name, ResourceTypes: types, ExplicitResourceIds: value.ExplicitResourceIds, MatchAll: &matchAll, Status: authzapi.DataScopeStatus(value.Status), Version: value.Version, CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time}
-	if value.Description != "" {
-		r.Description = &value.Description
-	}
-	if len(value.LabelSelector) > 0 {
-		var selector authzapi.LabelSelector
-		if json.Unmarshal(value.LabelSelector, &selector) == nil {
-			r.LabelSelector = &selector
-		}
-	}
-	return r
-}
 func toAuthzBinding(value authorization.BindingRecord) authzapi.RoleBinding {
-	ids := make([]string, len(value.DataScopeIDs))
-	for i, v := range value.DataScopeIDs {
-		ids[i] = v.String()
-	}
-	r := authzapi.RoleBinding{Id: value.Binding.ID.String(), EnterpriseId: value.Binding.EnterpriseID.String(), SubjectType: authzapi.RoleBindingSubjectType(value.Binding.SubjectType), SubjectId: value.Binding.SubjectID.String(), RoleId: value.Binding.RoleID.String(), DataScopeIds: ids, Status: authzapi.RoleBindingStatus(value.Binding.Status), Version: value.Binding.Version, CreatedAt: value.Binding.CreatedAt.Time, UpdatedAt: value.Binding.UpdatedAt.Time}
+	r := authzapi.RoleBinding{Id: value.Binding.ID.String(), EnterpriseId: value.Binding.EnterpriseID.String(), SubjectType: authzapi.RoleBindingSubjectType(value.Binding.SubjectType), SubjectId: value.Binding.SubjectID.String(), RoleId: value.Binding.RoleID.String(), Status: authzapi.RoleBindingStatus(value.Binding.Status), Version: value.Binding.Version, CreatedAt: value.Binding.CreatedAt.Time, UpdatedAt: value.Binding.UpdatedAt.Time}
 	if value.Binding.ValidFrom.Valid {
 		r.ValidFrom = &value.Binding.ValidFrom.Time
 	}
@@ -357,22 +371,18 @@ func toAuthzBinding(value authorization.BindingRecord) authzapi.RoleBinding {
 	}
 	return r
 }
-func scopeCreateInput(body authzapi.DataScopeCreate) (authorization.ScopeInput, error) {
-	raw, _ := json.Marshal(body.LabelSelector)
-	if body.LabelSelector == nil {
-		raw = nil
+
+func toUserRoleAssignments(value authorization.UserRoleAssignments) authzapi.UserRoleAssignments {
+	direct := make([]uuid.UUID, len(value.DirectRoleIDs))
+	copy(direct, value.DirectRoleIDs)
+	effective := make([]uuid.UUID, len(value.EffectiveRoleIDs))
+	copy(effective, value.EffectiveRoleIDs)
+	inherited := make([]authzapi.InheritedRoleAssignment, 0, len(value.InheritedRoles))
+	for _, item := range value.InheritedRoles {
+		inherited = append(inherited, authzapi.InheritedRoleAssignment{RoleId: item.RoleID, SourceId: item.SourceID, SourceName: item.SourceName, SourceType: authzapi.InheritedRoleAssignmentSourceTypeDepartment})
 	}
-	types := make([]string, len(body.ResourceTypes))
-	for i, v := range body.ResourceTypes {
-		types[i] = string(v)
-	}
-	description := ""
-	if body.Description != nil {
-		description = *body.Description
-	}
-	return authorization.ScopeInput{Name: body.Name, Description: description, ResourceTypes: types, ExplicitResourceIDs: body.ExplicitResourceIds, LabelSelector: raw, MatchAll: body.MatchAll}, nil
+	return authzapi.UserRoleAssignments{DirectRoleIds: direct, InheritedRoles: inherited, EffectiveRoleIds: effective, AuthorizationVersion: value.AuthorizationVersion}
 }
-func uuidSlice(values []uuid.UUID) []uuid.UUID { return append([]uuid.UUID(nil), values...) }
 func emptyAuthzPage() authzapi.CursorPage {
 	return authzapi.CursorPage{NextCursor: nil, HasMore: false, Partial: authzapi.PartialMetadata{Partial: false, Reasons: []authzapi.PartialMetadataReasons{}}}
 }
@@ -381,6 +391,12 @@ func authzError(ctx context.Context, err error) authzapi.ApiError {
 	defer func() { logMappedError(ctx, base.Code, err) }()
 	if errors.Is(err, authorization.ErrBuiltinRoleImmutable) {
 		base.Code, base.MessageKey = "BUILTIN_ROLE_IMMUTABLE", "errors.role.builtin_immutable"
+	} else if errors.Is(err, authorization.ErrAuthorizationConflict) {
+		base.Code, base.MessageKey = "AUTHORIZATION_VERSION_STALE", "errors.auth.authorization_version_stale"
+	} else if errors.Is(err, authorization.ErrLastIAMAdminRequired) {
+		base.Code, base.MessageKey = "LAST_IAM_ADMIN_REQUIRED", "errors.role.last_iam_admin_required"
+	} else if errors.Is(err, authorization.ErrInvalidRoleAssignment) {
+		base.Code, base.MessageKey = "INVALID_ARGUMENT", "errors.common.invalid_argument"
 	}
 	return authzapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
 		Params: copyErrorParams[map[string]authzapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,

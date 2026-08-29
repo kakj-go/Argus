@@ -193,7 +193,7 @@ export function HostsPage() {
     queryFn: () => api.connectors.list(),
   });
   const activeSessionsQuery = useQuery({
-    queryKey: ["remote-sessions", "active"],
+    queryKey: ["remote-access", "sessions", "active"],
     queryFn: () => api.remoteAccess.listSessions(),
     enabled: realMode,
   });
@@ -223,7 +223,7 @@ export function HostsPage() {
     void queryClient.invalidateQueries({ queryKey: ["hosts"] });
     void queryClient.invalidateQueries({ queryKey: ["bastion-scopes"] });
     void queryClient.invalidateQueries({ queryKey: ["connectors"] });
-    void queryClient.invalidateQueries({ queryKey: ["remote-sessions"] });
+    void queryClient.invalidateQueries({ queryKey: ["remote-access", "sessions"] });
   };
 
   const onHostCreated = () => {

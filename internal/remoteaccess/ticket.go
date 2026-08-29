@@ -15,6 +15,9 @@ var (
 	ErrTicketExpired  = errors.New("REMOTE_ACCESS_TICKET_EXPIRED")
 	ErrTicketConsumed = errors.New("REMOTE_ACCESS_TICKET_CONSUMED")
 	ErrTicketBinding  = errors.New("REMOTE_ACCESS_SCOPE_DENIED")
+	// ErrCommandAuditUnavailable mirrors ErrRecordingUnavailable for the
+	// command-audit channel: required mode fails closed on the gateway.
+	ErrCommandAuditUnavailable = errors.New("REMOTE_ACCESS_COMMAND_AUDIT_UNAVAILABLE")
 )
 
 type TicketBinding struct {

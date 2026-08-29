@@ -16,7 +16,7 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// ListKubernetesClusters List DataScope-filtered Kubernetes clusters.
+	// ListKubernetesClusters List explicitly authorized Kubernetes clusters.
 	// (GET /enterprise/kubernetes-clusters)
 	ListKubernetesClusters(w http.ResponseWriter, r *http.Request, params ListKubernetesClustersParams)
 	// PreviewCreateKubernetesCluster Freeze a Kubernetes cluster creation plan.
@@ -25,7 +25,7 @@ type ServerInterface interface {
 	// CreateKubernetesConnectionTest Start a bounded Kubernetes connection test.
 	// (POST /enterprise/kubernetes-clusters/connection-tests)
 	CreateKubernetesConnectionTest(w http.ResponseWriter, r *http.Request, params CreateKubernetesConnectionTestParams)
-	// GetKubernetesCluster Get a DataScope-filtered Kubernetes cluster.
+	// GetKubernetesCluster Get an explicitly authorized Kubernetes cluster.
 	// (GET /enterprise/kubernetes-clusters/{id})
 	GetKubernetesCluster(w http.ResponseWriter, r *http.Request, id ResourceId)
 	// PreviewDeleteKubernetesCluster Freeze a Kubernetes cluster logical deletion.
@@ -37,7 +37,7 @@ type ServerInterface interface {
 	// GetKubernetesPodLogs Read at most one MiB of Pod logs.
 	// (GET /enterprise/kubernetes-clusters/{id}/pod-logs)
 	GetKubernetesPodLogs(w http.ResponseWriter, r *http.Request, id ResourceId, params GetKubernetesPodLogsParams)
-	// ListKubernetesResources List bounded Kubernetes resources after cluster and Namespace DataScope checks.
+	// ListKubernetesResources List bounded Kubernetes resources after Kubernetes cluster authorization checks.
 	// (GET /enterprise/kubernetes-clusters/{id}/resources)
 	ListKubernetesResources(w http.ResponseWriter, r *http.Request, id ResourceId, params ListKubernetesResourcesParams)
 }
@@ -46,7 +46,7 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
-// ListKubernetesClusters List DataScope-filtered Kubernetes clusters.
+// ListKubernetesClusters List explicitly authorized Kubernetes clusters.
 // (GET /enterprise/kubernetes-clusters)
 func (_ Unimplemented) ListKubernetesClusters(w http.ResponseWriter, r *http.Request, params ListKubernetesClustersParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -64,7 +64,7 @@ func (_ Unimplemented) CreateKubernetesConnectionTest(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// GetKubernetesCluster Get a DataScope-filtered Kubernetes cluster.
+// GetKubernetesCluster Get an explicitly authorized Kubernetes cluster.
 // (GET /enterprise/kubernetes-clusters/{id})
 func (_ Unimplemented) GetKubernetesCluster(w http.ResponseWriter, r *http.Request, id ResourceId) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -88,7 +88,7 @@ func (_ Unimplemented) GetKubernetesPodLogs(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// ListKubernetesResources List bounded Kubernetes resources after cluster and Namespace DataScope checks.
+// ListKubernetesResources List bounded Kubernetes resources after Kubernetes cluster authorization checks.
 // (GET /enterprise/kubernetes-clusters/{id}/resources)
 func (_ Unimplemented) ListKubernetesResources(w http.ResponseWriter, r *http.Request, id ResourceId, params ListKubernetesResourcesParams) {
 	w.WriteHeader(http.StatusNotImplemented)

@@ -652,7 +652,7 @@ Leaf 到 Edge Gateway 使用独立 mTLS。Collector 本地生成私钥和 CSR，
 
 堡垒机 Gateway 只签发给同一 Bastion Scope 成员的 Leaf Credential，认证时同时校验 `bastion_scope_id`、源 Host、源 Collector 和目标 Gateway。独立 Gateway 只接受同一 Telemetry Group 的独立主机凭证。即使网络端口可达，跨 Scope、独立主机 → 堡垒机 Gateway、堡垒机成员 → 独立 Gateway 的凭证都必须被拒绝。
 
-Edge Gateway 到 Argus 使用独立凭证。`argus-telemetry ingest` 根据该凭证确定企业，并从受信资源目录解析源 Resource 和 Collector，覆盖可信 `argus.enterprise.id`、`argus.resource.id` 和 `argus.collector.id`，同时校验源资源属于同一企业。Bastion Scope、Telemetry Group 或用户标签都不能替代资源真实企业归属和 DataScope 授权。
+Edge Gateway 到 Argus 使用独立凭证。`argus-telemetry ingest` 根据该凭证确定企业，并从受信资源目录解析源 Resource 和 Collector，覆盖可信 `argus.enterprise.id`、`argus.resource.id` 和 `argus.collector.id`，同时校验源资源属于同一企业。Bastion Scope、Telemetry Group 或用户标签都不能替代资源真实企业归属和 explicit resource authorization 授权。
 
 Kubernetes Gateway 转发自身 Collector 数据时，只有内嵌 Collector ID 和证书序列与外层 mTLS 身份完全一致才按同 Collector 接受；其他下游身份必须匹配已落库的 Route、Gateway、资源和 Leaf 证书关系。Kubelet receiver 只读挂载宿主 kubelet 证书链并要求 `nodes/stats` 最小 RBAC，禁止设置 `insecure_skip_verify`。
 
@@ -722,7 +722,7 @@ trace_summary_<enterprise_uuid_hex>
 trace_span_edges_<enterprise_uuid_hex>
 ```
 
-`TenantTableRouter` 只接受服务端可信 UUID 并生成表名；查询文本不能影响表名。`TenantSchemaManager` 负责六张表的创建、严格结构验证、TTL 和删除。企业创建/启用通过内部 mTLS RPC 同步写入 readiness，disabled 同步进入 deleting 并回收表；周期对账只负责自愈。`resource_id` 仍保留在表内，用于企业内部 DataScope 裁剪；Enterprise 边界由物理表隔离并由 mTLS/RPC Scope 再次校验。
+`TenantTableRouter` 只接受服务端可信 UUID 并生成表名；查询文本不能影响表名。`TenantSchemaManager` 负责六张表的创建、严格结构验证、TTL 和删除。企业创建/启用通过内部 mTLS RPC 同步写入 readiness，disabled 同步进入 deleting 并回收表；周期对账只负责自愈。`resource_id` 仍保留在表内，用于企业内部 explicit resource authorization 裁剪；Enterprise 边界由物理表隔离并由 mTLS/RPC Scope 再次校验。
 
 ### 16.2 公共字段
 
@@ -896,7 +896,7 @@ ClickHouse Exporter 必须设置 `create_schema: false`。Operator 不能代替�
 
 ## 17. 多租户、分片和扩容要求
 
-- 所有查询由 Query Service 强制注入 `EnterpriseId`、授权 `ResourceIds` 或经校验标签选择器解析出的资源范围、Signal、字段投影与脱敏，并限制时间范围、行数、扫描字节和超时。
+- 所有查询由 Query Service 强制注入 `EnterpriseId`、授权 `ResourceIds`、用户标签筛选条件、Signal、字段投影与脱敏，并限制时间范围、行数、扫描字节和超时；标签筛选不能扩大 `ResourceIds`。
 - 企业用户和 Model Agent 不直接连接 ClickHouse。
 - 租户表由 Schema Manager 创建，排序键按 Signal 固定；M10 不引入 Distributed/Store Gateway 查询层。
 - Schema Migration 删除旧共享表并建立 Schema Version 3 bootstrap；企业创建/启用同步验证六张表，Query 启动和周期对账负责恢复。
@@ -939,7 +939,7 @@ Kafka/Collector 重试会产生至少一次投递，可能重复：
 
 ### 18.1 查询语义和保护
 
-Telemetry Query 不接受任意 SQL，只接受版本化 Metrics/Logs/Traces Query Schema。所有查询强制注入 EnterpriseId、授权 ResourceIds 或经校验标签选择器解析出的资源范围、Signal、时间范围、最大行数、最大扫描字节、超时和字段脱敏；昂贵查询使用 Redis 进行企业级并发和预算协调，权威策略保存在 PostgreSQL。
+Telemetry Query 不接受任意 SQL，只接受版本化 Metrics/Logs/Traces Query Schema。所有查询强制注入 EnterpriseId、授权 ResourceIds、用户标签筛选条件、Signal、时间范围、最大行数、最大扫描字节、超时和字段脱敏；标签筛选不能扩大授权 ResourceIds。昂贵查询使用 Redis 进行企业级并发和预算协调，权威策略保存在 PostgreSQL。
 
 Metrics Query 必须声明：
 
@@ -1015,7 +1015,7 @@ CRI-O：使用对应 Registry Mirror 或 Runtime 导入方式
 - Collector Distribution、版本和 Artifact 哈希。
 - 配置前后 Revision 和 Diff 摘要。
 - 权限、防火墙和服务变化。
-- Signal、DataScope/Resource 授权范围、字段投影与脱敏、时间范围、扫描预算、Live Tail 或 Export 行为。
+- Signal、explicit resource authorization/Resource 授权范围、字段投影与脱敏、时间范围、扫描预算、Live Tail 或 Export 行为。
 - Action Binding、Token 和用户确认。
 - 执行步骤、Connector、回滚和最终状态。
 
@@ -1031,7 +1031,7 @@ CRI-O：使用对应 Registry Mirror 或 Runtime 导入方式
 8. Altinity ClickHouse Operator、ClickHouseInstallation、多租户表与 Migration。
 9. Kubernetes Node/Host 绑定，以及带 Collection Claim 冲突检测的 DaemonSet + Gateway Deployment。
 10. Collector 自身监控、配额和成本控制。
-11. 带 DataScope/Resource、Signal、字段脱敏和查询预算授权的 Metrics/Logs 查询 Tool、交互卡片、告警和综合可观测性页面。
+11. 带 explicit resource authorization/Resource、Signal、字段脱敏和查询预算授权的 Metrics/Logs 查询 Tool、交互卡片、告警和综合可观测性页面。
 
 OpenTelemetry Profiles 信号、Trace 高级查询、双 Gateway、OpAMP、尾部采样、企业自定义 Distribution 和弱网 K8s 镜像分发在后续阶段实现。
 

@@ -133,10 +133,11 @@ func (session *localRemoteSession) runSSH(ctx context.Context, credential []byte
 	if err := remote.Shell(); err != nil {
 		return err
 	}
-	outgoing <- outboundFrame{value: session.stateFrame(connectorv1.RemoteAccessStateValue_REMOTE_ACCESS_STATE_VALUE_ACTIVE, "")}
+
 	outputs := make(chan connectorOutput, 8)
 	go readConnectorOutput(stdout, connectorv1.RemoteAccessOutputStream_REMOTE_ACCESS_OUTPUT_STREAM_STDOUT, outputs)
 	go readConnectorOutput(stderr, connectorv1.RemoteAccessOutputStream_REMOTE_ACCESS_OUTPUT_STREAM_STDERR, outputs)
+	outgoing <- outboundFrame{value: session.stateFrame(connectorv1.RemoteAccessStateValue_REMOTE_ACCESS_STATE_VALUE_ACTIVE, "")}
 	for {
 		select {
 		case <-ctx.Done():

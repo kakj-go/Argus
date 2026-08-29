@@ -1,81 +1,43 @@
 package resource
 
 import (
-	"context"
-	"encoding/json"
-
 	"github.com/google/uuid"
 
-	"github.com/kakj-go/Argus/internal/authorization"
-	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
-type AccessService struct{ Store *postgres.Store }
+type AccessService struct{}
 
-func (service AccessService) CanAccess(ctx context.Context, enterpriseID uuid.UUID, scopeIDs []uuid.UUID, resourceType, resourceID string, labels map[string]string) (bool, []string, error) {
-	scopes, err := service.loadScopes(ctx, enterpriseID, scopeIDs)
-	if err != nil {
-		return false, nil, err
+func (AccessService) CanAccess(authorizedResourceIDs []uuid.UUID, resourceID uuid.UUID) bool {
+	for _, id := range authorizedResourceIDs {
+		if id == resourceID {
+			return true
+		}
 	}
-	allowed, matched := authorization.AnyScopeMatches(scopes, authorization.Resource{EnterpriseID: enterpriseID.String(), Type: resourceType, ID: resourceID, Labels: labels})
-	return allowed, matched, nil
+	return false
 }
 
-func (service AccessService) FilterHosts(ctx context.Context, enterpriseID uuid.UUID, scopeIDs []uuid.UUID, hosts []db.Host) ([]db.Host, error) {
+func (service AccessService) FilterHosts(authorizedResourceIDs []uuid.UUID, hosts []db.Host) []db.Host {
 	result := make([]db.Host, 0, len(hosts))
 	for _, host := range hosts {
-		labels, err := DecodeLabels(host.Labels)
-		if err != nil {
-			return nil, err
-		}
-		allowed, _, err := service.CanAccess(ctx, enterpriseID, scopeIDs, "host", host.ID.String(), labels)
-		if err != nil {
-			return nil, err
-		}
-		if allowed {
+		if service.CanAccess(authorizedResourceIDs, host.ID) {
 			result = append(result, host)
 		}
 	}
-	return result, nil
+	return result
 }
 
-func (service AccessService) FilterKubernetesClusters(ctx context.Context, enterpriseID uuid.UUID, scopeIDs []uuid.UUID, clusters []db.KubernetesCluster) ([]db.KubernetesCluster, error) {
+func (service AccessService) FilterKubernetesClusters(authorizedResourceIDs []uuid.UUID, clusters []db.KubernetesCluster) []db.KubernetesCluster {
 	result := make([]db.KubernetesCluster, 0, len(clusters))
 	for _, cluster := range clusters {
-		labels, err := DecodeLabels(cluster.Labels)
-		if err != nil {
-			return nil, err
-		}
-		allowed, _, err := service.CanAccess(ctx, enterpriseID, scopeIDs, "kubernetes_cluster", cluster.ID.String(), labels)
-		if err != nil {
-			return nil, err
-		}
-		if allowed {
+		if service.CanAccess(authorizedResourceIDs, cluster.ID) {
 			result = append(result, cluster)
 		}
 	}
-	return result, nil
+	return result
 }
 
-func (service AccessService) CanAccessNamespace(ctx context.Context, enterpriseID uuid.UUID, scopeIDs []uuid.UUID, clusterID uuid.UUID, namespace string) (bool, error) {
-	allowed, _, err := service.CanAccess(ctx, enterpriseID, scopeIDs, "kubernetes_namespace", clusterID.String()+"/"+namespace, map[string]string{})
-	return allowed, err
-}
-
-func (service AccessService) loadScopes(ctx context.Context, enterpriseID uuid.UUID, scopeIDs []uuid.UUID) ([]authorization.Scope, error) {
-	result := make([]authorization.Scope, 0, len(scopeIDs))
-	for _, scopeID := range scopeIDs {
-		scope, err := service.Store.Queries.GetDataScope(ctx, db.GetDataScopeParams{ID: scopeID, EnterpriseID: enterpriseID})
-		if err != nil {
-			return nil, err
-		}
-		selector := json.RawMessage(nil)
-		if len(scope.LabelSelector) > 0 && string(scope.LabelSelector) != "null" {
-			selector = append(selector, scope.LabelSelector...)
-		}
-		result = append(result, authorization.Scope{ID: scope.ID.String(), EnterpriseID: scope.EnterpriseID.String(), ResourceTypes: scope.ResourceTypes,
-			ExplicitResourceIDs: scope.ExplicitResourceIds, LabelSelector: selector, MatchAll: scope.MatchAll, Status: scope.Status})
-	}
-	return result, nil
+func (service AccessService) CanAccessNamespace(authorizedResourceIDs []uuid.UUID, clusterID uuid.UUID) bool {
+	// Namespace and child objects inherit the Kubernetes cluster grant.
+	return service.CanAccess(authorizedResourceIDs, clusterID)
 }

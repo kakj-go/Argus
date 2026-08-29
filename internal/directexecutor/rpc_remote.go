@@ -129,20 +129,21 @@ func (server RPCServer) openSSH(ctx context.Context, stream directv1.DirectExecu
 	if err := session.Shell(); err != nil {
 		return status.Error(codes.Unavailable, "SSH shell rejected")
 	}
-	if err := stream.Send(&directv1.OpenRemoteAccessResponse{Sequence: 1, Frame: &directv1.OpenRemoteAccessResponse_Ready{Ready: &directv1.RemoteAccessReady{Mode: "ssh_pty"}}}); err != nil {
-		return err
-	}
-	return bridgeSSH(ctx, stream, session, stdin, stdout, stderr)
-}
 
-func bridgeSSH(ctx context.Context, stream directv1.DirectExecutorService_OpenRemoteAccessServer, session *ssh.Session, stdin io.WriteCloser, stdout, stderr io.Reader) error {
 	outputs := make(chan sshRemoteOutput, 8)
-	requests := make(chan *directv1.OpenRemoteAccessRequest, 1)
-	go readRemoteRequests(stream, requests)
 	go readSSHOutput(stdout, "stdout", outputs)
 	go readSSHOutput(stderr, "stderr", outputs)
 	go func() { outputs <- sshRemoteOutput{err: session.Wait()} }()
-	serverSequence, clientSequence := uint64(1), uint64(1)
+	if err := stream.Send(&directv1.OpenRemoteAccessResponse{Sequence: 1, Frame: &directv1.OpenRemoteAccessResponse_Ready{Ready: &directv1.RemoteAccessReady{Mode: "ssh_pty"}}}); err != nil {
+		return err
+	}
+	return bridgeSSHWithOutputs(ctx, stream, session, stdin, outputs, 1, 1)
+}
+
+// bridgeSSHWithOutputs bridges SSH I/O with already-started output readers
+func bridgeSSHWithOutputs(ctx context.Context, stream directv1.DirectExecutorService_OpenRemoteAccessServer, session *ssh.Session, stdin io.WriteCloser, outputs <-chan sshRemoteOutput, serverSequence, clientSequence uint64) error {
+	requests := make(chan *directv1.OpenRemoteAccessRequest, 1)
+	go readRemoteRequests(stream, requests)
 	for {
 		select {
 		case <-ctx.Done():

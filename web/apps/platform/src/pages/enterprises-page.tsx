@@ -12,6 +12,7 @@ import {
   type Enterprise,
 } from "@argus/api-client";
 import {
+  ActionGroup,
   Alert,
   Button,
   ConfirmDialog,
@@ -22,6 +23,7 @@ import {
   Input,
   KeyValueGrid,
   PageShell,
+  RowAction,
   Select,
   Spinner,
   StatusBadge,
@@ -275,55 +277,42 @@ export function EnterprisesPage() {
               key: "id",
               header: t("common.actions"),
               render: (row) => (
-                <div className="argus-row-actions">
-                  <Button
-                    onClick={() => setDetail(findEnterprise(row.id))}
-                    size="sm"
-                    variant="ghost"
-                  >
+                <ActionGroup>
+                  <RowAction onClick={() => setDetail(findEnterprise(row.id))}>
                     {t("common.detail")}
-                  </Button>
-                  <Button
-                    onClick={() => setEditing(findEnterprise(row.id))}
-                    size="sm"
-                    variant="ghost"
-                  >
+                  </RowAction>
+                  <RowAction onClick={() => setEditing(findEnterprise(row.id))}>
                     {t("common.edit")}
-                  </Button>
+                  </RowAction>
                   {row.status !== "active" && row.status !== "disabled" && (
-                    <Button
+                    <RowAction
                       onClick={() =>
                         setPendingAction({ type: "activate", enterprise: row })
                       }
-                      size="sm"
-                      variant="ghost"
                     >
                       {t("enterprises.action.activate")}
-                    </Button>
+                    </RowAction>
                   )}
                   {row.status === "active" && (
-                    <Button
+                    <RowAction
                       onClick={() =>
                         setPendingAction({ type: "suspend", enterprise: row })
                       }
-                      size="sm"
-                      variant="ghost"
                     >
                       {t("enterprises.action.suspend")}
-                    </Button>
+                    </RowAction>
                   )}
                   {row.status !== "disabled" && (
-                    <Button
+                    <RowAction
+                      danger
                       onClick={() =>
                         setPendingAction({ type: "disable", enterprise: row })
                       }
-                      size="sm"
-                      variant="ghost"
                     >
                       {t("enterprises.action.disable")}
-                    </Button>
+                    </RowAction>
                   )}
-                </div>
+                </ActionGroup>
               ),
             },
           ]}

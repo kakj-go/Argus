@@ -13,7 +13,10 @@ const (
 	HelloTimeout      = 3 * time.Second
 )
 
-var ErrProtocol = errors.New("REMOTE_ACCESS_PROTOCOL_ERROR")
+var (
+	ErrProtocol           = errors.New("REMOTE_ACCESS_PROTOCOL_ERROR")
+	ErrChannelUnavailable = errors.New("REMOTE_ACCESS_CHANNEL_NOT_AVAILABLE")
+)
 
 type ClientFrame struct {
 	Protocol string `json:"protocol"`
@@ -67,10 +70,32 @@ func (state *ProtocolState) Accept(raw []byte, now time.Time) (ClientFrame, erro
 		}
 	case "ping", "close":
 	default:
+		if advancedChannelFrame(frame.Type) {
+			state.LastSequence = frame.Sequence
+			return frame, ErrChannelUnavailable
+		}
 		return ClientFrame{}, ErrProtocol
 	}
 	state.LastSequence = frame.Sequence
 	return frame, nil
+}
+
+func advancedChannelFrame(frameType string) bool {
+	switch frameType {
+	case "clipboard", "file_upload", "file_download", "port_forward", "session_share":
+		return true
+	default:
+		return false
+	}
+}
+
+// businessActivity reports whether a client frame represents real terminal
+// activity. Protocol pings keep the transport alive but must not extend the
+// session's idle timeout.
+func businessActivity(frameType string) bool { return frameType != "ping" }
+
+func idleTimeoutReached(now, lastActivity time.Time, timeout time.Duration) bool {
+	return timeout > 0 && now.Sub(lastActivity) >= timeout
 }
 
 func validSize(cols, rows int) bool { return cols >= 20 && cols <= 1000 && rows >= 5 && rows <= 500 }

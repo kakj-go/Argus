@@ -24,7 +24,7 @@
 
 ### 2.1 上游依赖
 
-- M2 的企业、角色、DataScope 和 AuthorizationVersion。
+- M2 的企业、角色、explicit resource authorization 和 AuthorizationVersion。
 - M3 的 Host/Kubernetes 资源事实、资源 ID 和 Kubernetes UID。
 - M4 的 PendingAction、Action Executor、Execution 和审计。
 - M7/M10 的 Metrics、Logs、Traces 摄入与 Query Engine。
@@ -48,7 +48,7 @@
 
 - active Revision 不可变，发布通过 active_revision_id 原子更新。
 - Panel 查询保存 query_hash，浏览器不能覆盖已发布表达式。
-- Binding 只缩小查询上下文，不扩大 DataScope。
+- Binding 只缩小查询上下文，不扩大 explicit resource authorization。
 - 所有写入都通过 .preview/.commit 和 PendingAction。
 - 变量依赖由查询中的 $variable 自动解析，拒绝未定义变量和循环依赖。
 
@@ -88,7 +88,7 @@ Preview 必须完成：
 2. Panel 类型与查询语言兼容性校验。
 3. 变量 Key、依赖图、未定义引用和循环依赖校验。
 4. 布局、Panel 数量、Target 数和查询预算校验。
-5. Binding 目标企业归属、DataScope、Kubernetes UID 和传播策略校验。
+5. Binding 目标企业归属、explicit resource authorization、Kubernetes UID 和传播策略校验。
 6. 小范围样本查询和结果类型校验。
 7. 生成 Spec Hash、Diff、validation report、公开 Action Ref 和过期时间。
 
@@ -110,7 +110,7 @@ ExecuteDashboard(ctx, DashboardExecutionRequest)
 ~~~text
 Load active Revision
 → 校验可见性和 Revision 状态
-→ 解析 target context、Binding 和 DataScope
+→ 解析 target context、Binding 和 explicit resource authorization
 → 解析变量依赖并校验运行时值
 → 为 Panel/Target 创建受约束查询
 → 调用 PromQL/KQL/SkyWalking Engine
@@ -123,7 +123,7 @@ Load active Revision
 
 缓存键至少包含企业、Dashboard、Revision、Panel、Target、时间、变量和 AuthorizationVersion。
 
-Catalog 提供：Metrics 指标名/Label/有限值，Logs 字段/字段值/受控全文检索提示，Traces 资源属性/Span 属性/服务/状态/时延范围。Catalog 结果必须经过 DataScope、字段白名单、脱敏、数量、长度和敏感字段限制。
+Catalog 提供：Metrics 指标名/Label/有限值，Logs 字段/字段值/受控全文检索提示，Traces 资源属性/Span 属性/服务/状态/时延范围。Catalog 结果必须经过 explicit resource authorization、字段白名单、脱敏、数量、长度和敏感字段限制。
 
 ### T1.5 REST、API Client 与前端数据流
 
@@ -177,7 +177,7 @@ Panel 编辑页只编辑当前 Panel 的标题、描述、Signal、展示类型�
 必须实现：
 
 - Domain、Repository、Schema、Preview、Commit 单元和契约测试。
-- Query Runtime 的三信号、变量依赖、预算、缓存、取消、partial 和 DataScope 测试。
+- Query Runtime 的三信号、变量依赖、预算、缓存、取消、partial 和 explicit resource authorization 测试。
 - Playwright 覆盖列表、创建、Panel、变量、Catalog、刷新、布局和绑定。
 - 临时 Kubernetes Namespace E2E，验证服务重启、Redis 清空、重复 Commit、资源删除和 UID 漂移。
 - 失败时清理 Namespace、PVC、Topic、Bucket、Lease、测试绑定和诊断文件。

@@ -7,9 +7,9 @@ WHERE enterprise_id = $1 AND enabled = true
 ORDER BY id;
 
 -- name: CreateApprovalPolicy :one
-INSERT INTO approval_policies (id, enterprise_id, name, enabled, tool_ids, risks, resource_types, label_selector,
+INSERT INTO approval_policies (id, enterprise_id, name, enabled, tool_ids, risks, resource_types,
     minimum_approvers, separation_of_duty, approver_role_ids, expires_after_seconds)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *;
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *;
 
 -- name: ListApprovalPolicies :many
 SELECT * FROM approval_policies WHERE enterprise_id = $1 ORDER BY name, id;
@@ -20,10 +20,10 @@ SELECT * FROM approval_policies WHERE id = $1 AND enterprise_id = $2;
 -- name: UpdateApprovalPolicy :one
 UPDATE approval_policies SET
     name = $3, enabled = $4, tool_ids = $5, risks = $6, resource_types = $7,
-    label_selector = $8, minimum_approvers = $9, separation_of_duty = $10,
-    approver_role_ids = $11, expires_after_seconds = $12,
+    minimum_approvers = $8, separation_of_duty = $9,
+    approver_role_ids = $10, expires_after_seconds = $11,
     version = version + 1, updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND version = $13
+WHERE id = $1 AND enterprise_id = $2 AND version = $12
 RETURNING *;
 
 -- name: CreateUserConfirmation :one

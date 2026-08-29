@@ -140,6 +140,57 @@ describe("enterprise users", () => {
     });
   });
 
+  it("atomically replaces direct roles and protects the final IAM administrator", async () => {
+    const client = makeClient();
+    await login(client, "root");
+
+    const chenxi = await client.org.getUserRoleAssignments("u-chenxi");
+    const chenxiUser = await client.org.getEnterpriseUser("u-chenxi");
+    expect(chenxiUser).not.toBeNull();
+    await expect(
+      client.org.replaceUserRoleAssignments(
+        "u-chenxi",
+        "dept-pay",
+        [],
+        chenxiUser!.version,
+        chenxi.authorization_version,
+      ),
+    ).resolves.toMatchObject({
+      direct_role_ids: [],
+      inherited_roles: expect.arrayContaining([
+        expect.objectContaining({ source_id: "dept-pay" }),
+      ]),
+    });
+    await expect(
+      client.org.getEnterpriseUser("u-chenxi"),
+    ).resolves.toMatchObject({
+      department_id: "dept-pay",
+      version: chenxiUser!.version + 1,
+    });
+
+    const root = await client.org.getUserRoleAssignments("u-root");
+    const rootUser = await client.org.getEnterpriseUser("u-root");
+    expect(rootUser).not.toBeNull();
+    await expect(
+      client.org.replaceUserRoleAssignments(
+        "u-root",
+        "dept-pay",
+        [],
+        rootUser!.version,
+        root.authorization_version,
+      ),
+    ).rejects.toMatchObject({ code: "LAST_IAM_ADMIN_REQUIRED" });
+    await expect(
+      client.org.getUserRoleAssignments("u-root"),
+    ).resolves.toMatchObject({
+      direct_role_ids: ["role-ea"],
+      authorization_version: root.authorization_version,
+    });
+    await expect(client.org.getEnterpriseUser("u-root")).resolves.toMatchObject(
+      { department_id: "dept-sre", version: rootUser!.version },
+    );
+  });
+
   it("soft-disables and restores an empty department", async () => {
     const client = makeClient();
     await login(client, "root");

@@ -25,3 +25,6 @@ coverage.*
 build/otelcol/dist/
 build/otelcol/artifacts/
 /build/
+/.commandcode/
+/.claude/
+/.zcode/

@@ -140,6 +140,37 @@ func (q *Queries) InsertAuditEvent(ctx context.Context, arg InsertAuditEventPara
 	return i, err
 }
 
+const isUserEnterpriseAdmin = `-- name: IsUserEnterpriseAdmin :one
+SELECT EXISTS (
+  SELECT 1
+  FROM role_bindings rb
+  JOIN roles role ON role.id = rb.role_id
+    AND role.enterprise_id = rb.enterprise_id
+    AND role.identity_key = 'enterprise_admin'
+    AND role.builtin = true
+    AND role.status = 'active'
+  WHERE rb.enterprise_id = $1
+    AND rb.status = 'active'
+    AND (rb.valid_from IS NULL OR rb.valid_from <= now())
+    AND (rb.valid_until IS NULL OR rb.valid_until > now())
+    AND ((rb.subject_type = 'user' AND rb.subject_id = $2)
+      OR (rb.subject_type = 'department' AND rb.subject_id = $3))
+)
+`
+
+type IsUserEnterpriseAdminParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	UserID       uuid.UUID `json:"user_id"`
+	DepartmentID uuid.UUID `json:"department_id"`
+}
+
+func (q *Queries) IsUserEnterpriseAdmin(ctx context.Context, arg IsUserEnterpriseAdminParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isUserEnterpriseAdmin, arg.EnterpriseID, arg.UserID, arg.DepartmentID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listAllEnterpriseAuditEvents = `-- name: ListAllEnterpriseAuditEvents :many
 SELECT id, domain, enterprise_id, actor_type, actor_id, action, resource_type, resource_id, result, details, previous_hash, event_hash, created_at FROM audit_events WHERE domain = 'enterprise' AND enterprise_id = $1
 ORDER BY created_at DESC, id DESC

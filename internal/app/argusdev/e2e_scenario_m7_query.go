@@ -151,7 +151,7 @@ func validQueryMeta(value any) bool {
 
 func (a *App) verifyM7NodeBinding(ctx context.Context, env *E2EEnvironment, clusterID, hostID, distributionID string, profiles []string) error {
 	client, _ := scenarioHTTP(env)
-	bindings, err := client.JSONArray(ctx, "m7-node-bindings", "enterprise", http.MethodGet, "/enterprise/telemetry/node-host-bindings?kubernetes_cluster_id="+clusterID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	bindings, err := client.JSONArray(ctx, "m7-node-bindings", "enterprise", http.MethodGet, "/enterprise/telemetry/node-host-bindings?kubernetes_cluster_id="+clusterID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -181,7 +181,7 @@ func (a *App) verifyM7NodeBinding(ctx context.Context, env *E2EEnvironment, clus
 	if err := a.applyM7CollectorAction(ctx, env, "kubernetes-cluster", clusterID, "configure", distributionID, profiles); err != nil {
 		return err
 	}
-	stable, err := client.JSONArray(ctx, "m7-node-binding-stable", "enterprise", http.MethodGet, "/enterprise/telemetry/node-host-bindings?kubernetes_cluster_id="+clusterID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	stable, err := client.JSONArray(ctx, "m7-node-binding-stable", "enterprise", http.MethodGet, "/enterprise/telemetry/node-host-bindings?kubernetes_cluster_id="+clusterID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}
@@ -193,13 +193,13 @@ func (a *App) verifyM7NodeBinding(ctx context.Context, env *E2EEnvironment, clus
 			if err := a.applyM7CollectorAction(ctx, env, "kubernetes-cluster", clusterID, "configure", distributionID, profiles); err != nil {
 				return err
 			}
-			drifted, err := client.JSONArray(ctx, "m7-node-binding-drifted", "enterprise", http.MethodGet, "/enterprise/telemetry/node-host-bindings?kubernetes_cluster_id="+clusterID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+			drifted, err := client.JSONArray(ctx, "m7-node-binding-drifted", "enterprise", http.MethodGet, "/enterprise/telemetry/node-host-bindings?kubernetes_cluster_id="+clusterID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 			if err != nil {
 				return err
 			}
 			for _, changed := range drifted {
 				if changed["id"] == bindingID && changed["status"] == "proposed" {
-					claims, err := client.JSONArray(ctx, "m7-cluster-claims-after-drift", "enterprise", http.MethodGet, "/enterprise/telemetry/collection-claims?resource_id="+clusterID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+					claims, err := client.JSONArray(ctx, "m7-cluster-claims-after-drift", "enterprise", http.MethodGet, "/enterprise/telemetry/collection-claims?resource_id="+clusterID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 					if err != nil {
 						return err
 					}
@@ -251,7 +251,7 @@ func (a *App) runM10QueryScenario(ctx context.Context, env *E2EEnvironment) erro
 	if !validQueryMeta(extensions["argus"]) {
 		return fmt.Errorf("M10 SkyWalking GraphQL response does not match the wire contract")
 	}
-	audit, err := client.JSON(ctx, "m10-query-audit", "enterprise", http.MethodGet, "/enterprise/audit-events", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+	audit, err := client.JSON(ctx, "m10-query-audit", "enterprise", http.MethodGet, "/enterprise/audit-events", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 	if err != nil {
 		return err
 	}

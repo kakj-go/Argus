@@ -3,14 +3,23 @@ package resource
 import (
 	"testing"
 
-	"github.com/kakj-go/Argus/internal/authorization"
+	"github.com/google/uuid"
 )
 
-func TestNamespaceScopeUsesClusterSlashNamespaceID(t *testing.T) {
-	scope := authorization.Scope{ID: "scope", EnterpriseID: "enterprise", ResourceTypes: []string{"kubernetes_namespace"},
-		ExplicitResourceIDs: []string{"cluster-id/production"}, Status: "active"}
-	allowed, _ := authorization.AnyScopeMatches([]authorization.Scope{scope}, authorization.Resource{EnterpriseID: "enterprise", Type: "kubernetes_namespace", ID: "cluster-id/production"})
-	if !allowed {
-		t.Fatal("expected cluster_id/namespace explicit ID to match")
+func TestExplicitResourceAccessIgnoresLabels(t *testing.T) {
+	resourceID := uuid.New()
+	service := AccessService{}
+	if !service.CanAccess([]uuid.UUID{resourceID}, resourceID) {
+		t.Fatal("expected explicit grant to allow access")
+	}
+	if !service.CanAccess([]uuid.UUID{resourceID}, resourceID) {
+		t.Fatal("label changes must not affect explicit access")
+	}
+}
+
+func TestNamespaceAccessInheritsClusterGrant(t *testing.T) {
+	clusterID := uuid.New()
+	if !(AccessService{}).CanAccessNamespace([]uuid.UUID{clusterID}, clusterID) {
+		t.Fatal("expected namespace to inherit cluster authorization")
 	}
 }

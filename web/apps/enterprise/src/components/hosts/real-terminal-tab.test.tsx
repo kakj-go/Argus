@@ -26,6 +26,7 @@ import {
   type MockApiClient,
 } from "@argus/api-client";
 import { LocaleProvider } from "@argus/ui";
+import { TerminalSessionProvider } from "@argus/api-client";
 import "../../i18n";
 import { RealTerminalTab } from "./real-terminal-tab";
 
@@ -45,9 +46,9 @@ function createWrapper(client: MockApiClient) {
     return (
       <LocaleProvider>
         <ApiProvider client={client}>
-          <QueryClientProvider client={queryClient}>
-            {children}
-          </QueryClientProvider>
+          <TerminalSessionProvider>
+            <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+          </TerminalSessionProvider>
         </ApiProvider>
       </LocaleProvider>
     );
@@ -92,21 +93,16 @@ async function renderTerminal() {
 }
 
 describe("RealTerminalTab step-up", () => {
-  it("opens MFA step-up and retries the original request after verification", async () => {
+  it("opens MFA step-up and resumes the existing request after verification", async () => {
     const client = await renderTerminal();
     const createRequest = vi
       .spyOn(client.remoteAccess, "createRequest")
-      .mockRejectedValueOnce(
-        new ApiError(
-          {
-            code: "REMOTE_ACCESS_MFA_REQUIRED",
-            message_key: "errors.remote_access.mfa_required",
-            request_id: "request-step-up-required",
-            retryable: false,
-          },
-          409,
-        ),
-      )
+      .mockResolvedValueOnce({
+        id: "request-step-up-required",
+        status: "awaiting_mfa",
+      } as never);
+    const resumeRequest = vi
+      .spyOn(client.remoteAccess, "resumeRequest")
       .mockResolvedValueOnce({ status: "awaiting_approval" } as never);
     const stepUp = vi.spyOn(client.auth, "stepUp").mockResolvedValue({
       amr: ["password", "totp"],
@@ -125,7 +121,10 @@ describe("RealTerminalTab step-up", () => {
     await waitFor(() =>
       expect(stepUp).toHaveBeenCalledWith({ code: "123456" }),
     );
-    await waitFor(() => expect(createRequest).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(resumeRequest).toHaveBeenCalledWith("request-step-up-required"),
+    );
+    expect(createRequest).toHaveBeenCalledTimes(1);
     expect(
       screen.queryByText("errors.remote_access.mfa_required"),
     ).not.toBeInTheDocument();
@@ -133,17 +132,11 @@ describe("RealTerminalTab step-up", () => {
 
   it("shows a safe step-up failure with the request ID", async () => {
     const client = await renderTerminal();
-    vi.spyOn(client.remoteAccess, "createRequest").mockRejectedValueOnce(
-      new ApiError(
-        {
-          code: "REMOTE_ACCESS_MFA_REQUIRED",
-          message_key: "errors.remote_access.mfa_required",
-          request_id: "request-step-up-required",
-          retryable: false,
-        },
-        409,
-      ),
-    );
+    vi.spyOn(client.remoteAccess, "createRequest").mockResolvedValueOnce({
+      id: "request-step-up-required",
+      status: "awaiting_mfa",
+    } as never);
+    const resumeRequest = vi.spyOn(client.remoteAccess, "resumeRequest");
     vi.spyOn(client.auth, "stepUp").mockRejectedValueOnce(
       new ApiError(
         {
@@ -165,6 +158,7 @@ describe("RealTerminalTab step-up", () => {
 
     expect(await screen.findByText(/认证证明无效或已过期/)).toBeVisible();
     expect(screen.getByText(/request-invalid-proof/)).toBeVisible();
+    expect(resumeRequest).not.toHaveBeenCalled();
     expect(
       screen.queryByText("errors.auth.mfa_code_invalid"),
     ).not.toBeInTheDocument();

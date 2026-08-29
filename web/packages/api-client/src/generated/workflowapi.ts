@@ -158,7 +158,6 @@ export interface components {
             tool_ids: string[];
             risks: ("write" | "dangerous" | "critical")[];
             resource_types: string[];
-            label_selector?: components["schemas"]["LabelSelector"];
             minimum_approvers: number;
             separation_of_duty: boolean;
             approver_role_ids: string[];
@@ -177,7 +176,6 @@ export interface components {
             tool_ids: string[];
             risks: ("write" | "dangerous" | "critical")[];
             resource_types: string[];
-            label_selector?: components["schemas"]["LabelSelector"];
             minimum_approvers: number;
             separation_of_duty: boolean;
             approver_role_ids: string[];
@@ -249,29 +247,6 @@ export interface components {
             trace_id?: string;
             /** @default false */
             retryable: boolean;
-        };
-        UserLabelKey: string;
-        SystemLabelKey: string;
-        LabelValue: string;
-        LabelRequirement: {
-            key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
-            /** @constant */
-            operator: "eq";
-            values: components["schemas"]["LabelValue"][];
-        } | {
-            key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
-            /** @constant */
-            operator: "in";
-            values: components["schemas"]["LabelValue"][];
-        } | {
-            key: components["schemas"]["UserLabelKey"] | components["schemas"]["SystemLabelKey"];
-            /** @enum {unknown} */
-            operator: "exists" | "not_exists";
-        };
-        LabelSelector: {
-            /** @constant */
-            schema_version: "argus.label_selector/v1";
-            requirements: components["schemas"]["LabelRequirement"][];
         };
         IdempotencyKey: string;
         ApprovalDecision: {

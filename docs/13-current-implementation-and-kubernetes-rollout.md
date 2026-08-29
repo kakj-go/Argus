@@ -1,5 +1,7 @@
 # 当前实现盘点与 Kubernetes 落地路线
 
+> 当前实现以 data_authorization_grants 为授权事实来源，授权粒度为 Host 和 Kubernetes Cluster。标签变化不再触发授权变化，授权版本仍用于游标、会话和缓存失效。
+
 ## 1. 文档定位
 
 本文连接三类信息：
@@ -17,7 +19,7 @@
 | 文档组                 | 内容                                                                   | 解决的问题                            |
 | ---------------------- | ---------------------------------------------------------------------- | ------------------------------------- |
 | `00`、`01`             | 决策、不变量、产品定位、总体架构                                       | 哪些边界不能在实现中自行改变          |
-| `02`、`03`             | 企业身份、RoleBinding/DataScope、Connector、Host、Kubernetes、远程访问 | 谁可以通过哪条连接路径操作哪些资源    |
+| `02`、`03`             | 企业身份、RoleBinding/DataAuthorizationGrant、Connector、Host、Kubernetes、远程访问 | 谁可以通过哪条连接路径操作哪些资源    |
 | `04`、`05`、`06`       | Agent、MCP、Preview/Commit、Card、安全和 MVP                           | AI、浏览器、Card 与确定性执行如何隔离 |
 | `07`、`08`             | 初始化、双层管理门户、模型和 OpenSandbox                               | 平台域与企业域如何启动和治理          |
 | `09`、`10`、`11`、`12` | 遥测、Kubernetes 部署、运行时状态、技术栈                              | 服务如何部署、扩缩容、持久化和测试    |
@@ -25,7 +27,7 @@
 需要始终一起理解的关键关系：
 
 1. `enterprise_id` 是第一版唯一业务和安全隔离边界；第一版不实现 Project。
-2. Host/Kubernetes 标签用于归类与 DataScope 选择；Bastion Scope 和 Telemetry Group 只表达网络或遥测拓扑，不能传播权限。
+2. Host/Kubernetes 标签用于归类与 DataAuthorizationGrant 选择；Bastion Scope 和 Telemetry Group 只表达网络或遥测拓扑，不能传播权限。
 3. PostgreSQL 保存唯一业务状态；Redis 只做缓存、通知、限流和短期协调。
 4. 所有变更操作使用 Preview/Confirm/Commit；模型和浏览器都不能接触私有提交 Token。
 5. Connector 控制链路、OTLP 摄入链路、Telemetry Query 链路必须使用独立服务、凭证和扩缩容策略。
@@ -45,7 +47,7 @@
 | API Client                         | 生成契约、领域 Port、显式 mock/real Adapter 和 HTTP/SSE/WebSocket Transport 已完成；M2-M7 Path 已接入  | mock/real 配置错误 fail closed；未冻结操作不回退 mock                   |
 | `argus-server`                     | M2-M8 身份、资源、Agent/Action、Card、Remote Access、Telemetry 与本地 MFA/恢复 Handler 已接入          | Evaluation 与 local-hardening 可用；Production Profile 继续 fail closed |
 | Worker/Gateway/Telemetry/Connector | Worker、Direct Executor、Connector Gateway/Connector 和 Telemetry ingest/writer/query 已实现           | 外部副作用先对账；远程访问与 Collector 命令类型化，Redis 不保存唯一事实 |
-| `argusctl`                         | 已实现 preflight、plan、镜像、install、status、verify、tunnel、uninstall                               | 可安装和验证 Evaluation；Production 安装硬阻断                          |
+| `argusctl`                         | 已实现 preflight、plan、镜像、install、status、verify、uninstall（域名 + 强制 TLS 暴露，无 port-forward 模式）                               | 可安装和验证 Evaluation；Production 安装硬阻断                          |
 | OpenAPI/protobuf/migration         | M0 门禁、M2-M7 Path/DTO、Connector/Direct Executor/Telemetry protobuf 和六批 Goose/sqlc Schema 已完成  | Evaluation 第一版领域契约与数据模型已落地                               |
 | Kubernetes 交付物                  | Dockerfile、六个 Chart、Profile、Schema、版本锁和本地 Registry Loader 已存在；Web 镜像提供两个门户和独立 Card Origin | 可部署完整 Evaluation 基座                                     |
 
@@ -110,7 +112,7 @@ Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector 
 - `ArgusInstallConfig v1alpha1` JSON Schema、Evaluation/Production Profile 和版本锁定清单。
 - Foundation、Data Operators、Data、Sandbox、Platform、Telemetry Pipeline 六个 Helm Release。
 - PostgreSQL、Redis、MinIO、OpenSandbox、Strimzi/Kafka、Altinity/ClickHouse、Keeper 和 OTel Writer 的实际 Evaluation 集成。
-- `argusctl preflight/plan/images/install/status/verify/tunnel/uninstall` 与阶段状态 ConfigMap。
+- `argusctl preflight/plan/images/install/status/verify/uninstall` 与阶段状态 ConfigMap。
 - Local Registry 的 `argusctl images load` 每次都会滚动重启节点 Image Loader，使 init container 重新 pull 可复用的 `dev` 标签；配合 `pullPolicy: Never` 时不会继续运行节点缓存中的旧镜像。
 - `argus-dev` 为每次 E2E 构建写入 run 专属 OCI label，并通过 Registry V2 API 删除本次精确 tag；删除前会验证 manifest digest 未被正式 `dev` 或其他 tag 共享，Registry 不支持删除或发现共享时 fail closed，避免零残留清理误伤正式镜像。
 - M2 PostgreSQL Schema、独立 Goose Migration Job/advisory lock、按领域拆分的 sqlc 数据访问、Outbox Relay 和 Redis Stream 去重。
@@ -118,31 +120,37 @@ Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector 
 - 密码策略已由 `api/contracts/password-policy.json` 同时生成 Go/TypeScript 实现，首次登录与账户改密会返回安全的失败规则、长度边界和请求 ID；前端五条密码流程使用同一策略并展示可排查信息。
 - HTTP 错误响应的 `message/params/trace_id/request_id` 已跨领域 handler 保留，所有业务错误 mapper 写入稳定 `error_code` 关联日志；错误码注册表已清理重复键并增加“代码返回值必须登记”的契约门禁。
 - `/api/v1` 已启用嵌入式 bundled OpenAPI 请求校验；非法 body/path/query/header 在进入领域 Handler 前返回安全 `INVALID_ARGUMENT`。前端可把 `params.field` 回填到 RHF Field，其他错误显示表单摘要和 request ID，不回显输入、正则、堆栈或内部路径。
-- 企业生命周期、EnterpriseUser/Department 启停、默认 Department/七个内置 Role/默认空 DataScope、统一授权、签名游标、ServiceAccount/APIKey 和分域 hash-chain 审计。
+- 企业生命周期、EnterpriseUser/Department 启停、默认 Department/七个内置 Role/默认空 DataAuthorizationGrant、统一授权、签名游标、ServiceAccount/APIKey 和分域 hash-chain 审计。
 - `go run ./cmd/argus-dev e2e run --suite m2`：真实 Platform 初始化 → Platform 登录 → Enterprise → IAM → APIKey → Audit → 撤权，Redis 停止和 Server 重启恢复，三 Origin real Playwright，以及成功/失败无条件清理。
-- M3 OpenAPI/protobuf、Goose/sqlc、Envelope Encryption、Credential Lease、Host/Kubernetes、网络路径变更绑定冻结 ConnectionTest、最小 PendingAction、Bastion/Connector、Gateway Registry/Pub/Sub/Command/sweeper 和 DataScope 撤权实现。
+- M3 OpenAPI/protobuf、Goose/sqlc、Envelope Encryption、Credential Lease、Host/Kubernetes、网络路径变更绑定冻结 ConnectionTest、最小 PendingAction、Bastion/Connector、Gateway Registry/Pub/Sub/Command/sweeper 和 DataAuthorizationGrant 撤权实现。
 - cert-manager Connector PKI、Gateway 独立 ServiceAccount/Issuer/RBAC、独立 Direct Executor CA/mTLS RPC、固定 IP/DNS 重校验、Redirect/TLS/SSRF 防护，以及对应 Helm Service/RBAC/NetworkPolicy。
 - Enterprise real Adapter 与页面已接 Host 路径迁移、Kubernetes 有界资源/Pod Logs、Secret/ManagedAccount、Bastion/Connector 卸载和 Preview/Confirm；`in_cluster` 一次性安装命令只在确认结果中展示，Collector、Remote Access 和 Agent 操作不读取 mock 数据。
 - Connector 卸载结果等待 Gateway ACK 后才删除本地身份；无类型化清理证明的 reconcile 保持 `result_unknown`。有效重连恢复 Bastion Scope/Kubernetes 在线状态，Scope 删除要求已卸载或已 fencing 离线，并逻辑删除根 Host。
-- `go run ./cmd/argus-dev e2e run --suite m3`：真实 Secret/Credential/ManagedAccount、Bastion/Connector、证书轮换与 ACK 后卸载、Host 跨 Scope 迁移、双 Gateway 派发、内网/公网 Host、三种 Kubernetes 接入、DataScope 撤权、Redis 停止和 Server/Gateway 恢复，M2 3 条与 M3 6 条 real Playwright，以及成功/失败无条件清理。2026-08-17 的成功运行号为 `20260817060430-49810`，脱敏诊断位于本地同名 `artifacts/m3-e2e/` 目录，Namespace/PVC/Lease 零残留。
+- `go run ./cmd/argus-dev e2e run --suite m3`：真实 Secret/Credential/ManagedAccount、Bastion/Connector、证书轮换与 ACK 后卸载、Host 跨 Scope 迁移、双 Gateway 派发、内网/公网 Host、三种 Kubernetes 接入、DataAuthorizationGrant 撤权、Redis 停止和 Server/Gateway 恢复，M2 3 条与 M3 6 条 real Playwright，以及成功/失败无条件清理。2026-08-17 的成功运行号为 `20260817060430-49810`，脱敏诊断位于本地同名 `artifacts/m3-e2e/` 目录，Namespace/PVC/Lease 零残留。
 - M4 Conversation/Run/Task/Model/Approval/Execution/Sandbox 契约、Migration、四个 Worker Pool、双协议 Model Provider、ContextAssembler/Compaction、Tool 权限与严格 Schema Registry、确定性 Projection 和确定性 Action Executor。
 - Enterprise Chat/Model/Approval/Execution 与 Platform Sandbox 页面已接 real API；Replay Model Provider 仅存在于 `m4e2e` build tag，生产 Artifact 扫描拒绝测试 Provider、mock seed 和私网模型开关。
 - `go run ./cmd/argus-dev e2e run --suite m4`：真实身份与资源基座、双模型协议、Chat Tool、可信 Run→PendingAction→Execution→Verify 绑定、用户确认、多策略审批、Worker 删除、Redis 清空、ResultUnknown 不重放、模型额度耗尽、Sandbox 生命周期与配额、real Playwright，以及成功/失败无条件清理。2026-08-17 的成功运行号为 `20260817144832-31660`，脱敏诊断位于 `artifacts/m4-e2e/20260817144832-31660`，Namespace/PVC/Lease 零残留。
 - M5 OpenAPI/JSON Schema、Goose/sqlc、不可变 CardVersion、系统 Catalog Sync、企业 Chat Draft、静态/浏览器验证、`card.render`、CardPresentation、Query/Action Binding、版本切换/回滚和授权变化后重新物化。
 - Enterprise Card 管理页与 Chat 已接 real API；Card Runtime 继续复用独立 Origin、CSP、内容哈希和 MessagePort，浏览器只持有短期 Binding ID，不获得 Tool 参数、Commit Token 或私有计划。
-- `go run ./cmd/argus-dev e2e run --suite m5`：两版企业 Card 八场景验证、系统优先/企业精确匹配、DataScope 撤权、Action Binding 重放/双击、非创建人审批、Commit/Verify、回滚、Redis 清空和 Server 重启恢复。2026-08-17 的最终成功运行号为 `20260817211415-4363`，脱敏诊断位于 `artifacts/m5-e2e/20260817211415-4363`，Namespace/PVC/Lease 零残留。
-- M6 RemoteAccessGrant/Policy、AccessRequest/Lease、Session/Ticket、SSH PTY、HTTPS WinRS PowerShell 行模式、Connector/Direct 双向流、跨 Gateway peer 路由、并发限制、撤权和加密录像。
-- Enterprise Host/组织设置/审批中心已接 real Remote Access API；`@argus/ui` 使用 `@xterm/xterm`，Ticket 只存在于终端组件内存，录像播放器通过授权 API 增量读取 asciicast v2 NDJSON。远程会话策略要求 MFA 时，浏览器使用正式 Step-up 对话框获取 fresh proof 并自动重试 AccessRequest，登录 MFA 不被错误复用为操作级保证。
-- Gateway 外部 WSS `9445`、内部 peer mTLS `9446`、Connector `9443` 和 Direct Executor `9444` 分离；peer owner 通过 Kubernetes API 解析 Ready Pod IP，NetworkPolicy 与最小 Pod `get` RBAC 已自动化。
+- `go run ./cmd/argus-dev e2e run --suite m5`：两版企业 Card 八场景验证、系统优先/企业精确匹配、DataAuthorizationGrant 撤权、Action Binding 重放/双击、非创建人审批、Commit/Verify、回滚、Redis 清空和 Server 重启恢复。2026-08-17 的最终成功运行号为 `20260817211415-4363`，脱敏诊断位于 `artifacts/m5-e2e/20260817211415-4363`，Namespace/PVC/Lease 零残留。
+- M6 RemoteAccessGrant/Rule/ApprovalWorkflow/SessionProfile、AccessRequest/Lease、Session/Ticket、SSH PTY、HTTPS WinRS PowerShell 行模式、Connector/Direct 双向流、跨 Gateway peer 路由、并发限制、撤权和加密录像；旧 RemoteAccessPolicy 已在 PlanV3 Task 02 删除。2026-08-29 起 Connector 路径的会话就绪语义与 Direct 对齐：`RemoteAccessHub.Open` 等待 Connector 回传 `state: active`（SSH shell 已启动）才返回，Gateway 此时才发送 `server_ready`，握手失败/超时（15 秒）向浏览器返回明确错误，消除“已连接 + 黑屏”假状态；Enterprise 终端 Dock 改为与页面内容切分视口（非遮罩）并支持底部/左侧/右侧停靠，位置与尺寸持久化在 `argus.terminalDock`，E2E SSH 模拟器补充了 PTY 回显与 CR 行结束行为。
+- Enterprise Host/组织设置/审批中心已接 real Remote Access API；`@argus/ui` 使用 `@xterm/xterm`，Ticket 只存在于终端组件内存。录像回放统一为 `@argus/ui` 的 `TerminalPlayer`（2026-08-29 起）：xterm 时钟驱动回放 asciicast v2 NDJSON，打开后自动翻页拉取全量事件，提供视频式进度条 seek、1x/2x/4x/8x 倍速与键盘控制；主机详情页活动会话与远程会话页/录像 Tab 的“查看录像”共用同一 `RecordingDetailDialog` 宽版弹框（`--lg`，按录像 ID 加载，原始事件页签用 `--text-console` 保证浅色主题可读）。`useRecordingEvents` 做非法事件防御归一化，事件接口空页按契约返回 `[]` 而非 `null`，应用外壳由 `ErrorBoundary` 兜底避免局部渲染异常白屏。远程会话策略要求 MFA 时，浏览器使用正式 Step-up 对话框获取 fresh proof 并自动重试 AccessRequest，登录 MFA 不被错误复用为操作级保证。
+- Gateway 外部 WSS `9445`（经企业门户域名 `/v1/sessions` 同源路径接入，2026-08-29 起不再使用独立 `remote.<domain>`）、内部 peer mTLS `9446`、Connector `9443` 和 Direct Executor `9444` 分离；peer owner 通过 Kubernetes API 解析 Ready Pod IP，NetworkPolicy 与最小 Pod `get` RBAC 已自动化。
 - `go run ./cmd/argus-dev e2e run --suite m6`：真实 SSH PTY、TLS WinRS 模拟器、Ticket 重放、跨 Gateway/Redis fallback/30 秒 Drain、AuthorizationVersion 旧 Lease 失效、MinIO 连续中断 fail closed、录像、终止、M6 real Playwright 和 Redis 降级恢复。2026-08-18 的最终成功运行号为 `20260818072400-79219`，脱敏诊断位于 `artifacts/m6-e2e/20260818072400-79219`，Namespace/PVC/Lease 零残留。
 - M7 Telemetry OpenAPI/protobuf、PostgreSQL/ClickHouse Migration、Distribution/Profile/Collector/Route/Claim/NodeBinding 控制面、独立 mTLS PKI、OTLP gRPC/HTTP Ingest、Kafka Topic/DLQ、最小 Go Writer、ClickHouse 三信号 Schema、授权 Query、Tool 与 Telemetry Overview Card 已完成。
 - Linux arm64 OCB Distribution、Host Direct/Bastion 类型化安装路径、Kubernetes Agent/Gateway mTLS 固定模板、严格 Artifact TLS、canonical Operation Plan Hash、Credential Lease、Fence、`result_unknown` 对账和 Windows amd64 `validation_pending` 支持矩阵已落地。
 - NodeBinding 保留完整 IP 证据用于匹配，但人工确认哈希只绑定 Node UID/Name、Provider ID、Machine ID 和 System UUID；IP 波动不误失效，强身份漂移会撤销 Binding。Kubernetes Gateway 同 Collector 转发还需匹配可信 Collector ID 与证书序列，kubelet 采集保持证书校验并使用最小 `nodes/stats` RBAC。
 - Enterprise Host/Kubernetes Collector 与 Metrics/Logs/Traces 页面、Telemetry 保留期/用量/Catalog 页面已接 real API；ECharts 图表包含表格替代、键盘和读屏语义。
-- `go run ./cmd/argus-dev e2e run --suite m7`：Linux arm64 Collector 构建/安装、Kubernetes Agent/Gateway mTLS、NodeBinding 保持/漂移、Direct 与 Bastion Gateway 的真实三信号、Kafka backlog、DLQ replay、Redis outage 持久队列、Pod 删除恢复、Query 跨企业/DataScope/预算/脱敏/授权版本矩阵、Telemetry Card 激活、M2-M5 与 M7 real Playwright。2026-08-19 的最终成功运行号为 `20260819140437-21054`，脱敏诊断位于 `artifacts/m7-e2e/20260819140437-21054`，三个 Namespace、运行相关 PVC 和 Lease 零残留。
+- `go run ./cmd/argus-dev e2e run --suite m7`：Linux arm64 Collector 构建/安装、Kubernetes Agent/Gateway mTLS、NodeBinding 保持/漂移、Direct 与 Bastion Gateway 的真实三信号、Kafka backlog、DLQ replay、Redis outage 持久队列、Pod 删除恢复、Query 跨企业/DataAuthorizationGrant/预算/脱敏/授权版本矩阵、Telemetry Card 激活、M2-M5 与 M7 real Playwright。2026-08-19 的最终成功运行号为 `20260819140437-21054`，脱敏诊断位于 `artifacts/m7-e2e/20260819140437-21054`，三个 Namespace、运行相关 PVC 和 Lease 零残留。
 - `go run ./cmd/argus-dev e2e run --suite m10-query`：单进程 PromQL/KQL/SkyWalking GraphQL、企业同步租户 Schema lifecycle、每企业六张 ClickHouse 物理表、Native Histogram/Summary、Trace spans/edges、Query Audit、`MaxSamples/MaxSeries` 预算、权限/脱敏、Kafka backlog/DLQ、Redis/PostgreSQL 恢复和 M2-M5/M7 real Playwright。2026-08-22 的最终成功运行号为 `20260822063330-17805`，已验证 Metrics/KQL/GraphQL 三种独立 wire format、固定 SkyWalking SDL 和稳定启动门禁；诊断位于 `artifacts/m10-query-e2e/20260822063330-17805`，三个临时 Namespace、相关 PVC 和 E2E Lease 零残留。
 
-上述运行号来自迁移前的旧 Shell Harness，可继续作为当时版本的验收记录。新的 Go Harness 已覆盖对应场景，但仍须在 `go run ./cmd/argus-dev doctor e2e` 通过（包括至少 25 GiB 可用磁盘）后完成一次实时集群重跑；Make target 仅保留为兼容别名。
+PlanV3 第三阶段（2026-08-26）已完成代码、迁移、OpenAPI、Go/前端生成物、治理四 Tab、统一审批中心远程访问视图、远程会话活动/历史/录像页面、SessionProfile 能力快照、录像读取审计、Worker 失效会话收敛与 optional 录像恢复，以及受保护的 Docker Desktop 重置脚本。本机 `go test ./...`、`go vet -stdmethods=false ./...`、契约 lint/check/breaking、前端 typecheck/lint/test/build 均通过；mock Playwright 在独立端口运行 71 个场景，其中 38 个通过，33 个按产品或环境保护条件跳过，无失败。
+
+同日已在显式确认重置的 Docker Desktop Kubernetes Evaluation 环境完成 `20260826-planv3-final9`。M2 real Playwright 3/3、M3 6/6、M6 5/5 全部通过；真实链路覆盖 MFA、双人审批、自批拒绝、Lease、SSH PTY、HTTPS WinRS、录像读取、Ticket 重放拒绝、Rule 撤权、required ObjectStore fail closed、Redis 清空、跨 Gateway、Gateway Pod 删除与 Drain、Server/Worker 双副本、Worker 全量 Pod 重启和 PostgreSQL Pod 恢复。数据库恢复前后 Grant、Request、Lease、Session、Recording 事实数量一致，`argusctl verify passed=true`，服务日志敏感信息扫描通过；最终未残留运行 Namespace、PVC、Lease、image-loader DaemonSet 或 Registry 容器。证据位于 `artifacts/m6-e2e/20260826-planv3-final9/`。
+
+因此 Task 04 并入后的第三阶段开发/Evaluation 退出标准已经满足。Evaluation 环境仍报告 NetworkPolicy enforcement 未验证、外部 Egress Gateway 缺失和普通容器共享 Sandbox Runtime；WORM/Object Lock、跨故障域灾备、生产 PostgreSQL/ObjectStore HA 与真实 Windows 兼容性同样继续由 Production Validation 阻断。
+
+2026-08-18 及更早的运行号来自迁移前的旧 Shell Harness，可继续作为当时版本的验收记录。当前 Go Harness 已由 `20260826-planv3-final9` 完成实时集群重跑；后续回归仍须先通过 `go run ./cmd/argus-dev doctor e2e`，Make target 仅保留为兼容别名。
 
 仍未完成且不能由部署基座替代：
 
@@ -236,7 +244,7 @@ flowchart TB
 | ----------------------------- | --------------------------------------- | ---------------------------------- | -------------------------- |
 | Enterprise/Platform Web       | `argus-web`、`argus-server`             | HTTPS Ingress/Gateway              | Cookie、CSRF、CSP、SSE/WSS |
 | Card Runtime                  | `argus-web`                              | 独立 HTTPS Origin                  | iframe sandbox、CSP、MessagePort |
-| Connector                     | `argus-connector-gateway`               | 独立 TLS/L4 或支持长连接的 Gateway | mTLS、Drain、连接指标      |
+| Connector                     | `argus-connector-gateway`               | 专用 LoadBalancer Service（所有 Profile 统一，TCP 直通 `grpcs://<connectorHost>:9443`） | mTLS、Drain、连接指标      |
 | Remote Access                 | `argus-connector-gateway` 独立 Listener | HTTPS/WSS                          | 一次性票据、录像、独立限流 |
 | OTLP gRPC                     | `argus-telemetry-ingest:4317`           | 支持 HTTP/2 的 L4/L7 入口          | 独立证书、认证、背压       |
 | OTLP HTTP                     | `argus-telemetry-ingest:4318`           | HTTPS                              | 独立限流和请求体限制       |
@@ -352,7 +360,7 @@ argus-e2e-<run-id>-observability
 3. `doctor e2e` 检查 Strimzi/OpenSandbox 固定 ClusterRole 的 Helm 所有权，发现占用时在镜像构建前以能力错误退出。
 4. 在专用集群中使用 Evaluation Profile 安装独立 Operator、CRD、数据卷和 Argus 工作负载。
 5. 运行 `argusctl verify`、后端契约/集成测试和两个门户及 Card Runtime 的 Playwright 流程。
-6. 验证初始化、平台/企业身份隔离、RoleBinding/DataScope、标签撤权、Preview/Commit、Connector、Sandbox、OTLP 写入/查询和 Pod 故障接管。
+6. 验证初始化、平台/企业身份隔离、RoleBinding/DataAuthorizationGrant、标签变化不影响授权、Preview/Commit、Connector、Sandbox、OTLP 写入/查询和 Pod 故障接管。
 7. 导出失败日志、事件、Pod 状态和必要的脱敏 Artifact。
 8. 无论成功失败都删除三个临时 Namespace、测试拥有的 Operator/CRD、PVC、Fixture、镜像和 Cluster RBAC，并等待资源收敛。
 9. 释放测试 Lease；正式部署位于其他 Context，不参与暂停、接管或恢复。

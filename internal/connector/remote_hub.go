@@ -16,10 +16,16 @@ import (
 	"github.com/kakj-go/Argus/internal/remoteaccess"
 )
 
+// defaultRemoteHandshakeTimeout bounds how long Open waits for the Connector
+// to report the remote session active (SSH PTY shell started or WinRS shell
+// created) before the session is treated as unavailable.
+const defaultRemoteHandshakeTimeout = 15 * time.Second
+
 type RemoteAccessHub struct {
-	mu          sync.Mutex
-	connections map[uuid.UUID]remoteConnectorConnection
-	streams     map[string]*connectorRemoteSession
+	mu               sync.Mutex
+	connections      map[uuid.UUID]remoteConnectorConnection
+	streams          map[string]*connectorRemoteSession
+	HandshakeTimeout time.Duration
 }
 
 type remoteConnectorConnection struct {
@@ -91,7 +97,39 @@ func (hub *RemoteAccessHub) Open(ctx context.Context, target remoteaccess.Connec
 		hub.remove(streamID)
 		return nil, err
 	}
+	if err := hub.awaitActive(ctx, session); err != nil {
+		// Tell the Connector to stop the remote session; Close is a no-op when
+		// the Connector already reported a terminal state, and any frames it
+		// still emits for the removed stream are dropped by Deliver.
+		_ = session.Close(context.Background(), "handshake_failed")
+		return nil, remoteaccess.ErrSessionUnavailable
+	}
 	return session, nil
+}
+
+// awaitActive blocks until the Connector reports the remote session as active,
+// mirroring DirectBackendFactory's ready handshake: a session is only usable
+// after the remote shell is actually running. The active frame is consumed
+// here because the WebSocket gateway emits its own server_ready once Open
+// returns; any other first frame is a protocol violation and fails fast.
+func (hub *RemoteAccessHub) awaitActive(ctx context.Context, session *connectorRemoteSession) error {
+	timeout := defaultRemoteHandshakeTimeout
+	if hub.HandshakeTimeout > 0 {
+		timeout = hub.HandshakeTimeout
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case frame := <-session.events:
+		if frame.Type == "state" && frame.Status == "active" {
+			return nil
+		}
+		return remoteaccess.ErrSessionUnavailable
+	case <-timer.C:
+		return remoteaccess.ErrSessionUnavailable
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (hub *RemoteAccessHub) Deliver(connectorID uuid.UUID, epoch int64, request *connectorv1.ConnectRequest) error {
@@ -101,7 +139,14 @@ func (hub *RemoteAccessHub) Deliver(connectorID uuid.UUID, epoch int64, request 
 	}
 	hub.mu.Lock()
 	session, ok := hub.streams[streamID]
-	if !ok || session.connectorID != connectorID || session.epoch != epoch || session.closed || sequence != session.inboundSequence+1 {
+	if !ok {
+		// The stream was already closed by the Gateway (handshake failure or
+		// session teardown). Late Connector frames for it are expected during
+		// that window and must not poison the whole Connector connection.
+		hub.mu.Unlock()
+		return nil
+	}
+	if session.connectorID != connectorID || session.epoch != epoch || session.closed || sequence != session.inboundSequence+1 {
 		hub.mu.Unlock()
 		return ErrCommandState
 	}

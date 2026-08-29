@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
@@ -181,41 +180,19 @@ func (handler ResourceActionHandler) pendingActionVisible(ctx context.Context, p
 	if !item.ResourceID.Valid || item.ResourceType == "" {
 		return false, nil
 	}
-	labels := map[string]string{}
-	var err error
 	switch item.ResourceType {
 	case "host":
-		value, getErr := handler.Service.Store.Queries.GetHost(ctx, db.GetHostParams{ID: item.ResourceID.UUID, EnterpriseID: principal.EnterpriseIDValue()})
-		err = getErr
-		if err == nil {
-			labels, err = resource.DecodeLabels(value.Labels)
+		if _, err := handler.Service.Store.Queries.GetHost(ctx, db.GetHostParams{ID: item.ResourceID.UUID, EnterpriseID: principal.EnterpriseIDValue()}); err != nil {
+			return false, nil
 		}
 	case "kubernetes_cluster":
-		value, getErr := handler.Service.Store.Queries.GetKubernetesCluster(ctx, db.GetKubernetesClusterParams{ID: item.ResourceID.UUID, EnterpriseID: principal.EnterpriseIDValue()})
-		err = getErr
-		if err == nil {
-			labels, err = resource.DecodeLabels(value.Labels)
+		if _, err := handler.Service.Store.Queries.GetKubernetesCluster(ctx, db.GetKubernetesClusterParams{ID: item.ResourceID.UUID, EnterpriseID: principal.EnterpriseIDValue()}); err != nil {
+			return false, nil
 		}
 	default:
 		return false, nil
 	}
-	if err != nil {
-		var preview map[string]any
-		if json.Unmarshal(item.Preview, &preview) == nil {
-			if raw, ok := preview["labels"].(map[string]any); ok {
-				labels = make(map[string]string, len(raw))
-				for key, value := range raw {
-					if text, ok := value.(string); ok {
-						labels[key] = text
-					}
-				}
-			}
-		} else {
-			return false, err
-		}
-	}
-	allowed, _, accessErr := handler.Service.Access.CanAccess(ctx, principal.EnterpriseIDValue(), principal.DataScopeIDs, item.ResourceType, item.ResourceID.UUID.String(), labels)
-	return allowed, accessErr
+	return handler.Service.Access.CanAccess(principal.AuthorizedResourceIDs, item.ResourceID.UUID), nil
 }
 
 func (handler ResourceActionHandler) CancelPendingAction(ctx context.Context, request actionapi.CancelPendingActionRequestObject) (actionapi.CancelPendingActionResponseObject, error) {

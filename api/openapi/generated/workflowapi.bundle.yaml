@@ -252,8 +252,6 @@ components:
             type: string
             minLength: 1
             maxLength: 128
-        label_selector:
-          $ref: '#/components/schemas/LabelSelector'
         minimum_approvers:
           type: integer
           minimum: 1
@@ -328,8 +326,6 @@ components:
             type: string
             minLength: 1
             maxLength: 128
-        label_selector:
-          $ref: '#/components/schemas/LabelSelector'
         minimum_approvers:
           type: integer
           minimum: 1
@@ -532,92 +528,6 @@ components:
         retryable:
           type: boolean
           default: false
-    UserLabelKey:
-      type: string
-      minLength: 1
-      maxLength: 63
-      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-    SystemLabelKey:
-      type: string
-      maxLength: 72
-      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-      readOnly: true
-    LabelValue:
-      type: string
-      minLength: 1
-      maxLength: 63
-      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
-    LabelRequirement:
-      oneOf:
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-            - values
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              const: eq
-            values:
-              type: array
-              minItems: 1
-              maxItems: 1
-              uniqueItems: true
-              items:
-                $ref: '#/components/schemas/LabelValue'
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-            - values
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              const: in
-            values:
-              type: array
-              minItems: 1
-              maxItems: 32
-              uniqueItems: true
-              items:
-                $ref: '#/components/schemas/LabelValue'
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              enum:
-                - exists
-                - not_exists
-    LabelSelector:
-      type: object
-      additionalProperties: false
-      required:
-        - schema_version
-        - requirements
-      properties:
-        schema_version:
-          const: argus.label_selector/v1
-        requirements:
-          type: array
-          minItems: 1
-          maxItems: 16
-          items:
-            $ref: '#/components/schemas/LabelRequirement'
     IdempotencyKey:
       type: string
       minLength: 16

@@ -42,8 +42,10 @@ func (q *Queries) ActivateMfaCredential(ctx context.Context, id uuid.UUID) (MfaC
 }
 
 const bumpAuthorizationVersionRecord = `-- name: BumpAuthorizationVersionRecord :exec
-UPDATE authorization_versions SET version = version + 1, updated_at = now()
-WHERE enterprise_id = $1 AND subject_type = $2 AND subject_id = $3
+INSERT INTO authorization_versions (enterprise_id, subject_type, subject_id, version)
+VALUES ($1, $2, $3, 2)
+ON CONFLICT (enterprise_id, subject_type, subject_id)
+DO UPDATE SET version = authorization_versions.version + 1, updated_at = now()
 `
 
 type BumpAuthorizationVersionRecordParams struct {
@@ -167,6 +169,26 @@ type BumpUserAuthorizationVersionParams struct {
 
 func (q *Queries) BumpUserAuthorizationVersion(ctx context.Context, arg BumpUserAuthorizationVersionParams) (int64, error) {
 	row := q.db.QueryRow(ctx, bumpUserAuthorizationVersion, arg.ID, arg.EnterpriseID)
+	var authorization_version int64
+	err := row.Scan(&authorization_version)
+	return authorization_version, err
+}
+
+const bumpUserAuthorizationVersionExpected = `-- name: BumpUserAuthorizationVersionExpected :one
+UPDATE enterprise_users SET authorization_version = authorization_version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2
+  AND authorization_version = $3
+RETURNING authorization_version
+`
+
+type BumpUserAuthorizationVersionExpectedParams struct {
+	ID                           uuid.UUID `json:"id"`
+	EnterpriseID                 uuid.UUID `json:"enterprise_id"`
+	ExpectedAuthorizationVersion int64     `json:"expected_authorization_version"`
+}
+
+func (q *Queries) BumpUserAuthorizationVersionExpected(ctx context.Context, arg BumpUserAuthorizationVersionExpectedParams) (int64, error) {
+	row := q.db.QueryRow(ctx, bumpUserAuthorizationVersionExpected, arg.ID, arg.EnterpriseID, arg.ExpectedAuthorizationVersion)
 	var authorization_version int64
 	err := row.Scan(&authorization_version)
 	return authorization_version, err
@@ -1149,6 +1171,48 @@ func (q *Queries) ListEnterpriseUsers(ctx context.Context, enterpriseID uuid.UUI
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockEnterpriseForAccessUpdate = `-- name: LockEnterpriseForAccessUpdate :one
+SELECT id FROM enterprises WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockEnterpriseForAccessUpdate(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockEnterpriseForAccessUpdate, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockEnterpriseUserForAccessUpdate = `-- name: LockEnterpriseUserForAccessUpdate :one
+SELECT id, enterprise_id, department_id, username, display_name, email, status, mfa_enabled, authorization_version, version, last_login_at, created_at, updated_at FROM enterprise_users
+WHERE id = $1 AND enterprise_id = $2
+FOR UPDATE
+`
+
+type LockEnterpriseUserForAccessUpdateParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) LockEnterpriseUserForAccessUpdate(ctx context.Context, arg LockEnterpriseUserForAccessUpdateParams) (EnterpriseUser, error) {
+	row := q.db.QueryRow(ctx, lockEnterpriseUserForAccessUpdate, arg.ID, arg.EnterpriseID)
+	var i EnterpriseUser
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.DepartmentID,
+		&i.Username,
+		&i.DisplayName,
+		&i.Email,
+		&i.Status,
+		&i.MfaEnabled,
+		&i.AuthorizationVersion,
+		&i.Version,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const markEnterpriseLogin = `-- name: MarkEnterpriseLogin :exec

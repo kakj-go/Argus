@@ -98,13 +98,7 @@ func printSetupInitializationLink(writer io.Writer, cfg *InstallConfig, token st
 }
 
 func setupInitializationURL(cfg *InstallConfig, token string) string {
-	baseURL := "http://127.0.0.1:4174"
-	if cfg.Spec.Exposure.Mode == "ingress" {
-		baseURL = strings.TrimSpace(cfg.Spec.Exposure.PlatformHost)
-		if !strings.Contains(baseURL, "://") {
-			baseURL = "https://" + baseURL
-		}
-	}
+	baseURL := "https://" + strings.TrimSpace(cfg.Spec.Exposure.PlatformHost)
 	baseURL = strings.TrimRight(baseURL, "/") + "/login"
 	return baseURL + "#argus_setup_token=" + url.QueryEscape(token)
 }

@@ -19,9 +19,9 @@
 ## 任务
 
 - [x] `M0-ID-01` 固化 Enterprise、PlatformUser、EnterpriseUser、Department、Session、ServiceAccount、APIKey Schema。
-- [x] `M0-AUTH-01` 固化 Role、Permission、RoleBinding、DataScope、AuthorizationVersion 和授权决策 Schema。
+- [x] `M0-AUTH-01` 固化 Role、Permission、RoleBinding、explicit resource authorization、AuthorizationVersion 和授权决策 Schema。
 - [x] `M0-LABEL-01` 固化 `labels: Record<string,string>` 的键值限制、`argus.io/*` 保留规则、标签版本和错误码。
-- [x] `M0-LABEL-02` 固化标签选择器 v1，只支持精确、集合、存在/不存在及复杂度上限。
+- [x] `M0-LABEL-02` 固化标签过滤条件 v1，只支持精确、集合、存在/不存在及复杂度上限。
 - [x] `M0-ACTION-01` 分离 PendingAction 公共 DTO、内部不可变计划、私有参数和 Token Store。
 - [x] `M0-ACTION-02` 固化 Preview/Commit、Approval、Execution、ActionBinding 状态机和错误码。
 - [x] `M0-CARD-01` 固化 Card Manifest、RenderPlan、Data/Query/Action Binding 和 Bridge 消息 Schema。

@@ -55,7 +55,7 @@ func (a *App) verifyM6RemoteSession(ctx context.Context, env *E2EEnvironment, te
 		return "", err
 	}
 	websocketURL, _ := stringField(ticketResult, "websocket_url")
-	args := []string{"--url", websocketURL, "--origin", enterpriseOrigin, "--command", test.command, "--expect", test.expect}
+	args := []string{"--url", websocketURL, "--origin", env.EnterpriseOrigin(), "--command", test.command, "--expect", test.expect}
 	if err := a.runM6RemoteClient(ctx, env, "m6-"+test.name+"-client.log", ticket, args...); err != nil {
 		return "", err
 	}
@@ -89,7 +89,7 @@ func (a *App) verifyM6TerminatedTicket(ctx context.Context, env *E2EEnvironment,
 		map[string]any{"reason": "e2e_terminate"}, enterpriseHeaders(env, "m6-terminate")); err != nil {
 		return err
 	}
-	if err := a.runM6RemoteClient(ctx, env, "m6-terminated-ticket.log", ticket, "--url", websocketURL, "--origin", enterpriseOrigin); err == nil {
+	if err := a.runM6RemoteClient(ctx, env, "m6-terminated-ticket.log", ticket, "--url", websocketURL, "--origin", env.EnterpriseOrigin()); err == nil {
 		return fmt.Errorf("M6 terminated Session accepted an unused Ticket")
 	}
 	return nil
@@ -119,7 +119,7 @@ func (a *App) verifyM6ObjectStoreFailClosed(ctx context.Context, env *E2EEnviron
 		return err
 	}
 	runErr := a.runM6RemoteClient(ctx, env, "m6-object-store-fail-closed.log", ticket,
-		"--url", websocketURL, "--origin", enterpriseOrigin, "--command", "stream", "--expect-status", "failed", "--expect-reason", "REMOTE_ACCESS_RECORDING_UNAVAILABLE", "--timeout", "90s")
+		"--url", websocketURL, "--origin", env.EnterpriseOrigin(), "--command", "stream", "--expect-status", "failed", "--expect-reason", "REMOTE_ACCESS_RECORDING_UNAVAILABLE", "--timeout", "90s")
 	restoreCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	restoreErr := env.Kube.ScaleStatefulSet(restoreCtx, env.SystemNS, "argus-minio", 1)
@@ -154,7 +154,7 @@ func (a *App) findM6Lease(ctx context.Context, env *E2EEnvironment, requestID st
 	client, _ := scenarioHTTP(env)
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		leases, err := client.JSON(ctx, "m6-leases-"+requestID, "enterprise", http.MethodGet, "/enterprise/remote-access-leases", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+		leases, err := client.JSON(ctx, "m6-leases-"+requestID, "enterprise", http.MethodGet, "/enterprise/remote-access-leases", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 		if err != nil {
 			return "", err
 		}
@@ -184,14 +184,25 @@ func (a *App) runM6RemoteClient(ctx context.Context, env *E2EEnvironment, artifa
 		return err
 	}
 	defer log.Close()
-	return a.runner.RunIO(ctx, nil, strings.NewReader(ticket+"\n"), log, log, binary, args...)
+	variables := map[string]string{
+		"ARGUS_E2E_CA_FILE": env.Endpoints.CAFile,
+	}
+	var hostMap strings.Builder
+	for host, ip := range env.Endpoints.hostIPs {
+		if hostMap.Len() > 0 {
+			hostMap.WriteByte(',')
+		}
+		hostMap.WriteString(host + "=" + ip)
+	}
+	variables["ARGUS_E2E_HOST_MAP"] = hostMap.String()
+	return a.runner.RunIO(ctx, variables, strings.NewReader(ticket+"\n"), log, log, binary, args...)
 }
 
 func (a *App) waitM6Recording(ctx context.Context, env *E2EEnvironment, recordingID string) error {
 	client, _ := scenarioHTTP(env)
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
-		recording, err := client.JSON(ctx, "m6-recording-"+recordingID, "enterprise", http.MethodGet, "/enterprise/remote-access-recordings/"+recordingID, http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+		recording, err := client.JSON(ctx, "m6-recording-"+recordingID, "enterprise", http.MethodGet, "/enterprise/remote-access-recordings/"+recordingID, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 		if err != nil {
 			return err
 		}
@@ -201,7 +212,7 @@ func (a *App) waitM6Recording(ctx context.Context, env *E2EEnvironment, recordin
 			if chunkCount < 1 || eventCount < 3 {
 				return fmt.Errorf("M6 recording %s has incomplete counters", recordingID)
 			}
-			events, err := client.JSON(ctx, "m6-recording-events-"+recordingID, "enterprise", http.MethodGet, "/enterprise/remote-access-recordings/"+recordingID+"/events", http.StatusOK, nil, map[string]string{"Origin": enterpriseOrigin})
+			events, err := client.JSON(ctx, "m6-recording-events-"+recordingID, "enterprise", http.MethodGet, "/enterprise/remote-access-recordings/"+recordingID+"/events", http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})
 			if err != nil {
 				return err
 			}

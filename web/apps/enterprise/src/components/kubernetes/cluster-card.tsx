@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useApi, type KubernetesCluster } from "@argus/api-client";
-import { Badge, Button, Card, CardContent, StatusBadge } from "@argus/ui";
+import { Badge, Card, CardContent, RowAction, StatusBadge } from "@argus/ui";
 import {
   bindingCoverage,
   collectorStatusTone,
@@ -107,15 +107,11 @@ export function ClusterCard({
           )}
         </dl>
         <div className="argus-k8s-card-actions">
-          <Button onClick={onOpen} size="sm" variant="primary">
-            {t("kubernetes.card.open")}
-          </Button>
-          <Button onClick={onEdit} size="sm">
-            {t("kubernetes.card.edit")}
-          </Button>
-          <Button onClick={onDelete} size="sm" variant="danger">
+          <RowAction onClick={onOpen}>{t("kubernetes.card.open")}</RowAction>
+          <RowAction onClick={onEdit}>{t("kubernetes.card.edit")}</RowAction>
+          <RowAction danger onClick={onDelete}>
             {t("kubernetes.card.delete")}
-          </Button>
+          </RowAction>
         </div>
       </CardContent>
     </Card>

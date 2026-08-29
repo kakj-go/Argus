@@ -98,7 +98,6 @@ components:
         description: {type: string, maxLength: 1024}
         status: {type: string, enum: [active, disabled]}
         allowed_tool_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
-        data_scope_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
         authorization_version: {$ref: "./authorization.yaml#/components/schemas/AuthorizationVersion"}
         version: {type: integer, format: int64, minimum: 1}
         created_at: {type: string, format: date-time}

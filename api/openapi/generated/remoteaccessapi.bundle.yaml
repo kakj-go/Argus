@@ -88,55 +88,103 @@ paths:
                 $ref: '#/components/schemas/RemoteAccessGrant'
         default:
           $ref: '#/components/responses/Error'
-    delete:
+  /enterprise/remote-access-grants/{id}/enable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: enableRemoteAccessGrant
+      summary: Enable a remote access grant.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessGrant'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-grants/{id}/disable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
       operationId: disableRemoteAccessGrant
       summary: Disable a remote access grant.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '204':
-          description: Grant disabled.
-        default:
-          $ref: '#/components/responses/Error'
-  /enterprise/remote-access-policies:
-    get:
-      operationId: listRemoteAccessPolicies
-      summary: List remote access approval policies.
-      parameters:
-        - $ref: '#/components/parameters/Cursor'
-        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/ExpectedVersion'
       responses:
         '200':
-          description: Policy page.
+          description: Grant.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RemoteAccessPolicyPage'
+                $ref: '#/components/schemas/RemoteAccessGrant'
         default:
           $ref: '#/components/responses/Error'
+  /enterprise/remote-access-grants/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     post:
-      operationId: createRemoteAccessPolicy
-      summary: Create a remote access approval policy.
+      operationId: restoreRemoteAccessGrant
+      summary: Restore an archived remote access grant as a draft.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RemoteAccessPolicyWrite'
+        - $ref: '#/components/parameters/ExpectedVersion'
       responses:
-        '201':
-          description: Policy.
+        '200':
+          description: Grant.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RemoteAccessPolicy'
+                $ref: '#/components/schemas/RemoteAccessGrant'
         default:
           $ref: '#/components/responses/Error'
-  /enterprise/remote-access-policies/{id}:
+  /enterprise/remote-access-grants/{id}/archive:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: archiveRemoteAccessGrant
+      summary: Archive a remote access grant.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessGrant'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-grants/{id}/references:
     parameters:
       - name: id
         in: path
@@ -145,20 +193,36 @@ paths:
           type: string
           format: uuid
     get:
-      operationId: getRemoteAccessPolicy
-      summary: Get a remote access approval policy.
+      operationId: getRemoteAccessGrantReferences
+      summary: Get remote access grant references.
       responses:
         '200':
-          description: Policy.
+          description: References.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RemoteAccessPolicy'
+                $ref: '#/components/schemas/RemoteAccessReferences'
         default:
           $ref: '#/components/responses/Error'
-    put:
-      operationId: updateRemoteAccessPolicy
-      summary: Update a remote access approval policy with optimistic concurrency.
+  /enterprise/remote-access-rules:
+    get:
+      operationId: listRemoteAccessRules
+      summary: List remote access rules.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Rule page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRulePage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createRemoteAccessRule
+      summary: Create a remote access rule.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/CsrfToken'
@@ -167,25 +231,580 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RemoteAccessPolicyUpdate'
+              $ref: '#/components/schemas/RemoteAccessRuleWrite'
       responses:
-        '200':
-          description: Policy.
+        '201':
+          description: Rule.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RemoteAccessPolicy'
+                $ref: '#/components/schemas/RemoteAccessRule'
         default:
           $ref: '#/components/responses/Error'
-    delete:
-      operationId: disableRemoteAccessPolicy
-      summary: Disable a remote access approval policy.
+  /enterprise/remote-access-rules/simulate:
+    post:
+      operationId: simulateRemoteAccessRule
+      summary: Simulate the current remote access decision without creating runtime state.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteAccessRuleSimulationRequest'
+      responses:
+        '200':
+          description: Redacted decision explanation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRuleSimulationResult'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getRemoteAccessRule
+      summary: Get a remote access rule.
+      responses:
+        '200':
+          description: Rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRule'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      operationId: updateRemoteAccessRule
+      summary: Update a remote access rule with optimistic concurrency.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteAccessRuleUpdate'
       responses:
-        '204':
-          description: Policy disabled.
+        '200':
+          description: Rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRule'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-rules/{id}/enable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: enableRemoteAccessRule
+      summary: Enable a remote access rule.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRule'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-rules/{id}/disable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: disableRemoteAccessRule
+      summary: Disable a remote access rule.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRule'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-rules/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: restoreRemoteAccessRule
+      summary: Restore an archived remote access rule as a draft.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRule'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-rules/{id}/archive:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: archiveRemoteAccessRule
+      summary: Archive a remote access rule.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRule'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/remote-access-rules/{id}/references:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getRemoteAccessRuleReferences
+      summary: Get remote access rule references.
+      responses:
+        '200':
+          description: References.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessReferences'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-workflows:
+    get:
+      operationId: listApprovalWorkflows
+      summary: List remote access approval workflows.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Workflow page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalWorkflowPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createApprovalWorkflow
+      summary: Create a remote access approval workflow.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalWorkflowWrite'
+      responses:
+        '201':
+          description: Workflow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalWorkflow'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-workflows/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getApprovalWorkflow
+      summary: Get a remote access approval workflow.
+      responses:
+        '200':
+          description: Workflow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalWorkflow'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      operationId: updateApprovalWorkflow
+      summary: Update a remote access approval workflow with optimistic concurrency.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalWorkflowUpdate'
+      responses:
+        '200':
+          description: Workflow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalWorkflow'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-workflows/{id}/enable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: enableApprovalWorkflow
+      summary: Enable an approval workflow.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Workflow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalWorkflow'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-workflows/{id}/disable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: disableApprovalWorkflow
+      summary: Disable an approval workflow.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Workflow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalWorkflow'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-workflows/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: restoreApprovalWorkflow
+      summary: Restore an archived approval workflow as a draft.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Workflow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalWorkflow'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-workflows/{id}/archive:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: archiveApprovalWorkflow
+      summary: Archive an approval workflow.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Workflow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalWorkflow'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/approval-workflows/{id}/references:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getApprovalWorkflowReferences
+      summary: Get approval workflow references.
+      responses:
+        '200':
+          description: References.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessReferences'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/session-profiles:
+    get:
+      operationId: listSessionProfiles
+      summary: List remote access session profiles.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Session profile page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionProfilePage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createSessionProfile
+      summary: Create a remote access session profile.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionProfileWrite'
+      responses:
+        '201':
+          description: Session profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionProfile'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/session-profiles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getSessionProfile
+      summary: Get a remote access session profile.
+      responses:
+        '200':
+          description: Session profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionProfile'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      operationId: updateSessionProfile
+      summary: Update a remote access session profile with optimistic concurrency.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionProfileUpdate'
+      responses:
+        '200':
+          description: Session profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionProfile'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/session-profiles/{id}/enable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: enableSessionProfile
+      summary: Enable a session profile.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Session profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionProfile'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/session-profiles/{id}/disable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: disableSessionProfile
+      summary: Disable a session profile.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Session profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionProfile'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/session-profiles/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: restoreSessionProfile
+      summary: Restore an archived session profile as a draft.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Session profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionProfile'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/session-profiles/{id}/archive:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: archiveSessionProfile
+      summary: Archive a session profile.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/ExpectedVersion'
+      responses:
+        '200':
+          description: Session profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionProfile'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/session-profiles/{id}/references:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getSessionProfileReferences
+      summary: Get session profile references.
+      responses:
+        '200':
+          description: References.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessReferences'
         default:
           $ref: '#/components/responses/Error'
   /enterprise/remote-access-requests:
@@ -195,6 +814,50 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - mine
+              - approver
+              - processed
+            default: mine
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/RemoteAccessRequestStatus'
+        - name: created_by
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: host_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: protocol
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/RemoteAccessProtocol'
+        - name: created_from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: created_to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
       responses:
         '200':
           description: Request page.
@@ -274,6 +937,29 @@ paths:
                 $ref: '#/components/schemas/AccessRequest'
         default:
           $ref: '#/components/responses/Error'
+  /enterprise/remote-access-requests/{id}/resume:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: resumeRemoteAccessRequest
+      summary: Re-evaluate an access request after fresh step-up authentication.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+        default:
+          $ref: '#/components/responses/Error'
   /enterprise/remote-access-leases:
     get:
       operationId: listRemoteAccessLeases
@@ -320,6 +1006,66 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - active
+              - history
+              - all
+            default: all
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/RemoteAccessSessionStatus'
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: host_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: managed_account_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: protocol
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/RemoteAccessProtocol'
+        - name: connection_mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - via_bastion
+              - connector_local
+              - direct_ssh
+              - direct_winrm
+        - name: created_from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: created_to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
       responses:
         '200':
           description: Session page.
@@ -442,6 +1188,63 @@ paths:
                 $ref: '#/components/schemas/RemoteAccessRecording'
         default:
           $ref: '#/components/responses/Error'
+  /enterprise/remote-access-recordings:
+    get:
+      operationId: listRemoteAccessRecordings
+      summary: List remote access recordings.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - recording
+              - available
+              - incomplete
+              - failed
+              - expired
+        - name: session_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: host_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: created_from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: created_to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Recording page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteAccessRecordingPage'
+        default:
+          $ref: '#/components/responses/Error'
   /enterprise/remote-access-recordings/{id}/events:
     parameters:
       - name: id
@@ -489,7 +1292,7 @@ components:
         - actions
         - valid_from
         - valid_until
-        - enabled
+        - status
         - version
         - created_at
         - updated_at
@@ -513,8 +1316,6 @@ components:
           items:
             type: string
             format: uuid
-        host_selector:
-          $ref: '#/components/schemas/LabelSelector'
         managed_account_ids:
           type: array
           minItems: 1
@@ -543,8 +1344,8 @@ components:
         valid_until:
           type: string
           format: date-time
-        enabled:
-          type: boolean
+        status:
+          $ref: '#/components/schemas/RemoteAccessGovernanceStatus'
         version:
           type: integer
           format: int64
@@ -570,7 +1371,7 @@ components:
         - actions
         - valid_from
         - valid_until
-        - enabled
+        - status
       properties:
         subject_type:
           $ref: '#/components/schemas/RemoteAccessSubjectType'
@@ -584,8 +1385,6 @@ components:
           items:
             type: string
             format: uuid
-        host_selector:
-          $ref: '#/components/schemas/LabelSelector'
         managed_account_ids:
           type: array
           minItems: 1
@@ -614,8 +1413,11 @@ components:
         valid_until:
           type: string
           format: date-time
-        enabled:
-          type: boolean
+        status:
+          type: string
+          enum:
+            - draft
+          default: draft
     RemoteAccessGrantUpdate:
       type: object
       additionalProperties: false
@@ -628,7 +1430,6 @@ components:
         - actions
         - valid_from
         - valid_until
-        - enabled
         - expected_version
       properties:
         subject_type:
@@ -643,8 +1444,6 @@ components:
           items:
             type: string
             format: uuid
-        host_selector:
-          $ref: '#/components/schemas/LabelSelector'
         managed_account_ids:
           type: array
           minItems: 1
@@ -673,8 +1472,6 @@ components:
         valid_until:
           type: string
           format: date-time
-        enabled:
-          type: boolean
         expected_version:
           type: integer
           format: int64
@@ -692,22 +1489,23 @@ components:
             $ref: '#/components/schemas/RemoteAccessGrant'
         page:
           $ref: '#/components/schemas/CursorPage'
-    RemoteAccessPolicy:
+    RemoteAccessRule:
       type: object
       additionalProperties: false
       required:
         - id
         - enterprise_id
         - name
-        - enabled
+        - description
         - priority
         - protocols
-        - minimum_approvals
-        - separation_of_duties
-        - require_mfa
-        - max_session_seconds
-        - idle_timeout_seconds
+        - actions
+        - source_cidrs
+        - time_windows
+        - effects
+        - status
         - version
+        - created_by
         - created_at
         - updated_at
       properties:
@@ -722,8 +1520,9 @@ components:
           type: string
           minLength: 1
           maxLength: 128
-        enabled:
-          type: boolean
+        description:
+          type: string
+          maxLength: 2048
         priority:
           type: integer
           minimum: 0
@@ -735,61 +1534,74 @@ components:
           uniqueItems: true
           items:
             $ref: '#/components/schemas/RemoteAccessProtocol'
-        host_selector:
-          $ref: '#/components/schemas/LabelSelector'
-        approver_role_ids:
+        actions:
           type: array
+          minItems: 1
+          maxItems: 1
           uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessAction'
+        source_cidrs:
+          type: array
           maxItems: 64
+          uniqueItems: true
           items:
             type: string
-            format: uuid
-        minimum_approvals:
-          type: integer
-          minimum: 1
-          maximum: 16
-        separation_of_duties:
-          type: boolean
-        require_mfa:
-          type: boolean
-        max_session_seconds:
-          type: integer
-          minimum: 60
-          maximum: 3600
-        idle_timeout_seconds:
-          type: integer
-          minimum: 60
-          maximum: 900
+            minLength: 1
+            maxLength: 64
+        time_windows:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/RemoteAccessTimeWindow'
+        effects:
+          type: array
+          maxItems: 4
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessRuleEffect'
+        approval_workflow_id:
+          type: string
+          format: uuid
+        session_profile_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/RemoteAccessGovernanceStatus'
         version:
           type: integer
           format: int64
           minimum: 1
+        created_by:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-    RemoteAccessPolicyWrite:
+    RemoteAccessRuleWrite:
       type: object
       additionalProperties: false
       required:
         - name
-        - enabled
+        - description
         - priority
         - protocols
-        - minimum_approvals
-        - separation_of_duties
-        - require_mfa
-        - max_session_seconds
-        - idle_timeout_seconds
+        - actions
+        - source_cidrs
+        - time_windows
+        - effects
+        - status
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 128
-        enabled:
-          type: boolean
+        description:
+          type: string
+          maxLength: 2048
         priority:
           type: integer
           minimum: 0
@@ -801,52 +1613,64 @@ components:
           uniqueItems: true
           items:
             $ref: '#/components/schemas/RemoteAccessProtocol'
-        host_selector:
-          $ref: '#/components/schemas/LabelSelector'
-        approver_role_ids:
+        actions:
           type: array
+          minItems: 1
+          maxItems: 1
           uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessAction'
+        source_cidrs:
+          type: array
           maxItems: 64
+          uniqueItems: true
           items:
             type: string
-            format: uuid
-        minimum_approvals:
-          type: integer
-          minimum: 1
-          maximum: 16
-        separation_of_duties:
-          type: boolean
-        require_mfa:
-          type: boolean
-        max_session_seconds:
-          type: integer
-          minimum: 60
-          maximum: 3600
-        idle_timeout_seconds:
-          type: integer
-          minimum: 60
-          maximum: 900
-    RemoteAccessPolicyUpdate:
+            minLength: 1
+            maxLength: 64
+        time_windows:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/RemoteAccessTimeWindow'
+        effects:
+          type: array
+          maxItems: 4
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessRuleEffect'
+        approval_workflow_id:
+          type: string
+          format: uuid
+        session_profile_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - draft
+          default: draft
+    RemoteAccessRuleUpdate:
       type: object
       additionalProperties: false
       required:
         - name
-        - enabled
+        - description
         - priority
         - protocols
-        - minimum_approvals
-        - separation_of_duties
-        - require_mfa
-        - max_session_seconds
-        - idle_timeout_seconds
+        - actions
+        - source_cidrs
+        - time_windows
+        - effects
         - expected_version
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 128
-        enabled:
-          type: boolean
+        description:
+          type: string
+          maxLength: 2048
         priority:
           type: integer
           minimum: 0
@@ -858,36 +1682,43 @@ components:
           uniqueItems: true
           items:
             $ref: '#/components/schemas/RemoteAccessProtocol'
-        host_selector:
-          $ref: '#/components/schemas/LabelSelector'
-        approver_role_ids:
+        actions:
           type: array
+          minItems: 1
+          maxItems: 1
           uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessAction'
+        source_cidrs:
+          type: array
           maxItems: 64
+          uniqueItems: true
           items:
             type: string
-            format: uuid
-        minimum_approvals:
-          type: integer
-          minimum: 1
-          maximum: 16
-        separation_of_duties:
-          type: boolean
-        require_mfa:
-          type: boolean
-        max_session_seconds:
-          type: integer
-          minimum: 60
-          maximum: 3600
-        idle_timeout_seconds:
-          type: integer
-          minimum: 60
-          maximum: 900
+            minLength: 1
+            maxLength: 64
+        time_windows:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/RemoteAccessTimeWindow'
+        effects:
+          type: array
+          maxItems: 4
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessRuleEffect'
+        approval_workflow_id:
+          type: string
+          format: uuid
+        session_profile_id:
+          type: string
+          format: uuid
         expected_version:
           type: integer
           format: int64
           minimum: 1
-    RemoteAccessPolicyPage:
+    RemoteAccessRulePage:
       type: object
       additionalProperties: false
       required:
@@ -897,16 +1728,525 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/RemoteAccessPolicy'
+            $ref: '#/components/schemas/RemoteAccessRule'
         page:
           $ref: '#/components/schemas/CursorPage'
+    ApprovalWorkflow:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - name
+        - description
+        - approver_role_ids
+        - minimum_approvals
+        - separation_of_duties
+        - approval_timeout_seconds
+        - escalation_after_seconds
+        - timeout_effect
+        - escalation_role_ids
+        - status
+        - version
+        - created_by
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2048
+        approver_role_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        minimum_approvals:
+          type: integer
+          minimum: 1
+          maximum: 16
+        separation_of_duties:
+          type: boolean
+        approval_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+        escalation_after_seconds:
+          type: integer
+          minimum: 30
+          maximum: 604799
+        timeout_effect:
+          type: string
+          enum:
+            - reject
+            - expire
+        escalation_role_ids:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        status:
+          $ref: '#/components/schemas/RemoteAccessGovernanceStatus'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ApprovalWorkflowWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - description
+        - approver_role_ids
+        - minimum_approvals
+        - separation_of_duties
+        - approval_timeout_seconds
+        - escalation_after_seconds
+        - timeout_effect
+        - escalation_role_ids
+        - status
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2048
+        approver_role_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        minimum_approvals:
+          type: integer
+          minimum: 1
+          maximum: 16
+        separation_of_duties:
+          type: boolean
+        approval_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+        escalation_after_seconds:
+          type: integer
+          minimum: 30
+          maximum: 604799
+        timeout_effect:
+          type: string
+          enum:
+            - reject
+            - expire
+        escalation_role_ids:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        status:
+          type: string
+          enum:
+            - draft
+          default: draft
+    ApprovalWorkflowUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - description
+        - approver_role_ids
+        - minimum_approvals
+        - separation_of_duties
+        - approval_timeout_seconds
+        - escalation_after_seconds
+        - timeout_effect
+        - escalation_role_ids
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2048
+        approver_role_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        minimum_approvals:
+          type: integer
+          minimum: 1
+          maximum: 16
+        separation_of_duties:
+          type: boolean
+        approval_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+        escalation_after_seconds:
+          type: integer
+          minimum: 30
+          maximum: 604799
+        timeout_effect:
+          type: string
+          enum:
+            - reject
+            - expire
+        escalation_role_ids:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    ApprovalWorkflowPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalWorkflow'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    SessionProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - enterprise_id
+        - name
+        - description
+        - max_session_seconds
+        - idle_timeout_seconds
+        - recording_mode
+        - command_audit_mode
+        - clipboard_mode
+        - file_upload_mode
+        - file_download_mode
+        - port_forward_mode
+        - session_share_mode
+        - retention_days
+        - status
+        - version
+        - created_by
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        enterprise_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2048
+        max_session_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        idle_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        recording_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        command_audit_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        clipboard_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_upload_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_download_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        port_forward_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        session_share_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        status:
+          $ref: '#/components/schemas/RemoteAccessGovernanceStatus'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SessionProfileWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - description
+        - max_session_seconds
+        - idle_timeout_seconds
+        - recording_mode
+        - command_audit_mode
+        - clipboard_mode
+        - file_upload_mode
+        - file_download_mode
+        - port_forward_mode
+        - session_share_mode
+        - retention_days
+        - status
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2048
+        max_session_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        idle_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        recording_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        command_audit_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        clipboard_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_upload_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_download_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        port_forward_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        session_share_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        status:
+          type: string
+          enum:
+            - draft
+          default: draft
+    SessionProfileUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - description
+        - max_session_seconds
+        - idle_timeout_seconds
+        - recording_mode
+        - command_audit_mode
+        - clipboard_mode
+        - file_upload_mode
+        - file_download_mode
+        - port_forward_mode
+        - session_share_mode
+        - retention_days
+        - expected_version
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 2048
+        max_session_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        idle_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        recording_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        command_audit_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        clipboard_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_upload_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_download_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        port_forward_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        session_share_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    SessionProfilePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionProfile'
+        page:
+          $ref: '#/components/schemas/CursorPage'
+    RemoteAccessReferences:
+      type: object
+      additionalProperties: false
+      required:
+        - rules
+        - requests
+        - leases
+        - sessions
+      properties:
+        rules:
+          type: integer
+          minimum: 0
+        requests:
+          type: integer
+          minimum: 0
+        leases:
+          type: integer
+          minimum: 0
+        sessions:
+          type: integer
+          minimum: 0
     RemoteAccessRequirement:
       type: object
       additionalProperties: false
       required:
         - id
-        - policy_id
-        - policy_version
         - minimum_approvals
         - separation_of_duties
         - require_mfa
@@ -916,13 +2256,50 @@ components:
         id:
           type: string
           format: uuid
-        policy_id:
+        rule_id:
           type: string
           format: uuid
-        policy_version:
+        rule_version:
           type: integer
           format: int64
           minimum: 1
+        workflow_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: integer
+          format: int64
+          minimum: 1
+        session_profile_id:
+          type: string
+          format: uuid
+        session_profile_version:
+          type: integer
+          format: int64
+          minimum: 1
+        approval_snapshot:
+          type: object
+          additionalProperties: true
+        deadline_at:
+          type: string
+          format: date-time
+        escalation_at:
+          type: string
+          format: date-time
+        escalated_at:
+          type: string
+          format: date-time
+        timeout_effect:
+          type: string
+          enum:
+            - reject
+            - expire
+        escalation_role_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
         minimum_approvals:
           type: integer
           minimum: 1
@@ -1078,6 +2455,36 @@ components:
           type: integer
           format: int64
           minimum: 1
+        decision_outcome:
+          type: string
+          enum:
+            - allowed
+            - denied
+            - awaiting_mfa
+            - awaiting_approval
+        decision_reason_codes:
+          type: array
+          items:
+            type: string
+        decision_snapshot:
+          type: object
+          additionalProperties: true
+        decision_snapshot_hash:
+          type: string
+          pattern: ^[0-9a-fA-F]{64}$
+        matched_grant_snapshots:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        matched_rule_snapshots:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        decision_at:
+          type: string
+          format: date-time
         expires_at:
           type: string
           format: date-time
@@ -1149,6 +2556,9 @@ components:
           type: integer
           format: int64
           minimum: 1
+        decision_snapshot_hash:
+          type: string
+          pattern: ^[0-9a-fA-F]{64}$
         issued_at:
           type: string
           format: date-time
@@ -1206,10 +2616,11 @@ components:
         - connection_mode
         - status
         - session_fence
-        - recording_id
+        - authorization_version
         - idle_timeout_seconds
         - max_duration_seconds
         - connect_before
+        - reason
         - created_at
         - updated_at
       properties:
@@ -1242,6 +2653,16 @@ components:
             - connector_local
             - direct_ssh
             - direct_winrm
+        connector_id:
+          type: string
+          format: uuid
+        connector_epoch:
+          type: integer
+          format: int64
+          minimum: 1
+        gateway_instance:
+          type: string
+          maxLength: 256
         status:
           $ref: '#/components/schemas/RemoteAccessSessionStatus'
         session_fence:
@@ -1249,6 +2670,16 @@ components:
           format: int64
           minimum: 1
           readOnly: true
+        authorization_version:
+          type: integer
+          format: int64
+          minimum: 1
+          readOnly: true
+        reason:
+          type: string
+          maxLength: 2048
+          readOnly: true
+          description: Reason snapshot captured when the session was created.
         recording_id:
           type: string
           format: uuid
@@ -1259,7 +2690,59 @@ components:
         max_duration_seconds:
           type: integer
           minimum: 60
-          maximum: 3600
+          maximum: 86400
+        decision_snapshot_hash:
+          type: string
+          pattern: ^[0-9a-fA-F]{64}$
+        decision_snapshot:
+          type: object
+          additionalProperties: true
+          readOnly: true
+        session_profile_snapshot:
+          type: object
+          additionalProperties: true
+          readOnly: true
+        recording_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        command_audit_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        clipboard_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_upload_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_download_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        port_forward_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        session_share_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
         connect_before:
           type: string
           format: date-time
@@ -1311,7 +2794,7 @@ components:
           writeOnly: true
         websocket_url:
           type: string
-          pattern: ^wss://[^[:space:]]+$
+          pattern: ^wss?://[^[:space:]]+$
         protocol_version:
           type: string
           const: argus.remote_access/v1
@@ -1394,6 +2877,19 @@ components:
         completed_at:
           type: string
           format: date-time
+    RemoteAccessRecordingPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAccessRecording'
+        page:
+          $ref: '#/components/schemas/CursorPage'
     RecordingEventPage:
       type: object
       additionalProperties: false
@@ -1472,92 +2968,6 @@ components:
       enum:
         - user
         - department
-    UserLabelKey:
-      type: string
-      minLength: 1
-      maxLength: 63
-      pattern: ^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-    SystemLabelKey:
-      type: string
-      maxLength: 72
-      pattern: ^argus\.io/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$
-      readOnly: true
-    LabelValue:
-      type: string
-      minLength: 1
-      maxLength: 63
-      pattern: ^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$
-    LabelRequirement:
-      oneOf:
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-            - values
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              const: eq
-            values:
-              type: array
-              minItems: 1
-              maxItems: 1
-              uniqueItems: true
-              items:
-                $ref: '#/components/schemas/LabelValue'
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-            - values
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              const: in
-            values:
-              type: array
-              minItems: 1
-              maxItems: 32
-              uniqueItems: true
-              items:
-                $ref: '#/components/schemas/LabelValue'
-        - type: object
-          additionalProperties: false
-          required:
-            - key
-            - operator
-          properties:
-            key:
-              anyOf:
-                - $ref: '#/components/schemas/UserLabelKey'
-                - $ref: '#/components/schemas/SystemLabelKey'
-            operator:
-              enum:
-                - exists
-                - not_exists
-    LabelSelector:
-      type: object
-      additionalProperties: false
-      required:
-        - schema_version
-        - requirements
-      properties:
-        schema_version:
-          const: argus.label_selector/v1
-        requirements:
-          type: array
-          minItems: 1
-          maxItems: 16
-          items:
-            $ref: '#/components/schemas/LabelRequirement'
     RemoteAccessProtocol:
       type: string
       enum:
@@ -1567,6 +2977,13 @@ components:
       type: string
       enum:
         - terminal
+    RemoteAccessGovernanceStatus:
+      type: string
+      enum:
+        - draft
+        - enabled
+        - disabled
+        - archived
     PartialMetadata:
       type: object
       additionalProperties: false
@@ -1607,10 +3024,260 @@ components:
       minLength: 16
       maxLength: 128
       pattern: ^[A-Za-z0-9._:-]+$
+    RemoteAccessTimeWindow:
+      type: object
+      additionalProperties: false
+      required:
+        - day_of_week
+        - start
+        - end
+        - timezone
+      properties:
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+        start:
+          type: string
+          minLength: 5
+          maxLength: 5
+        end:
+          type: string
+          minLength: 5
+          maxLength: 5
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 64
+    RemoteAccessRuleEffect:
+      type: string
+      enum:
+        - deny
+        - require_mfa
+        - require_approval
+        - notify
+    RemoteAccessRuleSimulationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - host_id
+        - managed_account_id
+        - protocol
+        - action
+        - step_up_authenticated
+      properties:
+        host_id:
+          type: string
+          format: uuid
+        managed_account_id:
+          type: string
+          format: uuid
+        protocol:
+          $ref: '#/components/schemas/RemoteAccessProtocol'
+        action:
+          $ref: '#/components/schemas/RemoteAccessAction'
+        source_ip:
+          type: string
+          format: ip
+        evaluation_time:
+          type: string
+          format: date-time
+        step_up_authenticated:
+          type: boolean
+    RemoteAccessObjectVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    RemoteAccessApprovalRequirementSimulation:
+      type: object
+      additionalProperties: false
+      required:
+        - workflow_id
+        - workflow_version
+        - approver_role_ids
+        - minimum_approvals
+        - separation_of_duties
+        - approval_timeout_seconds
+        - escalation_after_seconds
+        - timeout_effect
+        - escalation_role_ids
+        - source_rule_ids
+      properties:
+        workflow_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: integer
+          format: int64
+          minimum: 1
+        approver_role_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        minimum_approvals:
+          type: integer
+          minimum: 1
+          maximum: 16
+        separation_of_duties:
+          type: boolean
+        approval_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+        escalation_after_seconds:
+          type: integer
+          minimum: 30
+          maximum: 604799
+        timeout_effect:
+          type: string
+          enum:
+            - reject
+            - expire
+        escalation_role_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        source_rule_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    RemoteAccessSessionProfileSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - source_profiles
+        - max_session_seconds
+        - idle_timeout_seconds
+        - recording_mode
+        - command_audit_mode
+        - clipboard_mode
+        - file_upload_mode
+        - file_download_mode
+        - port_forward_mode
+        - session_share_mode
+        - retention_days
+      properties:
+        source_profiles:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RemoteAccessObjectVersion'
+        max_session_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        idle_timeout_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        recording_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        command_audit_mode:
+          type: string
+          enum:
+            - required
+            - optional
+            - disabled
+        clipboard_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_upload_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        file_download_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        port_forward_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        session_share_mode:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+    RemoteAccessRuleSimulationResult:
+      type: object
+      additionalProperties: false
+      required:
+        - outcome
+        - reason_codes
+        - explanation
+        - matched_grants
+        - matched_rules
+        - approval_requirements
+        - session_profile
+        - snapshot_hash
+      properties:
+        outcome:
+          type: string
+          enum:
+            - allowed
+            - denied
+            - awaiting_mfa
+            - awaiting_approval
+        reason_codes:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: array
+          items:
+            type: string
+        matched_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAccessObjectVersion'
+        matched_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAccessObjectVersion'
+        approval_requirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAccessApprovalRequirementSimulation'
+        session_profile:
+          $ref: '#/components/schemas/RemoteAccessSessionProfileSnapshot'
+        snapshot_hash:
+          type: string
+          pattern: ^[0-9a-fA-F]{64}$
     RemoteAccessRequestStatus:
       type: string
       enum:
         - requested
+        - awaiting_mfa
         - awaiting_approval
         - authorized
         - rejected
@@ -1662,6 +3329,14 @@ components:
         type: string
         minLength: 32
         maxLength: 256
+    ExpectedVersion:
+      name: expected_version
+      in: query
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
   responses:
     Error:
       description: Stable Argus API error.

@@ -355,15 +355,29 @@ func (tools ResourceTools) subject(ctx context.Context, call mcp.Call) (resource
 		if err != nil || account.Status != "active" {
 			return resource.Subject{}, uuid.Nil, errors.New("subject unavailable")
 		}
-		scopes, err := tools.Store.Queries.ListServiceAccountDataScopes(ctx, account.ID)
-		return resource.Subject{ActorID: account.ID.String(), ActorType: "service_account", AuthorizationVersion: account.AuthorizationVersion, DataScopeIDs: scopes, RunID: runID}, enterpriseID, err
+		scopes := []uuid.UUID{}
+		for _, typ := range []string{"host", "kubernetes_cluster"} {
+			values, queryErr := tools.Store.Queries.ListServiceAccountAuthorizedResourceIDs(ctx, db.ListServiceAccountAuthorizedResourceIDsParams{ServiceAccountID: account.ID, EnterpriseID: enterpriseID, ResourceType: typ})
+			if queryErr != nil {
+				return resource.Subject{}, uuid.Nil, queryErr
+			}
+			scopes = append(scopes, values...)
+		}
+		return resource.Subject{ActorID: account.ID.String(), ActorType: "service_account", AuthorizationVersion: account.AuthorizationVersion, AuthorizedResourceIDs: scopes, RunID: runID}, enterpriseID, err
 	}
 	user, err := tools.Store.Queries.GetEnterpriseUser(ctx, db.GetEnterpriseUserParams{ID: subjectID, EnterpriseID: enterpriseID})
 	if err != nil || user.Status != "active" {
 		return resource.Subject{}, uuid.Nil, errors.New("subject unavailable")
 	}
-	scopes, err := tools.Store.Queries.ListEffectiveUserDataScopes(ctx, db.ListEffectiveUserDataScopesParams{EnterpriseID: enterpriseID, UserID: user.ID, DepartmentID: user.DepartmentID})
-	return resource.Subject{ActorID: user.ID.String(), AuthorizationVersion: user.AuthorizationVersion, DataScopeIDs: scopes, RunID: runID}, enterpriseID, err
+	scopes := []uuid.UUID{}
+	for _, typ := range []string{"host", "kubernetes_cluster"} {
+		values, queryErr := tools.Store.Queries.ListUserAuthorizedResourceIDs(ctx, db.ListUserAuthorizedResourceIDsParams{UserID: user.ID, EnterpriseID: enterpriseID, ResourceType: typ})
+		if queryErr != nil {
+			return resource.Subject{}, uuid.Nil, queryErr
+		}
+		scopes = append(scopes, values...)
+	}
+	return resource.Subject{ActorID: user.ID.String(), AuthorizationVersion: user.AuthorizationVersion, AuthorizedResourceIDs: scopes, RunID: runID}, enterpriseID, err
 }
 func callID(call mcp.Call, name string) (uuid.UUID, error) {
 	value, ok := call.Input[name].(string)
@@ -425,7 +439,7 @@ func (tools ResourceTools) listHosts(ctx context.Context, call mcp.Call) (mcp.Re
 	if err != nil {
 		return mcp.Result{}, err
 	}
-	items, err := tools.Resources.ListHosts(ctx, enterpriseID, subject.DataScopeIDs)
+	items, err := tools.Resources.ListHosts(ctx, enterpriseID, subject.AuthorizedResourceIDs)
 	if err != nil {
 		return mcp.Result{}, err
 	}
@@ -445,7 +459,7 @@ func (tools ResourceTools) getHost(ctx context.Context, call mcp.Call) (mcp.Resu
 	if err != nil {
 		return mcp.Result{}, err
 	}
-	item, err := tools.Resources.GetHost(ctx, enterpriseID, hostID, subject.DataScopeIDs)
+	item, err := tools.Resources.GetHost(ctx, enterpriseID, hostID, subject.AuthorizedResourceIDs)
 	if err != nil {
 		return mcp.Result{}, err
 	}
@@ -457,7 +471,7 @@ func (tools ResourceTools) listClusters(ctx context.Context, call mcp.Call) (mcp
 	if err != nil {
 		return mcp.Result{}, err
 	}
-	items, err := tools.Resources.ListKubernetesClusters(ctx, enterpriseID, subject.DataScopeIDs)
+	items, err := tools.Resources.ListKubernetesClusters(ctx, enterpriseID, subject.AuthorizedResourceIDs)
 	if err != nil {
 		return mcp.Result{}, err
 	}
@@ -477,7 +491,7 @@ func (tools ResourceTools) getCluster(ctx context.Context, call mcp.Call) (mcp.R
 	if err != nil {
 		return mcp.Result{}, err
 	}
-	item, err := tools.Resources.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.DataScopeIDs)
+	item, err := tools.Resources.GetKubernetesCluster(ctx, enterpriseID, clusterID, subject.AuthorizedResourceIDs)
 	if err != nil {
 		return mcp.Result{}, err
 	}

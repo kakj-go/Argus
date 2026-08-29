@@ -53,7 +53,7 @@ export const accountZh = {
   "account.mfa.state.enabled": "已启用",
   "account.breakGlass.title": "Break Glass",
   "account.breakGlass.description":
-    "仅替代明确允许的审批义务，不扩大角色或数据范围。最长 15 分钟。",
+    "仅替代明确允许的审批义务，不扩大角色或显式资源授权。最长 15 分钟。",
   "account.breakGlass.reason": "原因",
   "account.breakGlass.reasonInvalid": "原因需为 8-2048 个字符",
   "account.breakGlass.ticket": "工单引用",
@@ -133,7 +133,7 @@ export const accountEn = {
   "account.mfa.state.enabled": "Enabled",
   "account.breakGlass.title": "Break glass",
   "account.breakGlass.description":
-    "Replaces only explicitly allowed approval obligations and never expands RBAC or data scope. Maximum 15 minutes.",
+    "Replaces only explicitly allowed approval obligations and never expands RBAC or explicit resource grants. Maximum 15 minutes.",
   "account.breakGlass.reason": "Reason",
   "account.breakGlass.reasonInvalid":
     "The reason must contain 8-2048 characters",

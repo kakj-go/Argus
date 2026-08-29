@@ -1,3 +1,4 @@
+import { enterpriseOrigin, platformOrigin } from "./origins";
 import { expect, test, type Page } from "@playwright/test";
 import { createMfaLogin } from "./helpers/mfa-login";
 
@@ -18,25 +19,35 @@ test.describe("M4 real Agent and governance flow", () => {
   }) => {
     await enterpriseLogin(
       page,
-      "http://127.0.0.1:4173/login",
+      `${enterpriseOrigin}/login`,
       enterpriseUsername,
       enterprisePassword,
     );
 
-    await page.goto("http://127.0.0.1:4173/");
+    await page.goto(`${enterpriseOrigin}/`);
     await expect(page.getByText("M4 recovery flow", { exact: true })).toBeVisible();
 
-    await page.goto("http://127.0.0.1:4173/settings/ai");
+    await page.goto(`${enterpriseOrigin}/settings/ai`);
     await expect(page.getByText("M4 Replay chat_completions", { exact: true })).toBeVisible();
     await expect(page.getByText("M4 Replay responses", { exact: true })).toBeVisible();
 
-    await page.goto("http://127.0.0.1:4173/approvals");
+    await page.goto(`${enterpriseOrigin}/approvals`);
     await expect(
       page.getByRole("button", { name: /Update host.*(Succeeded|已成功)/ }).first(),
     ).toBeVisible();
 
-    await page.goto("http://127.0.0.1:4173/tasks");
+    await page.goto(`${enterpriseOrigin}/tasks`);
     await expect(page.getByText(/Succeeded|已成功/).first()).toBeVisible();
+    const refreshButton = page.getByRole("button", { name: /Refresh|刷新/ });
+    await expect(refreshButton).toBeVisible();
+    await expect(
+      page.locator(".argus-page__header").getByRole("button", {
+        name: /Refresh|刷新/,
+      }),
+    ).toHaveCount(1);
+    const refreshBox = await refreshButton.boundingBox();
+    expect(refreshBox).not.toBeNull();
+    expect(refreshBox!.width).toBeLessThanOrEqual(40);
 
     await expectNoCredentialInBrowserState(page, "m4-write-only-key");
   });
@@ -46,11 +57,11 @@ test.describe("M4 real Agent and governance flow", () => {
   }) => {
     await platformLogin(
       page,
-      "http://127.0.0.1:4174/login",
+      `${platformOrigin}/login`,
       platformUsername,
       platformPassword,
     );
-    await page.goto("http://127.0.0.1:4174/sandbox");
+    await page.goto(`${platformOrigin}/sandbox`);
     await expect(page.getByText("M4 OpenSandbox", { exact: true })).toBeVisible();
     await page.getByRole("tab", { name: "Sandbox Profiles" }).click();
     await expect(page.getByText("M4 smoke", { exact: true })).toBeVisible();

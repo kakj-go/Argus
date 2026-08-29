@@ -1,5 +1,7 @@
 # Argus 端到端实现计划
 
+> 数据授权重构包含显式授权表、批量授权 API、双栏授权弹框和创建后只读授权；删除 RoleBinding 数据范围、动态标签授权和独立权限管理页。
+
 ## 1. 目标
 
 本计划从当前“前端 mock 产品原型 + 后端进程骨架 + 可安装 Evaluation 基座”推进到可真实使用、可审计、可恢复、可在 Kubernetes 临时 Namespace 完成全链路验收的第一版产品。
@@ -9,7 +11,7 @@
 ```text
 安装与初始化
 → 平台创建企业和初始管理员
-→ 企业建立用户/部门、RoleBinding 和 DataScope
+→ 企业建立用户/部门、RoleBinding 和 DataAuthorizationGrant
 → 接入带 labels 的 Host/Kubernetes 与 Connector
 → 用户或 Agent 在授权范围内查询/Preview
 → 用户确认、必要审批、确定性 Commit
@@ -28,7 +30,7 @@
 - EnterpriseUser 直接绑定唯一 `enterprise_id + department_id`；无 Membership、企业切换和通用用户 Group。
 - 无 Project、`project_id`、Default Project、Project Selector 或 Project RoleBinding。
 - Host/KubernetesCluster 使用 `labels: Record<string,string>` 归类；`argus.io/*` 为系统保留命名空间。
-- RoleBinding 授予功能能力；DataScope 使用显式资源 ID 和/或受限标签选择器授权资源。
+- RoleBinding 授予功能能力；DataAuthorizationGrant 只使用明确 Host/Kubernetes Cluster ID 授权资源。
 - 所有变更使用 Preview/Commit；私有 Token 和参数只在服务端保存。
 - Card 使用 Manifest、CSP、MessageChannel/MessagePort 和 Binding ID。
 - 人工 RemoteAccessSession 与 AI/Tool Execution 使用不同票据、接口、状态机和审计；当前版本不提供定时无人值守任务。企业审批收件箱以桌面端为唯一正式支持视口，移动端不纳入 M4/M6 E2E 验收。
@@ -70,9 +72,9 @@
 
 ### 3.4 E2E 资源纪律
 
-统一入口为 `go run ./cmd/argus-dev e2e run --suite <m2|m3|m4|m5|m6|m7|m8|m10-query>`。Harness 使用真实 `argusctl` 子进程安装和验证正式 Helm Release；client-go 只管理 Lease、临时 Namespace、Fixture、等待、日志、exec、port-forward 和清理。Playwright 继续执行现有 TypeScript spec。
+统一入口为 `go run ./cmd/argus-dev e2e run --suite <m2|m3|m4|m5|m6|m7|m8|m10-query>`。Harness 使用真实 `argusctl` 子进程安装和验证正式 Helm Release；client-go 只管理 Lease、临时 Namespace、Fixture、等待、日志、exec 和清理。被测入口与产品形态一致：Playwright 与 Go 场景都通过域名访问 Ingress（host-resolver-rules 钉到负载均衡地址），Connector mTLS 走专用 LoadBalancer，不再使用宿主机 port-forward。Playwright 继续执行现有 TypeScript spec。
 
-轻量门禁在 Windows、Linux、macOS 使用相同命令；完整 E2E 由 `doctor e2e` 检查容器、集群、节点架构、StorageClass、端口、25 GiB 磁盘能力，以及 Strimzi/OpenSandbox 固定 ClusterRole 未被其他 Helm release 占用。完整 E2E 使用专用干净 Context，不与正式 Argus release 共用集群；能力不足属于明确的环境错误，不得伪装成测试通过或静默跳过。
+轻量门禁在 Windows、Linux、macOS 使用相同命令；完整 E2E 由 `doctor e2e` 检查容器、集群、节点架构、StorageClass、25 GiB 磁盘能力，以及 Strimzi/OpenSandbox 固定 ClusterRole 未被其他 Helm release 占用。完整 E2E 使用专用干净 Context，不与正式 Argus release 共用集群；能力不足属于明确的环境错误，不得伪装成测试通过或静默跳过。
 
 全链路测试使用唯一 Run ID 创建临时 Namespace；必要时记录并缩容常驻无状态服务。无论成功或失败都必须导出脱敏诊断信息、删除临时 Namespace/PVC/测试 Topic/Bucket，并恢复常驻服务副本数。
 
@@ -80,15 +82,17 @@
 
 | 阶段 | 目标 | 关键退出结果 |
 | --- | --- | --- |
-| M0 | 契约冻结与文档收敛 | 身份、labels/DataScope、错误、流式、PendingAction、Card、Agent Event/ContextSnapshot 契约可生成且有 Breaking Check |
+| M0 | 契约冻结与文档收敛 | 身份、labels/DataAuthorizationGrant、错误、流式、PendingAction、Card、Agent Event/ContextSnapshot 契约可生成且有 Breaking Check |
 | M1 | 前端与 API 基座 | real/mock Adapter 分离，UI/Token/i18n/安全欠账收敛，前端不再暴露私有 PendingAction 参数 |
-| M2 | 初始化、身份与授权闭环 | Setup、平台域、企业域、Department、RoleBinding/DataScope、Session、审计走真实 API |
+| M2 | 初始化、身份与授权闭环 | Setup、平台域、企业域、Department、RoleBinding/DataAuthorizationGrant、Session、审计走真实 API |
 | M3 | 资源与连接闭环 | 带 labels 的 Host/Kubernetes、Secret/Credential、Connector、Bastion Scope、Direct Executor 可真实管理 |
 | M4 | 确定性执行闭环 | Outbox/Lease/Fence、Run、单 Agent Loop、上下文投影/压缩、Tool 权限/Schema 门禁、Preview/PendingAction/Approval/Execution 可恢复执行、桌面审批收件箱 |
 | M5 | Card 闭环 | 系统 Card 通过 CSP/MessagePort/Manifest/Binding 安全展示和触发动作，企业 Card 通过发布门禁 |
 | M6 | 人工远程访问闭环 | Grant、短期票据、SSH PTY/HTTPS WinRS、加密录像、终止、撤权和审计完整 |
 | M7 | 遥测闭环 | Collector、Ingest/Kafka/ClickHouse/Query、可信资源身份和统一数据裁剪贯通 |
 | M8 | 本地安全与恢复 | TOTP/Step-up、OpenBao、备份恢复、升级、供应链和本地 Kubernetes E2E 达标 |
+
+M6 的 PlanV3 Task 01 已固化远程访问治理契约，Task 02 已将 `RemoteAccessPolicy` 直接切换为 `RemoteAccessRule`、`ApprovalWorkflow` 和 `SessionProfile`，删除旧 Policy，并以统一决策、不可变 Request/Lease/Session 快照、`awaiting_mfa`/`resume`、Workflow 可配置升级阈值、拒绝决策审计、`notify` Outbox 和快照撤权贯通现有连接底座。录像与命令审计的 required/optional/disabled 基础模式也已在 Session/Gateway 执行；控制台信息架构仍按 Task 04 实施。
 
 详细任务见[分阶段任务文件](./plans/README.md)。
 
@@ -122,7 +126,7 @@ M1 与 M2 可以在 M0 契约稳定后部分并行，但真实页面接入必须
 
 - OpenAPI 3.1 是浏览器和外部 API 权威协议。
 - protobuf 是内部服务和 Connector 权威协议。
-- JSON Schema 固化标签选择器、PendingAction 公共投影、Card Manifest/RenderPlan 和安装配置。
+- JSON Schema 固化标签过滤条件、PendingAction 公共投影、Card Manifest/RenderPlan 和安装配置。
 - PostgreSQL Migration 与领域对象同阶段提交；普通服务启动不得自动改 Schema。
 - 所有协议在 CI 执行 lint、生成漂移和 Breaking Change 检查。
 
@@ -141,7 +145,7 @@ M1 与 M2 可以在 M0 契约稳定后部分并行，但真实页面接入必须
 - PostgreSQL 保存事实；Redis 只做加速、通知、限流和短期协调。
 - 事务状态变化与 Outbox 同事务提交。
 - Worker/Connector/Execution 使用幂等键、Lease/Fence 和 ResultUnknown 对账。
-- 所有企业资源查询先校验真实 `enterprise_id`，再应用 DataScope。
+- 所有企业资源查询先校验真实 `enterprise_id`，再应用 DataAuthorizationGrant。
 - Agent 使用不可变 ConversationEvent Ledger、结构化 RunCheckpoint 和派生 ContextSnapshot；大 ToolResult 先确定性投影，压缩不删除原始历史。`ModelCall` 保存调用与计费事实，`ModelUsage` 只作为聚合查询投影。
 - ContextAssembler 与 ModelProvider Adapter 分离，默认生成 Provider-neutral 上下文；Provider 原生 Compaction 只作可选优化。
 
@@ -150,7 +154,7 @@ M1 与 M2 可以在 M0 契约稳定后部分并行，但真实页面接入必须
 - Platform/Enterprise 使用不同 Session Audience、API 域和路由守卫。
 - 浏览器生产认证使用 HttpOnly/Secure/SameSite Cookie 与 CSRF，不以 localStorage 保存权威 Session。
 - Secret/APIKey/ServiceAccount 原值只显示一次，数据库保存哈希或 `secret_ref`。
-- 所有授权变化和授权敏感标签变化递增 AuthorizationVersion。
+- 所有显式授权关系和角色/部门继承关系变化递增 AuthorizationVersion；标签变化不改变授权版本。
 - PendingAction 公共 DTO 与内部记录分离；浏览器、模型和 Card 永远看不到私有参数/Token。
 - 每个阶段同步补齐审计事件、字段脱敏和审计查询权限。
 
@@ -160,16 +164,16 @@ M8 结束时至少通过以下全链路场景：
 
 1. 全新 Namespace 安装后使用 `argusctl` 输出的一次性初始化链接创建平台超级管理员；页面无 Token 输入框、Fragment 被立即清除，Setup 随后永久锁定。
 2. 平台管理员创建企业和初始管理员，但无法读取企业业务正文。
-3. 企业管理员创建 Department、用户、RoleBinding 和基于 `environment=staging` 的 DataScope。
+3. 企业管理员创建 Department、用户、RoleBinding 和基于 `environment=staging` 的 DataAuthorizationGrant。
 4. 接入带标签的堡垒机、经堡垒机 Host、直连 Host 和 KubernetesCluster。
 5. 范围内用户可以列表/详情/Tool 查询资源，范围外资源通过直接 ID、批量、游标、Card 和遥测查询均不可见。
-6. 修改授权敏感标签使 Host 离开 DataScope，旧游标、PendingAction 和票据失效，活动订阅重新鉴权。
+6. 修改显式授权关系或角色/部门继承关系后，旧游标、PendingAction 和票据失效，活动订阅重新鉴权；标签变化仅影响筛选结果。
 7. Agent 发起变更 Preview，可信 `run_id` 贯穿 PendingAction、Execution 和 Verify；浏览器只持有 ActionBinding，用户确认后 Action Executor 确定性 Commit，重复点击不产生重复副作用。
 8. 长会话和大 ToolResult 触发确定性投影与 ContextSnapshot；原始事件仍可追溯，Worker 重启后能从相同切点恢复，摘要不能恢复已撤销权限。
 9. 需要审批的生产动作不能由创建人自批；多策略必须全部满足；撤权后 Commit 失败；ResultUnknown 仅依据外部命令终态对账且不重放副作用。
 10. 桌面审批收件箱支持“操作审批 / 远程访问审批”一级 Tab，以及“待我审批 / 我发起的 / 已处理”二级范围；刷新和深链接保持选择，远程访问申请不混入 PendingAction 列表。
 11. 系统 Card 使用 MessagePort 展示裁剪后的 Tool Result，伪造消息、Binding ID 或 Origin 被拒绝。
-12. RemoteAccessGrant 只允许指定 Host/标签结果与 ManagedAccount；票据撤销、会话终止、录像和审计可验证。
+12. RemoteAccessGrant 只允许指定 Host 与 ManagedAccount；票据撤销、会话终止、录像和审计可验证。
 13. Collector 伪造 Enterprise/Resource/Collector 身份被覆盖或拒绝，Metrics/Logs/Traces 只通过 Query Service 按资源范围返回。
 14. 删除 Server/Worker/Gateway/Writer Pod、清空 Redis、制造 Kafka 积压和 ClickHouse Replica 故障后，事实状态可恢复且无重复危险执行。
 15. 备份恢复到新 Namespace 后关键业务、审计索引和遥测查询符合恢复目标。

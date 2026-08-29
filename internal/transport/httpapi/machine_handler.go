@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	machineapi "github.com/kakj-go/Argus/internal/gen/openapi/machine"
 	"github.com/kakj-go/Argus/internal/identity"
@@ -56,7 +55,7 @@ func (handler MachineHandler) CreateServiceAccount(ctx context.Context, request 
 	if request.Body.Description != nil {
 		description = *request.Body.Description
 	}
-	result, err := handler.Service.CreateServiceAccount(p.Context(ctx), p.ActorID(), p.EnterpriseIDValue(), identity.ServiceAccountInput{Name: request.Body.Name, Description: description, AllowedToolIDs: request.Body.AllowedToolIds, DataScopeIDs: machineUUIDSlice(request.Body.DataScopeIds)}, request.Params.IdempotencyKey)
+	result, err := handler.Service.CreateServiceAccount(p.Context(ctx), p.ActorID(), p.EnterpriseIDValue(), identity.ServiceAccountInput{Name: request.Body.Name, Description: description, AllowedToolIDs: request.Body.AllowedToolIds}, request.Params.IdempotencyKey)
 	if err != nil {
 		return machineapi.CreateServiceAccountdefaultJSONResponse{Body: machineError(ctx, err), StatusCode: http.StatusConflict}, nil
 	}
@@ -79,16 +78,12 @@ func (handler MachineHandler) UpdateServiceAccount(ctx context.Context, request 
 	if request.Body.AllowedToolIds != nil {
 		tools = append([]string(nil), (*request.Body.AllowedToolIds)...)
 	}
-	var scopes []uuid.UUID
-	if request.Body.DataScopeIds != nil {
-		scopes = machineUUIDSlice(*request.Body.DataScopeIds)
-	}
 	var status *string
 	if request.Body.Status != nil {
 		v := string(*request.Body.Status)
 		status = &v
 	}
-	result, err := handler.Service.UpdateServiceAccount(p.Context(ctx), p.ActorID(), p.EnterpriseIDValue(), uuid.UUID(request.Id), identity.ServiceAccountInput{Description: description, AllowedToolIDs: tools, DataScopeIDs: scopes, Status: status, ExpectedVersion: request.Body.ExpectedVersion})
+	result, err := handler.Service.UpdateServiceAccount(p.Context(ctx), p.ActorID(), p.EnterpriseIDValue(), uuid.UUID(request.Id), identity.ServiceAccountInput{Description: description, AllowedToolIDs: tools, Status: status, ExpectedVersion: request.Body.ExpectedVersion})
 	if err != nil {
 		return machineapi.UpdateServiceAccountdefaultJSONResponse{Body: machineError(ctx, err), StatusCode: http.StatusConflict}, nil
 	}
@@ -168,11 +163,7 @@ func (handler MachineHandler) auth(ctx context.Context, mutation bool, csrf, per
 }
 func toMachineServiceAccount(value identity.ServiceAccountRecord) machineapi.ServiceAccount {
 	tools := append([]string(nil), value.Account.AllowedToolIds...)
-	scopes := make([]string, len(value.DataScopeIDs))
-	for i, v := range value.DataScopeIDs {
-		scopes[i] = v.String()
-	}
-	result := machineapi.ServiceAccount{Id: value.Account.ID.String(), EnterpriseId: value.Account.EnterpriseID.String(), Name: value.Account.Name, AllowedToolIds: &tools, DataScopeIds: &scopes, Status: machineapi.ServiceAccountStatus(value.Account.Status), AuthorizationVersion: value.Account.AuthorizationVersion, Version: value.Account.Version, CreatedAt: value.Account.CreatedAt.Time, UpdatedAt: value.Account.UpdatedAt.Time}
+	result := machineapi.ServiceAccount{Id: value.Account.ID.String(), EnterpriseId: value.Account.EnterpriseID.String(), Name: value.Account.Name, AllowedToolIds: &tools, Status: machineapi.ServiceAccountStatus(value.Account.Status), AuthorizationVersion: value.Account.AuthorizationVersion, Version: value.Account.Version, CreatedAt: value.Account.CreatedAt.Time, UpdatedAt: value.Account.UpdatedAt.Time}
 	if value.Account.Description != "" {
 		result.Description = &value.Account.Description
 	}
@@ -185,13 +176,6 @@ func toMachineAPIKey(value db.ApiKey) machineapi.ApiKey {
 	}
 	if value.LastUsedAt.Valid {
 		result.LastUsedAt = &value.LastUsedAt.Time
-	}
-	return result
-}
-func machineUUIDSlice(values []openapi_types.UUID) []uuid.UUID {
-	result := make([]uuid.UUID, len(values))
-	for i, v := range values {
-		result[i] = uuid.UUID(v)
 	}
 	return result
 }

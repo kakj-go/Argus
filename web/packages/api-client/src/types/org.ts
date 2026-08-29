@@ -1,7 +1,6 @@
 import type { ISODateString, RiskLevel } from "./common";
 import type {
   ApiKey,
-  DataScope,
   EnterpriseUser,
   EnterpriseUserUpdate,
   Permission,
@@ -12,7 +11,6 @@ import type {
 
 export type {
   ApiKey,
-  DataScope,
   Department,
   Role,
   RoleBinding,
@@ -44,17 +42,29 @@ export interface CreateRoleBindingInput {
   subject_type: RoleBindingSubjectType;
   subject_id: string;
   role_id: string;
-  data_scope_ids: string[];
   valid_from?: ISODateString;
   valid_until?: ISODateString;
   status?: RoleBindingStatus;
 }
 
 export interface UpdateRoleBindingInput {
-  data_scope_ids?: string[];
   status?: RoleBindingStatus;
   valid_from?: ISODateString | null;
   valid_until?: ISODateString | null;
+}
+
+export interface InheritedRoleAssignment {
+  role_id: string;
+  source_type: "department";
+  source_id: string;
+  source_name: string;
+}
+
+export interface UserRoleAssignments {
+  direct_role_ids: string[];
+  inherited_roles: InheritedRoleAssignment[];
+  effective_role_ids: string[];
+  authorization_version: number;
 }
 
 export interface CreateRoleInput {
@@ -63,27 +73,33 @@ export interface CreateRoleInput {
   permissions: string[];
 }
 
-export interface SaveDataScopeInput {
-  id?: string;
-  name: string;
-  description?: string;
-  resource_types: DataScope["resource_types"];
-  explicit_resource_ids: string[];
-  match_all: boolean;
-  label_selector?: DataScope["label_selector"];
-  status?: DataScope["status"];
-}
-
 export interface CreateServiceAccountInput {
   name: string;
   description?: string;
   allowed_tool_ids?: string[];
-  data_scope_ids?: string[];
 }
 
 export interface CreateApiKeyInput {
   name: string;
   expires_at?: string;
+}
+
+export type DataAuthorizationSubjectType =
+  "user" | "department" | "role" | "service_account";
+export type DataAuthorizationResourceType = "host" | "kubernetes_cluster";
+export interface DataAuthorizationResource {
+  resource_type: DataAuthorizationResourceType;
+  resource_id: string;
+  name: string;
+  direct: boolean;
+  inherited: boolean;
+  sources: string[];
+}
+export interface DataAuthorizationPage {
+  items: DataAuthorizationResource[];
+  page: { next_cursor: string | null; has_more: boolean };
+  authorization_version: number;
+  affected_member_count: number;
 }
 
 export interface ApprovalPolicy {
@@ -93,7 +109,6 @@ export interface ApprovalPolicy {
   matchRiskLevels: Array<Exclude<RiskLevel, "read">>;
   toolIds?: string[];
   resourceTypes?: string[];
-  labelSelector?: import("../generated/contracts").LabelSelector;
   minApprovers: number;
   approverRoleIds: string[];
   separationOfDuty: boolean;

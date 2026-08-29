@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -155,15 +154,6 @@ func (a *App) doctorWithOptions(ctx context.Context, scope string, options docto
 			add("kubernetes-storage", "fail", err.Error())
 		} else {
 			add("kubernetes-storage", "pass", strings.ReplaceAll(output, "\n", ", "))
-		}
-		for _, port := range []int{4173, 4174, 4176, 4180, 4193, 4195, m6BastionSSHForwardPort} {
-			listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-			if err != nil {
-				add(fmt.Sprintf("port/%d", port), "fail", "already in use")
-				continue
-			}
-			_ = listener.Close()
-			add(fmt.Sprintf("port/%d", port), "pass", "available")
 		}
 	}
 	if scope == "release" {

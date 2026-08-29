@@ -11,8 +11,10 @@ COPY web ./web
 RUN pnpm install --frozen-lockfile
 ARG VITE_API_MODE=real
 ARG VITE_API_BASE_URL=/
-ARG VITE_CARD_ORIGIN=http://localhost:4176
-ARG VITE_PLATFORM_URL=http://localhost:4174
+# Card origin and platform login URL are resolved at runtime from
+# /argus-runtime.json (injected by Helm); VITE_* values are dev/mock overrides.
+ARG VITE_CARD_ORIGIN=
+ARG VITE_PLATFORM_URL=
 ARG VITE_DIRECT_EGRESS_ADDRESSES=
 RUN VITE_API_MODE=$VITE_API_MODE \
     VITE_API_BASE_URL=$VITE_API_BASE_URL \

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import type {
   TaskStatus,
   TaskType,
@@ -21,8 +22,10 @@ import {
   DataTable,
   EmptyState,
   FilterBar,
+  IconButton,
   PageShell,
   Progress,
+  RowAction,
   Spinner,
   StatCard,
   StatusBadge,
@@ -106,6 +109,22 @@ function ExecutionsPage() {
   };
   return (
     <PageShell
+      actions={
+        <IconButton
+          disabled={executions.isFetching}
+          label={t("governance.tasks.refresh")}
+          onClick={() =>
+            void queryClient.invalidateQueries({ queryKey: ["executions"] })
+          }
+          variant="secondary"
+        >
+          <RefreshCw
+            aria-hidden
+            className={executions.isFetching ? "argus-spin" : undefined}
+            size={16}
+          />
+        </IconButton>
+      }
       description={t("governance.tasks.description")}
       title={t("governance.tasks.title")}
     >
@@ -171,13 +190,12 @@ function ExecutionsPage() {
               header: t("governance.tasks.columns.oneTimeResult"),
               render: (item) =>
                 item.one_time_result_available ? (
-                  <Button
+                  <RowAction
                     loading={claimingExecution === item.execution_id}
                     onClick={() => void claimOneTimeResult(item)}
-                    variant="secondary"
                   >
                     {t("governance.tasks.claimOneTimeResult")}
-                  </Button>
+                  </RowAction>
                 ) : (
                   "—"
                 ),
@@ -215,14 +233,6 @@ function ExecutionsPage() {
           </Button>
         </section>
       )}
-      <Button
-        onClick={() =>
-          queryClient.invalidateQueries({ queryKey: ["executions"] })
-        }
-        variant="secondary"
-      >
-        {t("governance.tasks.refresh")}
-      </Button>
     </PageShell>
   );
 }

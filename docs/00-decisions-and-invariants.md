@@ -38,17 +38,17 @@ labels: Record<string, string>
 
 - 标签键和值必须经过长度、字符集、数量和总大小校验；同一资源的标签键唯一。
 - `argus.io/*` 为系统保留命名空间，普通用户不能写入或覆盖。
-- Host 和 KubernetesCluster 的列表、过滤、批量操作、遥测和授权选择器复用同一标签语义，不再并行维护 `tags`。
-- 标签是企业内归类、筛选和资源范围授权的条件，不是新的租户边界。
-- 标签选择器必须使用受限、版本化语法并由服务端编译，禁止接收任意 SQL、CEL 或正则作为资源查询条件。
-- 修改被生效 DataScope 或 RemoteAccessGrant 选择器命中的标签属于授权敏感变更，必须 Preview/Commit、递增相关 `AuthorizationVersion` 并使旧票据、游标、Pending Action 和活动订阅及时失效。
+- Host 和 KubernetesCluster 的列表、过滤、批量操作和遥测筛选复用同一标签语义，不再并行维护 `tags`；授权只使用显式资源 ID。
+- 标签是企业内归类和筛选条件，不参与数据授权判断，也不是新的租户边界。
+- 数据授权只接受明确 Host/Kubernetes Cluster ID；标签过滤条件不再是授权输入。
+- 标签变化不会改变授权结果或递增授权版本；只有显式授权关系、角色/部门继承关系变化才触发失效。
 
 范围含义必须分离：
 
 ```text
 enterprise_id                    -> 唯一租户和安全隔离边界
-RoleBinding + DataScope          -> 功能能力与企业内资源授权范围
-Host/KubernetesCluster labels    -> 用户归类、筛选和资源选择条件
+RoleBinding + DataAuthorization  -> 功能能力与企业内资源授权范围
+Host/KubernetesCluster labels    -> 用户归类、筛选和资源选择条件（不授权）
 Bastion Scope                    -> 网络接入和堡垒机路由范围
 Telemetry Group                  -> 独立 Collector 的遥测转发拓扑
 ```
@@ -57,10 +57,16 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 
 ## 3. 授权与权威状态
 
+### 3.1 显式资源授权基线
+
+- 数据授权使用显式资源授权关系，不再通过动态标签过滤条件决定访问结果；标签只用于展示、搜索、普通筛选和保存视图。
+- 用户有效范围为用户、部门和角色授权的并集；无 Deny，也不支持排除继承资源。RoleBinding 只承载功能权限。
+- 创建只检查功能创建权限，成功后在同一资源事务中向创建主体授予资源只读授权。Kubernetes 以 Cluster 为授权粒度，下级对象继承 Cluster 授权。
+
 - RoleBinding 只在企业范围内向 User、Department 或 ServiceAccount 授予稳定的功能能力。
-- DataScope 向主体或 RoleBinding 授予显式资源 ID 和/或经过校验的标签选择器；RoleBinding 没有匹配的 DataScope 时，不得推导为企业内全部资源。
-- RemoteAccessGrant 独立限定 Host、ManagedAccount、协议、动作和有效期；可以使用显式 Host ID 或经过校验的 Host 标签选择器，不能使用“企业内全部主机”作为隐式默认。
-- PostgreSQL 保存所有唯一业务状态，包括 User、Department、RoleBinding、DataScope、RemoteAccessGrant、ManagedAccount、AuthorizationVersion、Run、Step、Task、ToolCall、PendingAction、Approval、ActionBinding、Execution、ConnectorCommand、BastionScope、RemoteAccessSession 和审计索引。
+- DataAuthorizationGrant 向主体授予明确资源 ID；用户有效范围为直接、部门和角色授权并集，RoleBinding 不携带显式资源授权。
+- RemoteAccessGrant 独立限定明确 Host、ManagedAccount、协议、动作和有效期，不能使用标签过滤条件或企业全量隐式默认。
+- PostgreSQL 保存所有唯一业务状态，包括 User、Department、RoleBinding、explicit resource authorization、RemoteAccessGrant、ManagedAccount、AuthorizationVersion、Run、Step、Task、ToolCall、PendingAction、Approval、ActionBinding、Execution、ConnectorCommand、BastionScope、RemoteAccessSession 和审计索引。
 - Redis 用于短期锁、租约加速、幂等窗口、限流、Session Registry 缓存、状态变更通知和短期一次性数据，但不能成为任何不可恢复状态的唯一存储。
 - PostgreSQL 与 Redis 之间不使用跨存储分布式事务。业务状态先通过 PostgreSQL 事务和条件更新提交，再通过 Transactional Outbox 发布 Redis Stream/PubSub 通知。
 - Redis 丢失或被清空后，系统必须能够从 PostgreSQL 重建可恢复状态并继续运行。
@@ -72,16 +78,16 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 - `argus__token` 和 PendingAction 私有参数不得进入模型上下文、用户消息、浏览器、Card DOM、日志、普通 Tool Result、公开 API DTO 或审计正文。
 - `.commit` 只接受 `argus__token` 和由服务端生成的幂等上下文，不接受可由用户、浏览器或模型修改的业务参数。
 - 用户点击确认后，由 `argus-server` 内的 Action Executor 使用服务端私有 Token 直接调用 `.commit`，不再启动模型推理。
-- Commit 必须重新检查当前身份、企业状态、功能权限、DataScope、远程/操作授权、授权版本、审批、资源归属、资源标签/版本和执行前置条件。审批只能满足 Policy 的附加条件，不能补齐缺失的基础权限。
+- Commit 必须重新检查当前身份、企业状态、功能权限、explicit resource authorization、远程/操作授权、授权版本、审批、资源归属、资源标签/版本和执行前置条件。审批只能满足 Rule 的附加条件，不能补齐缺失的基础权限。
 
 ## 5. AI、Card 和 Sandbox 不变量
 
 - AI 负责理解、规划和选择，不是权限、审批、Secret 或唯一状态的边界。
-- Model Agent 可发现的 Tool、可读取的数据和可操作的资源不得超过当前企业用户的功能权限与 DataScope。Conversation/Run 只绑定服务端确认的 `enterprise_id`；模型输出的企业、标签选择器或资源 ID 只是候选参数。
+- Model Agent 可发现的 Tool、可读取的数据和可操作的资源不得超过当前企业用户的功能权限与 explicit resource authorization。Conversation/Run 只绑定服务端确认的 `enterprise_id`；模型输出的企业、标签过滤条件或资源 ID 只是候选参数。
 - 每个 ToolCall、Run、PendingAction 和 Execution 必须保存目标资源引用、授权版本、功能权限和资源范围快照，以便 Commit、恢复、审计和撤权判断。
 - Agent Harness 第一版采用单 Agent 小内核；通用子 Agent、Agent 间消息和动态角色委派延后。Card Render 是同一 Run 内的受限声明式步骤，不拥有独立权限。
 - ConversationEvent Ledger、RunState/RunCheckpoint 和 ModelContextProjection 必须分离。完整事件历史只追加并保存在 PostgreSQL/Artifact Store；上下文压缩只能生成派生 ContextSnapshot，不能删除、覆盖或成为唯一历史。
-- 模型上下文固定由服务端 ContextAssembler 生成，结构为 Typed Run Checkpoint + Narrative Summary + 未压缩的最近完整 Turn。摘要是不可信派生文本，不能作为授权、审批、Commit、DataScope、资源归属或执行状态事实。
+- 模型上下文固定由服务端 ContextAssembler 生成，结构为 Typed Run Checkpoint + Narrative Summary + 未压缩的最近完整 Turn。摘要是不可信派生文本，不能作为授权、审批、Commit、explicit resource authorization、资源归属或执行状态事实。
 - 大 ToolResult 必须优先通过版本化 Projection Schema 做确定性裁剪，完整结果保存在服务端并以 `result_ref` 引用；不能依靠递归自然语言摘要保存唯一诊断证据。
 - 自动 Compaction 按模型 Token 预算触发，保留输出预算和安全余量，切点不能拆开 ToolCall/ToolResult、PendingAction 或 Execution 事件组。压缩失败不得静默截断历史。
 - Provider 原生 Compaction 只能是 ModelProvider Adapter 的可选优化，不能清空 Argus 事件账本或成为跨 Provider 唯一恢复状态。
@@ -95,17 +101,31 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 
 ## 6. Connector、远程访问和遥测不变量
 
+### 6.1 PlanV3 远程访问治理边界
+
+远程访问配置拆分为 `RemoteAccessGrant`、`RemoteAccessRule`、`ApprovalWorkflow` 和 `SessionProfile` 四个对象。Grant 是正向基础访问资格；Rule 是可选的条件与义务叠加层，只能增加 `deny`、MFA、审批、通知或 SessionProfile 限制，不能扩大 Grant。Workflow 只表达审批主体、人数、职责分离和超时；SessionProfile 只表达会话时长、交互能力、录像、命令审计和留存。Rule 不再提供冗余的 `allow` effect；`deny` 不能与其它 effect 或 Workflow/Profile 引用共存。
+
+有效 DataAuthorizationGrant、RemoteAccessGrant、Host、ManagedAccount、协议、动作和有效期均匹配时，即具备建立远程访问申请的基线资格。没有匹配 Rule 不是拒绝条件，决策必须允许访问并使用系统安全默认 SessionProfile；有匹配 Rule 时合并全部附加义务，任意 `deny` 始终优先。Rule 可以只引用 SessionProfile 而不配置 effect，但不能同时缺少 effect 和 SessionProfile。
+
+配置对象统一使用 `draft → enabled → disabled → archived`、`version` 和 `expected_version`。CSRF、幂等键和企业归属校验是所有写操作的共同前置条件；治理对象不提供物理删除，数据库删除保护器也会拒绝直接 `DELETE`，归档是唯一退出路径。旧 `RemoteAccessPolicy` API、代码、权限和表已经删除，`RemoteAccessDecisionService` 是申请、恢复、模拟和 Session 二次评估的唯一授权入口。
+
+AccessRequest、AccessLease 和 RemoteAccessSession 必须保存不可变决策/Profile 快照、规范化来源对象 `ID + version` 和 SHA-256 `snapshot_hash`；读取或流转时校验失败必须拒绝。需要 fresh Step-up 的申请进入 `awaiting_mfa`，只能通过服务端读取当前认证会话状态的 `resume` 继续，浏览器提交的 MFA 证明不构成授权事实。审批 Requirement 按 Workflow 独立保存，并冻结由 `escalation_after_seconds` 计算的 `escalation_at`；Worker 每 30 秒以 PostgreSQL `FOR UPDATE SKIP LOCKED` 处理 MFA 过期、单次升级和审批超时。
+
+所有远程访问评估结果都必须记录脱敏决策审计，包含 outcome、reason code、来源对象版本、AuthorizationVersion 和 `snapshot_hash`；拒绝结果也不能成为审计盲区。Rule 的 `notify` effect 通过 Transactional Outbox 发布。Session/Gateway 必须从冻结 Profile 执行录像和命令审计的 `required/optional/disabled` 模式，required 依赖失败时 fail closed，optional 降级必须审计，disabled 不启动对应通道。
+
+Grant、Rule、Workflow、SessionProfile、explicit resource authorization/RBAC、Host、ManagedAccount、用户或企业发生授权敏感变化时，必须递增受影响用户的 AuthorizationVersion、失效 Request、撤销 Lease、终止活动 Session 并写入 Outbox。Redis 只负责通知与加速，PostgreSQL 是授权事实来源。
+
 - Connector 只建立出站 mTLS 长连接，处理控制命令、批准 Artifact、端口/协议隧道和经授权的人工远程会话；Collector 不复用 Connector 通道发送遥测。
 - Connector 命令必须具有持久化状态、幂等键、连接代次 `connection_epoch`、过期时间和结果未知状态，不能把断连直接视为执行失败。
 - 安装 Connector 并注册为堡垒机时必须创建稳定的 Bastion Scope 和对应 Host；经堡垒机接入的内网主机只能归属一个 Bastion Scope。Bastion Scope 不能与可轮换、可重装的 Connector 实例共用同一主键和生命周期。
 - 主机连接模式第一版固定为 `connector_local`、`via_bastion`、`direct_ssh` 和 `direct_winrm`。Direct 模式由受控 Direct Executor 访问其部署网络可达且经过校验的目标，不以公网/私网划分；必须执行 Host Key/目标身份校验、DNS Rebinding 防护，并拦截环回、链路本地、云元数据、Argus/集群保护地址及配置的禁用网段。用户私网和自定义端口默认允许；固定出口由用户管理的 Egress Gateway 提供。
-- Remote Access Session 是人工操作边界，不等同于 MCP Tool Commit。它必须使用短期一次性会话票据，并校验 Enterprise、Host、ManagedAccount、协议、动作、Grant、DataScope、授权版本、MFA/审批、最长时长、录像与审计；AI、Card 和 OpenSandbox 不得获得交互式会话票据。当前版本不提供定时无人值守任务。
+- Remote Access Session 是人工操作边界，不等同于 MCP Tool Commit。它必须使用短期一次性会话票据，并校验 Enterprise、Host、ManagedAccount、协议、动作、Grant、explicit resource authorization、授权版本、MFA/审批、最长时长、录像与审计；AI、Card 和 OpenSandbox 不得获得交互式会话票据。当前版本不提供定时无人值守任务。
 - 所有已建立管理连接的 Host 都提供统一的“命令行”入口；人工命令行与后台任务可以复用底层连接适配器，但必须使用不同的票据、API、队列、状态机和审计类型。
 - Bastion Scope 成员的 Telemetry Route 只能是直接推送 Argus 或推送到所属堡垒机上已启用 Gateway 模式的 Collector；独立主机不得选择任何 Bastion Scope 内成员作为上游。
 - 同一物理 Kubernetes Node 上的同一 `CollectionClaim` 默认只能有一个活动采集所有者；迁移期临时重叠必须指定主实例和过期时间。
 - “监控插件”在产品层表示由 Argus 管理的版本化 Collection Profile，不表示运行时下载任意 Collector 插件或向用户暴露任意 YAML。
 - 遥测身份来自 Ingest 认证和受信资源目录，固定为 `EnterpriseId + ResourceId + CollectorId`；客户端自报的同名字段必须被覆盖或拒绝，不保留 `ProjectId`。
-- Telemetry Query 必须强制企业、授权资源 ID/标签选择器解析结果、Signal、字段脱敏、时间范围和查询预算；Web、Model Agent 和 Card 复用同一安全投影。
+- Telemetry Query 必须强制企业、授权资源 ID、用户筛选条件、Signal、字段脱敏、时间范围和查询预算；Web、Model Agent 和 Card 复用同一安全投影。
 
 ## 7. 部署、扩缩容与技术栈不变量
 
@@ -124,13 +144,17 @@ NetworkPolicy 是 Argus 内部服务隔离基线，由 `argusctl`/Helm 自动部
 
 Direct Executor 默认允许用户私网和自定义端口，只拒绝 Argus/集群保护地址、metadata、loopback 和 link-local 地址；固定出口、NAT 和出口防火墙由用户网络环境提供。
 
+## 7.5 对外暴露不变量（2026-08 确立）
+
+对外访问只有域名 + Ingress + 强制 TLS 一种形态：安装配置必须显式提供 `enterpriseHost`/`platformHost`/`connectorHost` 并开启 `tls.enabled`（cert-manager-selfsigned / cert-manager-issuer / user-provided），HTTP 暴露与 port-forward/tunnel 模式一律不支持。浏览器 Origin 允许列表只包含三个 HTTPS 门户域名。Connector mTLS `9443` 由专用 LoadBalancer Service 在所有 Profile 统一暴露（TCP 直通）；Remote WSS 与企业门户同源，统一由 `argus.<domain>` 的 `/v1/sessions` 路径承载（无独立终端域名）。Web 镜像不烧录域名，卡片 Origin 与 Platform 跳转地址由部署时运行时配置（`/argus-runtime.json`）注入。E2E 与产品形态一致，通过域名直连访问，不使用宿主机 port-forward。
+
 ## 8. 第一版开放问题
 
 以下问题不阻止契约与控制面开工，但进入对应里程碑前必须形成 ADR 或 Benchmark：
 
 - Production PostgreSQL Operator、同步复制、PITR 和故障恢复目标。
 - Kafka 与 ClickHouse 的容量档位、分片键和写入吞吐基准。
-- Card 独立 Origin 的最终域名、静态资源发布和浏览器兼容策略。
-- 标签选择器的第一版精确语法、复杂度上限和索引策略。
+- Card 独立 Origin 已定为 `cards.<parent-domain>` 约定并经运行时配置注入（见 7.5）；剩余浏览器兼容策略细节。
+- 标签过滤条件的第一版精确语法、复杂度上限和索引策略。
 - Remote Access Gateway 的协议库、录像格式和强制终止实现。
 - SBOM、签名、镜像扫描和离线制品的交付工具链。

@@ -16,6 +16,7 @@ import {
   Field,
   FormDrawer,
   Input,
+  RowAction,
   Spinner,
   StatusBadge,
   Switch,
@@ -165,7 +166,7 @@ export function OrgPoliciesTab() {
               key: "actions",
               header: t("settings.common.actions"),
               render: (row) => (
-                <Button
+                <RowAction
                   onClick={() => {
                     setEditing(
                       policies.data?.find((policy) => policy.id === row.id) ??
@@ -173,11 +174,9 @@ export function OrgPoliciesTab() {
                     );
                     setDrawerOpen(true);
                   }}
-                  size="sm"
-                  variant="ghost"
                 >
                   {t("settings.common.edit")}
-                </Button>
+                </RowAction>
               ),
             },
           ]}

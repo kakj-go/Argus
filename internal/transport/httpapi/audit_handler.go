@@ -198,10 +198,6 @@ func (resolver *auditPresentationResolver) resolveResourceUncached(ctx context.C
 		if value, queryErr := resolver.queries.GetRole(ctx, db.GetRoleParams{ID: id, EnterpriseID: enterpriseID}); queryErr == nil {
 			return value.Name
 		}
-	case "data_scope":
-		if value, queryErr := resolver.queries.GetDataScope(ctx, db.GetDataScopeParams{ID: id, EnterpriseID: enterpriseID}); queryErr == nil {
-			return value.Name
-		}
 	case "role_binding":
 		if binding, queryErr := resolver.queries.GetRoleBinding(ctx, db.GetRoleBindingParams{ID: id, EnterpriseID: enterpriseID}); queryErr == nil {
 			if role, roleErr := resolver.queries.GetRole(ctx, db.GetRoleParams{ID: binding.RoleID, EnterpriseID: enterpriseID}); roleErr == nil {

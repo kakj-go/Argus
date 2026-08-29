@@ -1,11 +1,7 @@
+import { enterpriseOrigin, platformOrigin, cardOrigin } from "./origins";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-const enterpriseOrigin =
-  process.env.ARGUS_E2E_ENTERPRISE_ORIGIN ?? "http://127.0.0.1:4173";
-const platformOrigin =
-  process.env.ARGUS_E2E_PLATFORM_ORIGIN ?? "http://127.0.0.1:4174";
-const cardOrigin = process.env.ARGUS_E2E_CARD_ORIGIN ?? "http://127.0.0.1:4176";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -90,7 +86,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
 
 test("initialized platform entry opens the login page", async ({ page }) => {
   await page.goto(`${platformOrigin}/?initialized=true&reset=1`);
-  await expect(page).toHaveURL(`${platformOrigin}/login`);
+  await expect(page).toHaveURL(/\/login(?:\?redirect=.*)?$/);
 });
 
 test("setup marks required fields and initializes without an admin email", async ({
@@ -433,7 +429,7 @@ test("chat shell lists conversations and links to the admin console", async ({
   expect(accountRightGap).toBe(20);
   await page.getByRole("link", { name: "进入管理后台" }).click();
   await expect(page).toHaveURL(/\/hosts$/);
-  await expect(page.getByRole("link", { name: /待审批/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /审批中心/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /Sandbox/ })).toHaveCount(0);
   await page.getByRole("link", { name: /企业审计/ }).click();
   await expect(page).toHaveURL(/\/settings\/audit$/);
@@ -1080,68 +1076,121 @@ test("tasks: list renders and the detail drawer opens", async ({ page }) => {
   await expect(drawer.getByText("日志")).toBeVisible();
 });
 
-test("org bindings tab: grant, reflect on users tab, and revoke", async ({
+test("remote access governance and session center expose the production flow", async ({
   page,
 }) => {
   await login(page);
   await page.goto("/settings/org");
-  await page.getByRole("tab", { name: "权限管理" }).click();
-  await page.getByRole("tab", { name: "授权绑定" }).click();
+  await page.getByRole("tab", { name: /远程访问|Remote access/i }).click();
+  await expect(page.getByRole("tab", { name: "访问授权" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "访问规则" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "审批流程" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "会话策略" })).toBeVisible();
+  await page.getByRole("tab", { name: "访问规则" }).click();
+  await expect(page.getByText("规则模拟器")).toBeVisible();
 
-  await page.getByRole("button", { name: "新建授权" }).click();
-  const drawer = page.getByRole("dialog", { name: "新建授权绑定" });
-  await expect(drawer).toBeVisible();
-
-  // 主体（主体类型默认为用户）：李娜。
-  await drawer.getByRole("combobox").nth(1).click();
-  await page.getByRole("option", { name: /李娜/ }).click();
-  // 角色：资源操作员，并绑定非生产资源数据范围。
-  await drawer.getByRole("combobox").nth(2).click();
-  await page.getByRole("option", { name: "资源操作员" }).click();
-  await drawer.getByRole("button", { name: "提交" }).click();
-  await expect(drawer).not.toBeVisible();
-
-  const row = page.getByRole("row", { name: /李娜.*资源操作员/ });
-  await expect(row).toBeVisible();
-
-  // 用户 tab 的角色 Badge 由 RoleBinding 派生，应同步出现。
-  await page.getByRole("tab", { name: "用户" }).click();
-  const userRow = page.getByRole("row", { name: /李娜/ });
-  await expect(userRow.getByText("资源操作员")).toBeVisible();
-
-  // 回到授权 tab 删除该绑定。
-  await page.getByRole("tab", { name: "授权绑定" }).click();
-  await page
-    .getByRole("row", { name: /李娜.*资源操作员/ })
-    .getByRole("button", { name: "删除" })
-    .click();
-  const dialog = page.getByRole("dialog", { name: "删除授权绑定" });
-  await dialog.getByRole("button", { name: "确认" }).click();
-  await expect(page.getByRole("row", { name: /李娜.*资源操作员/ })).toHaveCount(
-    0,
-  );
+  await page.goto("/remote-sessions");
+  await expect(page.getByRole("heading", { name: "远程会话" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "活动会话" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "历史会话" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "会话录像" })).toBeVisible();
+  const tabsBox = await page.getByRole("tablist").boundingBox();
+  const filtersBox = await page.locator(".argus-remote-sessions-tabs > .argus-filter-bar").boundingBox();
+  expect(tabsBox).not.toBeNull();
+  expect(filtersBox).not.toBeNull();
+  expect(filtersBox!.y - (tabsBox!.y + tabsBox!.height)).toBeGreaterThanOrEqual(12);
 });
 
-test("org data scopes persist structured label requirements", async ({
+test("org users remain renderable after the raw user directory is cached", async ({
   page,
 }) => {
   await login(page);
   await page.goto("/settings/org");
-  await page.getByRole("tab", { name: "权限管理" }).click();
-  await page.getByRole("tab", { name: "数据权限范围" }).click();
-  await page.getByRole("button", { name: "新建数据权限范围" }).click();
 
-  const drawer = page.getByRole("dialog", { name: "新建数据权限范围" });
-  await drawer.getByLabel("名称").fill("生产主机范围 E2E");
-  await drawer.locator(".argus-settings-check-option").first().click();
-  await drawer.locator(".argus-settings-selector-list .argus-button").click();
-  await drawer.getByLabel("标签键").fill("environment");
-  await drawer.getByLabel("标签值，多个值用逗号分隔").fill("production");
+  await page.getByRole("tab", { name: "远程访问" }).click();
+  await expect(page.getByRole("tab", { name: "访问授权" })).toBeVisible();
+  await expect(page.getByText("企业超级管理员").first()).toBeVisible();
+
+  await page.getByRole("tab", { name: "用户" }).click();
+  const userRow = page.getByRole("row", {
+    name: /企业超级管理员.*企业管理员/,
+  });
+  await expect(userRow).toBeVisible();
+
+  await userRow.getByRole("button", { name: "编辑" }).click();
+  const drawer = page.getByRole("dialog", { name: "编辑成员" });
+  await drawer.getByRole("button", { name: "资源查看者" }).click();
   await drawer.getByRole("button", { name: "提交" }).click();
+  await expect(drawer).not.toBeVisible();
+  await expect(userRow.getByText("资源查看者")).toBeVisible();
+});
 
-  const row = page.getByRole("row", { name: /生产主机范围 E2E/ });
-  await expect(row).toContainText("主机");
-  await expect(row).toContainText("environment eq (production)");
+test("remote access governance supports CRUD, lifecycle, details, validation, and simulation", async ({ page }) => {
+  test.setTimeout(60_000);
+  await login(page);
+  await page.goto("/settings/org");
+  await page.getByRole("tab", { name: "远程访问" }).click();
+
+  await page.getByRole("tab", { name: "会话策略" }).click();
+  await page.getByRole("button", { name: "新建会话策略" }).click();
+  let drawer = page.getByRole("dialog", { name: "新建会话策略" });
+  await drawer.getByLabel("名称").fill("生产会话策略");
+  await expect(drawer.getByRole("switch", { name: "文件上传" })).toBeDisabled();
+  await drawer.getByRole("button", { name: "保存" }).click();
+  let row = page.getByRole("row").filter({ hasText: "生产会话策略" });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "启用" }).click();
+  await expect(row.getByText("已启用")).toBeVisible();
+  await row.getByRole("button", { name: "详情" }).click();
+  await expect(page.getByRole("dialog", { name: "生产会话策略" }).getByText("v2")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("tab", { name: "审批流程" }).click();
+  await page.getByRole("button", { name: "新建审批流程" }).click();
+  drawer = page.getByRole("dialog", { name: "新建审批流程" });
+  await drawer.getByLabel("名称").fill("生产审批流程");
+  await drawer.getByRole("button", { name: "保存" }).click();
+  await expect(drawer.getByText("请至少选择一项").first()).toBeVisible();
+  await drawer.locator(".argus-governance-checks button").first().click();
+  await drawer.getByRole("button", { name: "保存" }).click();
+  row = page.getByRole("row").filter({ hasText: "生产审批流程" });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "启用" }).click();
+
+  await page.getByRole("tab", { name: "访问规则" }).click();
+  const simulator = page.locator(".argus-rule-simulator");
+  await simulator.getByLabel("主机").click();
+  await page.getByRole("option").first().click();
+  await simulator.getByLabel("托管账号").click();
+  await page.getByRole("option").first().click();
+  await simulator.getByRole("button", { name: "运行模拟" }).click();
+  await expect(simulator.locator(".argus-status-badge").getByText("allowed", { exact: true })).toBeVisible();
+  await expect(simulator.getByText(/REMOTE_ACCESS_ALLOWED/)).toBeVisible();
+
+  await page.getByRole("button", { name: "新建访问规则" }).click();
+  drawer = page.getByRole("dialog", { name: "新建访问规则" });
+  await drawer.getByLabel("名称").fill("生产 SSH 规则");
+  await drawer.getByRole("button", { name: "保存" }).click();
+  await expect(drawer.getByText("请至少选择一个处理效果或会话策略")).toBeVisible();
+  await drawer.getByLabel("会话策略").click();
+  await page.getByRole("option", { name: /生产会话策略/ }).click();
+  await drawer.getByRole("button", { name: "保存" }).click();
+  row = page.getByRole("row").filter({ hasText: "生产 SSH 规则" });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "启用" }).click();
+
+  await simulator.getByRole("button", { name: "运行模拟" }).click();
+  await expect(simulator.locator(".argus-status-badge").getByText("allowed", { exact: true })).toBeVisible();
+
+  row = page.getByRole("row").filter({ hasText: "生产 SSH 规则" });
+  await row.getByRole("button", { name: "停用" }).click();
+  await page.getByRole("dialog", { name: "确认配置变更" }).getByRole("button", { name: "停用" }).click();
+  await expect(row.getByText("已停用")).toBeVisible();
+  await row.getByRole("button", { name: "归档" }).click();
+  await page.getByRole("dialog", { name: "确认配置变更" }).getByRole("button", { name: "归档" }).click();
+  await expect(row.getByText("已归档")).toBeVisible();
+  await row.getByRole("button", { name: "恢复为草稿" }).click();
+  await expect(row.getByText("草稿")).toBeVisible();
 });
 
 test("org role drawer: permission matrix uses credential, not secret", async ({

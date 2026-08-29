@@ -1,9 +1,6 @@
+import { enterpriseOrigin, platformOrigin } from "./origins";
 import { expect, test, type Page } from "@playwright/test";
 
-const enterpriseOrigin =
-  process.env.ARGUS_E2E_ENTERPRISE_ORIGIN ?? "http://127.0.0.1:4173";
-const platformOrigin =
-  process.env.ARGUS_E2E_PLATFORM_ORIGIN ?? "http://127.0.0.1:4174";
 
 async function login(page: Page, origin: string, username: string) {
   const url =

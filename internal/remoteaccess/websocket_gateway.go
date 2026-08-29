@@ -36,6 +36,10 @@ type BackendFactory interface {
 	Open(context.Context, ConnectionTarget, int, int) (BackendSession, error)
 }
 
+// maxBacklogBytes bounds the detached-session output replay buffer so a
+// parked session cannot grow without limit while nobody is attached.
+const maxBacklogBytes = 256 << 10
+
 type WebSocketGateway struct {
 	Service        GatewayService
 	Backends       BackendFactory
@@ -45,8 +49,128 @@ type WebSocketGateway struct {
 	Drain          <-chan struct{}
 	Sessions       *SessionTracker
 	Terminations   *TerminationHub
-	Logger         *slog.Logger
-	Now            func() time.Time
+	// Parks holds sessions whose browser disconnected while the remote PTY
+	// keeps running; a fresh ticket can re-attach them on this instance.
+	Parks  *SessionParks
+	Logger *slog.Logger
+	Now    func() time.Time
+}
+
+// SessionParks is the instance-local registry of detached live sessions.
+type SessionParks struct {
+	mu     sync.Mutex
+	parked map[uuid.UUID]*ParkedSession
+}
+
+func NewSessionParks() *SessionParks {
+	return &SessionParks{parked: map[uuid.UUID]*ParkedSession{}}
+}
+
+func (parks *SessionParks) Has(id uuid.UUID) bool {
+	if parks == nil {
+		return false
+	}
+	parks.mu.Lock()
+	defer parks.mu.Unlock()
+	_, ok := parks.parked[id]
+	return ok
+}
+
+// Take removes a parked session and stops its park loop before returning it,
+// guaranteeing the caller becomes the only consumer of the backend frames.
+func (parks *SessionParks) Take(id uuid.UUID) *ParkedSession {
+	if parks == nil {
+		return nil
+	}
+	parks.mu.Lock()
+	session, ok := parks.parked[id]
+	delete(parks.parked, id)
+	parks.mu.Unlock()
+	if session == nil {
+		return nil
+	}
+	close(session.stop)
+	<-session.done
+	_ = ok
+	return session
+}
+
+func (parks *SessionParks) Put(id uuid.UUID, session *ParkedSession) {
+	parks.mu.Lock()
+	parks.parked[id] = session
+	parks.mu.Unlock()
+}
+
+func (parks *SessionParks) Remove(id uuid.UUID) {
+	parks.mu.Lock()
+	delete(parks.parked, id)
+	parks.mu.Unlock()
+}
+
+// outputBacklog is the session-scrollback ring: every output chunk (attached
+// or parked) is appended so a re-attached browser can repaint the terminal
+// after a page refresh, bounded by bytes.
+type outputBacklog struct {
+	mu     sync.Mutex
+	chunks []BackendFrame
+	bytes  int
+}
+
+func (backlog *outputBacklog) append(stream string, data []byte) {
+	backlog.mu.Lock()
+	defer backlog.mu.Unlock()
+	backlog.chunks = append(backlog.chunks, BackendFrame{Type: "output", Stream: stream, Data: append([]byte(nil), data...)})
+	backlog.bytes += len(data)
+	for backlog.bytes > maxBacklogBytes && len(backlog.chunks) > 1 {
+		backlog.bytes -= len(backlog.chunks[0].Data)
+		backlog.chunks = backlog.chunks[1:]
+	}
+}
+
+func (backlog *outputBacklog) snapshot() []BackendFrame {
+	backlog.mu.Lock()
+	defer backlog.mu.Unlock()
+	chunks := make([]BackendFrame, len(backlog.chunks))
+	copy(chunks, backlog.chunks)
+	return chunks
+}
+
+// ParkedSession couples a detached engine with the lifecycle channels of its
+// park goroutine.
+type ParkedSession struct {
+	engine *sessionEngine
+	stop   chan struct{}
+	done   chan struct{}
+}
+
+// sessionEngine owns one live remote session end to end: the backend PTY, the
+// recording, protocol validation state and the idle/max-duration timers. The
+// attached relay and the detached park loop are two phases of the same engine,
+// so a browser refresh parks the session and a later attach resumes it without
+// losing the backend or the scrollback.
+type sessionEngine struct {
+	gateway              WebSocketGateway
+	sessionID            uuid.UUID
+	target               ConnectionTarget
+	recording            *GatewayRecording
+	backend              BackendSession
+	backendFrames        <-chan receivedBackendFrame
+	terminationEvents    <-chan Termination
+	unregisterCompletion func()
+	sessionCtx           context.Context
+	sessionCancel        context.CancelFunc
+	state                *ProtocolState
+	started              time.Time
+	lastActivity         time.Time
+	lastAuthCheck        time.Time
+	// auditSequence numbers command-audit events per session (marker=1). The
+	// WebSocket sequence restarts on every re-attach, so auditing by frame
+	// sequence would collide with earlier connections under the
+	// (session_id, sequence) unique constraint.
+	auditSequence uint64
+	backlog       *outputBacklog
+	finishFence   int64
+	finished      bool
 }
 
 type SessionTracker struct {
@@ -159,10 +283,10 @@ func (gateway WebSocketGateway) ServeHTTP(response http.ResponseWriter, request 
 }
 
 func (gateway WebSocketGateway) serve(parent context.Context, connection *websocket.Conn, sessionID uuid.UUID) {
-	ctx, cancel := context.WithCancel(parent)
-	defer cancel()
+	requestCtx, requestCancel := context.WithCancel(parent)
+	defer requestCancel()
 	state := ProtocolState{StartedAt: gateway.now()}
-	helloCtx, helloCancel := context.WithTimeout(ctx, HelloTimeout)
+	helloCtx, helloCancel := context.WithTimeout(requestCtx, HelloTimeout)
 	messageType, raw, err := connection.Read(helloCtx)
 	helloCancel()
 	if err != nil || messageType != websocket.MessageText {
@@ -174,35 +298,37 @@ func (gateway WebSocketGateway) serve(parent context.Context, connection *websoc
 		closeProtocol(connection, "REMOTE_ACCESS_PROTOCOL_ERROR")
 		return
 	}
-	target, err := gateway.Service.AuthorizeConnection(ctx, sessionID, hello.Ticket)
+	// A parked session on this instance turns the ticket into a re-attach:
+	// the PTY backend is reused instead of opening a second shell.
+	reattach := gateway.Parks.Has(sessionID)
+	target, err := gateway.Service.AuthorizeConnection(requestCtx, sessionID, hello.Ticket, reattach)
 	hello.Ticket = ""
 	if err != nil {
 		gateway.logFailure("authorize", err)
 		closeProtocol(connection, gatewayErrorCode(err))
 		return
 	}
-	terminationEvents, unregisterTermination := gateway.Terminations.Register(sessionID, target.Session.SessionFence)
-	defer unregisterTermination()
-	recording, err := gateway.Service.OpenRecording(ctx, sessionID, gateway.ObjectStore)
-	if err != nil {
-		gateway.logFailure("open_recording", err)
-		_ = gateway.Service.Finish(ctx, sessionID, target.Session.SessionFence, "failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE")
-		closeProtocol(connection, "REMOTE_ACCESS_RECORDING_UNAVAILABLE")
-		return
-	}
-	backend, err := gateway.Backends.Open(ctx, target, hello.Cols, hello.Rows)
-	if err != nil {
-		gateway.logFailure("open_backend", err)
-		_ = gateway.Service.FinishRecording(ctx, recording, "failed")
-		_ = gateway.Service.Finish(ctx, sessionID, target.Session.SessionFence, "failed", "REMOTE_ACCESS_CONNECTION_LOST")
-		closeProtocol(connection, "REMOTE_ACCESS_CONNECTION_LOST")
-		return
-	}
-	defer backend.Close(context.Background(), "gateway_closed")
-	if err := gateway.Service.MarkActive(ctx, sessionID, target.Session.SessionFence); err != nil {
-		_ = gateway.Service.FinishRecording(ctx, recording, "incomplete")
-		closeProtocol(connection, "REMOTE_ACCESS_SESSION_INVALIDATED")
-		return
+
+	var engine *sessionEngine
+	if reattach {
+		parked := gateway.Parks.Take(sessionID)
+		if parked == nil || parked.engine.finished {
+			// The park vanished between Has and Take (expired or taken by a
+			// concurrent attach); converge the row instead of leaving it stale.
+			_ = gateway.Service.Finish(context.Background(), sessionID, target.Session.SessionFence, "connection_lost", "REMOTE_ACCESS_BACKEND_LOST")
+			closeProtocol(connection, "REMOTE_ACCESS_CONNECTION_LOST")
+			return
+		}
+		engine = parked.engine
+		// The fresh WebSocket starts a new protocol sequence space; the
+		// engine must not keep counting frames from the previous connection.
+		engine.state = &state
+	} else {
+		engine, err = gateway.startSession(requestCtx, sessionID, target, &state, hello.Cols, hello.Rows)
+		if err != nil {
+			closeProtocol(connection, "REMOTE_ACCESS_CONNECTION_LOST")
+			return
+		}
 	}
 
 	writer := &websocketWriter{connection: connection}
@@ -210,138 +336,350 @@ func (gateway WebSocketGateway) serve(parent context.Context, connection *websoc
 	if target.Protocol == "winrs" {
 		mode = "winrs_line"
 	}
-	if err := writer.write(ctx, serverFrame{Type: "server_ready", SessionID: sessionID.String(), Mode: mode, Nonce: hello.Nonce,
+	if err := writer.write(requestCtx, serverFrame{Type: "server_ready", SessionID: sessionID.String(), Mode: mode, Nonce: hello.Nonce,
 		IdleTimeout: int64(target.IdleTimeout / time.Second), MaxDuration: int64(target.MaxDuration / time.Second)}); err != nil {
-		_ = gateway.Service.FinishRecording(context.Background(), recording, "incomplete")
-		_ = gateway.Service.Finish(context.Background(), sessionID, target.Session.SessionFence, "connection_lost", "CLIENT_DISCONNECTED")
+		gateway.finishRecording(context.Background(), engine.recording, "incomplete")
+		engine.finalize("connection_lost", "CLIENT_DISCONNECTED")
 		return
 	}
+	// Replay the session scrollback so the refreshed browser repaints; the
+	// ring keeps accumulating so a later refresh replays again.
+	for _, chunk := range engine.backlog.snapshot() {
+		if err := writer.write(requestCtx, serverFrame{Type: "output", Stream: chunk.Stream, Data: string(chunk.Data)}); err != nil {
+			engine.park()
+			return
+		}
+	}
 
-	started, lastActivity, lastAuthorizationCheck := gateway.now(), gateway.now(), gateway.now()
 	clientFrames := make(chan receivedClientFrame, 1)
+	go receiveWebSocketFrames(requestCtx, connection, clientFrames)
+	finishStatus, finishReason := engine.relay(requestCtx, requestCancel, writer, clientFrames)
+	_ = connection.Close(websocket.StatusNormalClosure, finishReason)
+	if finishStatus != "" {
+		_ = writer.write(context.Background(), serverFrame{Type: "state", Status: finishStatus, Reason: finishReason})
+		engine.finalize(finishStatus, finishReason)
+	}
+}
+
+// startSession performs the first-attach setup: recording, command audit,
+// backend open and activation. On entry the session row is "connecting".
+func (gateway WebSocketGateway) startSession(ctx context.Context, sessionID uuid.UUID, target ConnectionTarget, state *ProtocolState, cols, rows int) (*sessionEngine, error) {
+	terminationEvents, unregisterTermination := gateway.Terminations.Register(sessionID, target.Session.SessionFence)
+	var recording *GatewayRecording
+	if target.Session.RecordingMode != "disabled" {
+		opened, openErr := gateway.Service.OpenRecording(ctx, sessionID, gateway.ObjectStore)
+		if openErr != nil {
+			gateway.logFailure("open_recording", openErr)
+			if target.Session.RecordingMode != "optional" {
+				_ = gateway.Service.Finish(ctx, sessionID, target.Session.SessionFence, "failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE")
+				return nil, ErrRecordingUnavailable
+			}
+		} else {
+			recording = &opened
+		}
+	}
+	if target.Session.CommandAuditMode != "disabled" {
+		if auditErr := gateway.Service.InitializeCommandAudit(ctx, sessionID); auditErr != nil {
+			gateway.logFailure("initialize_command_audit", auditErr)
+			if target.Session.CommandAuditMode == "required" || gateway.Service.RecordCommandAuditDegradation(ctx, sessionID) != nil {
+				_ = gateway.Service.Finish(ctx, sessionID, target.Session.SessionFence, "failed", "REMOTE_ACCESS_COMMAND_AUDIT_UNAVAILABLE")
+				return nil, ErrCommandAuditUnavailable
+			}
+		}
+	}
+	// The PTY backend must outlive the browser request: the gRPC stream is
+	// bound to this detached context so a page refresh parks the session
+	// instead of tearing the remote shell down with the HTTP request.
+	sessionCtx, sessionCancel := context.WithCancel(context.Background())
+	backend, err := gateway.Backends.Open(sessionCtx, target, cols, rows)
+	if err != nil {
+		sessionCancel()
+		gateway.logFailure("open_backend", err)
+		gateway.finishRecording(ctx, recording, "failed")
+		_ = gateway.Service.Finish(ctx, sessionID, target.Session.SessionFence, "failed", "REMOTE_ACCESS_CONNECTION_LOST")
+		return nil, err
+	}
+	if err := gateway.Service.MarkActive(ctx, sessionID, target.Session.SessionFence); err != nil {
+		sessionCancel()
+		_ = backend.Close(context.Background(), "gateway_closed")
+		gateway.finishRecording(ctx, recording, "incomplete")
+		return nil, err
+	}
+	now := gateway.now()
+	engine := &sessionEngine{gateway: gateway, sessionID: sessionID, target: target, recording: recording, backend: backend,
+		terminationEvents: terminationEvents, unregisterCompletion: unregisterTermination,
+		sessionCtx: sessionCtx, sessionCancel: sessionCancel, state: state,
+		started: now, lastActivity: now, lastAuthCheck: now, auditSequence: 1,
+		backlog: &outputBacklog{}, finishFence: target.Session.SessionFence}
+	engine.backendFrames = receiveBackendFramesDetached(sessionCtx, backend)
+	return engine, nil
+}
+
+func receiveBackendFramesDetached(ctx context.Context, backend BackendSession) <-chan receivedBackendFrame {
 	backendFrames := make(chan receivedBackendFrame, 1)
-	go receiveWebSocketFrames(ctx, connection, clientFrames)
-	go receiveBackendFrames(ctx, backend, backendFrames)
+	go func() {
+		defer close(backendFrames)
+		for {
+			frame, err := backend.Receive(ctx)
+			select {
+			case backendFrames <- receivedBackendFrame{frame: frame, err: err}:
+			case <-ctx.Done():
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return backendFrames
+}
+
+// receiveBackendFrames serves the gateway peer bridge, which never parks: the
+// peer stream ending is terminal for the whole bridge.
+func receiveBackendFrames(ctx context.Context, backend BackendSession, output chan<- receivedBackendFrame) {
+	for {
+		frame, err := backend.Receive(ctx)
+		select {
+		case output <- receivedBackendFrame{frame: frame, err: err}:
+		case <-ctx.Done():
+			return
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+// relay drives the attached phase. An empty return means the session was
+// parked (browser disconnected); the backend keeps running.
+func (engine *sessionEngine) relay(requestCtx context.Context, requestCancel context.CancelFunc, writer *websocketWriter, clientFrames <-chan receivedClientFrame) (string, string) {
+	gateway := engine.gateway
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-	finishStatus, finishReason := "terminated", "completed"
-
 	for {
 		select {
-		case termination, ok := <-terminationEvents:
+		case termination, ok := <-engine.terminationEvents:
 			if ok {
-				finishStatus, finishReason = "invalidated", termination.Reason
-				_ = writer.write(ctx, serverFrame{Type: "state", Status: "terminating", Reason: termination.Reason})
-				goto finished
+				engine.finishFence = termination.Fence
+				_ = writer.write(requestCtx, serverFrame{Type: "state", Status: "terminating", Reason: termination.Reason})
+				return "invalidated", termination.Reason
 			}
 		case <-gateway.Drain:
-			finishStatus, finishReason = "terminated", "gateway_drain"
-			_ = writer.write(ctx, serverFrame{Type: "state", Status: "terminating", Reason: finishReason})
-			goto finished
-		case <-ctx.Done():
-			finishStatus, finishReason = "connection_lost", "client_disconnected"
-			goto finished
+			_ = writer.write(requestCtx, serverFrame{Type: "state", Status: "terminating", Reason: "gateway_drain"})
+			return "terminated", "gateway_drain"
+		case <-requestCtx.Done():
+			requestCancel()
+			engine.park()
+			return "", ""
 		case <-ticker.C:
-			now := gateway.now()
-			if chunks, flushErr := recording.Recorder.FlushDue(ctx); flushErr != nil {
-				finishStatus, finishReason = "failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE"
-				goto finished
-			} else if persistErr := gateway.Service.PersistChunks(ctx, recording, chunks); persistErr != nil {
-				finishStatus, finishReason = "failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE"
-				goto finished
-			}
-			if now.Sub(lastAuthorizationCheck) >= 30*time.Second {
-				if gateway.Service.CheckActive(ctx, sessionID, target.Session.SessionFence, target.Session.AuthorizationVersion) != nil {
-					finishStatus, finishReason = "invalidated", "authorization_revoked"
-					goto finished
-				}
-				lastAuthorizationCheck = now
-			}
-			if now.Sub(lastActivity) >= target.IdleTimeout {
-				finishStatus, finishReason = "expired", "idle_timeout"
-				goto finished
-			}
-			if now.Sub(started) >= target.MaxDuration || !now.Before(target.LeaseExpiresAt) {
-				finishStatus, finishReason = "expired", "maximum_duration"
-				goto finished
+			if status, reason, done := engine.tickChecks(requestCtx); done {
+				return status, reason
 			}
 		case item := <-clientFrames:
 			if item.err != nil {
-				finishStatus, finishReason = "connection_lost", "client_disconnected"
-				goto finished
+				requestCancel()
+				engine.park()
+				return "", ""
 			}
-			frame, err := state.Accept(item.raw, gateway.now())
+			frame, err := engine.state.Accept(item.raw, gateway.now())
+			if errors.Is(err, ErrChannelUnavailable) {
+				engine.lastActivity = gateway.now()
+				_ = writer.write(requestCtx, serverFrame{Type: "error", Code: "REMOTE_ACCESS_CHANNEL_NOT_AVAILABLE", Message: "channel not available", Terminal: false})
+				continue
+			}
 			if err != nil || item.messageType != websocket.MessageText {
-				finishStatus, finishReason = "failed", "REMOTE_ACCESS_PROTOCOL_ERROR"
-				_ = writer.write(ctx, serverFrame{Type: "error", Code: "REMOTE_ACCESS_PROTOCOL_ERROR", Message: "protocol error", Terminal: true})
-				goto finished
+				_ = writer.write(requestCtx, serverFrame{Type: "error", Code: "REMOTE_ACCESS_PROTOCOL_ERROR", Message: "protocol error", Terminal: true})
+				return "failed", "REMOTE_ACCESS_PROTOCOL_ERROR"
 			}
-			lastActivity = gateway.now()
+			if businessActivity(frame.Type) {
+				engine.lastActivity = gateway.now()
+			}
 			if frame.Type == "ping" {
 				continue
 			}
 			if frame.Type == "close" {
-				finishStatus, finishReason = "terminated", "client_close"
-				goto finished
+				return "terminated", "client_close"
 			}
-			if err := gateway.recordClientFrame(ctx, recording, sessionID, frame); err != nil {
-				finishStatus, finishReason = "failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE"
-				goto finished
+			engine.auditSequence++
+			if err := gateway.auditClientFrame(requestCtx, engine.sessionID, engine.target.Session.CommandAuditMode, engine.auditSequence, frame); err != nil {
+				return "failed", "REMOTE_ACCESS_COMMAND_AUDIT_UNAVAILABLE"
 			}
-			if err := backend.Send(ctx, frame); err != nil {
-				finishStatus, finishReason = "connection_lost", "backend_send_failed"
-				goto finished
-			}
-		case item := <-backendFrames:
-			if item.err != nil {
-				if errors.Is(item.err, io.EOF) {
-					finishStatus, finishReason = "terminated", "remote_closed"
-				} else {
-					finishStatus, finishReason = "connection_lost", "backend_disconnected"
+			if err := gateway.recordClientFrame(requestCtx, engine.recording, frame); err != nil {
+				if engine.target.Session.RecordingMode != "optional" {
+					return "failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE"
 				}
-				goto finished
+				gateway.finishRecording(context.Background(), engine.recording, "failed")
+				engine.recording = nil
 			}
-			lastActivity = gateway.now()
-			if err := gateway.recordBackendFrame(ctx, recording, sessionID, item.frame); err != nil {
-				finishStatus, finishReason = "failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE"
-				goto finished
+			if err := engine.backend.Send(requestCtx, frame); err != nil {
+				return "connection_lost", "backend_send_failed"
+			}
+		case item, ok := <-engine.backendFrames:
+			if !ok || item.err != nil {
+				if ok && errors.Is(item.err, io.EOF) || !ok {
+					return "terminated", "remote_closed"
+				}
+				return "connection_lost", "backend_disconnected"
+			}
+			if businessActivity(item.frame.Type) {
+				engine.lastActivity = gateway.now()
+			}
+			if err := gateway.recordBackendFrame(engine.sessionCtx, engine.recording, item.frame); err != nil {
+				if engine.target.Session.RecordingMode != "optional" {
+					return "failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE"
+				}
+				gateway.finishRecording(context.Background(), engine.recording, "failed")
+				engine.recording = nil
 			}
 			if item.frame.Type == "output" {
-				if err := writer.write(ctx, serverFrame{Type: "output", Stream: item.frame.Stream, Data: string(item.frame.Data)}); err != nil {
-					finishStatus, finishReason = "connection_lost", "client_disconnected"
-					goto finished
+				if err := writer.write(requestCtx, serverFrame{Type: "output", Stream: item.frame.Stream, Data: string(item.frame.Data)}); err != nil {
+					requestCancel()
+					engine.park()
+					return "", ""
 				}
+				// The scrollback ring covers the whole session so any later
+				// re-attach repaints what this browser already saw.
+				engine.backlog.append(item.frame.Stream, item.frame.Data)
 			} else if item.frame.Type == "state" {
-				if err := writer.write(ctx, serverFrame{Type: "state", Status: item.frame.Status, Reason: item.frame.Reason}); err != nil {
-					finishStatus, finishReason = "connection_lost", "client_disconnected"
-					goto finished
+				if err := writer.write(requestCtx, serverFrame{Type: "state", Status: item.frame.Status, Reason: item.frame.Reason}); err != nil {
+					requestCancel()
+					engine.park()
+					return "", ""
 				}
 				if terminalState(item.frame.Status) {
-					finishStatus, finishReason = normalizeTerminalStatus(item.frame.Status), item.frame.Reason
-					goto finished
+					return normalizeTerminalStatus(item.frame.Status), item.frame.Reason
 				}
 			}
 		}
 	}
+}
 
-finished:
-	if err := backend.Close(context.Background(), finishReason); err != nil {
-		gateway.logFinalizationFailure("close_backend", err)
+// park hands the engine to the registry and starts the detached loop that
+// keeps recording, buffers output and enforces idle/max-duration timeouts.
+func (engine *sessionEngine) park() {
+	parked := &ParkedSession{engine: engine, stop: make(chan struct{}), done: make(chan struct{})}
+	engine.gateway.Parks.Put(engine.sessionID, parked)
+	go engine.parkLoop(parked)
+}
+
+func (engine *sessionEngine) parkLoop(parked *ParkedSession) {
+	defer close(parked.done)
+	gateway := engine.gateway
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-parked.stop:
+			return
+		case termination, ok := <-engine.terminationEvents:
+			if ok {
+				engine.finishFence = termination.Fence
+				gateway.Parks.Remove(engine.sessionID)
+				engine.finalize("invalidated", termination.Reason)
+				return
+			}
+		case <-gateway.Drain:
+			gateway.Parks.Remove(engine.sessionID)
+			engine.finalize("terminated", "gateway_drain")
+			return
+		case <-ticker.C:
+			if status, reason, done := engine.tickChecks(engine.sessionCtx); done {
+				gateway.Parks.Remove(engine.sessionID)
+				engine.finalize(status, reason)
+				return
+			}
+		case item, ok := <-engine.backendFrames:
+			if !ok || item.err != nil {
+				gateway.Parks.Remove(engine.sessionID)
+				if ok && errors.Is(item.err, io.EOF) {
+					engine.finalize("terminated", "remote_closed")
+				} else if ok {
+					engine.finalize("connection_lost", "backend_disconnected")
+				} else {
+					engine.finalize("terminated", "remote_closed")
+				}
+				return
+			}
+			if businessActivity(item.frame.Type) {
+				engine.lastActivity = gateway.now()
+			}
+			if err := gateway.recordBackendFrame(engine.sessionCtx, engine.recording, item.frame); err != nil {
+				if engine.target.Session.RecordingMode != "optional" {
+					gateway.Parks.Remove(engine.sessionID)
+					engine.finalize("failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE")
+					return
+				}
+				gateway.finishRecording(context.Background(), engine.recording, "failed")
+				engine.recording = nil
+			}
+			if item.frame.Type == "output" {
+				engine.backlog.append(item.frame.Stream, item.frame.Data)
+			} else if item.frame.Type == "state" && terminalState(item.frame.Status) {
+				gateway.Parks.Remove(engine.sessionID)
+				engine.finalize(normalizeTerminalStatus(item.frame.Status), item.frame.Reason)
+				return
+			}
+		}
+	}
+}
+
+// tickChecks runs the shared per-second housekeeping: recording flush,
+// authorization recheck, idle timeout and maximum duration.
+func (engine *sessionEngine) tickChecks(ctx context.Context) (string, string, bool) {
+	gateway := engine.gateway
+	now := gateway.now()
+	if engine.recording != nil {
+		chunks, flushErr := engine.recording.Recorder.FlushDue(ctx)
+		if flushErr == nil {
+			flushErr = gateway.Service.PersistChunks(ctx, *engine.recording, chunks)
+		}
+		if flushErr != nil {
+			if engine.target.Session.RecordingMode != "optional" {
+				return "failed", "REMOTE_ACCESS_RECORDING_UNAVAILABLE", true
+			}
+			gateway.finishRecording(context.Background(), engine.recording, "failed")
+			engine.recording = nil
+		}
+	}
+	if now.Sub(engine.lastAuthCheck) >= 30*time.Second {
+		if gateway.Service.CheckActive(ctx, engine.sessionID, engine.target.Session.SessionFence, engine.target.Session.AuthorizationVersion) != nil {
+			return "invalidated", "authorization_revoked", true
+		}
+		engine.lastAuthCheck = now
+	}
+	if idleTimeoutReached(now, engine.lastActivity, engine.target.IdleTimeout) {
+		return "expired", "idle_timeout", true
+	}
+	if now.Sub(engine.started) >= engine.target.MaxDuration || !now.Before(engine.target.LeaseExpiresAt) {
+		return "expired", "maximum_duration", true
+	}
+	return "", "", false
+}
+
+// finalize converges the session exactly once: backend close, recording
+// completion and durable status transition.
+func (engine *sessionEngine) finalize(status, reason string) {
+	if engine.finished {
+		return
+	}
+	engine.finished = true
+	if engine.unregisterCompletion != nil {
+		engine.unregisterCompletion()
+	}
+	if err := engine.backend.Close(context.Background(), reason); err != nil {
+		engine.gateway.logFinalizationFailure("close_backend", err)
 	}
 	recordingStatus := "available"
-	if finishStatus == "connection_lost" || finishStatus == "invalidated" {
+	if status == "connection_lost" || status == "invalidated" {
 		recordingStatus = "incomplete"
-	} else if finishStatus == "failed" && finishReason == "REMOTE_ACCESS_RECORDING_UNAVAILABLE" {
+	} else if status == "failed" && reason == "REMOTE_ACCESS_RECORDING_UNAVAILABLE" {
 		recordingStatus = "failed"
 	}
-	if err := gateway.Service.FinishRecording(context.Background(), recording, recordingStatus); err != nil {
-		gateway.logFinalizationFailure("finish_recording", err)
+	engine.gateway.finishRecording(context.Background(), engine.recording, recordingStatus)
+	if err := engine.gateway.Service.FinishFenceTolerant(context.Background(), engine.sessionID, engine.finishFence, status, reason); err != nil {
+		engine.gateway.logFinalizationFailure("finish_session", err)
 	}
-	if err := gateway.Service.Finish(context.Background(), sessionID, target.Session.SessionFence, finishStatus, finishReason); err != nil {
-		gateway.logFinalizationFailure("finish_session", err)
-	}
-	_ = writer.write(context.Background(), serverFrame{Type: "state", Status: finishStatus, Reason: finishReason})
-	_ = connection.Close(websocket.StatusNormalClosure, finishReason)
+	engine.sessionCancel()
 }
 
 func (gateway WebSocketGateway) logFailure(stage string, err error) {
@@ -356,20 +694,40 @@ func (gateway WebSocketGateway) logFinalizationFailure(stage string, err error) 
 	}
 }
 
-func (gateway WebSocketGateway) recordClientFrame(ctx context.Context, recording GatewayRecording, sessionID uuid.UUID, frame ClientFrame) error {
+// auditClientFrame records an input/resize event; sequence is the engine-scoped
+// audit counter, monotonically increasing across re-attach boundaries.
+func (gateway WebSocketGateway) auditClientFrame(ctx context.Context, sessionID uuid.UUID, mode string, sequence uint64, frame ClientFrame) error {
+	if mode == "disabled" || (frame.Type != "input" && frame.Type != "resize") {
+		return nil
+	}
+	var eventType string
+	var commandHash []byte
+	if frame.Type == "input" {
+		eventType = "input"
+		digest := sha256.Sum256([]byte(frame.Data))
+		commandHash = digest[:]
+	} else {
+		eventType = "resize"
+	}
+	if err := gateway.Service.RecordCommandEvent(ctx, sessionID, sequence, eventType, commandHash); err != nil {
+		if mode != "optional" {
+			return err
+		}
+		return gateway.Service.RecordCommandAuditDegradation(ctx, sessionID)
+	}
+	return nil
+}
+
+func (gateway WebSocketGateway) recordClientFrame(ctx context.Context, recording *GatewayRecording, frame ClientFrame) error {
+	if recording == nil {
+		return nil
+	}
 	var event RecordingEvent
 	switch frame.Type {
 	case "input":
 		event = RecordingEvent{Time: gateway.now().Sub(recording.Started).Seconds(), Type: "i", Data: frame.Data}
-		digest := sha256.Sum256([]byte(frame.Data))
-		if err := gateway.Service.RecordCommandEvent(ctx, sessionID, frame.Sequence, "input", digest[:]); err != nil {
-			return err
-		}
 	case "resize":
 		event = RecordingEvent{Time: gateway.now().Sub(recording.Started).Seconds(), Type: "r", Data: fmt.Sprintf("%dx%d", frame.Cols, frame.Rows)}
-		if err := gateway.Service.RecordCommandEvent(ctx, sessionID, frame.Sequence, "resize", nil); err != nil {
-			return err
-		}
 	default:
 		return nil
 	}
@@ -377,11 +735,11 @@ func (gateway WebSocketGateway) recordClientFrame(ctx context.Context, recording
 	if err != nil {
 		return err
 	}
-	return gateway.Service.PersistChunks(ctx, recording, chunks)
+	return gateway.Service.PersistChunks(ctx, *recording, chunks)
 }
 
-func (gateway WebSocketGateway) recordBackendFrame(ctx context.Context, recording GatewayRecording, sessionID uuid.UUID, frame BackendFrame) error {
-	if frame.Type != "output" && frame.Type != "state" {
+func (gateway WebSocketGateway) recordBackendFrame(ctx context.Context, recording *GatewayRecording, frame BackendFrame) error {
+	if recording == nil || (frame.Type != "output" && frame.Type != "state") {
 		return nil
 	}
 	eventType, data := "o", any(string(frame.Data))
@@ -392,7 +750,16 @@ func (gateway WebSocketGateway) recordBackendFrame(ctx context.Context, recordin
 	if err != nil {
 		return err
 	}
-	return gateway.Service.PersistChunks(ctx, recording, chunks)
+	return gateway.Service.PersistChunks(ctx, *recording, chunks)
+}
+
+func (gateway WebSocketGateway) finishRecording(ctx context.Context, recording *GatewayRecording, status string) {
+	if recording == nil {
+		return
+	}
+	if err := gateway.Service.FinishRecording(ctx, *recording, status); err != nil {
+		gateway.logFinalizationFailure("finish_recording", err)
+	}
 }
 
 type websocketWriter struct {
@@ -438,20 +805,6 @@ func receiveWebSocketFrames(ctx context.Context, connection *websocket.Conn, out
 type receivedBackendFrame struct {
 	frame BackendFrame
 	err   error
-}
-
-func receiveBackendFrames(ctx context.Context, backend BackendSession, output chan<- receivedBackendFrame) {
-	for {
-		frame, err := backend.Receive(ctx)
-		select {
-		case output <- receivedBackendFrame{frame: frame, err: err}:
-		case <-ctx.Done():
-			return
-		}
-		if err != nil {
-			return
-		}
-	}
 }
 
 func (gateway WebSocketGateway) originAllowed(raw string) bool {

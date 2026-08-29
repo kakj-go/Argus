@@ -1,5 +1,7 @@
 # 系统初始化与双层管理门户
 
+> 组织设置移除独立“权限管理”页面，仅保留角色编辑器中的功能权限矩阵。角色、用户、部门和 ServiceAccount 列表提供统一“数据授权”入口，按 Host/Kubernetes 两个 Tab 使用双栏批量移动资源；继承资源只读展示，不能从用户侧移除。
+
 ## 1. 目标
 
 Argus 第一次启动时没有任何用户和企业。系统通过一次性初始化流程让部署者设置平台超级管理员账号和密码。初始化完成后，平台超级管理员负责创建企业和对应企业管理员；企业管理员进入独立企业门户管理本企业。OpenSandbox 由 Helm 安装和配置，不进入 Setup 向导；其治理 API 在 M4 Agent/Sandbox 接入前补充。
@@ -68,7 +70,7 @@ Setup Token 应具有：
 
 - 平台显示名称。
 - 默认语言和时区。
-- 外部访问地址，用于门户跳转和后续受信回调地址。
+- 外部访问地址，用于门户跳转和后续受信回调地址；域名模式下默认为安装配置的企业门户域名（HTTPS）。
 
 ### 4.2 超级管理员
 
@@ -154,7 +156,7 @@ M1 原型中的 Sandbox 页面在 M2 real 模式保持稳定不可用，不得�
 
 删除企业属于高危且难恢复操作，不建议第一版提供。先提供停用和数据保留策略。
 
-创建企业时必须在同一事务或可恢复工作流中创建可重命名的默认 Department、内置 Role 模板和默认资源 DataScope。该范围只覆盖 Host 与 KubernetesCluster 两类资源，并显式设置 `match_all=true`，这样企业管理员可以在资源 ID 尚未生成的创建预览阶段完成授权检查；普通新建的 DataScope 默认 `match_all=false`，空范围仍匹配零资源。第一版不创建 Default Project；Host 和 KubernetesCluster 通过用户标签归类，Conversation、Run 和 PendingAction 只归属企业并分别保存实际目标资源和授权快照。
+创建企业时必须在同一事务或可恢复工作流中创建可重命名的默认 Department、内置 Role 模板和默认管理员账号。DataAuthorizationGrant 只接受已经存在的 Host 或 KubernetesCluster ID；资源创建成功后，再在同一资源事务中为实际创建主体写入只读授权。第一版不创建 Default Project；Host 和 KubernetesCluster 通过用户标签归类，Conversation、Run 和 PendingAction 只归属企业并分别保存实际目标资源和授权快照。
 
 企业状态必须由授权服务在所有入口统一执行，不能只在登录页面判断：
 
@@ -191,7 +193,9 @@ M1 原型中的 Sandbox 页面在 M2 real 模式保持稳定不可用，不得�
 
 Enterprise 用户名全局大小写不敏感唯一。原因是企业登录只提交 `username + password`，不接受客户端 `enterprise_id`，因此服务端必须在认证前唯一定位企业身份。
 
-初始企业管理员是新的 EnterpriseUser，直接固定绑定目标 `enterprise_id + department_id`，不能复用平台超级管理员身份。`enterprise_admin` 允许其建立企业 IAM、角色、DataScope 和授权，但不自动授予生产远程 Shell、ManagedAccount、Secret 原值或 AI 生产执行权限；需要操作生产资源时由企业管理员建立对应 RoleBinding、DataScope 和 RemoteAccessGrant，并记录审计。
+初始企业管理员是新的 EnterpriseUser，直接固定绑定目标 `enterprise_id + department_id`，不能复用平台超级管理员身份。`enterprise_admin` 允许其建立企业 IAM、角色、DataAuthorizationGrant 和授权，但不自动授予生产远程 Shell、ManagedAccount、Secret 原值或 AI 生产执行权限；需要操作生产资源时由企业管理员建立对应 RoleBinding、DataAuthorizationGrant 和 RemoteAccessGrant，并记录审计。
+
+企业用户编辑入口支持同时调整部门和直接角色。保存由 Authorization 应用服务协调 Identity 拥有的 EnterpriseUser 与 Authorization 拥有的 RoleBinding，在一个事务内使用用户最新 `version + AuthorizationVersion` 完成更新；部门角色仅展示继承来源。命令要求调用者同时具备 `identity.manage + role.manage`，并阻止修改后企业不存在有效 IAM 管理员。
 
 超级管理员可以：
 
@@ -244,7 +248,7 @@ Collector 不单独占用左侧菜单。未安装时在主机或 Kubernetes 详�
 
 企业管理员可以创建自定义企业角色并下放部分管理能力。OpenSandbox 是 SaaS 平台底层资产，企业工作台和管理后台均不展示或查询 OpenSandbox 服务、镜像、Profile、配额、活动会话和用量；相关管理与观测只存在于平台超级管理员门户。
 
-进入 Chatbox 只恢复固定企业身份、功能权限和 DataScope，不提供 Project 选择器。Conversation 和 Run 保存 `enterprise_id`；具体 ToolCall、Run、PendingAction 和 Execution 保存目标资源引用和授权范围快照。模型或 Card 不能修改身份域或扩大 DataScope。
+进入 Chatbox 只恢复固定企业身份、功能权限和 DataAuthorizationGrant，不提供 Project 选择器。Conversation 和 Run 保存 `enterprise_id`；具体 ToolCall、Run、PendingAction 和 Execution 保存目标资源引用和授权范围快照。模型或 Card 不能修改身份域或扩大 DataAuthorizationGrant。
 
 ## 9. 固定企业上下文和资源范围
 
@@ -252,9 +256,9 @@ EnterpriseUser 登录后只有一个固定企业上下文。服务端 Session �
 
 平台 Session 和企业 Session 必须使用不同 Audience、路由和 Cookie/Token 约束。平台身份不能访问企业 API，企业身份不能访问平台 API；禁止通过 `enterprise_id = null`、指定其他企业 ID 或修改 URL 切换身份域。
 
-企业内没有 Project 切换。用户可以在资源列表中按标签筛选或保存视图，但筛选条件不能扩大服务端计算的 DataScope。RoleBinding、DataScope、RemoteAccessGrant 或授权敏感标签变化后，客户端必须失效相关缓存和 Binding，SSE/WebSocket/Live Tail 在恢复与周期检查时重新鉴权。
+企业内没有 Project 切换。用户可以在资源列表中按标签筛选或保存视图，但筛选条件不能扩大服务端计算的 DataAuthorizationGrant。RoleBinding、DataAuthorizationGrant 或主体继承关系变化后，客户端必须失效相关缓存和 Binding，SSE/WebSocket/Live Tail 在恢复与周期检查时重新鉴权；标签变化不触发授权失效。
 
-API Key 和 ServiceAccount 固定绑定一个 `enterprise_id`、允许 Tool 和 DataScope，不支持运行时扩大范围。任何资源 ID 查询都必须验证资源真实 `enterprise_id` 并重新计算当前授权，不能只信任 Token、标签或客户端参数。
+API Key 和 ServiceAccount 固定绑定一个 `enterprise_id`、允许 Tool 和 DataAuthorizationGrant，不支持运行时扩大范围。任何资源 ID 查询都必须验证资源真实 `enterprise_id` 并重新计算当前授权，不能只信任 Token、标签或客户端参数。
 
 ### 9.1 认证基线
 
@@ -266,8 +270,8 @@ M2 提供本地账号认证，并预留 OIDC/SAML Adapter：
 - Platform 与 Enterprise 使用独立 Host-only Cookie；Production 使用 `Secure + HttpOnly + SameSite=Strict`。所有已认证变更同时执行 Session 绑定 CSRF Token 和 Origin 校验。
 - 用户禁用、密码重置、企业停用时在 PostgreSQL 写入撤销事实并递增相关 AuthorizationVersion；Redis 只传播快速失效通知。
 - Redis 不可用时 Server 保持 degraded：已有 Session 继续由 PostgreSQL 校验，新登录因为限流依赖不可用而 fail closed。
-- WebSocket/SSE/Live Tail 建立、恢复和周期性检查时重新校验 Session、固定企业、DataScope 和 AuthorizationVersion。
-- Service Account/API Key 只显示一次原值，数据库保存哈希，支持到期、轮换、撤销、Tool/DataScope Scope 和最后使用审计；Key 固定绑定创建时的 ServiceAccount AuthorizationVersion。
+- WebSocket/SSE/Live Tail 建立、恢复和周期性检查时重新校验 Session、固定企业、DataAuthorizationGrant 和 AuthorizationVersion。
+- Service Account/API Key 只显示一次原值，数据库保存哈希，支持到期、轮换、撤销、Tool/DataAuthorizationGrant Scope 和最后使用审计；Key 固定绑定创建时的 ServiceAccount AuthorizationVersion。
 
 ## 10. 账号恢复
 
@@ -286,9 +290,9 @@ argus admin reset-password
 平台审计和企业审计分离：
 
 - 平台审计：初始化、企业生命周期、企业管理员生命周期、Sandbox Profile、镜像、配额和活动会话终止。
-- 企业审计：Department、用户权限、RoleBinding、DataScope、资源标签、RemoteAccessGrant、ManagedAccount、Connector、资源、OpenTelemetry 安装与配置、监控查询/导出、Chatbox、MCP Tool、Card Action、Break Glass 和 Secret 使用。
+- 企业审计：Department、用户权限、RoleBinding、DataAuthorizationGrant、资源标签、RemoteAccessGrant、ManagedAccount、Connector、资源、OpenTelemetry 安装与配置、监控查询/导出、Chatbox、MCP Tool、Card Action、Break Glass 和 Secret 使用。
 
-超级管理员默认只能查看平台审计；企业管理员只能查看本企业审计。企业审计读取按角色、DataScope 和字段规则裁剪；`security_auditor` 可以查看被授权的企业审计正文，但不能因此获得远程操作、监控敏感字段或 Secret 权限。
+超级管理员默认只能查看平台审计；企业管理员只能查看本企业审计。企业审计读取按角色、DataAuthorizationGrant 和字段规则裁剪；`security_auditor` 可以查看被授权的企业审计正文，但不能因此获得远程操作、监控敏感字段或 Secret 权限。
 
 两个审计门户共享稳定的动作/资源代码目录，但分别维护中英文展示文案。列表与筛选器显示本地化名称，详情同时保留原始 action key、actor/resource ID。服务端审计读模型只在已授权域内尽力解析操作者和资源当前名称；平台活动 Sandbox 会话不得为显示企业用户名而新增企业成员查询，只显示“企业用户”和缩短的技术引用。
 

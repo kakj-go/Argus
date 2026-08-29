@@ -312,6 +312,22 @@ enterprise_role_bindings:
     responses:
       "201": {description: Role binding., content: {application/json: {schema: {$ref: "../components/authorization.yaml#/components/schemas/RoleBinding"}}}}
       default: {$ref: "#/components/responses/Error"}
+enterprise_user_role_assignments:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getUserRoleAssignments
+    summary: Get direct, inherited, and effective role assignments for an enterprise user.
+    responses:
+      "200": {description: User role assignments., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/UserRoleAssignments"}}}}
+      default: {$ref: "#/components/responses/Error"}
+  put:
+    operationId: replaceUserRoleAssignments
+    summary: Atomically replace an enterprise user's direct role assignments.
+    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/UserRoleAssignmentsUpdate"}}}}
+    responses:
+      "200": {description: Updated user role assignments., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/UserRoleAssignments"}}}}
+      default: {$ref: "#/components/responses/Error"}
 enterprise_role_binding:
   parameters: [{$ref: "#/components/parameters/ResourceId"}]
   put:
@@ -328,39 +344,6 @@ enterprise_role_binding:
     parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
     responses:
       "204": {description: Binding disabled.}
-      default: {$ref: "#/components/responses/Error"}
-enterprise_data_scopes:
-  get:
-    operationId: listDataScopes
-    summary: listDataScopes.
-    parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}]
-    responses:
-      "200": {description: Data scopes., content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/DataScopePage"}}}}
-      default: {$ref: "#/components/responses/Error"}
-  post:
-    operationId: createDataScope
-    summary: createDataScope.
-    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
-    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/DataScopeCreate"}}}}
-    responses:
-      "201": {description: Data scope., content: {application/json: {schema: {$ref: "../components/authorization.yaml#/components/schemas/DataScope"}}}}
-      default: {$ref: "#/components/responses/Error"}
-enterprise_data_scope:
-  parameters: [{$ref: "#/components/parameters/ResourceId"}]
-  put:
-    operationId: updateDataScope
-    summary: updateDataScope.
-    parameters: [{$ref: "#/components/parameters/CsrfToken"}]
-    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/DataScopeUpdate"}}}}
-    responses:
-      "200": {description: Updated data scope., content: {application/json: {schema: {$ref: "../components/authorization.yaml#/components/schemas/DataScope"}}}}
-      default: {$ref: "#/components/responses/Error"}
-  delete:
-    operationId: disableDataScope
-    summary: disableDataScope.
-    parameters: [{$ref: "#/components/parameters/CsrfToken"}, {$ref: "#/components/parameters/ExpectedVersion"}]
-    responses:
-      "204": {description: Data scope disabled.}
       default: {$ref: "#/components/responses/Error"}
 enterprise_service_accounts:
   get:

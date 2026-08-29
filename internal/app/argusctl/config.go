@@ -46,10 +46,6 @@ type InstallSpec struct {
 	} `json:"openSandbox"`
 	Telemetry   TelemetryArtifacts `json:"telemetry"`
 	Persistence Persistence        `json:"persistence"`
-	Cleanup     struct {
-		RetainData      bool `json:"retainData"`
-		DeleteOwnedCRDs bool `json:"deleteOwnedCrds"`
-	} `json:"cleanup"`
 }
 
 type Network struct {
@@ -96,11 +92,31 @@ type Images struct {
 }
 
 type Exposure struct {
-	Mode             string `json:"mode"`
-	IngressClassName string `json:"ingressClassName"`
-	EnterpriseHost   string `json:"enterpriseHost"`
-	PlatformHost     string `json:"platformHost"`
-	ConnectorHost    string `json:"connectorHost"`
+	IngressClassName string     `json:"ingressClassName"`
+	EnterpriseHost   string     `json:"enterpriseHost"`
+	PlatformHost     string     `json:"platformHost"`
+	ConnectorHost    string     `json:"connectorHost"`
+	TLS              *TLSConfig `json:"tls,omitempty"`
+}
+
+type TLSConfig struct {
+	Enabled    bool      `json:"enabled"`
+	Mode       TLSMode   `json:"mode"`
+	IssuerRef  IssuerRef `json:"issuerRef,omitempty"`
+	SecretName string    `json:"secretName,omitempty"`
+}
+
+type TLSMode string
+
+const (
+	TLSModeCertManagerSelfSigned TLSMode = "cert-manager-selfsigned"
+	TLSModeCertManagerIssuer     TLSMode = "cert-manager-issuer"
+	TLSModeUserProvided          TLSMode = "user-provided"
+)
+
+type IssuerRef struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"` // "Issuer" or "ClusterIssuer"
 }
 
 type Persistence struct {
@@ -205,14 +221,57 @@ func (c *InstallConfig) Validate() error {
 	if !contains([]string{"Never", "IfNotPresent", "Always"}, c.Spec.Images.PullPolicy) {
 		return fmt.Errorf("unsupported image pull policy %q", c.Spec.Images.PullPolicy)
 	}
-	if !contains([]string{"port-forward", "ingress"}, c.Spec.Exposure.Mode) {
-		return fmt.Errorf("unsupported exposure mode %q", c.Spec.Exposure.Mode)
+	if c.Spec.Exposure.IngressClassName == "" {
+		c.Spec.Exposure.IngressClassName = "nginx"
 	}
-	if c.Spec.Profile == "production" && (c.Spec.Exposure.EnterpriseHost == "" || c.Spec.Exposure.PlatformHost == "" ||
-		c.Spec.Exposure.ConnectorHost == "") {
-		return fmt.Errorf("production exposure hosts, including connectorHost, are required")
+	if !dnsLabel.MatchString(c.Spec.Exposure.IngressClassName) {
+		return fmt.Errorf("spec.exposure.ingressClassName must be a Kubernetes DNS label")
+	}
+	if c.Spec.Exposure.EnterpriseHost == "" || c.Spec.Exposure.PlatformHost == "" {
+		return fmt.Errorf("spec.exposure.enterpriseHost and spec.exposure.platformHost are required for domain-based exposure")
+	}
+	if !validHostname(c.Spec.Exposure.EnterpriseHost) || !validHostname(c.Spec.Exposure.PlatformHost) {
+		return fmt.Errorf("spec.exposure enterpriseHost and platformHost must be DNS hostnames")
+	}
+	if c.Spec.Exposure.ConnectorHost == "" {
+		return fmt.Errorf("spec.exposure.connectorHost is required for domain-based exposure")
+	}
+	if !validHostname(c.Spec.Exposure.ConnectorHost) {
+		return fmt.Errorf("spec.exposure.connectorHost must be a DNS hostname")
+	}
+	if c.Spec.Exposure.TLS == nil || !c.Spec.Exposure.TLS.Enabled {
+		return fmt.Errorf("spec.exposure.tls.enabled must be true; plain HTTP exposure is not supported (modes: cert-manager-selfsigned, cert-manager-issuer, user-provided)")
+	}
+	switch c.Spec.Exposure.TLS.Mode {
+	case TLSModeCertManagerSelfSigned:
+		// No additional validation needed
+	case TLSModeCertManagerIssuer:
+		if c.Spec.Exposure.TLS.IssuerRef.Name == "" {
+			return fmt.Errorf("spec.exposure.tls.issuerRef.name required when mode is cert-manager-issuer")
+		}
+		if c.Spec.Exposure.TLS.IssuerRef.Kind == "" {
+			c.Spec.Exposure.TLS.IssuerRef.Kind = "ClusterIssuer"
+		}
+	case TLSModeUserProvided:
+		if c.Spec.Exposure.TLS.SecretName == "" {
+			return fmt.Errorf("spec.exposure.tls.secretName required when mode is user-provided")
+		}
+	default:
+		return fmt.Errorf("spec.exposure.tls.mode must be cert-manager-selfsigned, cert-manager-issuer, or user-provided")
 	}
 	return nil
+}
+
+func validHostname(value string) bool {
+	if len(value) == 0 || len(value) > 253 || strings.HasPrefix(value, ".") || strings.HasSuffix(value, ".") {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if !dnsLabel.MatchString(label) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *InstallConfig) Image(name string) string {

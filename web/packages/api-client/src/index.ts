@@ -50,9 +50,18 @@ export type {
   RemoteAccessGrant,
   RemoteAccessGrantWrite,
   RemoteAccessGrantUpdate,
-  RemoteAccessPolicy,
-  RemoteAccessPolicyWrite,
-  RemoteAccessPolicyUpdate,
+  RemoteAccessRule,
+  RemoteAccessRuleWrite,
+  RemoteAccessRuleUpdate,
+  RemoteAccessRuleSimulationRequest,
+  RemoteAccessRuleSimulationResult,
+  ApprovalWorkflow,
+  ApprovalWorkflowWrite,
+  ApprovalWorkflowUpdate,
+  SessionProfile,
+  SessionProfileWrite,
+  SessionProfileUpdate,
+  RemoteAccessReferences,
   AccessRequest,
   AccessRequestCreate,
   AccessLease,
@@ -146,6 +155,14 @@ export {
 } from "./transport/errors";
 export { ApiProvider, useApi } from "./react";
 export type { ApiProviderProps } from "./react";
+export {
+  TerminalSessionProvider,
+  useTerminalSessions,
+} from "./contexts/terminal-session-context";
+export type {
+  SessionState,
+  TerminalLine,
+} from "./contexts/terminal-session-context";
 export {
   AUDIT_ACTION_CODES,
   AUDIT_ACTOR_TYPE_CODES,

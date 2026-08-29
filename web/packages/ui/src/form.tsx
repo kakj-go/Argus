@@ -151,15 +151,18 @@ export function Switch({
   checked,
   onChange,
   label,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       aria-checked={checked}
       className={cx("argus-switch", checked && "is-on")}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
       role="switch"
       type="button"

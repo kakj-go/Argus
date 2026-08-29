@@ -27,7 +27,7 @@
 1. `Dashboard` 是长期持久化业务对象，`InteractiveCard` 只用于会话中的预览、分析摘要和确认交互。
 2. 一个 Dashboard 可以混排三种信号，但每个 Panel 保留自己的 PromQL、KQL 或 SkyWalking GraphQL 语义。
 3. Dashboard 保存不可变 `DashboardRevision`；只有已验证的 Revision 才能被前端执行或被 AI Skill 使用。
-4. 资源绑定是导航和查询上下文，不是授权边界；每次打开、刷新、AI 查询和绑定变更都重新执行 DataScope 与 AuthorizationVersion 校验。
+4. 资源绑定是导航和查询上下文，不是授权边界；每次打开、刷新、AI 查询和绑定变更都重新执行 explicit resource authorization 与 AuthorizationVersion 校验。
 5. 所有持久化变更均使用现有 `.preview/.commit` 协议。产品文案可以称“准备/确认”，不另造一套 `prepare` 协议。
 6. 分析入口必须是显式 Dashboard `@` 引用；创建入口必须是显式 `/` Skill，不做用户语言到 Dashboard 的模糊自动匹配。
 7. AI 可以从 active Revision 读取 Panel 查询定义并决定查询顺序，但指标 Query Tool 必须校验 Dashboard/Revision/Panel provenance 和查询哈希。

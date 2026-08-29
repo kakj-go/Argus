@@ -76,7 +76,14 @@ func (relay Relay) publish(ctx context.Context, event db.OutboxEvent) error {
 	}
 	route, err := relay.Store.Queries.GetRemoteAccessRoute(ctx, sessionID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+		// Direct-mode sessions keep no route row; broadcast so the owning
+		// Gateway still learns about the termination instead of silently
+		// dropping the event.
+		var broadcast redisstore.RemoteAccessTermination
+		if err := json.Unmarshal(event.Payload, &broadcast); err != nil || broadcast.SessionID != sessionID.String() || broadcast.SessionFence < 1 {
+			return errors.New("invalid remote access termination payload")
+		}
+		return relay.Redis.PublishRemoteAccessTerminationBroadcast(ctx, broadcast)
 	}
 	if err != nil {
 		return err

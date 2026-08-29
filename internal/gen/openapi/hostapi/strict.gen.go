@@ -12,7 +12,7 @@ import (
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// ListHosts List DataScope-filtered Hosts.
+	// ListHosts List explicitly authorized Hosts.
 	// (GET /enterprise/hosts)
 	ListHosts(ctx context.Context, request ListHostsRequestObject) (ListHostsResponseObject, error)
 	// PreviewCreateHost Freeze a validated Host creation plan.
@@ -21,7 +21,7 @@ type StrictServerInterface interface {
 	// CreateHostConnectionTest Start a bounded Host connection test.
 	// (POST /enterprise/hosts/connection-tests)
 	CreateHostConnectionTest(ctx context.Context, request CreateHostConnectionTestRequestObject) (CreateHostConnectionTestResponseObject, error)
-	// GetHost Get a DataScope-filtered Host.
+	// GetHost Get an explicitly authorized Host.
 	// (GET /enterprise/hosts/{id})
 	GetHost(ctx context.Context, request GetHostRequestObject) (GetHostResponseObject, error)
 	// PreviewDeleteHost Freeze a Host logical deletion plan.

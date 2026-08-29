@@ -12,14 +12,112 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bumpRemoteAccessGovernanceUsersAuthorizationVersion = `-- name: BumpRemoteAccessGovernanceUsersAuthorizationVersion :many
+WITH affected AS (
+  SELECT DISTINCT request.requester_id
+  FROM remote_access_requests request
+  WHERE request.enterprise_id=$1
+    AND (
+      request.status IN ('requested','awaiting_mfa','awaiting_approval','authorized')
+      OR EXISTS (SELECT 1 FROM remote_access_leases lease WHERE lease.request_id=request.id AND lease.revoked_at IS NULL AND lease.expires_at>now())
+      OR EXISTS (SELECT 1 FROM remote_access_sessions session JOIN remote_access_leases lease ON lease.id=session.lease_id
+                  WHERE lease.request_id=request.id AND session.status IN ('requested','authorized','connecting','active','connection_lost'))
+    )
+    AND CASE $2::text
+      WHEN 'grant' THEN request.grant_id=$3::uuid
+      WHEN 'host' THEN request.host_id=$3::uuid
+      WHEN 'managed_account' THEN request.managed_account_id=$3::uuid
+      WHEN 'rule' THEN request.decision_snapshot->'matched_rule_snapshots' @> jsonb_build_array(jsonb_build_object('id', $3::uuid::text))
+      WHEN 'workflow' THEN request.decision_snapshot->'approval_requirements' @> jsonb_build_array(jsonb_build_object('workflow_id', $3::uuid::text))
+      WHEN 'session_profile' THEN request.decision_snapshot->'session_profile'->'source_profiles' @> jsonb_build_array(jsonb_build_object('id', $3::uuid::text))
+      ELSE false
+    END
+)
+UPDATE enterprise_users actor SET authorization_version=authorization_version+1,updated_at=now()
+FROM affected WHERE actor.id=affected.requester_id AND actor.enterprise_id=$1
+RETURNING actor.id
+`
+
+type BumpRemoteAccessGovernanceUsersAuthorizationVersionParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	SourceType   string    `json:"source_type"`
+	SourceID     uuid.UUID `json:"source_id"`
+}
+
+func (q *Queries) BumpRemoteAccessGovernanceUsersAuthorizationVersion(ctx context.Context, arg BumpRemoteAccessGovernanceUsersAuthorizationVersionParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, bumpRemoteAccessGovernanceUsersAuthorizationVersion, arg.EnterpriseID, arg.SourceType, arg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const canReadRemoteAccessRequestAsApprover = `-- name: CanReadRemoteAccessRequestAsApprover :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_access_requests request
+  WHERE request.id=$1 AND request.enterprise_id=$2
+    AND (
+      EXISTS (
+        SELECT 1 FROM remote_access_decisions decision
+        WHERE decision.request_id=request.id AND decision.decided_by=$3
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM remote_access_requirement_snapshots requirement
+        JOIN enterprise_users approver ON approver.id=$3
+          AND approver.enterprise_id=request.enterprise_id AND approver.status='active'
+        JOIN role_bindings binding ON binding.enterprise_id=request.enterprise_id
+          AND binding.status='active' AND binding.role_id=ANY(requirement.approver_role_ids)
+          AND ((binding.subject_type='user' AND binding.subject_id=$3)
+            OR (binding.subject_type='department' AND binding.subject_id=approver.department_id))
+          AND (binding.valid_from IS NULL OR binding.valid_from<=now())
+          AND (binding.valid_until IS NULL OR binding.valid_until>now())
+        WHERE requirement.request_id=request.id
+          AND (requirement.separation_of_duties=false OR request.requester_id<>$3)
+      )
+    )
+)
+`
+
+type CanReadRemoteAccessRequestAsApproverParams struct {
+	RequestID    uuid.UUID `json:"request_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	ApproverID   uuid.UUID `json:"approver_id"`
+}
+
+func (q *Queries) CanReadRemoteAccessRequestAsApprover(ctx context.Context, arg CanReadRemoteAccessRequestAsApproverParams) (bool, error) {
+	row := q.db.QueryRow(ctx, canReadRemoteAccessRequestAsApprover, arg.RequestID, arg.EnterpriseID, arg.ApproverID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const countRemoteAccessApprovals = `-- name: CountRemoteAccessApprovals :one
 SELECT count(*)::integer FROM remote_access_decisions decision
 JOIN remote_access_requirement_snapshots requirement ON requirement.id=decision.requirement_id
 JOIN remote_access_requests request ON request.id=decision.request_id
-JOIN role_bindings binding ON binding.enterprise_id=request.enterprise_id AND binding.subject_type='user'
-  AND binding.subject_id=decision.decided_by AND binding.status='active' AND binding.role_id=ANY(requirement.approver_role_ids)
+JOIN enterprise_users approver ON approver.id=decision.decided_by AND approver.enterprise_id=request.enterprise_id
+JOIN role_bindings binding ON binding.enterprise_id=request.enterprise_id
+  AND binding.status='active' AND binding.role_id=ANY(requirement.approver_role_ids)
+  AND ((binding.subject_type='user' AND binding.subject_id=decision.decided_by)
+    OR (binding.subject_type='department' AND binding.subject_id=approver.department_id))
 WHERE decision.requirement_id=$1 AND decision.decision='approve'
   AND (requirement.separation_of_duties=false OR decision.decided_by<>request.requester_id)
+  AND (binding.valid_from IS NULL OR binding.valid_from<=decision.decided_at)
+  AND (binding.valid_until IS NULL OR binding.valid_until>decision.decided_at)
 `
 
 func (q *Queries) CountRemoteAccessApprovals(ctx context.Context, requirementID uuid.UUID) (int32, error) {
@@ -93,23 +191,25 @@ func (q *Queries) CreateRemoteAccessDecision(ctx context.Context, arg CreateRemo
 
 const createRemoteAccessLease = `-- name: CreateRemoteAccessLease :one
 INSERT INTO remote_access_leases (id,request_id,enterprise_id,user_id,grant_id,host_id,managed_account_id,protocol,action,
-    authorization_version,policy_snapshot_hash,expires_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, request_id, enterprise_id, user_id, grant_id, host_id, managed_account_id, protocol, action, authorization_version, policy_snapshot_hash, issued_at, expires_at, revoked_at, revoke_reason
+    authorization_version,expires_at,decision_snapshot,session_profile_snapshot,decision_snapshot_hash)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id, request_id, enterprise_id, user_id, grant_id, host_id, managed_account_id, protocol, action, authorization_version, issued_at, expires_at, revoked_at, revoke_reason, decision_snapshot, session_profile_snapshot, decision_snapshot_hash
 `
 
 type CreateRemoteAccessLeaseParams struct {
-	ID                   uuid.UUID          `json:"id"`
-	RequestID            uuid.UUID          `json:"request_id"`
-	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
-	UserID               uuid.UUID          `json:"user_id"`
-	GrantID              uuid.UUID          `json:"grant_id"`
-	HostID               uuid.UUID          `json:"host_id"`
-	ManagedAccountID     uuid.UUID          `json:"managed_account_id"`
-	Protocol             string             `json:"protocol"`
-	Action               string             `json:"action"`
-	AuthorizationVersion int64              `json:"authorization_version"`
-	PolicySnapshotHash   []byte             `json:"policy_snapshot_hash"`
-	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	ID                     uuid.UUID          `json:"id"`
+	RequestID              uuid.UUID          `json:"request_id"`
+	EnterpriseID           uuid.UUID          `json:"enterprise_id"`
+	UserID                 uuid.UUID          `json:"user_id"`
+	GrantID                uuid.UUID          `json:"grant_id"`
+	HostID                 uuid.UUID          `json:"host_id"`
+	ManagedAccountID       uuid.UUID          `json:"managed_account_id"`
+	Protocol               string             `json:"protocol"`
+	Action                 string             `json:"action"`
+	AuthorizationVersion   int64              `json:"authorization_version"`
+	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
+	DecisionSnapshot       []byte             `json:"decision_snapshot"`
+	SessionProfileSnapshot []byte             `json:"session_profile_snapshot"`
+	DecisionSnapshotHash   []byte             `json:"decision_snapshot_hash"`
 }
 
 func (q *Queries) CreateRemoteAccessLease(ctx context.Context, arg CreateRemoteAccessLeaseParams) (RemoteAccessLease, error) {
@@ -124,8 +224,10 @@ func (q *Queries) CreateRemoteAccessLease(ctx context.Context, arg CreateRemoteA
 		arg.Protocol,
 		arg.Action,
 		arg.AuthorizationVersion,
-		arg.PolicySnapshotHash,
 		arg.ExpiresAt,
+		arg.DecisionSnapshot,
+		arg.SessionProfileSnapshot,
+		arg.DecisionSnapshotHash,
 	)
 	var i RemoteAccessLease
 	err := row.Scan(
@@ -139,33 +241,44 @@ func (q *Queries) CreateRemoteAccessLease(ctx context.Context, arg CreateRemoteA
 		&i.Protocol,
 		&i.Action,
 		&i.AuthorizationVersion,
-		&i.PolicySnapshotHash,
 		&i.IssuedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
 	)
 	return i, err
 }
 
 const createRemoteAccessRequest = `-- name: CreateRemoteAccessRequest :one
-INSERT INTO remote_access_requests (id,enterprise_id,requester_id,grant_id,host_id,managed_account_id,protocol,action,reason,status,authorization_version,expires_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at
+INSERT INTO remote_access_requests (id,enterprise_id,requester_id,grant_id,host_id,managed_account_id,protocol,action,reason,status,
+    authorization_version,expires_at,decision_outcome,decision_reason_codes,decision_snapshot,decision_snapshot_hash,
+    matched_grant_snapshots,matched_rule_snapshots,decision_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at, decision_outcome, decision_reason_codes, decision_snapshot, decision_snapshot_hash, matched_grant_snapshots, matched_rule_snapshots, decision_at
 `
 
 type CreateRemoteAccessRequestParams struct {
-	ID                   uuid.UUID          `json:"id"`
-	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
-	RequesterID          uuid.UUID          `json:"requester_id"`
-	GrantID              uuid.UUID          `json:"grant_id"`
-	HostID               uuid.UUID          `json:"host_id"`
-	ManagedAccountID     uuid.UUID          `json:"managed_account_id"`
-	Protocol             string             `json:"protocol"`
-	Action               string             `json:"action"`
-	Reason               string             `json:"reason"`
-	Status               string             `json:"status"`
-	AuthorizationVersion int64              `json:"authorization_version"`
-	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	ID                    uuid.UUID          `json:"id"`
+	EnterpriseID          uuid.UUID          `json:"enterprise_id"`
+	RequesterID           uuid.UUID          `json:"requester_id"`
+	GrantID               uuid.UUID          `json:"grant_id"`
+	HostID                uuid.UUID          `json:"host_id"`
+	ManagedAccountID      uuid.UUID          `json:"managed_account_id"`
+	Protocol              string             `json:"protocol"`
+	Action                string             `json:"action"`
+	Reason                string             `json:"reason"`
+	Status                string             `json:"status"`
+	AuthorizationVersion  int64              `json:"authorization_version"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	DecisionOutcome       pgtype.Text        `json:"decision_outcome"`
+	DecisionReasonCodes   []byte             `json:"decision_reason_codes"`
+	DecisionSnapshot      []byte             `json:"decision_snapshot"`
+	DecisionSnapshotHash  []byte             `json:"decision_snapshot_hash"`
+	MatchedGrantSnapshots []byte             `json:"matched_grant_snapshots"`
+	MatchedRuleSnapshots  []byte             `json:"matched_rule_snapshots"`
+	DecisionAt            pgtype.Timestamptz `json:"decision_at"`
 }
 
 func (q *Queries) CreateRemoteAccessRequest(ctx context.Context, arg CreateRemoteAccessRequestParams) (RemoteAccessRequest, error) {
@@ -182,6 +295,13 @@ func (q *Queries) CreateRemoteAccessRequest(ctx context.Context, arg CreateRemot
 		arg.Status,
 		arg.AuthorizationVersion,
 		arg.ExpiresAt,
+		arg.DecisionOutcome,
+		arg.DecisionReasonCodes,
+		arg.DecisionSnapshot,
+		arg.DecisionSnapshotHash,
+		arg.MatchedGrantSnapshots,
+		arg.MatchedRuleSnapshots,
+		arg.DecisionAt,
 	)
 	var i RemoteAccessRequest
 	err := row.Scan(
@@ -199,48 +319,72 @@ func (q *Queries) CreateRemoteAccessRequest(ctx context.Context, arg CreateRemot
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionOutcome,
+		&i.DecisionReasonCodes,
+		&i.DecisionSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.MatchedGrantSnapshots,
+		&i.MatchedRuleSnapshots,
+		&i.DecisionAt,
 	)
 	return i, err
 }
 
 const createRemoteAccessRequirement = `-- name: CreateRemoteAccessRequirement :one
-INSERT INTO remote_access_requirement_snapshots (id,request_id,policy_id,policy_version,approver_role_ids,minimum_approvals,
-    separation_of_duties,require_mfa,max_session_seconds,idle_timeout_seconds)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, request_id, policy_id, policy_version, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, status, created_at
+INSERT INTO remote_access_requirement_snapshots (id,request_id,approver_role_ids,minimum_approvals,
+    separation_of_duties,require_mfa,max_session_seconds,idle_timeout_seconds,rule_id,rule_version,workflow_id,workflow_version,
+    session_profile_id,session_profile_version,approval_snapshot,deadline_at,escalation_at,timeout_effect,escalation_role_ids)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id, request_id, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, status, created_at, rule_id, rule_version, workflow_id, workflow_version, session_profile_id, session_profile_version, approval_snapshot, deadline_at, escalated_at, timeout_effect, escalation_role_ids, escalation_at
 `
 
 type CreateRemoteAccessRequirementParams struct {
-	ID                 uuid.UUID   `json:"id"`
-	RequestID          uuid.UUID   `json:"request_id"`
-	PolicyID           uuid.UUID   `json:"policy_id"`
-	PolicyVersion      int64       `json:"policy_version"`
-	ApproverRoleIds    []uuid.UUID `json:"approver_role_ids"`
-	MinimumApprovals   int32       `json:"minimum_approvals"`
-	SeparationOfDuties bool        `json:"separation_of_duties"`
-	RequireMfa         bool        `json:"require_mfa"`
-	MaxSessionSeconds  int32       `json:"max_session_seconds"`
-	IdleTimeoutSeconds int32       `json:"idle_timeout_seconds"`
+	ID                    uuid.UUID          `json:"id"`
+	RequestID             uuid.UUID          `json:"request_id"`
+	ApproverRoleIds       []uuid.UUID        `json:"approver_role_ids"`
+	MinimumApprovals      int32              `json:"minimum_approvals"`
+	SeparationOfDuties    bool               `json:"separation_of_duties"`
+	RequireMfa            bool               `json:"require_mfa"`
+	MaxSessionSeconds     int32              `json:"max_session_seconds"`
+	IdleTimeoutSeconds    int32              `json:"idle_timeout_seconds"`
+	RuleID                uuid.NullUUID      `json:"rule_id"`
+	RuleVersion           pgtype.Int8        `json:"rule_version"`
+	WorkflowID            uuid.NullUUID      `json:"workflow_id"`
+	WorkflowVersion       pgtype.Int8        `json:"workflow_version"`
+	SessionProfileID      uuid.NullUUID      `json:"session_profile_id"`
+	SessionProfileVersion pgtype.Int8        `json:"session_profile_version"`
+	ApprovalSnapshot      []byte             `json:"approval_snapshot"`
+	DeadlineAt            pgtype.Timestamptz `json:"deadline_at"`
+	EscalationAt          pgtype.Timestamptz `json:"escalation_at"`
+	TimeoutEffect         string             `json:"timeout_effect"`
+	EscalationRoleIds     []uuid.UUID        `json:"escalation_role_ids"`
 }
 
 func (q *Queries) CreateRemoteAccessRequirement(ctx context.Context, arg CreateRemoteAccessRequirementParams) (RemoteAccessRequirementSnapshot, error) {
 	row := q.db.QueryRow(ctx, createRemoteAccessRequirement,
 		arg.ID,
 		arg.RequestID,
-		arg.PolicyID,
-		arg.PolicyVersion,
 		arg.ApproverRoleIds,
 		arg.MinimumApprovals,
 		arg.SeparationOfDuties,
 		arg.RequireMfa,
 		arg.MaxSessionSeconds,
 		arg.IdleTimeoutSeconds,
+		arg.RuleID,
+		arg.RuleVersion,
+		arg.WorkflowID,
+		arg.WorkflowVersion,
+		arg.SessionProfileID,
+		arg.SessionProfileVersion,
+		arg.ApprovalSnapshot,
+		arg.DeadlineAt,
+		arg.EscalationAt,
+		arg.TimeoutEffect,
+		arg.EscalationRoleIds,
 	)
 	var i RemoteAccessRequirementSnapshot
 	err := row.Scan(
 		&i.ID,
 		&i.RequestID,
-		&i.PolicyID,
-		&i.PolicyVersion,
 		&i.ApproverRoleIds,
 		&i.MinimumApprovals,
 		&i.SeparationOfDuties,
@@ -249,12 +393,200 @@ func (q *Queries) CreateRemoteAccessRequirement(ctx context.Context, arg CreateR
 		&i.IdleTimeoutSeconds,
 		&i.Status,
 		&i.CreatedAt,
+		&i.RuleID,
+		&i.RuleVersion,
+		&i.WorkflowID,
+		&i.WorkflowVersion,
+		&i.SessionProfileID,
+		&i.SessionProfileVersion,
+		&i.ApprovalSnapshot,
+		&i.DeadlineAt,
+		&i.EscalatedAt,
+		&i.TimeoutEffect,
+		&i.EscalationRoleIds,
+		&i.EscalationAt,
 	)
 	return i, err
 }
 
+const escalateRemoteAccessRequirements = `-- name: EscalateRemoteAccessRequirements :many
+WITH candidates AS (
+  SELECT requirement.id
+  FROM remote_access_requirement_snapshots requirement
+  JOIN remote_access_requests request ON request.id=requirement.request_id
+  WHERE requirement.status='pending' AND requirement.escalated_at IS NULL
+    AND cardinality(requirement.escalation_role_ids)>0
+    AND requirement.escalation_at<=now()
+    AND request.status='awaiting_approval'
+  ORDER BY requirement.deadline_at, requirement.id
+  FOR UPDATE OF requirement SKIP LOCKED
+  LIMIT $1
+)
+UPDATE remote_access_requirement_snapshots requirement SET escalated_at=now()
+FROM candidates WHERE requirement.id=candidates.id
+RETURNING requirement.id, requirement.request_id, requirement.approver_role_ids, requirement.minimum_approvals, requirement.separation_of_duties, requirement.require_mfa, requirement.max_session_seconds, requirement.idle_timeout_seconds, requirement.status, requirement.created_at, requirement.rule_id, requirement.rule_version, requirement.workflow_id, requirement.workflow_version, requirement.session_profile_id, requirement.session_profile_version, requirement.approval_snapshot, requirement.deadline_at, requirement.escalated_at, requirement.timeout_effect, requirement.escalation_role_ids, requirement.escalation_at
+`
+
+func (q *Queries) EscalateRemoteAccessRequirements(ctx context.Context, limit int32) ([]RemoteAccessRequirementSnapshot, error) {
+	rows, err := q.db.Query(ctx, escalateRemoteAccessRequirements, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessRequirementSnapshot{}
+	for rows.Next() {
+		var i RemoteAccessRequirementSnapshot
+		if err := rows.Scan(
+			&i.ID,
+			&i.RequestID,
+			&i.ApproverRoleIds,
+			&i.MinimumApprovals,
+			&i.SeparationOfDuties,
+			&i.RequireMfa,
+			&i.MaxSessionSeconds,
+			&i.IdleTimeoutSeconds,
+			&i.Status,
+			&i.CreatedAt,
+			&i.RuleID,
+			&i.RuleVersion,
+			&i.WorkflowID,
+			&i.WorkflowVersion,
+			&i.SessionProfileID,
+			&i.SessionProfileVersion,
+			&i.ApprovalSnapshot,
+			&i.DeadlineAt,
+			&i.EscalatedAt,
+			&i.TimeoutEffect,
+			&i.EscalationRoleIds,
+			&i.EscalationAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const expirePendingRemoteAccessRequests = `-- name: ExpirePendingRemoteAccessRequests :many
+WITH candidates AS (
+  SELECT request.id
+  FROM remote_access_requests request
+  WHERE request.status IN ('requested','awaiting_mfa') AND request.expires_at<=now()
+  ORDER BY request.expires_at, request.id
+  FOR UPDATE OF request SKIP LOCKED
+  LIMIT $1
+)
+UPDATE remote_access_requests request SET status='expired',updated_at=now()
+FROM candidates WHERE request.id=candidates.id
+RETURNING request.id, request.enterprise_id, request.requester_id, request.grant_id, request.host_id, request.managed_account_id, request.protocol, request.action, request.reason, request.status, request.authorization_version, request.expires_at, request.created_at, request.updated_at, request.decision_outcome, request.decision_reason_codes, request.decision_snapshot, request.decision_snapshot_hash, request.matched_grant_snapshots, request.matched_rule_snapshots, request.decision_at
+`
+
+func (q *Queries) ExpirePendingRemoteAccessRequests(ctx context.Context, limit int32) ([]RemoteAccessRequest, error) {
+	rows, err := q.db.Query(ctx, expirePendingRemoteAccessRequests, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessRequest{}
+	for rows.Next() {
+		var i RemoteAccessRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.RequesterID,
+			&i.GrantID,
+			&i.HostID,
+			&i.ManagedAccountID,
+			&i.Protocol,
+			&i.Action,
+			&i.Reason,
+			&i.Status,
+			&i.AuthorizationVersion,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DecisionOutcome,
+			&i.DecisionReasonCodes,
+			&i.DecisionSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.MatchedGrantSnapshots,
+			&i.MatchedRuleSnapshots,
+			&i.DecisionAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const expireRemoteAccessRequirements = `-- name: ExpireRemoteAccessRequirements :many
+WITH candidates AS (
+  SELECT requirement.id
+  FROM remote_access_requirement_snapshots requirement
+  JOIN remote_access_requests request ON request.id=requirement.request_id
+  WHERE requirement.status='pending' AND requirement.deadline_at<=now()
+    AND request.status='awaiting_approval'
+  ORDER BY requirement.deadline_at, requirement.id
+  FOR UPDATE OF requirement SKIP LOCKED
+  LIMIT $1
+)
+UPDATE remote_access_requirement_snapshots requirement SET status='invalidated'
+FROM candidates WHERE requirement.id=candidates.id
+RETURNING requirement.id, requirement.request_id, requirement.approver_role_ids, requirement.minimum_approvals, requirement.separation_of_duties, requirement.require_mfa, requirement.max_session_seconds, requirement.idle_timeout_seconds, requirement.status, requirement.created_at, requirement.rule_id, requirement.rule_version, requirement.workflow_id, requirement.workflow_version, requirement.session_profile_id, requirement.session_profile_version, requirement.approval_snapshot, requirement.deadline_at, requirement.escalated_at, requirement.timeout_effect, requirement.escalation_role_ids, requirement.escalation_at
+`
+
+func (q *Queries) ExpireRemoteAccessRequirements(ctx context.Context, limit int32) ([]RemoteAccessRequirementSnapshot, error) {
+	rows, err := q.db.Query(ctx, expireRemoteAccessRequirements, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessRequirementSnapshot{}
+	for rows.Next() {
+		var i RemoteAccessRequirementSnapshot
+		if err := rows.Scan(
+			&i.ID,
+			&i.RequestID,
+			&i.ApproverRoleIds,
+			&i.MinimumApprovals,
+			&i.SeparationOfDuties,
+			&i.RequireMfa,
+			&i.MaxSessionSeconds,
+			&i.IdleTimeoutSeconds,
+			&i.Status,
+			&i.CreatedAt,
+			&i.RuleID,
+			&i.RuleVersion,
+			&i.WorkflowID,
+			&i.WorkflowVersion,
+			&i.SessionProfileID,
+			&i.SessionProfileVersion,
+			&i.ApprovalSnapshot,
+			&i.DeadlineAt,
+			&i.EscalatedAt,
+			&i.TimeoutEffect,
+			&i.EscalationRoleIds,
+			&i.EscalationAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRemoteAccessLeaseForSession = `-- name: GetRemoteAccessLeaseForSession :one
-SELECT lease.id, lease.request_id, lease.enterprise_id, lease.user_id, lease.grant_id, lease.host_id, lease.managed_account_id, lease.protocol, lease.action, lease.authorization_version, lease.policy_snapshot_hash, lease.issued_at, lease.expires_at, lease.revoked_at, lease.revoke_reason, host.connection_mode, bastion.active_connector_id AS connector_id, account.username, account.credential_id
+SELECT lease.id, lease.request_id, lease.enterprise_id, lease.user_id, lease.grant_id, lease.host_id, lease.managed_account_id, lease.protocol, lease.action, lease.authorization_version, lease.issued_at, lease.expires_at, lease.revoked_at, lease.revoke_reason, lease.decision_snapshot, lease.session_profile_snapshot, lease.decision_snapshot_hash, host.connection_mode, bastion.active_connector_id AS connector_id, account.username, account.credential_id
 FROM remote_access_leases lease JOIN hosts host ON host.id=lease.host_id AND host.enterprise_id=lease.enterprise_id
 JOIN managed_accounts account ON account.id=lease.managed_account_id AND account.enterprise_id=lease.enterprise_id
 LEFT JOIN bastion_scopes bastion ON bastion.id=host.bastion_scope_id AND bastion.enterprise_id=host.enterprise_id AND bastion.status='active'
@@ -269,25 +601,27 @@ type GetRemoteAccessLeaseForSessionParams struct {
 }
 
 type GetRemoteAccessLeaseForSessionRow struct {
-	ID                   uuid.UUID          `json:"id"`
-	RequestID            uuid.UUID          `json:"request_id"`
-	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
-	UserID               uuid.UUID          `json:"user_id"`
-	GrantID              uuid.UUID          `json:"grant_id"`
-	HostID               uuid.UUID          `json:"host_id"`
-	ManagedAccountID     uuid.UUID          `json:"managed_account_id"`
-	Protocol             string             `json:"protocol"`
-	Action               string             `json:"action"`
-	AuthorizationVersion int64              `json:"authorization_version"`
-	PolicySnapshotHash   []byte             `json:"policy_snapshot_hash"`
-	IssuedAt             pgtype.Timestamptz `json:"issued_at"`
-	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
-	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
-	RevokeReason         pgtype.Text        `json:"revoke_reason"`
-	ConnectionMode       string             `json:"connection_mode"`
-	ConnectorID          uuid.NullUUID      `json:"connector_id"`
-	Username             string             `json:"username"`
-	CredentialID         uuid.UUID          `json:"credential_id"`
+	ID                     uuid.UUID          `json:"id"`
+	RequestID              uuid.UUID          `json:"request_id"`
+	EnterpriseID           uuid.UUID          `json:"enterprise_id"`
+	UserID                 uuid.UUID          `json:"user_id"`
+	GrantID                uuid.UUID          `json:"grant_id"`
+	HostID                 uuid.UUID          `json:"host_id"`
+	ManagedAccountID       uuid.UUID          `json:"managed_account_id"`
+	Protocol               string             `json:"protocol"`
+	Action                 string             `json:"action"`
+	AuthorizationVersion   int64              `json:"authorization_version"`
+	IssuedAt               pgtype.Timestamptz `json:"issued_at"`
+	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt              pgtype.Timestamptz `json:"revoked_at"`
+	RevokeReason           pgtype.Text        `json:"revoke_reason"`
+	DecisionSnapshot       []byte             `json:"decision_snapshot"`
+	SessionProfileSnapshot []byte             `json:"session_profile_snapshot"`
+	DecisionSnapshotHash   []byte             `json:"decision_snapshot_hash"`
+	ConnectionMode         string             `json:"connection_mode"`
+	ConnectorID            uuid.NullUUID      `json:"connector_id"`
+	Username               string             `json:"username"`
+	CredentialID           uuid.UUID          `json:"credential_id"`
 }
 
 func (q *Queries) GetRemoteAccessLeaseForSession(ctx context.Context, arg GetRemoteAccessLeaseForSessionParams) (GetRemoteAccessLeaseForSessionRow, error) {
@@ -304,11 +638,13 @@ func (q *Queries) GetRemoteAccessLeaseForSession(ctx context.Context, arg GetRem
 		&i.Protocol,
 		&i.Action,
 		&i.AuthorizationVersion,
-		&i.PolicySnapshotHash,
 		&i.IssuedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
 		&i.ConnectionMode,
 		&i.ConnectorID,
 		&i.Username,
@@ -318,7 +654,7 @@ func (q *Queries) GetRemoteAccessLeaseForSession(ctx context.Context, arg GetRem
 }
 
 const getRemoteAccessRequest = `-- name: GetRemoteAccessRequest :one
-SELECT id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at FROM remote_access_requests WHERE id=$1 AND enterprise_id=$2
+SELECT id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at, decision_outcome, decision_reason_codes, decision_snapshot, decision_snapshot_hash, matched_grant_snapshots, matched_rule_snapshots, decision_at FROM remote_access_requests WHERE id=$1 AND enterprise_id=$2
 `
 
 type GetRemoteAccessRequestParams struct {
@@ -344,12 +680,52 @@ func (q *Queries) GetRemoteAccessRequest(ctx context.Context, arg GetRemoteAcces
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionOutcome,
+		&i.DecisionReasonCodes,
+		&i.DecisionSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.MatchedGrantSnapshots,
+		&i.MatchedRuleSnapshots,
+		&i.DecisionAt,
+	)
+	return i, err
+}
+
+const getRemoteAccessRequestForReconcile = `-- name: GetRemoteAccessRequestForReconcile :one
+SELECT id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at, decision_outcome, decision_reason_codes, decision_snapshot, decision_snapshot_hash, matched_grant_snapshots, matched_rule_snapshots, decision_at FROM remote_access_requests WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) GetRemoteAccessRequestForReconcile(ctx context.Context, id uuid.UUID) (RemoteAccessRequest, error) {
+	row := q.db.QueryRow(ctx, getRemoteAccessRequestForReconcile, id)
+	var i RemoteAccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.RequesterID,
+		&i.GrantID,
+		&i.HostID,
+		&i.ManagedAccountID,
+		&i.Protocol,
+		&i.Action,
+		&i.Reason,
+		&i.Status,
+		&i.AuthorizationVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecisionOutcome,
+		&i.DecisionReasonCodes,
+		&i.DecisionSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.MatchedGrantSnapshots,
+		&i.MatchedRuleSnapshots,
+		&i.DecisionAt,
 	)
 	return i, err
 }
 
 const getRemoteAccessRequestForUpdate = `-- name: GetRemoteAccessRequestForUpdate :one
-SELECT id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at FROM remote_access_requests WHERE id=$1 AND enterprise_id=$2 FOR UPDATE
+SELECT id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at, decision_outcome, decision_reason_codes, decision_snapshot, decision_snapshot_hash, matched_grant_snapshots, matched_rule_snapshots, decision_at FROM remote_access_requests WHERE id=$1 AND enterprise_id=$2 FOR UPDATE
 `
 
 type GetRemoteAccessRequestForUpdateParams struct {
@@ -375,13 +751,20 @@ func (q *Queries) GetRemoteAccessRequestForUpdate(ctx context.Context, arg GetRe
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionOutcome,
+		&i.DecisionReasonCodes,
+		&i.DecisionSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.MatchedGrantSnapshots,
+		&i.MatchedRuleSnapshots,
+		&i.DecisionAt,
 	)
 	return i, err
 }
 
 const invalidateRemoteAccessRequestsByEnterprise = `-- name: InvalidateRemoteAccessRequestsByEnterprise :exec
 UPDATE remote_access_requests SET status='invalidated',updated_at=now()
-WHERE enterprise_id=$1 AND status IN ('requested','awaiting_approval','authorized')
+WHERE enterprise_id=$1 AND status IN ('requested','awaiting_mfa','awaiting_approval','authorized')
 `
 
 func (q *Queries) InvalidateRemoteAccessRequestsByEnterprise(ctx context.Context, enterpriseID uuid.UUID) error {
@@ -389,9 +772,35 @@ func (q *Queries) InvalidateRemoteAccessRequestsByEnterprise(ctx context.Context
 	return err
 }
 
+const invalidateRemoteAccessRequestsByGovernanceSource = `-- name: InvalidateRemoteAccessRequestsByGovernanceSource :exec
+UPDATE remote_access_requests request SET status='invalidated',updated_at=now()
+WHERE request.enterprise_id=$1
+  AND request.status IN ('requested','awaiting_mfa','awaiting_approval','authorized')
+  AND CASE $2::text
+    WHEN 'grant' THEN request.grant_id=$3::uuid
+    WHEN 'host' THEN request.host_id=$3::uuid
+    WHEN 'managed_account' THEN request.managed_account_id=$3::uuid
+    WHEN 'rule' THEN request.decision_snapshot->'matched_rule_snapshots' @> jsonb_build_array(jsonb_build_object('id', $3::uuid::text))
+    WHEN 'workflow' THEN request.decision_snapshot->'approval_requirements' @> jsonb_build_array(jsonb_build_object('workflow_id', $3::uuid::text))
+    WHEN 'session_profile' THEN request.decision_snapshot->'session_profile'->'source_profiles' @> jsonb_build_array(jsonb_build_object('id', $3::uuid::text))
+    ELSE false
+  END
+`
+
+type InvalidateRemoteAccessRequestsByGovernanceSourceParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	SourceType   string    `json:"source_type"`
+	SourceID     uuid.UUID `json:"source_id"`
+}
+
+func (q *Queries) InvalidateRemoteAccessRequestsByGovernanceSource(ctx context.Context, arg InvalidateRemoteAccessRequestsByGovernanceSourceParams) error {
+	_, err := q.db.Exec(ctx, invalidateRemoteAccessRequestsByGovernanceSource, arg.EnterpriseID, arg.SourceType, arg.SourceID)
+	return err
+}
+
 const invalidateRemoteAccessRequestsByGrant = `-- name: InvalidateRemoteAccessRequestsByGrant :exec
 UPDATE remote_access_requests SET status='invalidated',updated_at=now()
-WHERE grant_id=$1 AND enterprise_id=$2 AND status IN ('requested','awaiting_approval','authorized')
+WHERE grant_id=$1 AND enterprise_id=$2 AND status IN ('requested','awaiting_mfa','awaiting_approval','authorized')
 `
 
 type InvalidateRemoteAccessRequestsByGrantParams struct {
@@ -404,12 +813,31 @@ func (q *Queries) InvalidateRemoteAccessRequestsByGrant(ctx context.Context, arg
 	return err
 }
 
+const invalidateRemoteAccessRequestsByUsers = `-- name: InvalidateRemoteAccessRequestsByUsers :exec
+UPDATE remote_access_requests SET status='invalidated',updated_at=now()
+WHERE enterprise_id=$1 AND requester_id=ANY($2::uuid[])
+  AND status IN ('requested','awaiting_mfa','awaiting_approval','authorized')
+`
+
+type InvalidateRemoteAccessRequestsByUsersParams struct {
+	EnterpriseID uuid.UUID   `json:"enterprise_id"`
+	UserIds      []uuid.UUID `json:"user_ids"`
+}
+
+func (q *Queries) InvalidateRemoteAccessRequestsByUsers(ctx context.Context, arg InvalidateRemoteAccessRequestsByUsersParams) error {
+	_, err := q.db.Exec(ctx, invalidateRemoteAccessRequestsByUsers, arg.EnterpriseID, arg.UserIds)
+	return err
+}
+
 const isRemoteAccessApproverEligible = `-- name: IsRemoteAccessApproverEligible :one
 SELECT EXISTS (
   SELECT 1 FROM remote_access_requirement_snapshots requirement
   JOIN remote_access_requests request ON request.id=requirement.request_id
-  JOIN role_bindings binding ON binding.enterprise_id=request.enterprise_id AND binding.subject_type='user'
-    AND binding.subject_id=$1 AND binding.status='active' AND binding.role_id=ANY(requirement.approver_role_ids)
+  JOIN enterprise_users approver ON approver.id=$1 AND approver.enterprise_id=request.enterprise_id AND approver.status='active'
+  JOIN role_bindings binding ON binding.enterprise_id=request.enterprise_id
+    AND binding.status='active' AND binding.role_id=ANY(requirement.approver_role_ids)
+    AND ((binding.subject_type='user' AND binding.subject_id=$1)
+      OR (binding.subject_type='department' AND binding.subject_id=approver.department_id))
   WHERE requirement.id=$2 AND request.id=$3
     AND (requirement.separation_of_duties=false OR $1<>request.requester_id)
     AND (binding.valid_from IS NULL OR binding.valid_from<=now())
@@ -463,7 +891,7 @@ func (q *Queries) ListRemoteAccessDecisions(ctx context.Context, requestID uuid.
 }
 
 const listRemoteAccessLeases = `-- name: ListRemoteAccessLeases :many
-SELECT id, request_id, enterprise_id, user_id, grant_id, host_id, managed_account_id, protocol, action, authorization_version, policy_snapshot_hash, issued_at, expires_at, revoked_at, revoke_reason FROM remote_access_leases WHERE enterprise_id=$1 AND (user_id=$2 OR $3::boolean) ORDER BY issued_at DESC,id DESC LIMIT $4
+SELECT id, request_id, enterprise_id, user_id, grant_id, host_id, managed_account_id, protocol, action, authorization_version, issued_at, expires_at, revoked_at, revoke_reason, decision_snapshot, session_profile_snapshot, decision_snapshot_hash FROM remote_access_leases WHERE enterprise_id=$1 AND (user_id=$2 OR $3::boolean) ORDER BY issued_at DESC,id DESC LIMIT $4
 `
 
 type ListRemoteAccessLeasesParams struct {
@@ -498,11 +926,13 @@ func (q *Queries) ListRemoteAccessLeases(ctx context.Context, arg ListRemoteAcce
 			&i.Protocol,
 			&i.Action,
 			&i.AuthorizationVersion,
-			&i.PolicySnapshotHash,
 			&i.IssuedAt,
 			&i.ExpiresAt,
 			&i.RevokedAt,
 			&i.RevokeReason,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
 		); err != nil {
 			return nil, err
 		}
@@ -515,22 +945,69 @@ func (q *Queries) ListRemoteAccessLeases(ctx context.Context, arg ListRemoteAcce
 }
 
 const listRemoteAccessRequests = `-- name: ListRemoteAccessRequests :many
-SELECT id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at FROM remote_access_requests WHERE enterprise_id=$1 AND (requester_id=$2 OR $3::boolean) ORDER BY created_at DESC,id DESC LIMIT $4
+SELECT request.id, request.enterprise_id, request.requester_id, request.grant_id, request.host_id, request.managed_account_id, request.protocol, request.action, request.reason, request.status, request.authorization_version, request.expires_at, request.created_at, request.updated_at, request.decision_outcome, request.decision_reason_codes, request.decision_snapshot, request.decision_snapshot_hash, request.matched_grant_snapshots, request.matched_rule_snapshots, request.decision_at
+FROM remote_access_requests request
+WHERE request.enterprise_id=$1
+  AND CASE $2::text
+    WHEN 'mine' THEN request.requester_id=$3
+    WHEN 'approver' THEN request.status='awaiting_approval' AND EXISTS (
+      SELECT 1
+      FROM remote_access_requirement_snapshots requirement
+      JOIN role_bindings binding ON binding.enterprise_id=request.enterprise_id
+        AND binding.status='active'
+        AND binding.role_id=ANY(requirement.approver_role_ids)
+        AND ((binding.subject_type='user' AND binding.subject_id=$3)
+          OR (binding.subject_type='department' AND binding.subject_id=$4))
+        AND (binding.valid_from IS NULL OR binding.valid_from<=now())
+        AND (binding.valid_until IS NULL OR binding.valid_until>now())
+      WHERE requirement.request_id=request.id
+        AND requirement.status='pending'
+        AND (requirement.separation_of_duties=false OR request.requester_id<>$3)
+        AND NOT EXISTS (
+          SELECT 1 FROM remote_access_decisions decision
+          WHERE decision.requirement_id=requirement.id AND decision.decided_by=$3
+        )
+    )
+    WHEN 'processed' THEN EXISTS (
+      SELECT 1 FROM remote_access_decisions decision
+      WHERE decision.request_id=request.id AND decision.decided_by=$3
+    )
+    ELSE false
+  END
+  AND ($5::text IS NULL OR request.status=$5::text)
+  AND ($6::uuid IS NULL OR request.requester_id=$6::uuid)
+  AND ($7::uuid IS NULL OR request.host_id=$7::uuid)
+  AND ($8::text IS NULL OR request.protocol=$8::text)
+  AND ($9::timestamptz IS NULL OR request.created_at>=$9::timestamptz)
+  AND ($10::timestamptz IS NULL OR request.created_at<$10::timestamptz)
+ORDER BY request.created_at DESC,request.id DESC
 `
 
 type ListRemoteAccessRequestsParams struct {
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-	RequesterID  uuid.UUID `json:"requester_id"`
-	Column3      bool      `json:"column_3"`
-	Limit        int32     `json:"limit"`
+	EnterpriseID uuid.UUID          `json:"enterprise_id"`
+	Scope        string             `json:"scope"`
+	ActorID      uuid.UUID          `json:"actor_id"`
+	DepartmentID uuid.UUID          `json:"department_id"`
+	Status       pgtype.Text        `json:"status"`
+	CreatedBy    uuid.NullUUID      `json:"created_by"`
+	HostID       uuid.NullUUID      `json:"host_id"`
+	Protocol     pgtype.Text        `json:"protocol"`
+	CreatedFrom  pgtype.Timestamptz `json:"created_from"`
+	CreatedTo    pgtype.Timestamptz `json:"created_to"`
 }
 
 func (q *Queries) ListRemoteAccessRequests(ctx context.Context, arg ListRemoteAccessRequestsParams) ([]RemoteAccessRequest, error) {
 	rows, err := q.db.Query(ctx, listRemoteAccessRequests,
 		arg.EnterpriseID,
-		arg.RequesterID,
-		arg.Column3,
-		arg.Limit,
+		arg.Scope,
+		arg.ActorID,
+		arg.DepartmentID,
+		arg.Status,
+		arg.CreatedBy,
+		arg.HostID,
+		arg.Protocol,
+		arg.CreatedFrom,
+		arg.CreatedTo,
 	)
 	if err != nil {
 		return nil, err
@@ -554,6 +1031,13 @@ func (q *Queries) ListRemoteAccessRequests(ctx context.Context, arg ListRemoteAc
 			&i.ExpiresAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DecisionOutcome,
+			&i.DecisionReasonCodes,
+			&i.DecisionSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.MatchedGrantSnapshots,
+			&i.MatchedRuleSnapshots,
+			&i.DecisionAt,
 		); err != nil {
 			return nil, err
 		}
@@ -566,7 +1050,7 @@ func (q *Queries) ListRemoteAccessRequests(ctx context.Context, arg ListRemoteAc
 }
 
 const listRemoteAccessRequirements = `-- name: ListRemoteAccessRequirements :many
-SELECT id, request_id, policy_id, policy_version, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, status, created_at FROM remote_access_requirement_snapshots WHERE request_id=$1 ORDER BY policy_id
+SELECT id, request_id, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, status, created_at, rule_id, rule_version, workflow_id, workflow_version, session_profile_id, session_profile_version, approval_snapshot, deadline_at, escalated_at, timeout_effect, escalation_role_ids, escalation_at FROM remote_access_requirement_snapshots WHERE request_id=$1 ORDER BY workflow_id, id
 `
 
 func (q *Queries) ListRemoteAccessRequirements(ctx context.Context, requestID uuid.UUID) ([]RemoteAccessRequirementSnapshot, error) {
@@ -581,8 +1065,6 @@ func (q *Queries) ListRemoteAccessRequirements(ctx context.Context, requestID uu
 		if err := rows.Scan(
 			&i.ID,
 			&i.RequestID,
-			&i.PolicyID,
-			&i.PolicyVersion,
 			&i.ApproverRoleIds,
 			&i.MinimumApprovals,
 			&i.SeparationOfDuties,
@@ -591,6 +1073,18 @@ func (q *Queries) ListRemoteAccessRequirements(ctx context.Context, requestID uu
 			&i.IdleTimeoutSeconds,
 			&i.Status,
 			&i.CreatedAt,
+			&i.RuleID,
+			&i.RuleVersion,
+			&i.WorkflowID,
+			&i.WorkflowVersion,
+			&i.SessionProfileID,
+			&i.SessionProfileVersion,
+			&i.ApprovalSnapshot,
+			&i.DeadlineAt,
+			&i.EscalatedAt,
+			&i.TimeoutEffect,
+			&i.EscalationRoleIds,
+			&i.EscalationAt,
 		); err != nil {
 			return nil, err
 		}
@@ -602,8 +1096,67 @@ func (q *Queries) ListRemoteAccessRequirements(ctx context.Context, requestID uu
 	return items, nil
 }
 
+const resumeRemoteAccessRequest = `-- name: ResumeRemoteAccessRequest :one
+UPDATE remote_access_requests SET status=$3,decision_outcome=$4,decision_reason_codes=$5,decision_snapshot=$6,
+    decision_snapshot_hash=$7,matched_grant_snapshots=$8,matched_rule_snapshots=$9,expires_at=$10,decision_at=now(),updated_at=now()
+WHERE id=$1 AND enterprise_id=$2 AND status='awaiting_mfa' RETURNING id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at, decision_outcome, decision_reason_codes, decision_snapshot, decision_snapshot_hash, matched_grant_snapshots, matched_rule_snapshots, decision_at
+`
+
+type ResumeRemoteAccessRequestParams struct {
+	ID                    uuid.UUID          `json:"id"`
+	EnterpriseID          uuid.UUID          `json:"enterprise_id"`
+	Status                string             `json:"status"`
+	DecisionOutcome       pgtype.Text        `json:"decision_outcome"`
+	DecisionReasonCodes   []byte             `json:"decision_reason_codes"`
+	DecisionSnapshot      []byte             `json:"decision_snapshot"`
+	DecisionSnapshotHash  []byte             `json:"decision_snapshot_hash"`
+	MatchedGrantSnapshots []byte             `json:"matched_grant_snapshots"`
+	MatchedRuleSnapshots  []byte             `json:"matched_rule_snapshots"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) ResumeRemoteAccessRequest(ctx context.Context, arg ResumeRemoteAccessRequestParams) (RemoteAccessRequest, error) {
+	row := q.db.QueryRow(ctx, resumeRemoteAccessRequest,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Status,
+		arg.DecisionOutcome,
+		arg.DecisionReasonCodes,
+		arg.DecisionSnapshot,
+		arg.DecisionSnapshotHash,
+		arg.MatchedGrantSnapshots,
+		arg.MatchedRuleSnapshots,
+		arg.ExpiresAt,
+	)
+	var i RemoteAccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.RequesterID,
+		&i.GrantID,
+		&i.HostID,
+		&i.ManagedAccountID,
+		&i.Protocol,
+		&i.Action,
+		&i.Reason,
+		&i.Status,
+		&i.AuthorizationVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecisionOutcome,
+		&i.DecisionReasonCodes,
+		&i.DecisionSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.MatchedGrantSnapshots,
+		&i.MatchedRuleSnapshots,
+		&i.DecisionAt,
+	)
+	return i, err
+}
+
 const revokeRemoteAccessLease = `-- name: RevokeRemoteAccessLease :one
-UPDATE remote_access_leases SET revoked_at=now(),revoke_reason=$3 WHERE id=$1 AND enterprise_id=$2 AND revoked_at IS NULL RETURNING id, request_id, enterprise_id, user_id, grant_id, host_id, managed_account_id, protocol, action, authorization_version, policy_snapshot_hash, issued_at, expires_at, revoked_at, revoke_reason
+UPDATE remote_access_leases SET revoked_at=now(),revoke_reason=$3 WHERE id=$1 AND enterprise_id=$2 AND revoked_at IS NULL RETURNING id, request_id, enterprise_id, user_id, grant_id, host_id, managed_account_id, protocol, action, authorization_version, issued_at, expires_at, revoked_at, revoke_reason, decision_snapshot, session_profile_snapshot, decision_snapshot_hash
 `
 
 type RevokeRemoteAccessLeaseParams struct {
@@ -626,11 +1179,13 @@ func (q *Queries) RevokeRemoteAccessLease(ctx context.Context, arg RevokeRemoteA
 		&i.Protocol,
 		&i.Action,
 		&i.AuthorizationVersion,
-		&i.PolicySnapshotHash,
 		&i.IssuedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.DecisionSnapshot,
+		&i.SessionProfileSnapshot,
+		&i.DecisionSnapshotHash,
 	)
 	return i, err
 }
@@ -650,6 +1205,37 @@ func (q *Queries) RevokeRemoteAccessLeasesByEnterprise(ctx context.Context, arg 
 	return err
 }
 
+const revokeRemoteAccessLeasesByGovernanceSource = `-- name: RevokeRemoteAccessLeasesByGovernanceSource :exec
+UPDATE remote_access_leases lease SET revoked_at=now(),revoke_reason=$1
+WHERE lease.enterprise_id=$2 AND lease.revoked_at IS NULL
+  AND CASE $3::text
+    WHEN 'grant' THEN lease.grant_id=$4::uuid
+    WHEN 'host' THEN lease.host_id=$4::uuid
+    WHEN 'managed_account' THEN lease.managed_account_id=$4::uuid
+    WHEN 'rule' THEN lease.decision_snapshot->'matched_rule_snapshots' @> jsonb_build_array(jsonb_build_object('id', $4::uuid::text))
+    WHEN 'workflow' THEN lease.decision_snapshot->'approval_requirements' @> jsonb_build_array(jsonb_build_object('workflow_id', $4::uuid::text))
+    WHEN 'session_profile' THEN lease.decision_snapshot->'session_profile'->'source_profiles' @> jsonb_build_array(jsonb_build_object('id', $4::uuid::text))
+    ELSE false
+  END
+`
+
+type RevokeRemoteAccessLeasesByGovernanceSourceParams struct {
+	Reason       pgtype.Text `json:"reason"`
+	EnterpriseID uuid.UUID   `json:"enterprise_id"`
+	SourceType   string      `json:"source_type"`
+	SourceID     uuid.UUID   `json:"source_id"`
+}
+
+func (q *Queries) RevokeRemoteAccessLeasesByGovernanceSource(ctx context.Context, arg RevokeRemoteAccessLeasesByGovernanceSourceParams) error {
+	_, err := q.db.Exec(ctx, revokeRemoteAccessLeasesByGovernanceSource,
+		arg.Reason,
+		arg.EnterpriseID,
+		arg.SourceType,
+		arg.SourceID,
+	)
+	return err
+}
+
 const revokeRemoteAccessLeasesByGrant = `-- name: RevokeRemoteAccessLeasesByGrant :exec
 UPDATE remote_access_leases SET revoked_at=now(),revoke_reason=$1
 WHERE grant_id=$2 AND enterprise_id=$3 AND revoked_at IS NULL
@@ -666,8 +1252,195 @@ func (q *Queries) RevokeRemoteAccessLeasesByGrant(ctx context.Context, arg Revok
 	return err
 }
 
+const revokeRemoteAccessLeasesByRequest = `-- name: RevokeRemoteAccessLeasesByRequest :exec
+UPDATE remote_access_leases SET revoked_at=now(),revoke_reason=$1
+WHERE request_id=$2 AND revoked_at IS NULL
+`
+
+type RevokeRemoteAccessLeasesByRequestParams struct {
+	Reason    pgtype.Text `json:"reason"`
+	RequestID uuid.UUID   `json:"request_id"`
+}
+
+func (q *Queries) RevokeRemoteAccessLeasesByRequest(ctx context.Context, arg RevokeRemoteAccessLeasesByRequestParams) error {
+	_, err := q.db.Exec(ctx, revokeRemoteAccessLeasesByRequest, arg.Reason, arg.RequestID)
+	return err
+}
+
+const revokeRemoteAccessLeasesByUsers = `-- name: RevokeRemoteAccessLeasesByUsers :exec
+UPDATE remote_access_leases SET revoked_at=now(),revoke_reason=$1
+WHERE enterprise_id=$2 AND user_id=ANY($3::uuid[])
+  AND revoked_at IS NULL
+`
+
+type RevokeRemoteAccessLeasesByUsersParams struct {
+	Reason       pgtype.Text `json:"reason"`
+	EnterpriseID uuid.UUID   `json:"enterprise_id"`
+	UserIds      []uuid.UUID `json:"user_ids"`
+}
+
+func (q *Queries) RevokeRemoteAccessLeasesByUsers(ctx context.Context, arg RevokeRemoteAccessLeasesByUsersParams) error {
+	_, err := q.db.Exec(ctx, revokeRemoteAccessLeasesByUsers, arg.Reason, arg.EnterpriseID, arg.UserIds)
+	return err
+}
+
+const terminateRemoteAccessSessionsByGovernanceSource = `-- name: TerminateRemoteAccessSessionsByGovernanceSource :many
+UPDATE remote_access_sessions session SET status='invalidated',terminated_at=now(),termination_reason=$1,
+    session_fence=session_fence+1,updated_at=now()
+WHERE session.enterprise_id=$2
+  AND session.status IN ('requested','authorized','connecting','active','connection_lost')
+  AND CASE $3::text
+    WHEN 'grant' THEN EXISTS (SELECT 1 FROM remote_access_leases lease WHERE lease.id=session.lease_id AND lease.grant_id=$4::uuid)
+    WHEN 'host' THEN session.host_id=$4::uuid
+    WHEN 'managed_account' THEN session.managed_account_id=$4::uuid
+    WHEN 'rule' THEN session.decision_snapshot->'matched_rule_snapshots' @> jsonb_build_array(jsonb_build_object('id', $4::uuid::text))
+    WHEN 'workflow' THEN session.decision_snapshot->'approval_requirements' @> jsonb_build_array(jsonb_build_object('workflow_id', $4::uuid::text))
+    WHEN 'session_profile' THEN session.decision_snapshot->'session_profile'->'source_profiles' @> jsonb_build_array(jsonb_build_object('id', $4::uuid::text))
+    ELSE false
+  END
+RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason
+`
+
+type TerminateRemoteAccessSessionsByGovernanceSourceParams struct {
+	Reason       pgtype.Text `json:"reason"`
+	EnterpriseID uuid.UUID   `json:"enterprise_id"`
+	SourceType   string      `json:"source_type"`
+	SourceID     uuid.UUID   `json:"source_id"`
+}
+
+func (q *Queries) TerminateRemoteAccessSessionsByGovernanceSource(ctx context.Context, arg TerminateRemoteAccessSessionsByGovernanceSourceParams) ([]RemoteAccessSession, error) {
+	rows, err := q.db.Query(ctx, terminateRemoteAccessSessionsByGovernanceSource,
+		arg.Reason,
+		arg.EnterpriseID,
+		arg.SourceType,
+		arg.SourceID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessSession{}
+	for rows.Next() {
+		var i RemoteAccessSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.UserID,
+			&i.HttpSessionID,
+			&i.LeaseID,
+			&i.HostID,
+			&i.ManagedAccountID,
+			&i.Protocol,
+			&i.ConnectionMode,
+			&i.ConnectorID,
+			&i.ConnectorEpoch,
+			&i.Status,
+			&i.SessionFence,
+			&i.AuthorizationVersion,
+			&i.IdleTimeoutSeconds,
+			&i.MaxDurationSeconds,
+			&i.ConnectBefore,
+			&i.ConnectedAt,
+			&i.TerminatedAt,
+			&i.TerminationReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const terminateRemoteAccessSessionsByUsers = `-- name: TerminateRemoteAccessSessionsByUsers :many
+UPDATE remote_access_sessions SET status='invalidated',terminated_at=now(),termination_reason=$1,
+    session_fence=session_fence+1,updated_at=now()
+WHERE enterprise_id=$2 AND user_id=ANY($3::uuid[])
+  AND status IN ('requested','authorized','connecting','active','connection_lost')
+RETURNING id, enterprise_id, user_id, http_session_id, lease_id, host_id, managed_account_id, protocol, connection_mode, connector_id, connector_epoch, status, session_fence, authorization_version, idle_timeout_seconds, max_duration_seconds, connect_before, connected_at, terminated_at, termination_reason, created_at, updated_at, decision_snapshot, session_profile_snapshot, decision_snapshot_hash, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, gateway_instance, reason
+`
+
+type TerminateRemoteAccessSessionsByUsersParams struct {
+	Reason       pgtype.Text `json:"reason"`
+	EnterpriseID uuid.UUID   `json:"enterprise_id"`
+	UserIds      []uuid.UUID `json:"user_ids"`
+}
+
+func (q *Queries) TerminateRemoteAccessSessionsByUsers(ctx context.Context, arg TerminateRemoteAccessSessionsByUsersParams) ([]RemoteAccessSession, error) {
+	rows, err := q.db.Query(ctx, terminateRemoteAccessSessionsByUsers, arg.Reason, arg.EnterpriseID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessSession{}
+	for rows.Next() {
+		var i RemoteAccessSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.UserID,
+			&i.HttpSessionID,
+			&i.LeaseID,
+			&i.HostID,
+			&i.ManagedAccountID,
+			&i.Protocol,
+			&i.ConnectionMode,
+			&i.ConnectorID,
+			&i.ConnectorEpoch,
+			&i.Status,
+			&i.SessionFence,
+			&i.AuthorizationVersion,
+			&i.IdleTimeoutSeconds,
+			&i.MaxDurationSeconds,
+			&i.ConnectBefore,
+			&i.ConnectedAt,
+			&i.TerminatedAt,
+			&i.TerminationReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DecisionSnapshot,
+			&i.SessionProfileSnapshot,
+			&i.DecisionSnapshotHash,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.GatewayInstance,
+			&i.Reason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateRemoteAccessRequestStatus = `-- name: UpdateRemoteAccessRequestStatus :one
-UPDATE remote_access_requests SET status=$3,updated_at=now() WHERE id=$1 AND enterprise_id=$2 AND status=$4 RETURNING id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at
+UPDATE remote_access_requests SET status=$3,updated_at=now() WHERE id=$1 AND enterprise_id=$2 AND status=$4 RETURNING id, enterprise_id, requester_id, grant_id, host_id, managed_account_id, protocol, action, reason, status, authorization_version, expires_at, created_at, updated_at, decision_outcome, decision_reason_codes, decision_snapshot, decision_snapshot_hash, matched_grant_snapshots, matched_rule_snapshots, decision_at
 `
 
 type UpdateRemoteAccessRequestStatusParams struct {
@@ -700,12 +1473,19 @@ func (q *Queries) UpdateRemoteAccessRequestStatus(ctx context.Context, arg Updat
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionOutcome,
+		&i.DecisionReasonCodes,
+		&i.DecisionSnapshot,
+		&i.DecisionSnapshotHash,
+		&i.MatchedGrantSnapshots,
+		&i.MatchedRuleSnapshots,
+		&i.DecisionAt,
 	)
 	return i, err
 }
 
 const updateRemoteAccessRequirementStatus = `-- name: UpdateRemoteAccessRequirementStatus :one
-UPDATE remote_access_requirement_snapshots SET status=$2 WHERE id=$1 AND status='pending' RETURNING id, request_id, policy_id, policy_version, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, status, created_at
+UPDATE remote_access_requirement_snapshots SET status=$2 WHERE id=$1 AND status='pending' RETURNING id, request_id, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, status, created_at, rule_id, rule_version, workflow_id, workflow_version, session_profile_id, session_profile_version, approval_snapshot, deadline_at, escalated_at, timeout_effect, escalation_role_ids, escalation_at
 `
 
 type UpdateRemoteAccessRequirementStatusParams struct {
@@ -719,8 +1499,6 @@ func (q *Queries) UpdateRemoteAccessRequirementStatus(ctx context.Context, arg U
 	err := row.Scan(
 		&i.ID,
 		&i.RequestID,
-		&i.PolicyID,
-		&i.PolicyVersion,
 		&i.ApproverRoleIds,
 		&i.MinimumApprovals,
 		&i.SeparationOfDuties,
@@ -729,6 +1507,18 @@ func (q *Queries) UpdateRemoteAccessRequirementStatus(ctx context.Context, arg U
 		&i.IdleTimeoutSeconds,
 		&i.Status,
 		&i.CreatedAt,
+		&i.RuleID,
+		&i.RuleVersion,
+		&i.WorkflowID,
+		&i.WorkflowVersion,
+		&i.SessionProfileID,
+		&i.SessionProfileVersion,
+		&i.ApprovalSnapshot,
+		&i.DeadlineAt,
+		&i.EscalatedAt,
+		&i.TimeoutEffect,
+		&i.EscalationRoleIds,
+		&i.EscalationAt,
 	)
 	return i, err
 }

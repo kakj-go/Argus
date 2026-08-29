@@ -17,7 +17,13 @@ spec:
     tag: dev
     pullPolicy: Never
   exposure:
-    mode: port-forward
+    ingressClassName: nginx
+    enterpriseHost: argus.dev
+    platformHost: platform.argus.dev
+    connectorHost: connector.argus.dev
+    tls:
+      enabled: true
+      mode: cert-manager-selfsigned
   security:
     platformMfaRequired: false
   openSandbox:
@@ -42,6 +48,3 @@ spec:
     kafka: 4Gi
     clickhouse: 6Gi
     keeper: 1Gi
-  cleanup:
-    retainData: true
-    deleteOwnedCrds: false

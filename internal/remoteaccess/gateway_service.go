@@ -4,12 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/kakj-go/Argus/internal/audit"
 	"github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
@@ -50,7 +54,7 @@ type GatewayRecording struct {
 	Started  time.Time
 }
 
-func (service GatewayService) AuthorizeConnection(ctx context.Context, sessionID uuid.UUID, rawTicket string) (ConnectionTarget, error) {
+func (service GatewayService) AuthorizeConnection(ctx context.Context, sessionID uuid.UUID, rawTicket string, reattach bool) (ConnectionTarget, error) {
 	decoded, err := base64.RawURLEncoding.DecodeString(rawTicket)
 	if err != nil || len(decoded) != 32 || sessionID == uuid.Nil {
 		return ConnectionTarget{}, ErrTicketBinding
@@ -70,6 +74,21 @@ func (service GatewayService) AuthorizeConnection(ctx context.Context, sessionID
 		target, err := q.GetRemoteAccessSessionTarget(ctx, sessionID)
 		if err != nil || target.SessionFence != ticket.SessionFence || target.AuthorizationVersion != ticket.AuthorizationVersion {
 			return ErrTicketBinding
+		}
+		if reattach {
+			// Re-attach to a parked session: the PTY backend is already held
+			// by this Gateway instance, so no new lease or state transition
+			// happens. A session that claims active without a local park
+			// (crashed or other replica) is rejected and left to converge via
+			// its lease expiry.
+			if target.Status != "active" {
+				return ErrSessionUnavailable
+			}
+			result = connectionTarget(target, uuid.Nil)
+			return nil
+		}
+		if target.Status != "authorized" {
+			return ErrSessionUnavailable
 		}
 		recipientType, recipientID := "direct_executor", service.DirectRecipientID
 		connectionEpoch := int64(0)
@@ -132,7 +151,10 @@ func connectionTarget(target db.GetRemoteAccessSessionTargetRow, credentialLease
 		Status: target.Status, SessionFence: target.SessionFence, AuthorizationVersion: target.AuthorizationVersion,
 		IdleTimeoutSeconds: target.IdleTimeoutSeconds, MaxDurationSeconds: target.MaxDurationSeconds, ConnectBefore: target.ConnectBefore,
 		ConnectedAt: target.ConnectedAt, TerminatedAt: target.TerminatedAt, TerminationReason: target.TerminationReason,
-		CreatedAt: target.CreatedAt, UpdatedAt: target.UpdatedAt}, EnterpriseID: target.EnterpriseID, UserID: target.UserID,
+		DecisionSnapshot: target.DecisionSnapshot, SessionProfileSnapshot: target.SessionProfileSnapshot, DecisionSnapshotHash: target.DecisionSnapshotHash,
+		RecordingMode: target.RecordingMode, CommandAuditMode: target.CommandAuditMode, ClipboardMode: target.ClipboardMode,
+		FileUploadMode: target.FileUploadMode, FileDownloadMode: target.FileDownloadMode, PortForwardMode: target.PortForwardMode,
+		SessionShareMode: target.SessionShareMode, RetentionDays: target.RetentionDays, CreatedAt: target.CreatedAt, UpdatedAt: target.UpdatedAt}, EnterpriseID: target.EnterpriseID, UserID: target.UserID,
 		HostID: target.HostID, ManagedAccountID: target.ManagedAccountID, CredentialLeaseID: credentialLeaseID,
 		ConnectionMode: target.ConnectionMode, ConnectorID: target.ConnectorID, ConnectionEpoch: target.ConnectionEpoch.Int64,
 		Protocol: target.Protocol, Address: target.Address, Hostname: target.Hostname, Port: target.Port, PinnedHostKey: target.PinnedHostKey,
@@ -203,6 +225,44 @@ func (service GatewayService) RecordCommandEvent(ctx context.Context, sessionID 
 	return err
 }
 
+func (service GatewayService) InitializeCommandAudit(ctx context.Context, sessionID uuid.UUID) error {
+	err := service.RecordCommandEvent(ctx, sessionID, 1, "marker", nil)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return nil
+	}
+	return err
+}
+
+func (service GatewayService) RecordCommandAuditDegradation(ctx context.Context, sessionID uuid.UUID) error {
+	return service.Store.InTx(ctx, func(q *db.Queries) error {
+		target, err := q.GetRemoteAccessSessionTarget(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(map[string]any{"enterprise_id": target.EnterpriseID, "session_id": sessionID,
+			"command_audit_mode": target.CommandAuditMode, "status": "degraded"})
+		if err != nil {
+			return err
+		}
+		eventID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("remote_access.command_audit.degraded:"+sessionID.String()))
+		if err := q.InsertOutboxEvent(ctx, db.InsertOutboxEventParams{ID: eventID, Topic: "remote_access.command_audit.degraded",
+			AggregateType: "remote_access_session", AggregateID: sessionID.String(), Payload: payload}); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return nil
+			}
+			return err
+		}
+		_, err = audit.Append(ctx, q, audit.Entry{Domain: "enterprise", EnterpriseID: uuid.NullUUID{UUID: target.EnterpriseID, Valid: true},
+			ActorType: "remote_access_gateway", ActorID: service.InstanceID, Action: "remote_access.command_audit.degrade",
+			ResourceType: "remote_access_session", ResourceID: sessionID.String(), Result: "success", Details: map[string]any{
+				"status": "degraded", "remote_session_id": sessionID.String(), "authorization_version": target.AuthorizationVersion,
+				"snapshot_hash": hex.EncodeToString(target.DecisionSnapshotHash)}})
+		return err
+	})
+}
+
 func (service GatewayService) FinishRecording(ctx context.Context, recording GatewayRecording, status string) error {
 	if recording.Recorder != nil {
 		defer clear(recording.Recorder.DEK)
@@ -228,6 +288,22 @@ func (service GatewayService) Finish(ctx context.Context, sessionID uuid.UUID, f
 	}
 	_, err := service.Store.Queries.FinishRemoteAccessSession(ctx, db.FinishRemoteAccessSessionParams{ID: sessionID, SessionFence: fence, Status: status, TerminationReason: text(reason)})
 	return err
+}
+
+// FinishFenceTolerant completes a session with the engine's fence hint; when a
+// termination already advanced the fence (engine learned via polling instead
+// of the termination channel), it retries with the current row so the gateway
+// never leaves the session stuck in "terminating".
+func (service GatewayService) FinishFenceTolerant(ctx context.Context, sessionID uuid.UUID, fence int64, status, reason string) error {
+	err := service.Finish(ctx, sessionID, fence, status, reason)
+	if err == nil {
+		return nil
+	}
+	target, targetErr := service.Store.Queries.GetRemoteAccessSessionTarget(ctx, sessionID)
+	if targetErr != nil || target.SessionFence <= fence {
+		return err
+	}
+	return service.Finish(ctx, sessionID, target.SessionFence, status, reason)
 }
 
 func (service GatewayService) now() time.Time {

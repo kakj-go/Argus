@@ -1,0 +1,248 @@
+/* Dock 由外壳 grid 切分摆放（见 styles.css 的 [data-terminal-dock] 规则），
+   自身只负责内部布局；分隔条贴主内容区一侧，拖拽方向随停靠位置变化。 */
+.argus-terminal-dock {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-default);
+}
+.argus-app-shell[data-terminal-dock="bottom"] .argus-terminal-dock {
+  border-top: 1px solid var(--border-strong);
+}
+.argus-app-shell[data-terminal-dock="left"] .argus-terminal-dock {
+  border-right: 1px solid var(--border-strong);
+}
+.argus-app-shell[data-terminal-dock="right"] .argus-terminal-dock {
+  border-left: 1px solid var(--border-strong);
+}
+.argus-terminal-dock-launcher {
+  position: fixed;
+  z-index: 100;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-default);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.argus-terminal-dock-launcher:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.argus-terminal-dock__separator {
+  position: absolute;
+  z-index: 2;
+}
+.argus-app-shell[data-terminal-dock="bottom"] .argus-terminal-dock__separator {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  cursor: ns-resize;
+}
+.argus-app-shell[data-terminal-dock="left"] .argus-terminal-dock__separator,
+.argus-app-shell[data-terminal-dock="right"] .argus-terminal-dock__separator {
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+}
+.argus-app-shell[data-terminal-dock="left"] .argus-terminal-dock__separator {
+  right: 0;
+}
+.argus-app-shell[data-terminal-dock="right"] .argus-terminal-dock__separator {
+  left: 0;
+}
+.argus-app-shell[data-terminal-dock="bottom"]
+  .argus-terminal-dock__separator::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 45%;
+  right: 45%;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+}
+.argus-app-shell[data-terminal-dock="left"]
+  .argus-terminal-dock__separator::after,
+.argus-app-shell[data-terminal-dock="right"]
+  .argus-terminal-dock__separator::after {
+  content: "";
+  position: absolute;
+  top: 45%;
+  bottom: 45%;
+  left: 4px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+}
+.argus-terminal-dock__separator:hover::after,
+.argus-terminal-dock__separator:focus-visible::after {
+  background: var(--accent);
+}
+.argus-terminal-dock__tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 38px;
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  flex-shrink: 0;
+}
+.argus-terminal-dock__tab-list {
+  display: flex;
+  align-items: center;
+  gap: var(--space-px-2);
+  overflow-x: auto;
+  min-width: 0;
+  flex: 1;
+}
+.argus-terminal-dock__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.argus-terminal-dock__positions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-px-2);
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--border-subtle);
+}
+.argus-terminal-dock__positions .argus-button.is-active-position {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.argus-terminal-dock__viewport {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-code);
+}
+.argus-terminal-dock__viewport .argus-terminal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+}
+.argus-terminal-dock__viewport .argus-terminal__xterm {
+  flex: 1;
+  min-height: 0;
+  height: auto !important;
+}
+.argus-terminal-dock__viewport .argus-terminal__output {
+  flex: 1;
+  min-height: 0;
+  height: auto !important;
+}
+.argus-terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 300px;
+  padding: var(--space-2) var(--space-4);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  font: 500 var(--font-size-12-5) var(--font-mono);
+  white-space: nowrap;
+  user-select: none;
+}
+.argus-terminal-tab:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-default);
+}
+.argus-terminal-tab.is-active {
+  background: var(--surface-default);
+  border-color: var(--border-strong);
+}
+.argus-terminal-tab__status {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: var(--radius-round);
+}
+.argus-terminal-tab__status.is-connecting {
+  background: var(--warning);
+  animation: argus-pulse 1.4s ease-out infinite;
+}
+.argus-terminal-tab__status.is-connected {
+  background: var(--success);
+}
+.argus-terminal-tab__status.is-disconnected {
+  background: var(--text-disabled);
+}
+.argus-terminal-tab__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+}
+.argus-terminal-tab.is-active .argus-terminal-tab__label {
+  color: var(--text-primary);
+}
+.argus-terminal-tab__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.argus-terminal-tab__close:hover:not(:disabled) {
+  background: var(--bg-danger-subtle);
+  color: var(--danger);
+}
+.argus-terminal-tab__close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.argus-terminal-dock__tab-list::-webkit-scrollbar {
+  height: 6px;
+}
+.argus-terminal-dock__tab-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.argus-terminal-dock__tab-list::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-pill);
+}
+@keyframes argus-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+body.argus-is-resizing-terminal {
+  cursor: ns-resize;
+  user-select: none;
+}
+body.argus-is-resizing-terminal-ew {
+  cursor: ew-resize;
+  user-select: none;
+}

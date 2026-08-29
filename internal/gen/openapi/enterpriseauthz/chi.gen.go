@@ -12,22 +12,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// ListDataScopes listDataScopes.
-	// (GET /enterprise/data-scopes)
-	ListDataScopes(w http.ResponseWriter, r *http.Request, params ListDataScopesParams)
-	// CreateDataScope createDataScope.
-	// (POST /enterprise/data-scopes)
-	CreateDataScope(w http.ResponseWriter, r *http.Request, params CreateDataScopeParams)
-	// DisableDataScope disableDataScope.
-	// (DELETE /enterprise/data-scopes/{id})
-	DisableDataScope(w http.ResponseWriter, r *http.Request, id ResourceId, params DisableDataScopeParams)
-	// UpdateDataScope updateDataScope.
-	// (PUT /enterprise/data-scopes/{id})
-	UpdateDataScope(w http.ResponseWriter, r *http.Request, id ResourceId, params UpdateDataScopeParams)
+	// ListDataAuthorizationResources List explicit data authorization resources for a subject.
+	// (GET /enterprise/data-authorizations/{subject_type}/{subject_id})
+	ListDataAuthorizationResources(w http.ResponseWriter, r *http.Request, subjectType DataAuthorizationSubjectType, subjectId openapi_types.UUID, params ListDataAuthorizationResourcesParams)
+	// UpdateDataAuthorization Add or remove explicit data authorization resources.
+	// (POST /enterprise/data-authorizations/{subject_type}/{subject_id})
+	UpdateDataAuthorization(w http.ResponseWriter, r *http.Request, subjectType DataAuthorizationSubjectType, subjectId openapi_types.UUID, params UpdateDataAuthorizationParams)
 	// ListPermissions listPermissions.
 	// (GET /enterprise/permissions)
 	ListPermissions(w http.ResponseWriter, r *http.Request, params ListPermissionsParams)
@@ -55,33 +50,27 @@ type ServerInterface interface {
 	// UpdateRole updateRole.
 	// (PUT /enterprise/roles/{id})
 	UpdateRole(w http.ResponseWriter, r *http.Request, id ResourceId, params UpdateRoleParams)
+	// GetUserRoleAssignments Get direct, inherited, and effective role assignments for an enterprise user.
+	// (GET /enterprise/users/{id}/role-assignments)
+	GetUserRoleAssignments(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// ReplaceUserRoleAssignments Atomically replace an enterprise user's direct role assignments.
+	// (PUT /enterprise/users/{id}/role-assignments)
+	ReplaceUserRoleAssignments(w http.ResponseWriter, r *http.Request, id ResourceId, params ReplaceUserRoleAssignmentsParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
-// ListDataScopes listDataScopes.
-// (GET /enterprise/data-scopes)
-func (_ Unimplemented) ListDataScopes(w http.ResponseWriter, r *http.Request, params ListDataScopesParams) {
+// ListDataAuthorizationResources List explicit data authorization resources for a subject.
+// (GET /enterprise/data-authorizations/{subject_type}/{subject_id})
+func (_ Unimplemented) ListDataAuthorizationResources(w http.ResponseWriter, r *http.Request, subjectType DataAuthorizationSubjectType, subjectId openapi_types.UUID, params ListDataAuthorizationResourcesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// CreateDataScope createDataScope.
-// (POST /enterprise/data-scopes)
-func (_ Unimplemented) CreateDataScope(w http.ResponseWriter, r *http.Request, params CreateDataScopeParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// DisableDataScope disableDataScope.
-// (DELETE /enterprise/data-scopes/{id})
-func (_ Unimplemented) DisableDataScope(w http.ResponseWriter, r *http.Request, id ResourceId, params DisableDataScopeParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// UpdateDataScope updateDataScope.
-// (PUT /enterprise/data-scopes/{id})
-func (_ Unimplemented) UpdateDataScope(w http.ResponseWriter, r *http.Request, id ResourceId, params UpdateDataScopeParams) {
+// UpdateDataAuthorization Add or remove explicit data authorization resources.
+// (POST /enterprise/data-authorizations/{subject_type}/{subject_id})
+func (_ Unimplemented) UpdateDataAuthorization(w http.ResponseWriter, r *http.Request, subjectType DataAuthorizationSubjectType, subjectId openapi_types.UUID, params UpdateDataAuthorizationParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -139,6 +128,18 @@ func (_ Unimplemented) UpdateRole(w http.ResponseWriter, r *http.Request, id Res
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetUserRoleAssignments Get direct, inherited, and effective role assignments for an enterprise user.
+// (GET /enterprise/users/{id}/role-assignments)
+func (_ Unimplemented) GetUserRoleAssignments(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReplaceUserRoleAssignments Atomically replace an enterprise user's direct role assignments.
+// (PUT /enterprise/users/{id}/role-assignments)
+func (_ Unimplemented) ReplaceUserRoleAssignments(w http.ResponseWriter, r *http.Request, id ResourceId, params ReplaceUserRoleAssignmentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
 	Handler            ServerInterface
@@ -148,14 +149,45 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// ListDataScopes operation middleware
-func (siw *ServerInterfaceWrapper) ListDataScopes(w http.ResponseWriter, r *http.Request) {
+// ListDataAuthorizationResources operation middleware
+func (siw *ServerInterfaceWrapper) ListDataAuthorizationResources(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
+	// ------------- Path parameter "subject_type" -------------
+	var subjectType DataAuthorizationSubjectType
+
+	err = runtime.BindStyledParameterWithOptions("simple", "subject_type", chi.URLParam(r, "subject_type"), &subjectType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subject_type", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "subject_id" -------------
+	var subjectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "subject_id", chi.URLParam(r, "subject_id"), &subjectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subject_id", Err: err})
+		return
+	}
+
 	// Parameter object where we will unmarshal all parameters from the context
-	var params ListDataScopesParams
+	var params ListDataAuthorizationResourcesParams
+
+	// ------------- Required query parameter "resource_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "resource_type", r.URL.Query(), &params.ResourceType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "resource_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resource_type", Err: err})
+		}
+		return
+	}
 
 	// ------------- Optional query parameter "cursor" -------------
 
@@ -184,7 +216,7 @@ func (siw *ServerInterfaceWrapper) ListDataScopes(w http.ResponseWriter, r *http
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListDataScopes(w, r, params)
+		siw.Handler.ListDataAuthorizationResources(w, r, subjectType, subjectId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -194,16 +226,57 @@ func (siw *ServerInterfaceWrapper) ListDataScopes(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
-// CreateDataScope operation middleware
-func (siw *ServerInterfaceWrapper) CreateDataScope(w http.ResponseWriter, r *http.Request) {
+// UpdateDataAuthorization operation middleware
+func (siw *ServerInterfaceWrapper) UpdateDataAuthorization(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
+	// ------------- Path parameter "subject_type" -------------
+	var subjectType DataAuthorizationSubjectType
+
+	err = runtime.BindStyledParameterWithOptions("simple", "subject_type", chi.URLParam(r, "subject_type"), &subjectType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subject_type", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "subject_id" -------------
+	var subjectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "subject_id", chi.URLParam(r, "subject_id"), &subjectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subject_id", Err: err})
+		return
+	}
+
 	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateDataScopeParams
+	var params UpdateDataAuthorizationParams
 
 	headers := r.Header
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken ParametersCsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
 
 	// ------------- Required header parameter "Idempotency-Key" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
@@ -228,152 +301,8 @@ func (siw *ServerInterfaceWrapper) CreateDataScope(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateDataScope(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DisableDataScope operation middleware
-func (siw *ServerInterfaceWrapper) DisableDataScope(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id ResourceId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DisableDataScopeParams
-
-	// ------------- Required query parameter "expected_version" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "expected_version", r.URL.Query(), &params.ExpectedVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expected_version"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expected_version", Err: err})
-		}
-		return
-	}
-
-	headers := r.Header
-
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DisableDataScope(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateDataScope operation middleware
-func (siw *ServerInterfaceWrapper) UpdateDataScope(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id ResourceId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params UpdateDataScopeParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken CsrfToken
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
-			return
-		}
-
-		params.XCSRFToken = XCSRFToken
-
-	} else {
-		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateDataScope(w, r, id, params)
+		siw.Handler.UpdateDataAuthorization(w, r, subjectType, subjectId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -899,6 +828,109 @@ func (siw *ServerInterfaceWrapper) UpdateRole(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// GetUserRoleAssignments operation middleware
+func (siw *ServerInterfaceWrapper) GetUserRoleAssignments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUserRoleAssignments(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceUserRoleAssignments operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceUserRoleAssignments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplaceUserRoleAssignmentsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceUserRoleAssignments(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -1040,16 +1072,16 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/enterprise/role-bindings/{id}", wrapper.UpdateRoleBinding)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/enterprise/data-scopes", wrapper.ListDataScopes)
+		r.Get(options.BaseURL+"/enterprise/users/{id}/role-assignments", wrapper.GetUserRoleAssignments)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/data-scopes", wrapper.CreateDataScope)
+		r.Put(options.BaseURL+"/enterprise/users/{id}/role-assignments", wrapper.ReplaceUserRoleAssignments)
 	})
 	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/enterprise/data-scopes/{id}", wrapper.DisableDataScope)
+		r.Get(options.BaseURL+"/enterprise/data-authorizations/{subject_type}/{subject_id}", wrapper.ListDataAuthorizationResources)
 	})
 	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/enterprise/data-scopes/{id}", wrapper.UpdateDataScope)
+		r.Post(options.BaseURL+"/enterprise/data-authorizations/{subject_type}/{subject_id}", wrapper.UpdateDataAuthorization)
 	})
 
 	return r
@@ -1057,17 +1089,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 
 type ErrorJSONResponse ApiError
 
-type ListDataScopesRequestObject struct {
-	Params ListDataScopesParams
+type ResponsesErrorJSONResponse ApiError
+
+type ListDataAuthorizationResourcesRequestObject struct {
+	SubjectType DataAuthorizationSubjectType `json:"subject_type"`
+	SubjectId   openapi_types.UUID           `json:"subject_id"`
+	Params      ListDataAuthorizationResourcesParams
 }
 
-type ListDataScopesResponseObject interface {
-	VisitListDataScopesResponse(w http.ResponseWriter) error
+type ListDataAuthorizationResourcesResponseObject interface {
+	VisitListDataAuthorizationResourcesResponse(w http.ResponseWriter) error
 }
 
-type ListDataScopes200JSONResponse DataScopePage
+type ListDataAuthorizationResources200JSONResponse DataAuthorizationPage
 
-func (response ListDataScopes200JSONResponse) VisitListDataScopesResponse(w http.ResponseWriter) error {
+func (response ListDataAuthorizationResources200JSONResponse) VisitListDataAuthorizationResourcesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1079,12 +1115,12 @@ func (response ListDataScopes200JSONResponse) VisitListDataScopesResponse(w http
 	return err
 }
 
-type ListDataScopesdefaultJSONResponse struct {
+type ListDataAuthorizationResourcesdefaultJSONResponse struct {
 	Body       ApiError
 	StatusCode int
 }
 
-func (response ListDataScopesdefaultJSONResponse) VisitListDataScopesResponse(w http.ResponseWriter) error {
+func (response ListDataAuthorizationResourcesdefaultJSONResponse) VisitListDataAuthorizationResourcesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -1096,110 +1132,31 @@ func (response ListDataScopesdefaultJSONResponse) VisitListDataScopesResponse(w 
 	return err
 }
 
-type CreateDataScopeRequestObject struct {
-	Params CreateDataScopeParams
-	Body   *CreateDataScopeJSONRequestBody
+type UpdateDataAuthorizationRequestObject struct {
+	SubjectType DataAuthorizationSubjectType `json:"subject_type"`
+	SubjectId   openapi_types.UUID           `json:"subject_id"`
+	Params      UpdateDataAuthorizationParams
+	Body        *UpdateDataAuthorizationJSONRequestBody
 }
 
-type CreateDataScopeResponseObject interface {
-	VisitCreateDataScopeResponse(w http.ResponseWriter) error
+type UpdateDataAuthorizationResponseObject interface {
+	VisitUpdateDataAuthorizationResponse(w http.ResponseWriter) error
 }
 
-type CreateDataScope201JSONResponse DataScope
-
-func (response CreateDataScope201JSONResponse) VisitCreateDataScopeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	_, err := buf.WriteTo(w)
-	return err
+type UpdateDataAuthorization204Response struct {
 }
 
-type CreateDataScopedefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response CreateDataScopedefaultJSONResponse) VisitCreateDataScopeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DisableDataScopeRequestObject struct {
-	Id     ResourceId `json:"id"`
-	Params DisableDataScopeParams
-}
-
-type DisableDataScopeResponseObject interface {
-	VisitDisableDataScopeResponse(w http.ResponseWriter) error
-}
-
-type DisableDataScope204Response struct {
-}
-
-func (response DisableDataScope204Response) VisitDisableDataScopeResponse(w http.ResponseWriter) error {
+func (response UpdateDataAuthorization204Response) VisitUpdateDataAuthorizationResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
 }
 
-type DisableDataScopedefaultJSONResponse struct {
+type UpdateDataAuthorizationdefaultJSONResponse struct {
 	Body       ApiError
 	StatusCode int
 }
 
-func (response DisableDataScopedefaultJSONResponse) VisitDisableDataScopeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateDataScopeRequestObject struct {
-	Id     ResourceId `json:"id"`
-	Params UpdateDataScopeParams
-	Body   *UpdateDataScopeJSONRequestBody
-}
-
-type UpdateDataScopeResponseObject interface {
-	VisitUpdateDataScopeResponse(w http.ResponseWriter) error
-}
-
-type UpdateDataScope200JSONResponse DataScope
-
-func (response UpdateDataScope200JSONResponse) VisitUpdateDataScopeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateDataScopedefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response UpdateDataScopedefaultJSONResponse) VisitUpdateDataScopeResponse(w http.ResponseWriter) error {
+func (response UpdateDataAuthorizationdefaultJSONResponse) VisitUpdateDataAuthorizationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -1547,6 +1504,86 @@ type UpdateRoledefaultJSONResponse struct {
 }
 
 func (response UpdateRoledefaultJSONResponse) VisitUpdateRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserRoleAssignmentsRequestObject struct {
+	Id ResourceId `json:"id"`
+}
+
+type GetUserRoleAssignmentsResponseObject interface {
+	VisitGetUserRoleAssignmentsResponse(w http.ResponseWriter) error
+}
+
+type GetUserRoleAssignments200JSONResponse UserRoleAssignments
+
+func (response GetUserRoleAssignments200JSONResponse) VisitGetUserRoleAssignmentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserRoleAssignmentsdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response GetUserRoleAssignmentsdefaultJSONResponse) VisitGetUserRoleAssignmentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceUserRoleAssignmentsRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params ReplaceUserRoleAssignmentsParams
+	Body   *ReplaceUserRoleAssignmentsJSONRequestBody
+}
+
+type ReplaceUserRoleAssignmentsResponseObject interface {
+	VisitReplaceUserRoleAssignmentsResponse(w http.ResponseWriter) error
+}
+
+type ReplaceUserRoleAssignments200JSONResponse UserRoleAssignments
+
+func (response ReplaceUserRoleAssignments200JSONResponse) VisitReplaceUserRoleAssignmentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceUserRoleAssignmentsdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response ReplaceUserRoleAssignmentsdefaultJSONResponse) VisitReplaceUserRoleAssignmentsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {

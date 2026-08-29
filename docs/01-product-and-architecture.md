@@ -25,12 +25,12 @@ Argus 同时存在两个隔离的管理域：
 
 工作台和企业管理后台共享同一个固定企业身份，但使用不同布局与路由；平台超级管理员不进入这两个企业界面，也不拥有企业资源读取权限。OpenSandbox 是 SaaS 平台底层资产，企业门户不展示其服务、镜像、Profile、配额、会话或用量。
 
-身份第一版为单企业模型：平台身份与企业身份互斥，一个 EnterpriseUser 直接绑定唯一 `enterprise_id + department_id`，不提供 Membership 或企业切换。企业内部使用 Host/Kubernetes 标签归类资源，通过企业级 RoleBinding 授予功能能力，并由 DataScope 限定显式资源或标签选择结果。
+身份第一版为单企业模型：平台身份与企业身份互斥，一个 EnterpriseUser 直接绑定唯一 `enterprise_id + department_id`，不提供 Membership 或企业切换。企业内部使用 Host/Kubernetes 标签归类资源，通过企业级 RoleBinding 授予功能能力，并由 DataAuthorizationGrant 限定明确 Host/Kubernetes Cluster ID。
 
 ## 2. 产品目标
 
 - 为租户提供完整的身份、RBAC 和数据权限体系。
-- 为企业提供资源标签、DataScope 和统一数据裁剪，并使生产远程访问和 AI 操作具有独立、可审计的授权范围。
+- 为企业提供资源标签、显式资源授权和统一数据裁剪，并使生产远程访问和 AI 操作具有独立、可审计的授权范围。
 - 通过统一 Connector 将一台主机注册为堡垒机，代理访问其管辖范围内的 Windows、Linux、macOS 主机和 Kubernetes API Server。
 - 对 Direct Executor 部署网络可达且经过校验的主机提供受控 Direct SSH/WinRM 接入，并为人工运维提供带短期票据、录像和审计的远程会话。
 - 同时提供 Chatbox 与传统管理界面，且两者能力一致。
@@ -48,7 +48,7 @@ Argus 同时存在两个隔离的管理域：
 以下能力必须位于确定性服务端边界内：
 
 - 租户隔离和授权判断。
-- 资源真实企业归属、标签/DataScope、目标账号授权、权限撤销与授权版本判断。
+- 资源真实企业归属、显式资源授权、目标账号授权、权限撤销与授权版本判断。
 - Secret 的读取与使用。
 - Pending Action 的创建、确认、取消和过期。
 - Connector 命令下发。
@@ -149,7 +149,7 @@ Redis 不参与 PostgreSQL 的原子提交，也不保存唯一 Run 状态。跨
 - Agent Harness 使用 Provider-neutral Message/Event 和小型 Tool Loop；模型调用前由 ContextAssembler 组装 Typed Checkpoint、最新 ContextSnapshot 和最近完整 Turn。
 - ConversationEvent Ledger 保存完整历史，ContextSnapshot 只用于模型上下文压缩，不能替代 PostgreSQL 中的 Run/Step/Tool/Execution 事实。
 
-通用子 Agent 调度延后。后续即使将 Presentation 拆为子 Agent，其输出也必须是可校验的声明式计划，且不能拥有超过父 Run 的 Tool/DataScope 权限。
+通用子 Agent 调度延后。后续即使将 Presentation 拆为子 Agent，其输出也必须是可校验的声明式计划，且不能拥有超过父 Run 的 Tool/显式资源授权。
 
 ### 5.3 工具与领域模块
 
@@ -202,7 +202,7 @@ flowchart TB
 - 控制链路故障不应阻止 Collector 继续推送数据。
 - 远程会话流量和 Connector 控制命令可以复用同一 Connector 长连接协议族，但必须使用独立逻辑流、短期票据、优先级、限流和审计；会话录像写入 Artifact Store，不能只保存在 Gateway Pod 本地。
 - 遥测写入积压不应占用 Connector 命令通道。
-- Query Service 使用只读 ClickHouse 账号，并强制应用 Enterprise、授权 Resource ID/标签选择结果、Signal 权限、字段脱敏、时间范围和查询预算；Web、Model Agent 和 Card 不得各自实现不同的数据过滤。
+- Query Service 使用只读 ClickHouse 账号，并强制应用 Enterprise、授权 Resource ID 和用户筛选条件、Signal 权限、字段脱敏、时间范围和查询预算；标签筛选不能扩大授权资源；Web、Model Agent 和 Card 不得各自实现不同的数据过滤。
 - Ingest Service 不向用户提供查询接口，也不持有控制面 Secret。
 
 ### 5.6 安全与治理平面
@@ -233,7 +233,7 @@ Sandbox 生成计划或脚本
 
 ## 7. 关键领域对象
 
-- Enterprise、PlatformUser、EnterpriseUser、Department、Role、Permission、RoleBinding、DataScope、Policy、AuthorizationVersion。
+- Enterprise、PlatformUser、EnterpriseUser、Department、Role、Permission、RoleBinding、DataAuthorizationGrant、Policy、AuthorizationVersion。
 - Connector、Host、BastionScope、KubernetesCluster、ManagedAccount、RemoteAccessGrant、Credential、SecretRef。
 - RemoteAccessSession、RemoteAccessTicket、SessionRecording。
 - TelemetryGroup、CollectorInstance、CollectorConfigRevision、TelemetryCredential、IngestionPolicy。
@@ -246,7 +246,7 @@ Sandbox 生成计划或脚本
 
 第一版中 Enterprise 是唯一业务隔离边界，旧文档或外部协议中的 Tenant 必须在入口适配为 `enterprise_id`，内部领域对象不得同时维护两套隔离 ID。
 
-第一版不实现 Project。`enterprise_id` 是唯一租户和安全隔离边界；Host/Kubernetes 标签只用于归类、筛选和 DataScope 选择，Bastion Scope 与 Telemetry Group 只描述网络或遥测拓扑。平台超级管理员、企业管理员、资源操作者和 Model Agent 的所有入口均复用同一授权服务。
+第一版不实现 Project。`enterprise_id` 是唯一租户和安全隔离边界；Host/Kubernetes 标签只用于归类和筛选，显式资源授权只接受 Host/Kubernetes Cluster ID，Bastion Scope 与 Telemetry Group 只描述网络或遥测拓扑。平台超级管理员、企业管理员、资源操作者和 Model Agent 的所有入口均复用同一授权服务。
 
 ## 8. Kubernetes 部署边界
 

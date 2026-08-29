@@ -11,99 +11,57 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// Defines values for DataScopeResourceTypes.
+// Defines values for DataAuthorizationResourceType.
 const (
-	DataScopeResourceTypesHost                DataScopeResourceTypes = "host"
-	DataScopeResourceTypesKubernetesCluster   DataScopeResourceTypes = "kubernetes_cluster"
-	DataScopeResourceTypesKubernetesNamespace DataScopeResourceTypes = "kubernetes_namespace"
+	Host              DataAuthorizationResourceType = "host"
+	KubernetesCluster DataAuthorizationResourceType = "kubernetes_cluster"
 )
 
-// Valid indicates whether the value is a known member of the DataScopeResourceTypes enum.
-func (e DataScopeResourceTypes) Valid() bool {
+// Valid indicates whether the value is a known member of the DataAuthorizationResourceType enum.
+func (e DataAuthorizationResourceType) Valid() bool {
 	switch e {
-	case DataScopeResourceTypesHost:
+	case Host:
 		return true
-	case DataScopeResourceTypesKubernetesCluster:
-		return true
-	case DataScopeResourceTypesKubernetesNamespace:
+	case KubernetesCluster:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for DataScopeStatus.
+// Defines values for DataAuthorizationSubjectType.
 const (
-	DataScopeStatusActive   DataScopeStatus = "active"
-	DataScopeStatusDisabled DataScopeStatus = "disabled"
+	DataAuthorizationSubjectTypeDepartment     DataAuthorizationSubjectType = "department"
+	DataAuthorizationSubjectTypeRole           DataAuthorizationSubjectType = "role"
+	DataAuthorizationSubjectTypeServiceAccount DataAuthorizationSubjectType = "service_account"
+	DataAuthorizationSubjectTypeUser           DataAuthorizationSubjectType = "user"
 )
 
-// Valid indicates whether the value is a known member of the DataScopeStatus enum.
-func (e DataScopeStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the DataAuthorizationSubjectType enum.
+func (e DataAuthorizationSubjectType) Valid() bool {
 	switch e {
-	case DataScopeStatusActive:
+	case DataAuthorizationSubjectTypeDepartment:
 		return true
-	case DataScopeStatusDisabled:
+	case DataAuthorizationSubjectTypeRole:
+		return true
+	case DataAuthorizationSubjectTypeServiceAccount:
+		return true
+	case DataAuthorizationSubjectTypeUser:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for DataScopeCreateResourceTypes.
+// Defines values for InheritedRoleAssignmentSourceType.
 const (
-	DataScopeCreateResourceTypesHost                DataScopeCreateResourceTypes = "host"
-	DataScopeCreateResourceTypesKubernetesCluster   DataScopeCreateResourceTypes = "kubernetes_cluster"
-	DataScopeCreateResourceTypesKubernetesNamespace DataScopeCreateResourceTypes = "kubernetes_namespace"
+	InheritedRoleAssignmentSourceTypeDepartment InheritedRoleAssignmentSourceType = "department"
 )
 
-// Valid indicates whether the value is a known member of the DataScopeCreateResourceTypes enum.
-func (e DataScopeCreateResourceTypes) Valid() bool {
+// Valid indicates whether the value is a known member of the InheritedRoleAssignmentSourceType enum.
+func (e InheritedRoleAssignmentSourceType) Valid() bool {
 	switch e {
-	case DataScopeCreateResourceTypesHost:
-		return true
-	case DataScopeCreateResourceTypesKubernetesCluster:
-		return true
-	case DataScopeCreateResourceTypesKubernetesNamespace:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for DataScopeUpdateResourceTypes.
-const (
-	DataScopeUpdateResourceTypesHost                DataScopeUpdateResourceTypes = "host"
-	DataScopeUpdateResourceTypesKubernetesCluster   DataScopeUpdateResourceTypes = "kubernetes_cluster"
-	DataScopeUpdateResourceTypesKubernetesNamespace DataScopeUpdateResourceTypes = "kubernetes_namespace"
-)
-
-// Valid indicates whether the value is a known member of the DataScopeUpdateResourceTypes enum.
-func (e DataScopeUpdateResourceTypes) Valid() bool {
-	switch e {
-	case DataScopeUpdateResourceTypesHost:
-		return true
-	case DataScopeUpdateResourceTypesKubernetesCluster:
-		return true
-	case DataScopeUpdateResourceTypesKubernetesNamespace:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for DataScopeUpdateStatus.
-const (
-	DataScopeUpdateStatusActive   DataScopeUpdateStatus = "active"
-	DataScopeUpdateStatusDisabled DataScopeUpdateStatus = "disabled"
-)
-
-// Valid indicates whether the value is a known member of the DataScopeUpdateStatus enum.
-func (e DataScopeUpdateStatus) Valid() bool {
-	switch e {
-	case DataScopeUpdateStatusActive:
-		return true
-	case DataScopeUpdateStatusDisabled:
+	case InheritedRoleAssignmentSourceTypeDepartment:
 		return true
 	default:
 		return false
@@ -280,116 +238,51 @@ type CursorPage struct {
 	Partial    PartialMetadata `json:"partial"`
 }
 
-// DataScope defines model for DataScope.
-type DataScope struct {
-	CreatedAt           time.Time                `json:"created_at"`
-	Description         *string                  `json:"description,omitempty"`
-	EnterpriseId        string                   `json:"enterprise_id"`
-	ExplicitResourceIds []string                 `json:"explicit_resource_ids"`
-	Id                  string                   `json:"id"`
-	LabelSelector       *LabelSelector           `json:"label_selector,omitempty"`
-	MatchAll            *bool                    `json:"match_all,omitempty"`
-	Name                string                   `json:"name"`
-	ResourceTypes       []DataScopeResourceTypes `json:"resource_types"`
-	Status              DataScopeStatus          `json:"status"`
-	UpdatedAt           time.Time                `json:"updated_at"`
-	Version             int64                    `json:"version"`
+// DataAuthorizationBatch defines model for DataAuthorizationBatch.
+type DataAuthorizationBatch struct {
+	ExpectedVersion int64                         `json:"expected_version"`
+	Remove          bool                          `json:"remove"`
+	ResourceIds     []openapi_types.UUID          `json:"resource_ids"`
+	ResourceType    DataAuthorizationResourceType `json:"resource_type"`
 }
 
-// DataScopeResourceTypes defines model for DataScope.ResourceTypes.
-type DataScopeResourceTypes string
-
-// DataScopeStatus defines model for DataScope.Status.
-type DataScopeStatus string
-
-// DataScopeCreate defines model for DataScopeCreate.
-type DataScopeCreate struct {
-	Description         *string                        `json:"description,omitempty"`
-	ExplicitResourceIds []string                       `json:"explicit_resource_ids"`
-	LabelSelector       *LabelSelector                 `json:"label_selector,omitempty"`
-	MatchAll            *bool                          `json:"match_all,omitempty"`
-	Name                string                         `json:"name"`
-	ResourceTypes       []DataScopeCreateResourceTypes `json:"resource_types"`
+// DataAuthorizationPage defines model for DataAuthorizationPage.
+type DataAuthorizationPage struct {
+	AffectedMemberCount  int64                       `json:"affected_member_count"`
+	AuthorizationVersion int64                       `json:"authorization_version"`
+	Items                []DataAuthorizationResource `json:"items"`
+	Page                 CursorPage                  `json:"page"`
 }
 
-// DataScopeCreateResourceTypes defines model for DataScopeCreate.ResourceTypes.
-type DataScopeCreateResourceTypes string
-
-// DataScopePage defines model for DataScopePage.
-type DataScopePage struct {
-	Items []DataScope `json:"items"`
-	Page  CursorPage  `json:"page"`
+// DataAuthorizationResource defines model for DataAuthorizationResource.
+type DataAuthorizationResource struct {
+	Direct       bool                          `json:"direct"`
+	Inherited    bool                          `json:"inherited"`
+	Name         string                        `json:"name"`
+	ResourceId   openapi_types.UUID            `json:"resource_id"`
+	ResourceType DataAuthorizationResourceType `json:"resource_type"`
+	Sources      []string                      `json:"sources"`
 }
 
-// DataScopeUpdate defines model for DataScopeUpdate.
-type DataScopeUpdate struct {
-	Description         *string                        `json:"description,omitempty"`
-	ExpectedVersion     int64                          `json:"expected_version"`
-	ExplicitResourceIds []string                       `json:"explicit_resource_ids"`
-	LabelSelector       *LabelSelector                 `json:"label_selector,omitempty"`
-	MatchAll            *bool                          `json:"match_all,omitempty"`
-	Name                string                         `json:"name"`
-	ResourceTypes       []DataScopeUpdateResourceTypes `json:"resource_types"`
-	Status              *DataScopeUpdateStatus         `json:"status,omitempty"`
-}
+// DataAuthorizationResourceType defines model for DataAuthorizationResourceType.
+type DataAuthorizationResourceType string
 
-// DataScopeUpdateResourceTypes defines model for DataScopeUpdate.ResourceTypes.
-type DataScopeUpdateResourceTypes string
-
-// DataScopeUpdateStatus defines model for DataScopeUpdate.Status.
-type DataScopeUpdateStatus string
+// DataAuthorizationSubjectType defines model for DataAuthorizationSubjectType.
+type DataAuthorizationSubjectType string
 
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
 
-// LabelRequirement defines model for LabelRequirement.
-type LabelRequirement struct {
-	union json.RawMessage
+// InheritedRoleAssignment defines model for InheritedRoleAssignment.
+type InheritedRoleAssignment struct {
+	RoleId     openapi_types.UUID                `json:"role_id"`
+	SourceId   openapi_types.UUID                `json:"source_id"`
+	SourceName string                            `json:"source_name"`
+	SourceType InheritedRoleAssignmentSourceType `json:"source_type"`
 }
 
-// LabelRequirement0 defines model for LabelRequirement.0.
-type LabelRequirement0 struct {
-	Key      LabelRequirement_0_Key `json:"key"`
-	Operator interface{}            `json:"operator"`
-	Values   []LabelValue           `json:"values"`
-}
-
-// LabelRequirement_0_Key defines model for LabelRequirement.0.Key.
-type LabelRequirement_0_Key struct {
-	union json.RawMessage
-}
-
-// LabelRequirement1 defines model for LabelRequirement.1.
-type LabelRequirement1 struct {
-	Key      LabelRequirement_1_Key `json:"key"`
-	Operator interface{}            `json:"operator"`
-	Values   []LabelValue           `json:"values"`
-}
-
-// LabelRequirement_1_Key defines model for LabelRequirement.1.Key.
-type LabelRequirement_1_Key struct {
-	union json.RawMessage
-}
-
-// LabelRequirement2 defines model for LabelRequirement.2.
-type LabelRequirement2 struct {
-	Key      LabelRequirement_2_Key `json:"key"`
-	Operator interface{}            `json:"operator"`
-}
-
-// LabelRequirement_2_Key defines model for LabelRequirement.2.Key.
-type LabelRequirement_2_Key struct {
-	union json.RawMessage
-}
-
-// LabelSelector defines model for LabelSelector.
-type LabelSelector struct {
-	Requirements  []LabelRequirement `json:"requirements"`
-	SchemaVersion interface{}        `json:"schema_version"`
-}
-
-// LabelValue defines model for LabelValue.
-type LabelValue = string
+// InheritedRoleAssignmentSourceType defines model for InheritedRoleAssignment.SourceType.
+type InheritedRoleAssignmentSourceType string
 
 // PartialMetadata defines model for PartialMetadata.
 type PartialMetadata struct {
@@ -433,7 +326,6 @@ type RoleStatus string
 // RoleBinding defines model for RoleBinding.
 type RoleBinding struct {
 	CreatedAt    time.Time              `json:"created_at"`
-	DataScopeIds []string               `json:"data_scope_ids"`
 	EnterpriseId string                 `json:"enterprise_id"`
 	Id           string                 `json:"id"`
 	RoleId       string                 `json:"role_id"`
@@ -454,12 +346,11 @@ type RoleBindingSubjectType string
 
 // RoleBindingCreate defines model for RoleBindingCreate.
 type RoleBindingCreate struct {
-	DataScopeIds []openapi_types.UUID         `json:"data_scope_ids"`
-	RoleId       openapi_types.UUID           `json:"role_id"`
-	SubjectId    openapi_types.UUID           `json:"subject_id"`
-	SubjectType  RoleBindingCreateSubjectType `json:"subject_type"`
-	ValidFrom    *time.Time                   `json:"valid_from,omitempty"`
-	ValidUntil   *time.Time                   `json:"valid_until,omitempty"`
+	RoleId      openapi_types.UUID           `json:"role_id"`
+	SubjectId   openapi_types.UUID           `json:"subject_id"`
+	SubjectType RoleBindingCreateSubjectType `json:"subject_type"`
+	ValidFrom   *time.Time                   `json:"valid_from,omitempty"`
+	ValidUntil  *time.Time                   `json:"valid_until,omitempty"`
 }
 
 // RoleBindingCreateSubjectType defines model for RoleBindingCreate.SubjectType.
@@ -473,7 +364,6 @@ type RoleBindingPage struct {
 
 // RoleBindingUpdate defines model for RoleBindingUpdate.
 type RoleBindingUpdate struct {
-	DataScopeIds    *[]openapi_types.UUID    `json:"data_scope_ids,omitempty"`
 	ExpectedVersion int64                    `json:"expected_version"`
 	Status          *RoleBindingUpdateStatus `json:"status,omitempty"`
 	ValidFrom       *time.Time               `json:"valid_from"`
@@ -508,11 +398,21 @@ type RoleUpdate struct {
 // RoleUpdateStatus defines model for RoleUpdate.Status.
 type RoleUpdateStatus string
 
-// SystemLabelKey defines model for SystemLabelKey.
-type SystemLabelKey = string
+// UserRoleAssignments defines model for UserRoleAssignments.
+type UserRoleAssignments struct {
+	AuthorizationVersion int64                     `json:"authorization_version"`
+	DirectRoleIds        []openapi_types.UUID      `json:"direct_role_ids"`
+	EffectiveRoleIds     []openapi_types.UUID      `json:"effective_role_ids"`
+	InheritedRoles       []InheritedRoleAssignment `json:"inherited_roles"`
+}
 
-// UserLabelKey defines model for UserLabelKey.
-type UserLabelKey = string
+// UserRoleAssignmentsUpdate defines model for UserRoleAssignmentsUpdate.
+type UserRoleAssignmentsUpdate struct {
+	DepartmentId                 openapi_types.UUID   `json:"department_id"`
+	ExpectedAuthorizationVersion int64                `json:"expected_authorization_version"`
+	ExpectedUserVersion          int64                `json:"expected_user_version"`
+	RoleIds                      []openapi_types.UUID `json:"role_ids"`
+}
 
 // CsrfToken defines model for CsrfToken.
 type CsrfToken = string
@@ -529,30 +429,29 @@ type Limit = int
 // ResourceId defines model for ResourceId.
 type ResourceId = openapi_types.UUID
 
+// ParametersCsrfToken defines model for parameters-CsrfToken.
+type ParametersCsrfToken = string
+
+// ParametersLimit defines model for parameters-Limit.
+type ParametersLimit = int
+
 // Error defines model for Error.
 type Error = ApiError
 
-// ListDataScopesParams defines parameters for ListDataScopes.
-type ListDataScopesParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+// ResponsesError defines model for responses-Error.
+type ResponsesError = ApiError
+
+// ListDataAuthorizationResourcesParams defines parameters for ListDataAuthorizationResources.
+type ListDataAuthorizationResourcesParams struct {
+	ResourceType DataAuthorizationResourceType `form:"resource_type" json:"resource_type"`
+	Cursor       *Cursor                       `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit        *ParametersLimit              `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
-// CreateDataScopeParams defines parameters for CreateDataScope.
-type CreateDataScopeParams struct {
-	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
-	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
-}
-
-// DisableDataScopeParams defines parameters for DisableDataScope.
-type DisableDataScopeParams struct {
-	ExpectedVersion ExpectedVersion `form:"expected_version" json:"expected_version"`
-	XCSRFToken      CsrfToken       `json:"X-CSRF-Token"`
-}
-
-// UpdateDataScopeParams defines parameters for UpdateDataScope.
-type UpdateDataScopeParams struct {
-	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
+// UpdateDataAuthorizationParams defines parameters for UpdateDataAuthorization.
+type UpdateDataAuthorizationParams struct {
+	XCSRFToken     ParametersCsrfToken `json:"X-CSRF-Token"`
+	IdempotencyKey IdempotencyKey      `json:"Idempotency-Key"`
 }
 
 // ListPermissionsParams defines parameters for ListPermissions.
@@ -607,11 +506,14 @@ type UpdateRoleParams struct {
 	XCSRFToken CsrfToken `json:"X-CSRF-Token"`
 }
 
-// CreateDataScopeJSONRequestBody defines body for CreateDataScope for application/json ContentType.
-type CreateDataScopeJSONRequestBody = DataScopeCreate
+// ReplaceUserRoleAssignmentsParams defines parameters for ReplaceUserRoleAssignments.
+type ReplaceUserRoleAssignmentsParams struct {
+	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
 
-// UpdateDataScopeJSONRequestBody defines body for UpdateDataScope for application/json ContentType.
-type UpdateDataScopeJSONRequestBody = DataScopeUpdate
+// UpdateDataAuthorizationJSONRequestBody defines body for UpdateDataAuthorization for application/json ContentType.
+type UpdateDataAuthorizationJSONRequestBody = DataAuthorizationBatch
 
 // CreateRoleBindingJSONRequestBody defines body for CreateRoleBinding for application/json ContentType.
 type CreateRoleBindingJSONRequestBody = RoleBindingCreate
@@ -624,6 +526,9 @@ type CreateRoleJSONRequestBody = RoleCreate
 
 // UpdateRoleJSONRequestBody defines body for UpdateRole for application/json ContentType.
 type UpdateRoleJSONRequestBody = RoleUpdate
+
+// ReplaceUserRoleAssignmentsJSONRequestBody defines body for ReplaceUserRoleAssignments for application/json ContentType.
+type ReplaceUserRoleAssignmentsJSONRequestBody = UserRoleAssignmentsUpdate
 
 // AsApiErrorParams0 returns the union data inside the ApiError_Params_AdditionalProperties as a ApiErrorParams0
 func (t ApiError_Params_AdditionalProperties) AsApiErrorParams0() (ApiErrorParams0, error) {
@@ -709,280 +614,6 @@ func (t ApiError_Params_AdditionalProperties) MarshalJSON() ([]byte, error) {
 }
 
 func (t *ApiError_Params_AdditionalProperties) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsLabelRequirement0 returns the union data inside the LabelRequirement as a LabelRequirement0
-func (t LabelRequirement) AsLabelRequirement0() (LabelRequirement0, error) {
-	var body LabelRequirement0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromLabelRequirement0 overwrites any union data inside the LabelRequirement as the provided LabelRequirement0
-func (t *LabelRequirement) FromLabelRequirement0(v LabelRequirement0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeLabelRequirement0 performs a merge with any union data inside the LabelRequirement, using the provided LabelRequirement0
-func (t *LabelRequirement) MergeLabelRequirement0(v LabelRequirement0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsLabelRequirement1 returns the union data inside the LabelRequirement as a LabelRequirement1
-func (t LabelRequirement) AsLabelRequirement1() (LabelRequirement1, error) {
-	var body LabelRequirement1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromLabelRequirement1 overwrites any union data inside the LabelRequirement as the provided LabelRequirement1
-func (t *LabelRequirement) FromLabelRequirement1(v LabelRequirement1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeLabelRequirement1 performs a merge with any union data inside the LabelRequirement, using the provided LabelRequirement1
-func (t *LabelRequirement) MergeLabelRequirement1(v LabelRequirement1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsLabelRequirement2 returns the union data inside the LabelRequirement as a LabelRequirement2
-func (t LabelRequirement) AsLabelRequirement2() (LabelRequirement2, error) {
-	var body LabelRequirement2
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromLabelRequirement2 overwrites any union data inside the LabelRequirement as the provided LabelRequirement2
-func (t *LabelRequirement) FromLabelRequirement2(v LabelRequirement2) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeLabelRequirement2 performs a merge with any union data inside the LabelRequirement, using the provided LabelRequirement2
-func (t *LabelRequirement) MergeLabelRequirement2(v LabelRequirement2) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t LabelRequirement) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *LabelRequirement) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsUserLabelKey returns the union data inside the LabelRequirement_0_Key as a UserLabelKey
-func (t LabelRequirement_0_Key) AsUserLabelKey() (UserLabelKey, error) {
-	var body UserLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromUserLabelKey overwrites any union data inside the LabelRequirement_0_Key as the provided UserLabelKey
-func (t *LabelRequirement_0_Key) FromUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeUserLabelKey performs a merge with any union data inside the LabelRequirement_0_Key, using the provided UserLabelKey
-func (t *LabelRequirement_0_Key) MergeUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsSystemLabelKey returns the union data inside the LabelRequirement_0_Key as a SystemLabelKey
-func (t LabelRequirement_0_Key) AsSystemLabelKey() (SystemLabelKey, error) {
-	var body SystemLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromSystemLabelKey overwrites any union data inside the LabelRequirement_0_Key as the provided SystemLabelKey
-func (t *LabelRequirement_0_Key) FromSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeSystemLabelKey performs a merge with any union data inside the LabelRequirement_0_Key, using the provided SystemLabelKey
-func (t *LabelRequirement_0_Key) MergeSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t LabelRequirement_0_Key) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *LabelRequirement_0_Key) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsUserLabelKey returns the union data inside the LabelRequirement_1_Key as a UserLabelKey
-func (t LabelRequirement_1_Key) AsUserLabelKey() (UserLabelKey, error) {
-	var body UserLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromUserLabelKey overwrites any union data inside the LabelRequirement_1_Key as the provided UserLabelKey
-func (t *LabelRequirement_1_Key) FromUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeUserLabelKey performs a merge with any union data inside the LabelRequirement_1_Key, using the provided UserLabelKey
-func (t *LabelRequirement_1_Key) MergeUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsSystemLabelKey returns the union data inside the LabelRequirement_1_Key as a SystemLabelKey
-func (t LabelRequirement_1_Key) AsSystemLabelKey() (SystemLabelKey, error) {
-	var body SystemLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromSystemLabelKey overwrites any union data inside the LabelRequirement_1_Key as the provided SystemLabelKey
-func (t *LabelRequirement_1_Key) FromSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeSystemLabelKey performs a merge with any union data inside the LabelRequirement_1_Key, using the provided SystemLabelKey
-func (t *LabelRequirement_1_Key) MergeSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t LabelRequirement_1_Key) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *LabelRequirement_1_Key) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsUserLabelKey returns the union data inside the LabelRequirement_2_Key as a UserLabelKey
-func (t LabelRequirement_2_Key) AsUserLabelKey() (UserLabelKey, error) {
-	var body UserLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromUserLabelKey overwrites any union data inside the LabelRequirement_2_Key as the provided UserLabelKey
-func (t *LabelRequirement_2_Key) FromUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeUserLabelKey performs a merge with any union data inside the LabelRequirement_2_Key, using the provided UserLabelKey
-func (t *LabelRequirement_2_Key) MergeUserLabelKey(v UserLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsSystemLabelKey returns the union data inside the LabelRequirement_2_Key as a SystemLabelKey
-func (t LabelRequirement_2_Key) AsSystemLabelKey() (SystemLabelKey, error) {
-	var body SystemLabelKey
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromSystemLabelKey overwrites any union data inside the LabelRequirement_2_Key as the provided SystemLabelKey
-func (t *LabelRequirement_2_Key) FromSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeSystemLabelKey performs a merge with any union data inside the LabelRequirement_2_Key, using the provided SystemLabelKey
-func (t *LabelRequirement_2_Key) MergeSystemLabelKey(v SystemLabelKey) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t LabelRequirement_2_Key) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *LabelRequirement_2_Key) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

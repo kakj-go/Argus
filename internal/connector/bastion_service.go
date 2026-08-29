@@ -31,11 +31,10 @@ type BastionInput struct {
 }
 
 type bastionPlan struct {
-	Operation string               `json:"operation"`
-	ScopeID   uuid.UUID            `json:"scope_id"`
-	HostID    uuid.UUID            `json:"host_id"`
-	Input     BastionInput         `json:"input"`
-	Impact    resource.LabelImpact `json:"impact"`
+	Operation string       `json:"operation"`
+	ScopeID   uuid.UUID    `json:"scope_id"`
+	HostID    uuid.UUID    `json:"host_id"`
+	Input     BastionInput `json:"input"`
 }
 
 type bastionSnapshot struct {
@@ -90,27 +89,19 @@ func (service BastionService) GetConnector(ctx context.Context, enterpriseID, co
 }
 
 func (service BastionService) PreviewCreate(ctx context.Context, subject resource.Subject, enterpriseID uuid.UUID, input BastionInput, idempotencyKey string) (db.PendingAction, error) {
-	labelsJSON, _, err := resource.NormalizeUserLabels(input.Labels)
+	_, _, err := resource.NormalizeUserLabels(input.Labels)
 	if err != nil {
 		return db.PendingAction{}, err
 	}
-	labels, _ := resource.DecodeLabels(labelsJSON)
 	scopeID, hostID := newID(), newID()
-	allowed, matched, err := (resource.AccessService{Store: service.Store}).CanAccess(ctx, enterpriseID, subject.DataScopeIDs, "host", hostID.String(), labels)
-	if err != nil || !allowed {
-		return db.PendingAction{}, resource.ErrResourceDenied
-	}
-	impact, _, err := resource.ComputeLabelImpact(ctx, service.Store.Queries, enterpriseID, "host", hostID.String(), map[string]string{}, labels)
-	if err != nil {
-		return db.PendingAction{}, err
-	}
-	plan := bastionPlan{Operation: "create", ScopeID: scopeID, HostID: hostID, Input: input, Impact: impact}
+	snapshot := resource.NewResourceAuthorizationSnapshot("host", hostID)
+	plan := bastionPlan{Operation: "create", ScopeID: scopeID, HostID: hostID, Input: input}
 	return service.Actions.Prepare(ctx, subject.ActorID, enterpriseID, resource.PrepareActionInput{ActionType: "bastion_scope.create", Title: "Create bastion",
 		Summary: "Create a stable Bastion Scope and one-time enrollment", Risk: "dangerous", ResourceType: "bastion_scope",
 		ResourceID: uuid.NullUUID{UUID: scopeID, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
-		Preview: map[string]any{"scope_id": scopeID, "host_id": hostID, "name": input.Name, "matched_data_scope_ids": matched},
+		Preview: map[string]any{"scope_id": scopeID, "host_id": hostID, "name": input.Name},
 		Diff:    []map[string]string{{"kind": "add", "text": "Create bastion " + input.Name}}, ImmutablePlan: plan,
-		ResourceScopeSnapshot: impact, CommitHandler: "argus.bastion_scope.create.commit"}, idempotencyKey)
+		ResourceScopeSnapshot: snapshot, CommitHandler: "argus.bastion_scope.create.commit"}, idempotencyKey)
 }
 
 func (service BastionService) PreviewUpdate(ctx context.Context, subject resource.Subject, enterpriseID, scopeID uuid.UUID, input BastionInput, idempotencyKey string) (db.PendingAction, error) {
@@ -118,26 +109,22 @@ func (service BastionService) PreviewUpdate(ctx context.Context, subject resourc
 	if err != nil || current.ResourceVersion != input.ExpectedVersion || !current.ConnectorHostID.Valid {
 		return db.PendingAction{}, resource.ErrVersionConflict
 	}
-	before, _ := resource.DecodeLabels(current.Labels)
-	after := before
 	if input.Labels != nil {
+		before, _ := resource.DecodeLabels(current.Labels)
 		encoded, _, normalizeErr := resource.NormalizeUserLabels(resource.MergeSystemLabels(input.Labels, before))
 		if normalizeErr != nil {
 			return db.PendingAction{}, normalizeErr
 		}
-		after, _ = resource.DecodeLabels(encoded)
+		_ = encoded
 	}
-	impact, _, err := resource.ComputeLabelImpact(ctx, service.Store.Queries, enterpriseID, "host", current.ConnectorHostID.UUID.String(), before, after)
-	if err != nil {
-		return db.PendingAction{}, err
-	}
-	plan := bastionPlan{Operation: "update", ScopeID: scopeID, HostID: current.ConnectorHostID.UUID, Input: input, Impact: impact}
+	snapshot := resource.NewResourceAuthorizationSnapshot("host", current.ConnectorHostID.UUID)
+	plan := bastionPlan{Operation: "update", ScopeID: scopeID, HostID: current.ConnectorHostID.UUID, Input: input}
 	return service.Actions.Prepare(ctx, subject.ActorID, enterpriseID, resource.PrepareActionInput{ActionType: "bastion_scope.update", Title: "Update bastion",
 		Summary: "Update Bastion Scope metadata", Risk: "write", ResourceType: "bastion_scope", ResourceID: uuid.NullUUID{UUID: scopeID, Valid: true},
 		ExpectedResourceVersion: pgtype.Int8{Int64: input.ExpectedVersion, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
-		Preview: map[string]any{"scope_id": scopeID, "affected_subject_count": len(impact.AffectedSubjects)},
+		Preview: map[string]any{"scope_id": scopeID},
 		Diff:    []map[string]string{{"kind": "change", "text": "Update bastion " + current.Name}}, ImmutablePlan: plan,
-		ResourceScopeSnapshot: impact, CommitHandler: "argus.bastion_scope.update.commit"}, idempotencyKey)
+		ResourceScopeSnapshot: snapshot, CommitHandler: "argus.bastion_scope.update.commit"}, idempotencyKey)
 }
 
 func (service BastionService) PreviewLifecycle(ctx context.Context, subject resource.Subject, enterpriseID, scopeID uuid.UUID, expectedVersion int64, operation, idempotencyKey string) (db.PendingAction, error) {
@@ -244,21 +231,14 @@ func (service BastionService) RevalidateAction(ctx context.Context, q *db.Querie
 		return nil, err
 	}
 	if plan.Operation == "create" {
-		_, hash, err := resource.ComputeLabelImpact(ctx, q, action.EnterpriseID, "host", plan.HostID.String(), map[string]string{}, plan.Input.Labels)
-		return hash, err
+		return resource.HashResourceAuthorizationSnapshot("host", plan.HostID)
 	}
 	current, err := q.GetBastionScope(ctx, db.GetBastionScopeParams{ID: plan.ScopeID, EnterpriseID: action.EnterpriseID})
 	if err != nil || current.ResourceVersion != plan.Input.ExpectedVersion {
 		return nil, resource.ErrActionInvalidated
 	}
 	if plan.Operation == "update" {
-		before, _ := resource.DecodeLabels(current.Labels)
-		after := before
-		if plan.Input.Labels != nil {
-			after = resource.MergeSystemLabels(plan.Input.Labels, before)
-		}
-		_, hash, err := resource.ComputeLabelImpact(ctx, q, action.EnterpriseID, "host", plan.HostID.String(), before, after)
-		return hash, err
+		return resource.HashResourceAuthorizationSnapshot("host", plan.HostID)
 	}
 	snapshot := bastionSnapshot{ResourceVersion: current.ResourceVersion, FencingGeneration: current.FencingGeneration, MemberCount: current.MemberCount, Status: bastionSnapshotStatus(plan.Operation, current.Status)}
 	encoded, err := json.Marshal(snapshot)
@@ -291,19 +271,23 @@ func (service BastionService) CommitAction(ctx context.Context, q *db.Queries, a
 		if err != nil {
 			return resource.ActionCommitResult{}, err
 		}
-		if _, err := q.CreateHost(ctx, db.CreateHostParams{ID: plan.HostID, EnterpriseID: action.EnterpriseID, Name: plan.Input.Name,
+		host, err := q.CreateHost(ctx, db.CreateHostParams{ID: plan.HostID, EnterpriseID: action.EnterpriseID, Name: plan.Input.Name,
 			Hostname: "", Address: "connector://" + plan.HostID.String(), Port: 1, Platform: "linux", ConnectionMode: "connector_local",
 			BastionScopeID: uuid.NullUUID{UUID: scope.ID, Valid: true}, Environment: plan.Input.Environment, Labels: labels, LabelsHash: hash,
-			ConnectionStatus: "onboarding", PinnedHostKey: ""}); err != nil {
+			ConnectionStatus: "onboarding", PinnedHostKey: ""})
+		if err != nil {
+			return resource.ActionCommitResult{}, err
+		}
+		creator := action.CreatorSubjectID
+		if _, err := q.AddDataAuthorizationGrant(ctx, db.AddDataAuthorizationGrantParams{ID: newID(), EnterpriseID: action.EnterpriseID,
+			SubjectType: action.CreatorSubjectType, SubjectID: creator, ResourceType: "host", ResourceID: host.ID,
+			CreatedBy: uuid.NullUUID{UUID: creator, Valid: true}}); err != nil {
 			return resource.ActionCommitResult{}, err
 		}
 		enrollment, err := service.Enrollment.CreateEnrollment(ctx, q, action.CreatorSubjectID.String(), action.EnterpriseID, CreateEnrollmentInput{Role: "bastion",
 			Purpose: "initial_registration", BastionScopeID: uuid.NullUUID{UUID: scope.ID, Valid: true}, HostID: uuid.NullUUID{UUID: plan.HostID, Valid: true},
 			Policy: json.RawMessage(`{"capabilities":["host.connection_probe","kubernetes.connection_probe","kubernetes.query","credential.lease","connector.uninstall"]}`)})
 		if err != nil {
-			return resource.ActionCommitResult{}, err
-		}
-		if err := resource.ApplyLabelImpact(ctx, q, action.EnterpriseID, plan.Impact); err != nil {
 			return resource.ActionCommitResult{}, err
 		}
 		return resource.ActionCommitResult{ResourceType: "bastion_scope", ResourceID: scope.ID, ResourceVersion: scope.ResourceVersion,
@@ -333,9 +317,6 @@ func (service BastionService) CommitAction(ctx context.Context, q *db.Queries, a
 		}
 		scope, err := q.UpdateBastionScope(ctx, params)
 		if err != nil {
-			return resource.ActionCommitResult{}, err
-		}
-		if err := resource.ApplyLabelImpact(ctx, q, action.EnterpriseID, plan.Impact); err != nil {
 			return resource.ActionCommitResult{}, err
 		}
 		return resource.ActionCommitResult{ResourceType: "bastion_scope", ResourceID: scope.ID, ResourceVersion: scope.ResourceVersion, Summary: "Bastion Scope updated"}, nil

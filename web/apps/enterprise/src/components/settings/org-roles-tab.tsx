@@ -7,6 +7,7 @@ import { z } from "zod";
 import { presentApiFormError, useApi } from "@argus/api-client";
 import type { Role } from "@argus/api-client";
 import {
+  ActionGroup,
   Alert,
   Badge,
   Button,
@@ -16,12 +17,14 @@ import {
   Field,
   FormDrawer,
   Input,
+  RowAction,
   Spinner,
   Tooltip,
 } from "@argus/ui";
 import { roleDisplayName } from "../../lib/role-presentation";
 import { formatDateTime, PermissionMatrix } from "./shared";
 import { useOrgRoles } from "./org-users-tab";
+import { DataAuthorizationDialog } from "./data-authorization-dialog";
 
 type RoleRow = {
   id: string;
@@ -40,6 +43,7 @@ export function OrgRolesTab() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
   const [deleting, setDeleting] = useState<Role | null>(null);
+  const [authorizationTarget, setAuthorizationTarget] = useState<Role | null>(null);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["org", "roles"] });
@@ -140,10 +144,11 @@ export function OrgRolesTab() {
               key: "actions",
               header: t("settings.common.actions"),
               render: (row) => (
-                <span className="argus-settings-inline-actions">
+                <ActionGroup>
+                  <RowAction onClick={() => setAuthorizationTarget(roles.data?.find((role) => role.id === row.id) ?? null)}>数据授权</RowAction>
                   {!row.builtin && (
                     <>
-                      <Button
+                      <RowAction
                         onClick={() => {
                           setEditing(
                             roles.data?.find((role) => role.id === row.id) ??
@@ -151,35 +156,32 @@ export function OrgRolesTab() {
                           );
                           setDrawerOpen(true);
                         }}
-                        size="sm"
-                        variant="ghost"
                       >
                         {t("settings.common.edit")}
-                      </Button>
-                      <Button
+                      </RowAction>
+                      <RowAction
+                        danger
                         onClick={() =>
                           setDeleting(
                             roles.data?.find((role) => role.id === row.id) ??
                               null,
                           )
                         }
-                        size="sm"
-                        variant="ghost"
                       >
                         {t("settings.common.delete")}
-                      </Button>
+                      </RowAction>
                     </>
                   )}
                   {row.builtin && (
                     <Tooltip content={t("settings.org.rolesTab.builtinLocked")}>
                       <span>
-                        <Button disabled size="sm" variant="ghost">
+                        <RowAction disabled danger>
                           {t("settings.common.delete")}
-                        </Button>
+                        </RowAction>
                       </span>
                     </Tooltip>
                   )}
-                </span>
+                </ActionGroup>
               ),
             },
           ]}
@@ -187,6 +189,7 @@ export function OrgRolesTab() {
           getRowKey={(row) => row.id}
         />
       )}
+      <DataAuthorizationDialog open={authorizationTarget !== null} onOpenChange={(open) => !open && setAuthorizationTarget(null)} subjectType="role" subjectId={authorizationTarget?.id ?? ""} subjectLabel={authorizationTarget?.name ?? ""} />
 
       <RoleDrawer
         loading={save.isPending}

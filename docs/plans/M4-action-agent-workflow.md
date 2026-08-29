@@ -37,7 +37,7 @@
 - [x] `M4-TOOL-02` 默认顺序执行 Tool，仅允许显式 `parallel_safe` 的无副作用查询并行；截断/不完整 ToolCall 不执行。
 - [x] `M4-ACTION-01` 扩展 M3 PendingAction 公共/内部存储和私有 Token 分流，增加 `.preview/.commit` Tool 配对与通用状态迁移；不得重建或并行维护第二套资源 Action。
 - [x] `M4-ACTION-02` 实现 UserConfirmation、ApprovalRequest、ActionBinding、Execution 和 Action Executor。
-- [x] `M4-AUTH-01` 在 Preview、确认、审批、Commit、恢复时重新检查 DataScope、标签/资源版本和 AuthorizationVersion。
+- [x] `M4-AUTH-01` 在 Preview、确认、审批、Commit、恢复时重新检查 explicit resource authorization、标签/资源版本和 AuthorizationVersion。
 - [x] `M4-IDEMPOTENCY-01` 实现双击、网络重试、服务重启、过期、取消和 ResultUnknown 对账。
 - [x] `M4-WEB-01` Chatbox、任务、PendingAction、审批页面切到真实 SSE/API。
 - [x] `M4-CONTRACT-01` 建立所有变更 Tool 的自动发布门禁。
@@ -51,7 +51,7 @@
 - Approval 不能补齐基础权限，创建人不能满足非本人审批。
 - Worker Pod 删除、Redis 清空和 Lease 过期后 Run 可恢复且危险副作用不重复。
 - 大 ToolResult 先确定性投影；多轮压缩不删除原事件，ToolCall/ToolResult 不被拆开，Projection Hash 和 Source Range 可复现。
-- ContextSnapshot 搜索不到 Secret、私有 Token、PendingAction 私有参数或 RemoteAccessTicket；摘要不能恢复已撤销 Tool/DataScope。
+- ContextSnapshot 搜索不到 Secret、私有 Token、PendingAction 私有参数或 RemoteAccessTicket；摘要不能恢复已撤销 Tool/explicit resource authorization。
 - 模型以 `length`、`max_tokens` 或 `incomplete` 停止时，即使已经出现部分 ToolCall 也不得执行。
 - 多条 Approval Policy 形成独立 Requirement Snapshot，全部满足后才能创建 Execution。
 - Agent Preview 创建的 PendingAction、Execution 和 Verify Task 必须保持同一可信 Run 绑定，浏览器和模型不能自报 `run_id`。

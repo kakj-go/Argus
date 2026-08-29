@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -20,6 +21,7 @@ import {
   Input,
   StatusBadge,
 } from "@argus/ui";
+import { MfaStepUpDialog } from "../security/mfa-step-up-dialog";
 
 const decisionCommentConstraint = formConstraint(
   "RemoteAccessDecisionCreate",
@@ -28,13 +30,25 @@ const decisionCommentConstraint = formConstraint(
 
 type Requirement = AccessRequest["requirements"][number];
 
-export function RemoteAccessApprovals() {
+export function RemoteAccessApprovals({
+  scope,
+}: {
+  scope: "mine" | "created" | "done";
+}) {
   const { t } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
   const requests = useQuery({
-    queryKey: ["remote-access", "approval-requests"],
-    queryFn: () => api.remoteAccess.listRequests(),
+    queryKey: ["remote-access", "approval-requests", scope],
+    queryFn: () =>
+      api.remoteAccess.listRequests({
+        scope:
+          scope === "created"
+            ? "mine"
+            : scope === "done"
+              ? "processed"
+              : "approver",
+      }),
   });
   const hosts = useQuery({
     queryKey: ["hosts", "remote-access-options"],
@@ -44,9 +58,9 @@ export function RemoteAccessApprovals() {
     queryKey: ["managed-accounts", "remote-access-options"],
     queryFn: () => api.secrets.listManagedAccounts(),
   });
-  const policies = useQuery({
-    queryKey: ["remote-access", "policies"],
-    queryFn: () => api.remoteAccess.listPolicies(),
+  const workflows = useQuery({
+    queryKey: ["remote-access", "approval-workflows"],
+    queryFn: () => api.remoteAccess.listApprovalWorkflows(),
   });
   const decide = useMutation({
     mutationFn: ({
@@ -68,26 +82,32 @@ export function RemoteAccessApprovals() {
     onSuccess: () =>
       void queryClient.invalidateQueries({ queryKey: ["remote-access"] }),
   });
-  const pending = (requests.data?.items ?? []).filter(
-    (request) => request.status === "awaiting_approval",
-  );
+  const [stepUpRequestId, setStepUpRequestId] = useState<string | null>(null);
+  const resume = useMutation({
+    mutationFn: (requestId: string) => api.remoteAccess.resumeRequest(requestId),
+    onSuccess: () => {
+      setStepUpRequestId(null);
+      void queryClient.invalidateQueries({ queryKey: ["remote-access"] });
+    },
+  });
+  const visible = requests.data?.items ?? [];
   const unavailable = t("remoteAccess.unavailableReference");
   const hostName = (id: string) =>
     hosts.data?.items.find((item) => item.id === id)?.name ?? unavailable;
   const accountName = (id: string) =>
     accounts.data?.find((item) => item.id === id)?.username ?? unavailable;
-  const policyName = (id: string) =>
-    policies.data?.items.find((item) => item.id === id)?.name ?? unavailable;
+  const workflowName = (id: string) =>
+    workflows.data?.items.find((item) => item.id === id)?.name ?? unavailable;
 
   return (
     <Card>
       <CardHeader title={t("remoteAccess.approvalsTitle")} />
       <CardContent>
-        {pending.length === 0 ? (
+        {visible.length === 0 ? (
           <EmptyState description="" title={t("remoteAccess.noApprovals")} />
         ) : (
           <div className="argus-remote-approval-list">
-            {pending.map((request) => (
+            {visible.map((request) => (
               <section className="argus-remote-approval" key={request.id}>
                 <div>
                   <strong>
@@ -106,14 +126,30 @@ export function RemoteAccessApprovals() {
                     account: accountName(request.managed_account_id),
                   })}
                 </small>
+                {request.decision_reason_codes?.length ? (
+                  <small className="argus-settings-section__hint">
+                    {request.decision_reason_codes.join(" · ")}
+                  </small>
+                ) : null}
+                {scope === "created" && request.status === "awaiting_mfa" ? (
+                  <Button
+                    onClick={() => setStepUpRequestId(request.id)}
+                    size="sm"
+                    variant="primary"
+                  >
+                    {t("remoteAccess.completeMfa")}
+                  </Button>
+                ) : null}
                 {request.requirements.map((requirement) => (
                   <div
                     className="argus-remote-approval__requirement"
                     key={requirement.id}
                   >
                     <span>
-                      {t("remoteAccess.policyProgress", {
-                        policy: policyName(requirement.policy_id),
+                      {t("remoteAccess.workflowProgress", {
+                        workflow: requirement.workflow_id
+                          ? workflowName(requirement.workflow_id)
+                          : unavailable,
                         approved: requirement.approved_count,
                         required: requirement.minimum_approvals,
                       })}
@@ -122,7 +158,7 @@ export function RemoteAccessApprovals() {
                       <StatusBadge tone="danger">
                         {t("remoteAccess.mfaFailClosed")}
                       </StatusBadge>
-                    ) : requirement.status === "pending" ? (
+                    ) : scope === "mine" && requirement.status === "pending" ? (
                       <RemoteAccessDecisionForm
                         loading={decide.isPending}
                         onSubmit={(value) =>
@@ -148,6 +184,17 @@ export function RemoteAccessApprovals() {
           </div>
         )}
       </CardContent>
+      <MfaStepUpDialog
+        onComplete={() =>
+          stepUpRequestId
+            ? resume.mutateAsync(stepUpRequestId).then(() => undefined)
+            : Promise.resolve()
+        }
+        onOpenChange={(open) => {
+          if (!open) setStepUpRequestId(null);
+        }}
+        open={stepUpRequestId !== null}
+      />
     </Card>
   );
 }

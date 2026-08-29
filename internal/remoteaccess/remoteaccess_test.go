@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
@@ -17,7 +18,7 @@ import (
 func TestGrantCannotBeExpandedByRequest(t *testing.T) {
 	now := time.Now().UTC()
 	user, enterprise, host, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	grant := Grant{EnterpriseID: enterprise, SubjectType: "user", SubjectID: user, HostIDs: []uuid.UUID{host}, ManagedAccountIDs: []uuid.UUID{account}, Protocols: []string{"ssh"}, Actions: []string{"terminal"}, ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour), Enabled: true}
+	grant := Grant{EnterpriseID: enterprise, SubjectType: "user", SubjectID: user, HostIDs: []uuid.UUID{host}, ManagedAccountIDs: []uuid.UUID{account}, Protocols: []string{"ssh"}, Actions: []string{"terminal"}, ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour), Status: GovernanceEnabled}
 	intent := Intent{EnterpriseID: enterprise, UserID: user, HostID: host, ManagedAccountID: account, Protocol: "ssh", Action: "terminal", AuthorizationTime: now}
 	if !grant.Authorizes(intent) {
 		t.Fatal("expected exact grant match")
@@ -32,10 +33,27 @@ func TestGrantCannotBeExpandedByRequest(t *testing.T) {
 	}
 }
 
-func TestMFARequirementFailsClosed(t *testing.T) {
-	_, err := MatchPolicies([]Policy{{ID: uuid.New(), Version: 1, Enabled: true, Protocols: []string{"ssh"}, RequireMFA: true}}, Intent{Protocol: "ssh"})
-	if !errors.Is(err, ErrMFARequired) {
-		t.Fatalf("expected MFA fail closed, got %v", err)
+func TestApprovalRequestStateUsesRequesterAuthorizationVersion(t *testing.T) {
+	now := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
+	request := db.RemoteAccessRequest{
+		Status:               "awaiting_approval",
+		AuthorizationVersion: 7,
+		ExpiresAt:            pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true},
+	}
+	if err := validateApprovalRequestState(request, 7, now); err != nil {
+		t.Fatalf("valid requester authorization version rejected: %v", err)
+	}
+	if err := validateApprovalRequestState(request, 8, now); !errors.Is(err, ErrAuthorizationStale) {
+		t.Fatalf("changed requester authorization version returned %v", err)
+	}
+	request.Status = "authorized"
+	if err := validateApprovalRequestState(request, 7, now); !errors.Is(err, ErrApprovalRequired) {
+		t.Fatalf("non-pending request returned %v", err)
+	}
+	request.Status = "awaiting_approval"
+	request.ExpiresAt.Time = now
+	if err := validateApprovalRequestState(request, 7, now); !errors.Is(err, ErrApprovalRequired) {
+		t.Fatalf("expired request returned %v", err)
 	}
 }
 
@@ -139,6 +157,20 @@ func TestRecordingEnvelopeRejectsDivergentKeyReference(t *testing.T) {
 	}
 }
 
+func TestGatewayDisabledRecordingAndCommandAuditSkipPersistence(t *testing.T) {
+	gateway := WebSocketGateway{}
+	frame := ClientFrame{Type: "input", Sequence: 1, Data: "whoami"}
+	if err := gateway.auditClientFrame(context.Background(), uuid.New(), "disabled", 2, frame); err != nil {
+		t.Fatalf("disabled command audit touched persistence: %v", err)
+	}
+	if err := gateway.recordClientFrame(context.Background(), nil, frame); err != nil {
+		t.Fatalf("disabled recording touched persistence: %v", err)
+	}
+	if err := gateway.recordBackendFrame(context.Background(), nil, BackendFrame{Type: "output", Data: []byte("ok")}); err != nil {
+		t.Fatalf("disabled backend recording touched persistence: %v", err)
+	}
+}
+
 func TestWebSocketProtocolRequiresHelloAndMonotonicSequence(t *testing.T) {
 	now := time.Now().UTC()
 	state := ProtocolState{StartedAt: now}
@@ -152,6 +184,45 @@ func TestWebSocketProtocolRequiresHelloAndMonotonicSequence(t *testing.T) {
 	}
 	if _, err := state.Accept(input, now.Add(2*time.Second)); !errors.Is(err, ErrProtocol) {
 		t.Fatalf("duplicate sequence accepted: %v", err)
+	}
+}
+
+func TestProtocolRejectsUndeliveredAdvancedChannelsWithoutBreakingSequence(t *testing.T) {
+	now := time.Now().UTC()
+	state := ProtocolState{StartedAt: now}
+	hello := []byte(`{"protocol":"argus.remote_access/v1","type":"client_hello","sequence":1,"ticket":"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ","nonce":"0123456789abcdef","cols":80,"rows":24}`)
+	if _, err := state.Accept(hello, now); err != nil {
+		t.Fatalf("accept hello: %v", err)
+	}
+	advanced := []byte(`{"protocol":"argus.remote_access/v1","type":"clipboard","sequence":2,"data":"blocked"}`)
+	if _, err := state.Accept(advanced, now); !errors.Is(err, ErrChannelUnavailable) {
+		t.Fatalf("advanced channel error = %v, want %v", err, ErrChannelUnavailable)
+	}
+	ping := []byte(`{"protocol":"argus.remote_access/v1","type":"ping","sequence":3}`)
+	if _, err := state.Accept(ping, now); err != nil {
+		t.Fatalf("sequence did not advance after safe rejection: %v", err)
+	}
+}
+
+func TestBusinessActivityExcludesPing(t *testing.T) {
+	for _, frameType := range []string{"input", "resize", "output", "close"} {
+		if !businessActivity(frameType) {
+			t.Fatalf("%s should refresh business activity", frameType)
+		}
+	}
+	if businessActivity("ping") {
+		t.Fatal("ping must not refresh business activity")
+	}
+}
+
+func TestIdleTimeoutReachedAtFrozenProfileBoundary(t *testing.T) {
+	lastActivity := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
+	now := lastActivity.Add(15 * time.Minute)
+	if !idleTimeoutReached(now, lastActivity, 15*time.Minute) {
+		t.Fatal("15 minute idle boundary was not recognized")
+	}
+	if idleTimeoutReached(now.Add(-time.Nanosecond), lastActivity, 15*time.Minute) {
+		t.Fatal("session expired before idle boundary")
 	}
 }
 

@@ -6,7 +6,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List DataScope-filtered Hosts. */
+        /** List explicitly authorized Hosts. */
         get: operations["listHosts"];
         put?: never;
         post?: never;
@@ -25,7 +25,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Get a DataScope-filtered Host. */
+        /** Get an explicitly authorized Host. */
         get: operations["getHost"];
         put?: never;
         post?: never;

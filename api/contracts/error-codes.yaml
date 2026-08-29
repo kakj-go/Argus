@@ -8,6 +8,7 @@ codes:
   CURSOR_INVALID: {http_status: 400, message_key: errors.pagination.cursor_invalid, retryable: false}
   CURSOR_EXPIRED: {http_status: 409, message_key: errors.pagination.cursor_expired, retryable: true}
   IDEMPOTENCY_CONFLICT: {http_status: 409, message_key: errors.common.idempotency_conflict, retryable: false}
+  IDEMPOTENCY_EXPIRED: {http_status: 409, message_key: errors.common.idempotency_expired, retryable: false}
   LABEL_INVALID: {http_status: 422, message_key: errors.labels.invalid, retryable: false}
   LABEL_RESERVED: {http_status: 403, message_key: errors.labels.reserved, retryable: false}
   LABEL_LIMIT_EXCEEDED: {http_status: 422, message_key: errors.labels.limit_exceeded, retryable: false}
@@ -49,6 +50,7 @@ codes:
   DEFAULT_DEPARTMENT_IMMUTABLE: {http_status: 409, message_key: errors.department.default_immutable, retryable: false}
   DEPARTMENT_NOT_EMPTY: {http_status: 409, message_key: errors.department.not_empty, retryable: false}
   BUILTIN_ROLE_IMMUTABLE: {http_status: 409, message_key: errors.role.builtin_immutable, retryable: false}
+  LAST_IAM_ADMIN_REQUIRED: {http_status: 409, message_key: errors.role.last_iam_admin_required, retryable: false}
   CROSS_ENTERPRISE_REFERENCE: {http_status: 404, message_key: errors.auth.cross_enterprise_reference, retryable: false}
   API_KEY_REVOKED: {http_status: 401, message_key: errors.api_key.revoked, retryable: false}
   API_KEY_EXPIRED: {http_status: 401, message_key: errors.api_key.expired, retryable: false}
@@ -125,7 +127,11 @@ codes:
   REMOTE_ACCESS_TICKET_CONSUMED: {http_status: 409, message_key: errors.remote_access.ticket_consumed, retryable: false}
   REMOTE_ACCESS_CAPACITY_EXCEEDED: {http_status: 429, message_key: errors.remote_access.capacity_exceeded, retryable: true}
   REMOTE_ACCESS_RECORDING_UNAVAILABLE: {http_status: 503, message_key: errors.remote_access.recording_unavailable, retryable: true}
+  REMOTE_ACCESS_COMMAND_AUDIT_UNAVAILABLE: {http_status: 503, message_key: errors.remote_access.command_audit_unavailable, retryable: true}
+  REMOTE_ACCESS_CHANNEL_NOT_AVAILABLE: {http_status: 409, message_key: errors.remote_access.channel_not_available, retryable: false}
   REMOTE_ACCESS_CONNECTION_LOST: {http_status: 409, message_key: errors.remote_access.connection_lost, retryable: true}
+  REMOTE_ACCESS_INVALID_STATE_TRANSITION: {http_status: 409, message_key: errors.remote_access.invalid_state_transition, retryable: false}
+  REMOTE_ACCESS_INVALID_GOVERNANCE: {http_status: 422, message_key: errors.remote_access.invalid_governance, retryable: false}
   WINRM_TLS_REQUIRED: {http_status: 422, message_key: errors.remote_access.winrm_tls_required, retryable: false}
   COLLECTOR_DISTRIBUTION_UNSUPPORTED: {http_status: 422, message_key: errors.telemetry.distribution_unsupported, retryable: false}
   COLLECTOR_ARTIFACT_INVALID: {http_status: 422, message_key: errors.telemetry.artifact_invalid, retryable: false}

@@ -111,6 +111,7 @@ export function Dialog({
   footer,
   open,
   onOpenChange,
+  size = "md",
 }: {
   trigger?: ReactNode;
   title: string;
@@ -119,6 +120,8 @@ export function Dialog({
   footer?: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** md keeps the default 520px; lg widens for detail/read-only layouts. */
+  size?: "md" | "lg";
 }) {
   const text = useUiText();
   return (
@@ -128,7 +131,9 @@ export function Dialog({
       )}
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="argus-dialog__overlay" />
-        <DialogPrimitive.Content className="argus-dialog">
+        <DialogPrimitive.Content
+          className={cx("argus-dialog", size !== "md" && `argus-dialog--${size}`)}
+        >
           <div className="argus-dialog__top">
             <div>
               <DialogPrimitive.Title className="argus-dialog__title">

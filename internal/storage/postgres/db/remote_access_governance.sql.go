@@ -12,10 +12,184 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countRemoteAccessApprovalWorkflowReferences = `-- name: CountRemoteAccessApprovalWorkflowReferences :one
+SELECT (SELECT count(*)::integer FROM remote_access_rules WHERE approval_workflow_id=$1)::integer AS rules,
+       (SELECT count(*)::integer FROM remote_access_requests request
+         WHERE request.decision_snapshot->'approval_requirements' @> jsonb_build_array(jsonb_build_object('workflow_id', $1::uuid::text)))::integer AS requests,
+       (SELECT count(*)::integer FROM remote_access_leases lease
+         WHERE lease.decision_snapshot->'approval_requirements' @> jsonb_build_array(jsonb_build_object('workflow_id', $1::uuid::text)))::integer AS leases,
+       (SELECT count(*)::integer FROM remote_access_sessions session
+         WHERE session.decision_snapshot->'approval_requirements' @> jsonb_build_array(jsonb_build_object('workflow_id', $1::uuid::text)))::integer AS sessions
+`
+
+type CountRemoteAccessApprovalWorkflowReferencesRow struct {
+	Rules    int32 `json:"rules"`
+	Requests int32 `json:"requests"`
+	Leases   int32 `json:"leases"`
+	Sessions int32 `json:"sessions"`
+}
+
+func (q *Queries) CountRemoteAccessApprovalWorkflowReferences(ctx context.Context, approvalWorkflowID uuid.NullUUID) (CountRemoteAccessApprovalWorkflowReferencesRow, error) {
+	row := q.db.QueryRow(ctx, countRemoteAccessApprovalWorkflowReferences, approvalWorkflowID)
+	var i CountRemoteAccessApprovalWorkflowReferencesRow
+	err := row.Scan(
+		&i.Rules,
+		&i.Requests,
+		&i.Leases,
+		&i.Sessions,
+	)
+	return i, err
+}
+
+const countRemoteAccessGrantReferences = `-- name: CountRemoteAccessGrantReferences :one
+SELECT 0::integer AS rules,
+       (SELECT count(*)::integer FROM remote_access_requests request WHERE request.grant_id=$1)::integer AS requests,
+       (SELECT count(*)::integer FROM remote_access_leases lease WHERE lease.grant_id=$1)::integer AS leases,
+       (SELECT count(*)::integer FROM remote_access_sessions session
+         JOIN remote_access_leases lease ON lease.id=session.lease_id WHERE lease.grant_id=$1)::integer AS sessions
+`
+
+type CountRemoteAccessGrantReferencesRow struct {
+	Rules    int32 `json:"rules"`
+	Requests int32 `json:"requests"`
+	Leases   int32 `json:"leases"`
+	Sessions int32 `json:"sessions"`
+}
+
+func (q *Queries) CountRemoteAccessGrantReferences(ctx context.Context, grantID uuid.UUID) (CountRemoteAccessGrantReferencesRow, error) {
+	row := q.db.QueryRow(ctx, countRemoteAccessGrantReferences, grantID)
+	var i CountRemoteAccessGrantReferencesRow
+	err := row.Scan(
+		&i.Rules,
+		&i.Requests,
+		&i.Leases,
+		&i.Sessions,
+	)
+	return i, err
+}
+
+const countRemoteAccessRuleReferences = `-- name: CountRemoteAccessRuleReferences :one
+SELECT 0::integer AS rules,
+       (SELECT count(*)::integer FROM remote_access_requests request
+         WHERE request.decision_snapshot->'matched_rule_snapshots' @> jsonb_build_array(jsonb_build_object('id', $1::uuid::text)))::integer AS requests,
+       (SELECT count(*)::integer FROM remote_access_leases lease
+         WHERE lease.decision_snapshot->'matched_rule_snapshots' @> jsonb_build_array(jsonb_build_object('id', $1::uuid::text)))::integer AS leases,
+       (SELECT count(*)::integer FROM remote_access_sessions session
+         WHERE session.decision_snapshot->'matched_rule_snapshots' @> jsonb_build_array(jsonb_build_object('id', $1::uuid::text)))::integer AS sessions
+`
+
+type CountRemoteAccessRuleReferencesRow struct {
+	Rules    int32 `json:"rules"`
+	Requests int32 `json:"requests"`
+	Leases   int32 `json:"leases"`
+	Sessions int32 `json:"sessions"`
+}
+
+func (q *Queries) CountRemoteAccessRuleReferences(ctx context.Context, dollar_1 uuid.UUID) (CountRemoteAccessRuleReferencesRow, error) {
+	row := q.db.QueryRow(ctx, countRemoteAccessRuleReferences, dollar_1)
+	var i CountRemoteAccessRuleReferencesRow
+	err := row.Scan(
+		&i.Rules,
+		&i.Requests,
+		&i.Leases,
+		&i.Sessions,
+	)
+	return i, err
+}
+
+const countRemoteAccessSessionProfileReferences = `-- name: CountRemoteAccessSessionProfileReferences :one
+SELECT (SELECT count(*)::integer FROM remote_access_rules profile_rule WHERE profile_rule.session_profile_id=$1)::integer AS rules,
+       (SELECT count(*)::integer FROM remote_access_requests request
+         WHERE request.decision_snapshot->'session_profile'->'source_profiles' @> jsonb_build_array(jsonb_build_object('id', $1::uuid::text)))::integer AS requests,
+       (SELECT count(*)::integer FROM remote_access_leases lease
+         WHERE lease.decision_snapshot->'session_profile'->'source_profiles' @> jsonb_build_array(jsonb_build_object('id', $1::uuid::text)))::integer AS leases,
+       (SELECT count(*)::integer FROM remote_access_sessions session
+         WHERE session.decision_snapshot->'session_profile'->'source_profiles' @> jsonb_build_array(jsonb_build_object('id', $1::uuid::text)))::integer AS sessions
+`
+
+type CountRemoteAccessSessionProfileReferencesRow struct {
+	Rules    int32 `json:"rules"`
+	Requests int32 `json:"requests"`
+	Leases   int32 `json:"leases"`
+	Sessions int32 `json:"sessions"`
+}
+
+func (q *Queries) CountRemoteAccessSessionProfileReferences(ctx context.Context, sessionProfileID uuid.NullUUID) (CountRemoteAccessSessionProfileReferencesRow, error) {
+	row := q.db.QueryRow(ctx, countRemoteAccessSessionProfileReferences, sessionProfileID)
+	var i CountRemoteAccessSessionProfileReferencesRow
+	err := row.Scan(
+		&i.Rules,
+		&i.Requests,
+		&i.Leases,
+		&i.Sessions,
+	)
+	return i, err
+}
+
+const createRemoteAccessApprovalWorkflow = `-- name: CreateRemoteAccessApprovalWorkflow :one
+INSERT INTO remote_access_approval_workflows (id,enterprise_id,name,description,approver_role_ids,minimum_approvals,
+    separation_of_duties,approval_timeout_seconds,escalation_after_seconds,timeout_effect,escalation_role_ids,status,created_by)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, enterprise_id, name, description, approver_role_ids, minimum_approvals, separation_of_duties, approval_timeout_seconds, timeout_effect, escalation_role_ids, status, version, created_by, created_at, updated_at, escalation_after_seconds
+`
+
+type CreateRemoteAccessApprovalWorkflowParams struct {
+	ID                     uuid.UUID   `json:"id"`
+	EnterpriseID           uuid.UUID   `json:"enterprise_id"`
+	Name                   string      `json:"name"`
+	Description            string      `json:"description"`
+	ApproverRoleIds        []uuid.UUID `json:"approver_role_ids"`
+	MinimumApprovals       int32       `json:"minimum_approvals"`
+	SeparationOfDuties     bool        `json:"separation_of_duties"`
+	ApprovalTimeoutSeconds int32       `json:"approval_timeout_seconds"`
+	EscalationAfterSeconds int32       `json:"escalation_after_seconds"`
+	TimeoutEffect          string      `json:"timeout_effect"`
+	EscalationRoleIds      []uuid.UUID `json:"escalation_role_ids"`
+	Status                 string      `json:"status"`
+	CreatedBy              uuid.UUID   `json:"created_by"`
+}
+
+func (q *Queries) CreateRemoteAccessApprovalWorkflow(ctx context.Context, arg CreateRemoteAccessApprovalWorkflowParams) (RemoteAccessApprovalWorkflow, error) {
+	row := q.db.QueryRow(ctx, createRemoteAccessApprovalWorkflow,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Name,
+		arg.Description,
+		arg.ApproverRoleIds,
+		arg.MinimumApprovals,
+		arg.SeparationOfDuties,
+		arg.ApprovalTimeoutSeconds,
+		arg.EscalationAfterSeconds,
+		arg.TimeoutEffect,
+		arg.EscalationRoleIds,
+		arg.Status,
+		arg.CreatedBy,
+	)
+	var i RemoteAccessApprovalWorkflow
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Description,
+		&i.ApproverRoleIds,
+		&i.MinimumApprovals,
+		&i.SeparationOfDuties,
+		&i.ApprovalTimeoutSeconds,
+		&i.TimeoutEffect,
+		&i.EscalationRoleIds,
+		&i.Status,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EscalationAfterSeconds,
+	)
+	return i, err
+}
+
 const createRemoteAccessGrant = `-- name: CreateRemoteAccessGrant :one
-INSERT INTO remote_access_grants (id, enterprise_id, subject_type, subject_id, host_ids, host_selector, host_selector_hash,
-    managed_account_ids, protocols, actions, valid_from, valid_until, enabled, created_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id, enterprise_id, subject_type, subject_id, host_ids, host_selector, host_selector_hash, managed_account_ids, protocols, actions, valid_from, valid_until, enabled, version, created_by, created_at, updated_at
+INSERT INTO remote_access_grants (id, enterprise_id, subject_type, subject_id, host_ids,
+    managed_account_ids, protocols, actions, valid_from, valid_until, status, created_by)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, enterprise_id, subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, version, created_by, created_at, updated_at, status
 `
 
 type CreateRemoteAccessGrantParams struct {
@@ -24,14 +198,12 @@ type CreateRemoteAccessGrantParams struct {
 	SubjectType       string             `json:"subject_type"`
 	SubjectID         uuid.UUID          `json:"subject_id"`
 	HostIds           []uuid.UUID        `json:"host_ids"`
-	HostSelector      []byte             `json:"host_selector"`
-	HostSelectorHash  []byte             `json:"host_selector_hash"`
 	ManagedAccountIds []uuid.UUID        `json:"managed_account_ids"`
 	Protocols         []string           `json:"protocols"`
 	Actions           []string           `json:"actions"`
 	ValidFrom         pgtype.Timestamptz `json:"valid_from"`
 	ValidUntil        pgtype.Timestamptz `json:"valid_until"`
-	Enabled           bool               `json:"enabled"`
+	Status            string             `json:"status"`
 	CreatedBy         uuid.UUID          `json:"created_by"`
 }
 
@@ -42,14 +214,12 @@ func (q *Queries) CreateRemoteAccessGrant(ctx context.Context, arg CreateRemoteA
 		arg.SubjectType,
 		arg.SubjectID,
 		arg.HostIds,
-		arg.HostSelector,
-		arg.HostSelectorHash,
 		arg.ManagedAccountIds,
 		arg.Protocols,
 		arg.Actions,
 		arg.ValidFrom,
 		arg.ValidUntil,
-		arg.Enabled,
+		arg.Status,
 		arg.CreatedBy,
 	)
 	var i RemoteAccessGrant
@@ -59,115 +229,75 @@ func (q *Queries) CreateRemoteAccessGrant(ctx context.Context, arg CreateRemoteA
 		&i.SubjectType,
 		&i.SubjectID,
 		&i.HostIds,
-		&i.HostSelector,
-		&i.HostSelectorHash,
 		&i.ManagedAccountIds,
 		&i.Protocols,
 		&i.Actions,
 		&i.ValidFrom,
 		&i.ValidUntil,
-		&i.Enabled,
 		&i.Version,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
-const createRemoteAccessPolicy = `-- name: CreateRemoteAccessPolicy :one
-INSERT INTO remote_access_policies (id,enterprise_id,name,enabled,priority,protocols,host_selector,host_selector_hash,
-    approver_role_ids,minimum_approvals,separation_of_duties,require_mfa,max_session_seconds,idle_timeout_seconds,created_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id, enterprise_id, name, enabled, priority, protocols, host_selector, host_selector_hash, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, version, created_by, created_at, updated_at
+const createRemoteAccessRule = `-- name: CreateRemoteAccessRule :one
+INSERT INTO remote_access_rules (id,enterprise_id,name,description,priority,
+    protocols,actions,source_cidrs,time_windows,effects,approval_workflow_id,session_profile_id,status,created_by)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id, enterprise_id, name, description, priority, protocols, actions, source_cidrs, time_windows, effects, approval_workflow_id, session_profile_id, status, version, created_by, created_at, updated_at
 `
 
-type CreateRemoteAccessPolicyParams struct {
-	ID                 uuid.UUID   `json:"id"`
-	EnterpriseID       uuid.UUID   `json:"enterprise_id"`
-	Name               string      `json:"name"`
-	Enabled            bool        `json:"enabled"`
-	Priority           int32       `json:"priority"`
-	Protocols          []string    `json:"protocols"`
-	HostSelector       []byte      `json:"host_selector"`
-	HostSelectorHash   []byte      `json:"host_selector_hash"`
-	ApproverRoleIds    []uuid.UUID `json:"approver_role_ids"`
-	MinimumApprovals   int32       `json:"minimum_approvals"`
-	SeparationOfDuties bool        `json:"separation_of_duties"`
-	RequireMfa         bool        `json:"require_mfa"`
-	MaxSessionSeconds  int32       `json:"max_session_seconds"`
-	IdleTimeoutSeconds int32       `json:"idle_timeout_seconds"`
-	CreatedBy          uuid.UUID   `json:"created_by"`
+type CreateRemoteAccessRuleParams struct {
+	ID                 uuid.UUID     `json:"id"`
+	EnterpriseID       uuid.UUID     `json:"enterprise_id"`
+	Name               string        `json:"name"`
+	Description        string        `json:"description"`
+	Priority           int32         `json:"priority"`
+	Protocols          []string      `json:"protocols"`
+	Actions            []string      `json:"actions"`
+	SourceCidrs        []string      `json:"source_cidrs"`
+	TimeWindows        []byte        `json:"time_windows"`
+	Effects            []string      `json:"effects"`
+	ApprovalWorkflowID uuid.NullUUID `json:"approval_workflow_id"`
+	SessionProfileID   uuid.NullUUID `json:"session_profile_id"`
+	Status             string        `json:"status"`
+	CreatedBy          uuid.UUID     `json:"created_by"`
 }
 
-func (q *Queries) CreateRemoteAccessPolicy(ctx context.Context, arg CreateRemoteAccessPolicyParams) (RemoteAccessPolicy, error) {
-	row := q.db.QueryRow(ctx, createRemoteAccessPolicy,
+func (q *Queries) CreateRemoteAccessRule(ctx context.Context, arg CreateRemoteAccessRuleParams) (RemoteAccessRule, error) {
+	row := q.db.QueryRow(ctx, createRemoteAccessRule,
 		arg.ID,
 		arg.EnterpriseID,
 		arg.Name,
-		arg.Enabled,
+		arg.Description,
 		arg.Priority,
 		arg.Protocols,
-		arg.HostSelector,
-		arg.HostSelectorHash,
-		arg.ApproverRoleIds,
-		arg.MinimumApprovals,
-		arg.SeparationOfDuties,
-		arg.RequireMfa,
-		arg.MaxSessionSeconds,
-		arg.IdleTimeoutSeconds,
+		arg.Actions,
+		arg.SourceCidrs,
+		arg.TimeWindows,
+		arg.Effects,
+		arg.ApprovalWorkflowID,
+		arg.SessionProfileID,
+		arg.Status,
 		arg.CreatedBy,
 	)
-	var i RemoteAccessPolicy
+	var i RemoteAccessRule
 	err := row.Scan(
 		&i.ID,
 		&i.EnterpriseID,
 		&i.Name,
-		&i.Enabled,
+		&i.Description,
 		&i.Priority,
-		&i.Protocols,
-		&i.HostSelector,
-		&i.HostSelectorHash,
-		&i.ApproverRoleIds,
-		&i.MinimumApprovals,
-		&i.SeparationOfDuties,
-		&i.RequireMfa,
-		&i.MaxSessionSeconds,
-		&i.IdleTimeoutSeconds,
-		&i.Version,
-		&i.CreatedBy,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const disableRemoteAccessGrant = `-- name: DisableRemoteAccessGrant :one
-UPDATE remote_access_grants SET enabled=false, version=version+1, updated_at=now()
-WHERE id=$1 AND enterprise_id=$2 AND enabled=true RETURNING id, enterprise_id, subject_type, subject_id, host_ids, host_selector, host_selector_hash, managed_account_ids, protocols, actions, valid_from, valid_until, enabled, version, created_by, created_at, updated_at
-`
-
-type DisableRemoteAccessGrantParams struct {
-	ID           uuid.UUID `json:"id"`
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-}
-
-func (q *Queries) DisableRemoteAccessGrant(ctx context.Context, arg DisableRemoteAccessGrantParams) (RemoteAccessGrant, error) {
-	row := q.db.QueryRow(ctx, disableRemoteAccessGrant, arg.ID, arg.EnterpriseID)
-	var i RemoteAccessGrant
-	err := row.Scan(
-		&i.ID,
-		&i.EnterpriseID,
-		&i.SubjectType,
-		&i.SubjectID,
-		&i.HostIds,
-		&i.HostSelector,
-		&i.HostSelectorHash,
-		&i.ManagedAccountIds,
 		&i.Protocols,
 		&i.Actions,
-		&i.ValidFrom,
-		&i.ValidUntil,
-		&i.Enabled,
+		&i.SourceCidrs,
+		&i.TimeWindows,
+		&i.Effects,
+		&i.ApprovalWorkflowID,
+		&i.SessionProfileID,
+		&i.Status,
 		&i.Version,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -176,44 +306,111 @@ func (q *Queries) DisableRemoteAccessGrant(ctx context.Context, arg DisableRemot
 	return i, err
 }
 
-const disableRemoteAccessPolicy = `-- name: DisableRemoteAccessPolicy :one
-UPDATE remote_access_policies SET enabled=false,version=version+1,updated_at=now()
-WHERE id=$1 AND enterprise_id=$2 AND enabled=true RETURNING id, enterprise_id, name, enabled, priority, protocols, host_selector, host_selector_hash, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, version, created_by, created_at, updated_at
+const createRemoteAccessSessionProfile = `-- name: CreateRemoteAccessSessionProfile :one
+INSERT INTO remote_access_session_profiles (id,enterprise_id,name,description,max_session_seconds,idle_timeout_seconds,
+    recording_mode,command_audit_mode,clipboard_mode,file_upload_mode,file_download_mode,port_forward_mode,session_share_mode,
+    retention_days,status,created_by)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id, enterprise_id, name, description, max_session_seconds, idle_timeout_seconds, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, status, version, created_by, created_at, updated_at
 `
 
-type DisableRemoteAccessPolicyParams struct {
-	ID           uuid.UUID `json:"id"`
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
+type CreateRemoteAccessSessionProfileParams struct {
+	ID                 uuid.UUID `json:"id"`
+	EnterpriseID       uuid.UUID `json:"enterprise_id"`
+	Name               string    `json:"name"`
+	Description        string    `json:"description"`
+	MaxSessionSeconds  int32     `json:"max_session_seconds"`
+	IdleTimeoutSeconds int32     `json:"idle_timeout_seconds"`
+	RecordingMode      string    `json:"recording_mode"`
+	CommandAuditMode   string    `json:"command_audit_mode"`
+	ClipboardMode      string    `json:"clipboard_mode"`
+	FileUploadMode     string    `json:"file_upload_mode"`
+	FileDownloadMode   string    `json:"file_download_mode"`
+	PortForwardMode    string    `json:"port_forward_mode"`
+	SessionShareMode   string    `json:"session_share_mode"`
+	RetentionDays      int32     `json:"retention_days"`
+	Status             string    `json:"status"`
+	CreatedBy          uuid.UUID `json:"created_by"`
 }
 
-func (q *Queries) DisableRemoteAccessPolicy(ctx context.Context, arg DisableRemoteAccessPolicyParams) (RemoteAccessPolicy, error) {
-	row := q.db.QueryRow(ctx, disableRemoteAccessPolicy, arg.ID, arg.EnterpriseID)
-	var i RemoteAccessPolicy
+func (q *Queries) CreateRemoteAccessSessionProfile(ctx context.Context, arg CreateRemoteAccessSessionProfileParams) (RemoteAccessSessionProfile, error) {
+	row := q.db.QueryRow(ctx, createRemoteAccessSessionProfile,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Name,
+		arg.Description,
+		arg.MaxSessionSeconds,
+		arg.IdleTimeoutSeconds,
+		arg.RecordingMode,
+		arg.CommandAuditMode,
+		arg.ClipboardMode,
+		arg.FileUploadMode,
+		arg.FileDownloadMode,
+		arg.PortForwardMode,
+		arg.SessionShareMode,
+		arg.RetentionDays,
+		arg.Status,
+		arg.CreatedBy,
+	)
+	var i RemoteAccessSessionProfile
 	err := row.Scan(
 		&i.ID,
 		&i.EnterpriseID,
 		&i.Name,
-		&i.Enabled,
-		&i.Priority,
-		&i.Protocols,
-		&i.HostSelector,
-		&i.HostSelectorHash,
-		&i.ApproverRoleIds,
-		&i.MinimumApprovals,
-		&i.SeparationOfDuties,
-		&i.RequireMfa,
+		&i.Description,
 		&i.MaxSessionSeconds,
 		&i.IdleTimeoutSeconds,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.Status,
 		&i.Version,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRemoteAccessApprovalWorkflow = `-- name: GetRemoteAccessApprovalWorkflow :one
+SELECT id, enterprise_id, name, description, approver_role_ids, minimum_approvals, separation_of_duties, approval_timeout_seconds, timeout_effect, escalation_role_ids, status, version, created_by, created_at, updated_at, escalation_after_seconds FROM remote_access_approval_workflows WHERE id=$1 AND enterprise_id=$2
+`
+
+type GetRemoteAccessApprovalWorkflowParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) GetRemoteAccessApprovalWorkflow(ctx context.Context, arg GetRemoteAccessApprovalWorkflowParams) (RemoteAccessApprovalWorkflow, error) {
+	row := q.db.QueryRow(ctx, getRemoteAccessApprovalWorkflow, arg.ID, arg.EnterpriseID)
+	var i RemoteAccessApprovalWorkflow
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Description,
+		&i.ApproverRoleIds,
+		&i.MinimumApprovals,
+		&i.SeparationOfDuties,
+		&i.ApprovalTimeoutSeconds,
+		&i.TimeoutEffect,
+		&i.EscalationRoleIds,
+		&i.Status,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EscalationAfterSeconds,
 	)
 	return i, err
 }
 
 const getRemoteAccessGrant = `-- name: GetRemoteAccessGrant :one
-SELECT id, enterprise_id, subject_type, subject_id, host_ids, host_selector, host_selector_hash, managed_account_ids, protocols, actions, valid_from, valid_until, enabled, version, created_by, created_at, updated_at FROM remote_access_grants WHERE id = $1 AND enterprise_id = $2
+SELECT id, enterprise_id, subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, version, created_by, created_at, updated_at, status FROM remote_access_grants WHERE id = $1 AND enterprise_id = $2
 `
 
 type GetRemoteAccessGrantParams struct {
@@ -230,14 +427,46 @@ func (q *Queries) GetRemoteAccessGrant(ctx context.Context, arg GetRemoteAccessG
 		&i.SubjectType,
 		&i.SubjectID,
 		&i.HostIds,
-		&i.HostSelector,
-		&i.HostSelectorHash,
 		&i.ManagedAccountIds,
 		&i.Protocols,
 		&i.Actions,
 		&i.ValidFrom,
 		&i.ValidUntil,
-		&i.Enabled,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Status,
+	)
+	return i, err
+}
+
+const getRemoteAccessRule = `-- name: GetRemoteAccessRule :one
+SELECT id, enterprise_id, name, description, priority, protocols, actions, source_cidrs, time_windows, effects, approval_workflow_id, session_profile_id, status, version, created_by, created_at, updated_at FROM remote_access_rules WHERE id=$1 AND enterprise_id=$2
+`
+
+type GetRemoteAccessRuleParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) GetRemoteAccessRule(ctx context.Context, arg GetRemoteAccessRuleParams) (RemoteAccessRule, error) {
+	row := q.db.QueryRow(ctx, getRemoteAccessRule, arg.ID, arg.EnterpriseID)
+	var i RemoteAccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Description,
+		&i.Priority,
+		&i.Protocols,
+		&i.Actions,
+		&i.SourceCidrs,
+		&i.TimeWindows,
+		&i.Effects,
+		&i.ApprovalWorkflowID,
+		&i.SessionProfileID,
+		&i.Status,
 		&i.Version,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -246,33 +475,34 @@ func (q *Queries) GetRemoteAccessGrant(ctx context.Context, arg GetRemoteAccessG
 	return i, err
 }
 
-const getRemoteAccessPolicy = `-- name: GetRemoteAccessPolicy :one
-SELECT id, enterprise_id, name, enabled, priority, protocols, host_selector, host_selector_hash, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, version, created_by, created_at, updated_at FROM remote_access_policies WHERE id=$1 AND enterprise_id=$2
+const getRemoteAccessSessionProfile = `-- name: GetRemoteAccessSessionProfile :one
+SELECT id, enterprise_id, name, description, max_session_seconds, idle_timeout_seconds, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, status, version, created_by, created_at, updated_at FROM remote_access_session_profiles WHERE id=$1 AND enterprise_id=$2
 `
 
-type GetRemoteAccessPolicyParams struct {
+type GetRemoteAccessSessionProfileParams struct {
 	ID           uuid.UUID `json:"id"`
 	EnterpriseID uuid.UUID `json:"enterprise_id"`
 }
 
-func (q *Queries) GetRemoteAccessPolicy(ctx context.Context, arg GetRemoteAccessPolicyParams) (RemoteAccessPolicy, error) {
-	row := q.db.QueryRow(ctx, getRemoteAccessPolicy, arg.ID, arg.EnterpriseID)
-	var i RemoteAccessPolicy
+func (q *Queries) GetRemoteAccessSessionProfile(ctx context.Context, arg GetRemoteAccessSessionProfileParams) (RemoteAccessSessionProfile, error) {
+	row := q.db.QueryRow(ctx, getRemoteAccessSessionProfile, arg.ID, arg.EnterpriseID)
+	var i RemoteAccessSessionProfile
 	err := row.Scan(
 		&i.ID,
 		&i.EnterpriseID,
 		&i.Name,
-		&i.Enabled,
-		&i.Priority,
-		&i.Protocols,
-		&i.HostSelector,
-		&i.HostSelectorHash,
-		&i.ApproverRoleIds,
-		&i.MinimumApprovals,
-		&i.SeparationOfDuties,
-		&i.RequireMfa,
+		&i.Description,
 		&i.MaxSessionSeconds,
 		&i.IdleTimeoutSeconds,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.Status,
 		&i.Version,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -282,9 +512,9 @@ func (q *Queries) GetRemoteAccessPolicy(ctx context.Context, arg GetRemoteAccess
 }
 
 const listCandidateRemoteAccessGrants = `-- name: ListCandidateRemoteAccessGrants :many
-SELECT access_grant.id, access_grant.enterprise_id, access_grant.subject_type, access_grant.subject_id, access_grant.host_ids, access_grant.host_selector, access_grant.host_selector_hash, access_grant.managed_account_ids, access_grant.protocols, access_grant.actions, access_grant.valid_from, access_grant.valid_until, access_grant.enabled, access_grant.version, access_grant.created_by, access_grant.created_at, access_grant.updated_at FROM remote_access_grants access_grant
+SELECT access_grant.id, access_grant.enterprise_id, access_grant.subject_type, access_grant.subject_id, access_grant.host_ids, access_grant.managed_account_ids, access_grant.protocols, access_grant.actions, access_grant.valid_from, access_grant.valid_until, access_grant.version, access_grant.created_by, access_grant.created_at, access_grant.updated_at, access_grant.status FROM remote_access_grants access_grant
 JOIN enterprise_users actor ON actor.id=$1 AND actor.enterprise_id=access_grant.enterprise_id
-WHERE access_grant.enterprise_id=$2 AND access_grant.enabled=true AND now() >= access_grant.valid_from AND now() < access_grant.valid_until
+WHERE access_grant.enterprise_id=$2 AND access_grant.status='enabled' AND now() >= access_grant.valid_from AND now() < access_grant.valid_until
   AND ((access_grant.subject_type='user' AND access_grant.subject_id=actor.id) OR (access_grant.subject_type='department' AND access_grant.subject_id=actor.department_id))
 ORDER BY access_grant.created_at, access_grant.id
 `
@@ -309,18 +539,57 @@ func (q *Queries) ListCandidateRemoteAccessGrants(ctx context.Context, arg ListC
 			&i.SubjectType,
 			&i.SubjectID,
 			&i.HostIds,
-			&i.HostSelector,
-			&i.HostSelectorHash,
 			&i.ManagedAccountIds,
 			&i.Protocols,
 			&i.Actions,
 			&i.ValidFrom,
 			&i.ValidUntil,
-			&i.Enabled,
 			&i.Version,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteAccessApprovalWorkflows = `-- name: ListRemoteAccessApprovalWorkflows :many
+SELECT id, enterprise_id, name, description, approver_role_ids, minimum_approvals, separation_of_duties, approval_timeout_seconds, timeout_effect, escalation_role_ids, status, version, created_by, created_at, updated_at, escalation_after_seconds FROM remote_access_approval_workflows WHERE enterprise_id=$1 ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListRemoteAccessApprovalWorkflows(ctx context.Context, enterpriseID uuid.UUID) ([]RemoteAccessApprovalWorkflow, error) {
+	rows, err := q.db.Query(ctx, listRemoteAccessApprovalWorkflows, enterpriseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessApprovalWorkflow{}
+	for rows.Next() {
+		var i RemoteAccessApprovalWorkflow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.Name,
+			&i.Description,
+			&i.ApproverRoleIds,
+			&i.MinimumApprovals,
+			&i.SeparationOfDuties,
+			&i.ApprovalTimeoutSeconds,
+			&i.TimeoutEffect,
+			&i.EscalationRoleIds,
+			&i.Status,
+			&i.Version,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.EscalationAfterSeconds,
 		); err != nil {
 			return nil, err
 		}
@@ -333,16 +602,11 @@ func (q *Queries) ListCandidateRemoteAccessGrants(ctx context.Context, arg ListC
 }
 
 const listRemoteAccessGrants = `-- name: ListRemoteAccessGrants :many
-SELECT id, enterprise_id, subject_type, subject_id, host_ids, host_selector, host_selector_hash, managed_account_ids, protocols, actions, valid_from, valid_until, enabled, version, created_by, created_at, updated_at FROM remote_access_grants WHERE enterprise_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2
+SELECT id, enterprise_id, subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, version, created_by, created_at, updated_at, status FROM remote_access_grants WHERE enterprise_id = $1 ORDER BY created_at DESC, id DESC
 `
 
-type ListRemoteAccessGrantsParams struct {
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-	Limit        int32     `json:"limit"`
-}
-
-func (q *Queries) ListRemoteAccessGrants(ctx context.Context, arg ListRemoteAccessGrantsParams) ([]RemoteAccessGrant, error) {
-	rows, err := q.db.Query(ctx, listRemoteAccessGrants, arg.EnterpriseID, arg.Limit)
+func (q *Queries) ListRemoteAccessGrants(ctx context.Context, enterpriseID uuid.UUID) ([]RemoteAccessGrant, error) {
+	rows, err := q.db.Query(ctx, listRemoteAccessGrants, enterpriseID)
 	if err != nil {
 		return nil, err
 	}
@@ -356,18 +620,16 @@ func (q *Queries) ListRemoteAccessGrants(ctx context.Context, arg ListRemoteAcce
 			&i.SubjectType,
 			&i.SubjectID,
 			&i.HostIds,
-			&i.HostSelector,
-			&i.HostSelectorHash,
 			&i.ManagedAccountIds,
 			&i.Protocols,
 			&i.Actions,
 			&i.ValidFrom,
 			&i.ValidUntil,
-			&i.Enabled,
 			&i.Version,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -379,34 +641,33 @@ func (q *Queries) ListRemoteAccessGrants(ctx context.Context, arg ListRemoteAcce
 	return items, nil
 }
 
-const listRemoteAccessPolicies = `-- name: ListRemoteAccessPolicies :many
-SELECT id, enterprise_id, name, enabled, priority, protocols, host_selector, host_selector_hash, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, version, created_by, created_at, updated_at FROM remote_access_policies WHERE enterprise_id=$1 ORDER BY priority, id
+const listRemoteAccessRules = `-- name: ListRemoteAccessRules :many
+SELECT id, enterprise_id, name, description, priority, protocols, actions, source_cidrs, time_windows, effects, approval_workflow_id, session_profile_id, status, version, created_by, created_at, updated_at FROM remote_access_rules WHERE enterprise_id=$1 ORDER BY priority, id
 `
 
-func (q *Queries) ListRemoteAccessPolicies(ctx context.Context, enterpriseID uuid.UUID) ([]RemoteAccessPolicy, error) {
-	rows, err := q.db.Query(ctx, listRemoteAccessPolicies, enterpriseID)
+func (q *Queries) ListRemoteAccessRules(ctx context.Context, enterpriseID uuid.UUID) ([]RemoteAccessRule, error) {
+	rows, err := q.db.Query(ctx, listRemoteAccessRules, enterpriseID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []RemoteAccessPolicy{}
+	items := []RemoteAccessRule{}
 	for rows.Next() {
-		var i RemoteAccessPolicy
+		var i RemoteAccessRule
 		if err := rows.Scan(
 			&i.ID,
 			&i.EnterpriseID,
 			&i.Name,
-			&i.Enabled,
+			&i.Description,
 			&i.Priority,
 			&i.Protocols,
-			&i.HostSelector,
-			&i.HostSelectorHash,
-			&i.ApproverRoleIds,
-			&i.MinimumApprovals,
-			&i.SeparationOfDuties,
-			&i.RequireMfa,
-			&i.MaxSessionSeconds,
-			&i.IdleTimeoutSeconds,
+			&i.Actions,
+			&i.SourceCidrs,
+			&i.TimeWindows,
+			&i.Effects,
+			&i.ApprovalWorkflowID,
+			&i.SessionProfileID,
+			&i.Status,
 			&i.Version,
 			&i.CreatedBy,
 			&i.CreatedAt,
@@ -422,11 +683,289 @@ func (q *Queries) ListRemoteAccessPolicies(ctx context.Context, enterpriseID uui
 	return items, nil
 }
 
+const listRemoteAccessSessionProfiles = `-- name: ListRemoteAccessSessionProfiles :many
+SELECT id, enterprise_id, name, description, max_session_seconds, idle_timeout_seconds, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, status, version, created_by, created_at, updated_at FROM remote_access_session_profiles WHERE enterprise_id=$1 ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListRemoteAccessSessionProfiles(ctx context.Context, enterpriseID uuid.UUID) ([]RemoteAccessSessionProfile, error) {
+	rows, err := q.db.Query(ctx, listRemoteAccessSessionProfiles, enterpriseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RemoteAccessSessionProfile{}
+	for rows.Next() {
+		var i RemoteAccessSessionProfile
+		if err := rows.Scan(
+			&i.ID,
+			&i.EnterpriseID,
+			&i.Name,
+			&i.Description,
+			&i.MaxSessionSeconds,
+			&i.IdleTimeoutSeconds,
+			&i.RecordingMode,
+			&i.CommandAuditMode,
+			&i.ClipboardMode,
+			&i.FileUploadMode,
+			&i.FileDownloadMode,
+			&i.PortForwardMode,
+			&i.SessionShareMode,
+			&i.RetentionDays,
+			&i.Status,
+			&i.Version,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const transitionRemoteAccessApprovalWorkflow = `-- name: TransitionRemoteAccessApprovalWorkflow :one
+UPDATE remote_access_approval_workflows SET status=$3,version=version+1,updated_at=now()
+WHERE id=$1 AND enterprise_id=$2 AND status=$4 AND version=$5 RETURNING id, enterprise_id, name, description, approver_role_ids, minimum_approvals, separation_of_duties, approval_timeout_seconds, timeout_effect, escalation_role_ids, status, version, created_by, created_at, updated_at, escalation_after_seconds
+`
+
+type TransitionRemoteAccessApprovalWorkflowParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	Status       string    `json:"status"`
+	Status_2     string    `json:"status_2"`
+	Version      int64     `json:"version"`
+}
+
+func (q *Queries) TransitionRemoteAccessApprovalWorkflow(ctx context.Context, arg TransitionRemoteAccessApprovalWorkflowParams) (RemoteAccessApprovalWorkflow, error) {
+	row := q.db.QueryRow(ctx, transitionRemoteAccessApprovalWorkflow,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Status,
+		arg.Status_2,
+		arg.Version,
+	)
+	var i RemoteAccessApprovalWorkflow
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Description,
+		&i.ApproverRoleIds,
+		&i.MinimumApprovals,
+		&i.SeparationOfDuties,
+		&i.ApprovalTimeoutSeconds,
+		&i.TimeoutEffect,
+		&i.EscalationRoleIds,
+		&i.Status,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EscalationAfterSeconds,
+	)
+	return i, err
+}
+
+const transitionRemoteAccessGrant = `-- name: TransitionRemoteAccessGrant :one
+UPDATE remote_access_grants SET status=$3, version=version+1, updated_at=now()
+WHERE id=$1 AND enterprise_id=$2 AND status=$4 AND version=$5 RETURNING id, enterprise_id, subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, version, created_by, created_at, updated_at, status
+`
+
+type TransitionRemoteAccessGrantParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	Status       string    `json:"status"`
+	Status_2     string    `json:"status_2"`
+	Version      int64     `json:"version"`
+}
+
+func (q *Queries) TransitionRemoteAccessGrant(ctx context.Context, arg TransitionRemoteAccessGrantParams) (RemoteAccessGrant, error) {
+	row := q.db.QueryRow(ctx, transitionRemoteAccessGrant,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Status,
+		arg.Status_2,
+		arg.Version,
+	)
+	var i RemoteAccessGrant
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.SubjectType,
+		&i.SubjectID,
+		&i.HostIds,
+		&i.ManagedAccountIds,
+		&i.Protocols,
+		&i.Actions,
+		&i.ValidFrom,
+		&i.ValidUntil,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Status,
+	)
+	return i, err
+}
+
+const transitionRemoteAccessRule = `-- name: TransitionRemoteAccessRule :one
+UPDATE remote_access_rules SET status=$3,version=version+1,updated_at=now()
+WHERE id=$1 AND enterprise_id=$2 AND status=$4 AND version=$5 RETURNING id, enterprise_id, name, description, priority, protocols, actions, source_cidrs, time_windows, effects, approval_workflow_id, session_profile_id, status, version, created_by, created_at, updated_at
+`
+
+type TransitionRemoteAccessRuleParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	Status       string    `json:"status"`
+	Status_2     string    `json:"status_2"`
+	Version      int64     `json:"version"`
+}
+
+func (q *Queries) TransitionRemoteAccessRule(ctx context.Context, arg TransitionRemoteAccessRuleParams) (RemoteAccessRule, error) {
+	row := q.db.QueryRow(ctx, transitionRemoteAccessRule,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Status,
+		arg.Status_2,
+		arg.Version,
+	)
+	var i RemoteAccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Description,
+		&i.Priority,
+		&i.Protocols,
+		&i.Actions,
+		&i.SourceCidrs,
+		&i.TimeWindows,
+		&i.Effects,
+		&i.ApprovalWorkflowID,
+		&i.SessionProfileID,
+		&i.Status,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const transitionRemoteAccessSessionProfile = `-- name: TransitionRemoteAccessSessionProfile :one
+UPDATE remote_access_session_profiles SET status=$3,version=version+1,updated_at=now()
+WHERE id=$1 AND enterprise_id=$2 AND status=$4 AND version=$5 RETURNING id, enterprise_id, name, description, max_session_seconds, idle_timeout_seconds, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, status, version, created_by, created_at, updated_at
+`
+
+type TransitionRemoteAccessSessionProfileParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	Status       string    `json:"status"`
+	Status_2     string    `json:"status_2"`
+	Version      int64     `json:"version"`
+}
+
+func (q *Queries) TransitionRemoteAccessSessionProfile(ctx context.Context, arg TransitionRemoteAccessSessionProfileParams) (RemoteAccessSessionProfile, error) {
+	row := q.db.QueryRow(ctx, transitionRemoteAccessSessionProfile,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Status,
+		arg.Status_2,
+		arg.Version,
+	)
+	var i RemoteAccessSessionProfile
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Description,
+		&i.MaxSessionSeconds,
+		&i.IdleTimeoutSeconds,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.Status,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateRemoteAccessApprovalWorkflow = `-- name: UpdateRemoteAccessApprovalWorkflow :one
+UPDATE remote_access_approval_workflows SET name=$3,description=$4,approver_role_ids=$5,minimum_approvals=$6,
+    separation_of_duties=$7,approval_timeout_seconds=$8,escalation_after_seconds=$9,timeout_effect=$10,escalation_role_ids=$11,
+    version=version+1,updated_at=now()
+WHERE id=$1 AND enterprise_id=$2 AND version=$12 RETURNING id, enterprise_id, name, description, approver_role_ids, minimum_approvals, separation_of_duties, approval_timeout_seconds, timeout_effect, escalation_role_ids, status, version, created_by, created_at, updated_at, escalation_after_seconds
+`
+
+type UpdateRemoteAccessApprovalWorkflowParams struct {
+	ID                     uuid.UUID   `json:"id"`
+	EnterpriseID           uuid.UUID   `json:"enterprise_id"`
+	Name                   string      `json:"name"`
+	Description            string      `json:"description"`
+	ApproverRoleIds        []uuid.UUID `json:"approver_role_ids"`
+	MinimumApprovals       int32       `json:"minimum_approvals"`
+	SeparationOfDuties     bool        `json:"separation_of_duties"`
+	ApprovalTimeoutSeconds int32       `json:"approval_timeout_seconds"`
+	EscalationAfterSeconds int32       `json:"escalation_after_seconds"`
+	TimeoutEffect          string      `json:"timeout_effect"`
+	EscalationRoleIds      []uuid.UUID `json:"escalation_role_ids"`
+	Version                int64       `json:"version"`
+}
+
+func (q *Queries) UpdateRemoteAccessApprovalWorkflow(ctx context.Context, arg UpdateRemoteAccessApprovalWorkflowParams) (RemoteAccessApprovalWorkflow, error) {
+	row := q.db.QueryRow(ctx, updateRemoteAccessApprovalWorkflow,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Name,
+		arg.Description,
+		arg.ApproverRoleIds,
+		arg.MinimumApprovals,
+		arg.SeparationOfDuties,
+		arg.ApprovalTimeoutSeconds,
+		arg.EscalationAfterSeconds,
+		arg.TimeoutEffect,
+		arg.EscalationRoleIds,
+		arg.Version,
+	)
+	var i RemoteAccessApprovalWorkflow
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Description,
+		&i.ApproverRoleIds,
+		&i.MinimumApprovals,
+		&i.SeparationOfDuties,
+		&i.ApprovalTimeoutSeconds,
+		&i.TimeoutEffect,
+		&i.EscalationRoleIds,
+		&i.Status,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EscalationAfterSeconds,
+	)
+	return i, err
+}
+
 const updateRemoteAccessGrant = `-- name: UpdateRemoteAccessGrant :one
-UPDATE remote_access_grants SET subject_type=$3, subject_id=$4, host_ids=$5, host_selector=$6, host_selector_hash=$7,
-    managed_account_ids=$8, protocols=$9, actions=$10, valid_from=$11, valid_until=$12, enabled=$13,
+UPDATE remote_access_grants SET subject_type=$3, subject_id=$4, host_ids=$5,
+    managed_account_ids=$6, protocols=$7, actions=$8, valid_from=$9, valid_until=$10,
     version=version+1, updated_at=now()
-WHERE id=$1 AND enterprise_id=$2 AND version=$14 RETURNING id, enterprise_id, subject_type, subject_id, host_ids, host_selector, host_selector_hash, managed_account_ids, protocols, actions, valid_from, valid_until, enabled, version, created_by, created_at, updated_at
+WHERE id=$1 AND enterprise_id=$2 AND version=$11 RETURNING id, enterprise_id, subject_type, subject_id, host_ids, managed_account_ids, protocols, actions, valid_from, valid_until, version, created_by, created_at, updated_at, status
 `
 
 type UpdateRemoteAccessGrantParams struct {
@@ -435,14 +974,11 @@ type UpdateRemoteAccessGrantParams struct {
 	SubjectType       string             `json:"subject_type"`
 	SubjectID         uuid.UUID          `json:"subject_id"`
 	HostIds           []uuid.UUID        `json:"host_ids"`
-	HostSelector      []byte             `json:"host_selector"`
-	HostSelectorHash  []byte             `json:"host_selector_hash"`
 	ManagedAccountIds []uuid.UUID        `json:"managed_account_ids"`
 	Protocols         []string           `json:"protocols"`
 	Actions           []string           `json:"actions"`
 	ValidFrom         pgtype.Timestamptz `json:"valid_from"`
 	ValidUntil        pgtype.Timestamptz `json:"valid_until"`
-	Enabled           bool               `json:"enabled"`
 	Version           int64              `json:"version"`
 }
 
@@ -453,14 +989,11 @@ func (q *Queries) UpdateRemoteAccessGrant(ctx context.Context, arg UpdateRemoteA
 		arg.SubjectType,
 		arg.SubjectID,
 		arg.HostIds,
-		arg.HostSelector,
-		arg.HostSelectorHash,
 		arg.ManagedAccountIds,
 		arg.Protocols,
 		arg.Actions,
 		arg.ValidFrom,
 		arg.ValidUntil,
-		arg.Enabled,
 		arg.Version,
 	)
 	var i RemoteAccessGrant
@@ -470,14 +1003,74 @@ func (q *Queries) UpdateRemoteAccessGrant(ctx context.Context, arg UpdateRemoteA
 		&i.SubjectType,
 		&i.SubjectID,
 		&i.HostIds,
-		&i.HostSelector,
-		&i.HostSelectorHash,
 		&i.ManagedAccountIds,
 		&i.Protocols,
 		&i.Actions,
 		&i.ValidFrom,
 		&i.ValidUntil,
-		&i.Enabled,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Status,
+	)
+	return i, err
+}
+
+const updateRemoteAccessRule = `-- name: UpdateRemoteAccessRule :one
+UPDATE remote_access_rules SET name=$3,description=$4,priority=$5,
+    protocols=$6,actions=$7,source_cidrs=$8,time_windows=$9,effects=$10,
+    approval_workflow_id=$11,session_profile_id=$12,version=version+1,updated_at=now()
+WHERE id=$1 AND enterprise_id=$2 AND version=$13 RETURNING id, enterprise_id, name, description, priority, protocols, actions, source_cidrs, time_windows, effects, approval_workflow_id, session_profile_id, status, version, created_by, created_at, updated_at
+`
+
+type UpdateRemoteAccessRuleParams struct {
+	ID                 uuid.UUID     `json:"id"`
+	EnterpriseID       uuid.UUID     `json:"enterprise_id"`
+	Name               string        `json:"name"`
+	Description        string        `json:"description"`
+	Priority           int32         `json:"priority"`
+	Protocols          []string      `json:"protocols"`
+	Actions            []string      `json:"actions"`
+	SourceCidrs        []string      `json:"source_cidrs"`
+	TimeWindows        []byte        `json:"time_windows"`
+	Effects            []string      `json:"effects"`
+	ApprovalWorkflowID uuid.NullUUID `json:"approval_workflow_id"`
+	SessionProfileID   uuid.NullUUID `json:"session_profile_id"`
+	Version            int64         `json:"version"`
+}
+
+func (q *Queries) UpdateRemoteAccessRule(ctx context.Context, arg UpdateRemoteAccessRuleParams) (RemoteAccessRule, error) {
+	row := q.db.QueryRow(ctx, updateRemoteAccessRule,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Name,
+		arg.Description,
+		arg.Priority,
+		arg.Protocols,
+		arg.Actions,
+		arg.SourceCidrs,
+		arg.TimeWindows,
+		arg.Effects,
+		arg.ApprovalWorkflowID,
+		arg.SessionProfileID,
+		arg.Version,
+	)
+	var i RemoteAccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Description,
+		&i.Priority,
+		&i.Protocols,
+		&i.Actions,
+		&i.SourceCidrs,
+		&i.TimeWindows,
+		&i.Effects,
+		&i.ApprovalWorkflowID,
+		&i.SessionProfileID,
+		&i.Status,
 		&i.Version,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -486,65 +1079,66 @@ func (q *Queries) UpdateRemoteAccessGrant(ctx context.Context, arg UpdateRemoteA
 	return i, err
 }
 
-const updateRemoteAccessPolicy = `-- name: UpdateRemoteAccessPolicy :one
-UPDATE remote_access_policies SET name=$3,enabled=$4,priority=$5,protocols=$6,host_selector=$7,host_selector_hash=$8,
-    approver_role_ids=$9,minimum_approvals=$10,separation_of_duties=$11,require_mfa=$12,max_session_seconds=$13,
-    idle_timeout_seconds=$14,version=version+1,updated_at=now()
-WHERE id=$1 AND enterprise_id=$2 AND version=$15 RETURNING id, enterprise_id, name, enabled, priority, protocols, host_selector, host_selector_hash, approver_role_ids, minimum_approvals, separation_of_duties, require_mfa, max_session_seconds, idle_timeout_seconds, version, created_by, created_at, updated_at
+const updateRemoteAccessSessionProfile = `-- name: UpdateRemoteAccessSessionProfile :one
+UPDATE remote_access_session_profiles SET name=$3,description=$4,max_session_seconds=$5,idle_timeout_seconds=$6,
+    recording_mode=$7,command_audit_mode=$8,clipboard_mode=$9,file_upload_mode=$10,file_download_mode=$11,
+    port_forward_mode=$12,session_share_mode=$13,retention_days=$14,version=version+1,updated_at=now()
+WHERE id=$1 AND enterprise_id=$2 AND version=$15 RETURNING id, enterprise_id, name, description, max_session_seconds, idle_timeout_seconds, recording_mode, command_audit_mode, clipboard_mode, file_upload_mode, file_download_mode, port_forward_mode, session_share_mode, retention_days, status, version, created_by, created_at, updated_at
 `
 
-type UpdateRemoteAccessPolicyParams struct {
-	ID                 uuid.UUID   `json:"id"`
-	EnterpriseID       uuid.UUID   `json:"enterprise_id"`
-	Name               string      `json:"name"`
-	Enabled            bool        `json:"enabled"`
-	Priority           int32       `json:"priority"`
-	Protocols          []string    `json:"protocols"`
-	HostSelector       []byte      `json:"host_selector"`
-	HostSelectorHash   []byte      `json:"host_selector_hash"`
-	ApproverRoleIds    []uuid.UUID `json:"approver_role_ids"`
-	MinimumApprovals   int32       `json:"minimum_approvals"`
-	SeparationOfDuties bool        `json:"separation_of_duties"`
-	RequireMfa         bool        `json:"require_mfa"`
-	MaxSessionSeconds  int32       `json:"max_session_seconds"`
-	IdleTimeoutSeconds int32       `json:"idle_timeout_seconds"`
-	Version            int64       `json:"version"`
+type UpdateRemoteAccessSessionProfileParams struct {
+	ID                 uuid.UUID `json:"id"`
+	EnterpriseID       uuid.UUID `json:"enterprise_id"`
+	Name               string    `json:"name"`
+	Description        string    `json:"description"`
+	MaxSessionSeconds  int32     `json:"max_session_seconds"`
+	IdleTimeoutSeconds int32     `json:"idle_timeout_seconds"`
+	RecordingMode      string    `json:"recording_mode"`
+	CommandAuditMode   string    `json:"command_audit_mode"`
+	ClipboardMode      string    `json:"clipboard_mode"`
+	FileUploadMode     string    `json:"file_upload_mode"`
+	FileDownloadMode   string    `json:"file_download_mode"`
+	PortForwardMode    string    `json:"port_forward_mode"`
+	SessionShareMode   string    `json:"session_share_mode"`
+	RetentionDays      int32     `json:"retention_days"`
+	Version            int64     `json:"version"`
 }
 
-func (q *Queries) UpdateRemoteAccessPolicy(ctx context.Context, arg UpdateRemoteAccessPolicyParams) (RemoteAccessPolicy, error) {
-	row := q.db.QueryRow(ctx, updateRemoteAccessPolicy,
+func (q *Queries) UpdateRemoteAccessSessionProfile(ctx context.Context, arg UpdateRemoteAccessSessionProfileParams) (RemoteAccessSessionProfile, error) {
+	row := q.db.QueryRow(ctx, updateRemoteAccessSessionProfile,
 		arg.ID,
 		arg.EnterpriseID,
 		arg.Name,
-		arg.Enabled,
-		arg.Priority,
-		arg.Protocols,
-		arg.HostSelector,
-		arg.HostSelectorHash,
-		arg.ApproverRoleIds,
-		arg.MinimumApprovals,
-		arg.SeparationOfDuties,
-		arg.RequireMfa,
+		arg.Description,
 		arg.MaxSessionSeconds,
 		arg.IdleTimeoutSeconds,
+		arg.RecordingMode,
+		arg.CommandAuditMode,
+		arg.ClipboardMode,
+		arg.FileUploadMode,
+		arg.FileDownloadMode,
+		arg.PortForwardMode,
+		arg.SessionShareMode,
+		arg.RetentionDays,
 		arg.Version,
 	)
-	var i RemoteAccessPolicy
+	var i RemoteAccessSessionProfile
 	err := row.Scan(
 		&i.ID,
 		&i.EnterpriseID,
 		&i.Name,
-		&i.Enabled,
-		&i.Priority,
-		&i.Protocols,
-		&i.HostSelector,
-		&i.HostSelectorHash,
-		&i.ApproverRoleIds,
-		&i.MinimumApprovals,
-		&i.SeparationOfDuties,
-		&i.RequireMfa,
+		&i.Description,
 		&i.MaxSessionSeconds,
 		&i.IdleTimeoutSeconds,
+		&i.RecordingMode,
+		&i.CommandAuditMode,
+		&i.ClipboardMode,
+		&i.FileUploadMode,
+		&i.FileDownloadMode,
+		&i.PortForwardMode,
+		&i.SessionShareMode,
+		&i.RetentionDays,
+		&i.Status,
 		&i.Version,
 		&i.CreatedBy,
 		&i.CreatedAt,

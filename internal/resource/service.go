@@ -15,12 +15,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/kakj-go/Argus/internal/remoteaccess/revocation"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
 
 var (
-	ErrResourceDenied        = errors.New("resource is outside data scope")
+	ErrResourceDenied        = errors.New("resource is not explicitly authorized")
 	ErrConnectionTestNeeded  = errors.New("successful connection test required")
 	ErrInvalidConnectionMode = errors.New("invalid connection mode")
 	ErrWinRMTLSRequired      = errors.New("WINRM_TLS_REQUIRED")
@@ -81,11 +82,18 @@ type Service struct {
 }
 
 type Subject struct {
-	ActorID              string
-	ActorType            string
-	AuthorizationVersion int64
-	DataScopeIDs         []uuid.UUID
-	RunID                uuid.NullUUID
+	ActorID               string
+	ActorType             string
+	AuthorizationVersion  int64
+	AuthorizedResourceIDs []uuid.UUID
+	RunID                 uuid.NullUUID
+}
+
+func explicitGrantSubjectType(actorType string) string {
+	if actorType == "service_account" {
+		return "service_account"
+	}
+	return "user"
 }
 
 func (service Service) prepareAction(ctx context.Context, subject Subject, enterpriseID uuid.UUID, input PrepareActionInput, idempotencyKey string) (db.PendingAction, error) {
@@ -134,43 +142,33 @@ type ConnectionTestResult struct {
 }
 
 type hostActionPlan struct {
-	Operation string      `json:"operation"`
-	HostID    uuid.UUID   `json:"host_id"`
-	Input     HostInput   `json:"input"`
-	Impact    LabelImpact `json:"impact"`
-	PinnedKey string      `json:"pinned_host_key,omitempty"`
+	Operation string    `json:"operation"`
+	HostID    uuid.UUID `json:"host_id"`
+	Input     HostInput `json:"input"`
+	PinnedKey string    `json:"pinned_host_key,omitempty"`
 }
 
 type kubernetesActionPlan struct {
 	Operation string          `json:"operation"`
 	ClusterID uuid.UUID       `json:"cluster_id"`
 	Input     KubernetesInput `json:"input"`
-	Impact    LabelImpact     `json:"impact"`
 	Version   string          `json:"kubernetes_version,omitempty"`
 }
 
-func (service Service) ListHosts(ctx context.Context, enterpriseID uuid.UUID, scopeIDs []uuid.UUID) ([]db.Host, error) {
+func (service Service) ListHosts(ctx context.Context, enterpriseID uuid.UUID, authorizedResourceIDs []uuid.UUID) ([]db.Host, error) {
 	items, err := service.Store.Queries.ListHosts(ctx, enterpriseID)
 	if err != nil {
 		return nil, err
 	}
-	return service.Access.FilterHosts(ctx, enterpriseID, scopeIDs, items)
+	return service.Access.FilterHosts(authorizedResourceIDs, items), nil
 }
 
-func (service Service) GetHost(ctx context.Context, enterpriseID, hostID uuid.UUID, scopeIDs []uuid.UUID) (db.Host, error) {
+func (service Service) GetHost(ctx context.Context, enterpriseID, hostID uuid.UUID, authorizedResourceIDs []uuid.UUID) (db.Host, error) {
 	host, err := service.Store.Queries.GetHost(ctx, db.GetHostParams{ID: hostID, EnterpriseID: enterpriseID})
 	if err != nil {
 		return db.Host{}, err
 	}
-	labels, err := DecodeLabels(host.Labels)
-	if err != nil {
-		return db.Host{}, err
-	}
-	allowed, _, err := service.Access.CanAccess(ctx, enterpriseID, scopeIDs, "host", host.ID.String(), labels)
-	if err != nil {
-		return db.Host{}, err
-	}
-	if !allowed {
+	if !service.Access.CanAccess(authorizedResourceIDs, host.ID) {
 		return db.Host{}, ErrResourceDenied
 	}
 	return host, nil
@@ -297,43 +295,34 @@ func (service Service) PreviewCreateHost(ctx context.Context, subject Subject, e
 	if err != nil {
 		return db.PendingAction{}, err
 	}
-	labelsJSON, _, err := NormalizeUserLabels(input.Labels)
+	_, _, err = NormalizeUserLabels(input.Labels)
 	if err != nil {
 		return db.PendingAction{}, err
 	}
-	labels, _ := DecodeLabels(labelsJSON)
 	hostID := newResourceID()
-	allowed, matched, err := service.Access.CanAccess(ctx, enterpriseID, subject.DataScopeIDs, "host", hostID.String(), labels)
-	if err != nil || !allowed {
-		return db.PendingAction{}, ErrResourceDenied
-	}
-	impact, _, err := ComputeLabelImpact(ctx, service.Store.Queries, enterpriseID, "host", hostID.String(), map[string]string{}, labels)
-	if err != nil {
-		return db.PendingAction{}, err
-	}
-	plan := hostActionPlan{Operation: "create", HostID: hostID, Input: input, Impact: impact, PinnedKey: result.HostKeyFingerprint}
+	snapshot := NewResourceAuthorizationSnapshot("host", hostID)
+	plan := hostActionPlan{Operation: "create", HostID: hostID, Input: input, PinnedKey: result.HostKeyFingerprint}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.create", Title: "Create host", Summary: "Create a validated host resource",
 		Risk: "write", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
-		Preview: map[string]any{"host_id": hostID, "name": input.Name, "connection_test_id": test.ID, "matched_data_scope_ids": matched, "affected_subject_count": len(impact.AffectedSubjects)},
-		Diff:    []map[string]string{{"kind": "add", "text": "Create host " + input.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: impact, CommitHandler: "argus.host.create.commit"}, idempotencyKey)
+		Preview: map[string]any{"host_id": hostID, "name": input.Name, "connection_test_id": test.ID},
+		Diff:    []map[string]string{{"kind": "add", "text": "Create host " + input.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: snapshot, CommitHandler: "argus.host.create.commit"}, idempotencyKey)
 }
 
 func (service Service) PreviewUpdateHost(ctx context.Context, subject Subject, enterpriseID, hostID uuid.UUID, input HostInput, idempotencyKey string) (db.PendingAction, error) {
-	current, err := service.GetHost(ctx, enterpriseID, hostID, subject.DataScopeIDs)
+	current, err := service.GetHost(ctx, enterpriseID, hostID, subject.AuthorizedResourceIDs)
 	if err != nil || current.ResourceVersion != input.ExpectedVersion {
 		return db.PendingAction{}, ErrVersionConflict
 	}
 	if input.ConnectionMode != "" && !editableHostConnectionMode(input.ConnectionMode) {
 		return db.PendingAction{}, ErrInvalidConnectionMode
 	}
-	before, _ := DecodeLabels(current.Labels)
-	after := before
 	if input.Labels != nil {
+		before, _ := DecodeLabels(current.Labels)
 		encoded, _, err := NormalizeUserLabels(MergeSystemLabels(input.Labels, before))
 		if err != nil {
 			return db.PendingAction{}, err
 		}
-		after, _ = DecodeLabels(encoded)
+		_ = encoded
 	}
 	result := ConnectionTestResult{HostKeyFingerprint: current.PinnedHostKey}
 	if hostNetworkPathChanged(current, input) || input.ConnectionTestID.Valid {
@@ -342,32 +331,25 @@ func (service Service) PreviewUpdateHost(ctx context.Context, subject Subject, e
 			return db.PendingAction{}, err
 		}
 	}
-	impact, _, err := ComputeLabelImpact(ctx, service.Store.Queries, enterpriseID, "host", hostID.String(), before, after)
-	if err != nil {
-		return db.PendingAction{}, err
-	}
-	plan := hostActionPlan{Operation: "update", HostID: hostID, Input: input, Impact: impact, PinnedKey: result.HostKeyFingerprint}
+	snapshot := NewResourceAuthorizationSnapshot("host", hostID)
+	plan := hostActionPlan{Operation: "update", HostID: hostID, Input: input, PinnedKey: result.HostKeyFingerprint}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.update", Title: "Update host", Summary: "Apply validated host changes",
 		Risk: "write", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, ExpectedResourceVersion: pgtype.Int8{Int64: input.ExpectedVersion, Valid: true},
-		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID, "affected_subject_count": len(impact.AffectedSubjects)},
-		Diff: []map[string]string{{"kind": "change", "text": "Update host " + current.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: impact, CommitHandler: "argus.host.update.commit"}, idempotencyKey)
+		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID},
+		Diff: []map[string]string{{"kind": "change", "text": "Update host " + current.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: snapshot, CommitHandler: "argus.host.update.commit"}, idempotencyKey)
 }
 
 func (service Service) PreviewDeleteHost(ctx context.Context, subject Subject, enterpriseID, hostID uuid.UUID, expectedVersion int64, idempotencyKey string) (db.PendingAction, error) {
-	current, err := service.GetHost(ctx, enterpriseID, hostID, subject.DataScopeIDs)
+	current, err := service.GetHost(ctx, enterpriseID, hostID, subject.AuthorizedResourceIDs)
 	if err != nil || current.ResourceVersion != expectedVersion || current.ConnectionMode == "connector_local" {
 		return db.PendingAction{}, ErrVersionConflict
 	}
-	before, _ := DecodeLabels(current.Labels)
-	impact, _, err := ComputeLabelImpact(ctx, service.Store.Queries, enterpriseID, "host", hostID.String(), before, map[string]string{})
-	if err != nil {
-		return db.PendingAction{}, err
-	}
-	plan := hostActionPlan{Operation: "delete", HostID: hostID, Input: HostInput{ExpectedVersion: expectedVersion}, Impact: impact}
+	snapshot := NewResourceAuthorizationSnapshot("host", hostID)
+	plan := hostActionPlan{Operation: "delete", HostID: hostID, Input: HostInput{ExpectedVersion: expectedVersion}}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.delete", Title: "Delete host", Summary: "Logically delete host " + current.Name,
 		Risk: "dangerous", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, ExpectedResourceVersion: pgtype.Int8{Int64: expectedVersion, Valid: true},
-		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID, "affected_subject_count": len(impact.AffectedSubjects)},
-		Diff: []map[string]string{{"kind": "remove", "text": "Delete host " + current.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: impact, CommitHandler: "argus.host.delete.commit"}, idempotencyKey)
+		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID},
+		Diff: []map[string]string{{"kind": "remove", "text": "Delete host " + current.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: snapshot, CommitHandler: "argus.host.delete.commit"}, idempotencyKey)
 }
 
 func (service Service) Confirm(ctx context.Context, subject Subject, enterpriseID uuid.UUID, actionRef, idempotencyKey string) (ActionConfirmation, error) {
@@ -402,7 +384,6 @@ func (service Service) revalidateAction(ctx context.Context, q *db.Queries, acti
 		if err := json.Unmarshal(raw, &plan); err != nil {
 			return nil, err
 		}
-		before := map[string]string{}
 		var current db.Host
 		if plan.Operation != "create" {
 			var err error
@@ -410,29 +391,18 @@ func (service Service) revalidateAction(ctx context.Context, q *db.Queries, acti
 			if err != nil || current.ResourceVersion != plan.Input.ExpectedVersion {
 				return nil, ErrActionInvalidated
 			}
-			before, _ = DecodeLabels(current.Labels)
 		}
 		if plan.Operation == "update" && (hostNetworkPathChanged(current, plan.Input) || plan.Input.ConnectionTestID.Valid) {
 			if _, _, err := service.requireHostUpdateConnectionTest(ctx, q, action.EnterpriseID, current, plan.Input); err != nil {
 				return nil, ErrActionInvalidated
 			}
 		}
-		after := plan.Input.Labels
-		if plan.Operation == "delete" {
-			after = map[string]string{}
-		} else if after == nil {
-			after = before
-		} else {
-			after = MergeSystemLabels(after, before)
-		}
-		_, hash, err := ComputeLabelImpact(ctx, q, action.EnterpriseID, "host", plan.HostID.String(), before, after)
-		return hash, err
+		return HashResourceAuthorizationSnapshot("host", plan.HostID)
 	case "kubernetes_cluster":
 		var plan kubernetesActionPlan
 		if err := json.Unmarshal(raw, &plan); err != nil {
 			return nil, err
 		}
-		before := map[string]string{}
 		var current db.KubernetesCluster
 		if plan.Operation != "create" {
 			var err error
@@ -440,23 +410,13 @@ func (service Service) revalidateAction(ctx context.Context, q *db.Queries, acti
 			if err != nil || current.ResourceVersion != plan.Input.ExpectedVersion {
 				return nil, ErrActionInvalidated
 			}
-			before, _ = DecodeLabels(current.Labels)
 		}
 		if plan.Operation == "update" && (kubernetesNetworkPathChanged(current, plan.Input) || plan.Input.ConnectionTestID.Valid) {
 			if _, _, err := service.requireKubernetesUpdateConnectionTest(ctx, q, action.EnterpriseID, current, plan.Input); err != nil {
 				return nil, ErrActionInvalidated
 			}
 		}
-		after := plan.Input.Labels
-		if plan.Operation == "delete" {
-			after = map[string]string{}
-		} else if after == nil {
-			after = before
-		} else {
-			after = MergeSystemLabels(after, before)
-		}
-		_, hash, err := ComputeLabelImpact(ctx, q, action.EnterpriseID, "kubernetes_cluster", plan.ClusterID.String(), before, after)
-		return hash, err
+		return HashResourceAuthorizationSnapshot("kubernetes_cluster", plan.ClusterID)
 	default:
 		if service.Extension != nil {
 			return service.Extension.RevalidateAction(ctx, q, action, raw)
@@ -474,14 +434,14 @@ func (service Service) commitAction(ctx context.Context, q *db.Queries, action d
 		if err := json.Unmarshal(raw, &plan); err != nil {
 			return ActionCommitResult{}, err
 		}
-		return service.commitHost(ctx, q, action.EnterpriseID, plan)
+		return service.commitHost(ctx, q, action.CreatorSubjectID.String(), action.CreatorSubjectType, action.EnterpriseID, plan)
 	}
 	if action.ResourceType == "kubernetes_cluster" {
 		var plan kubernetesActionPlan
 		if err := json.Unmarshal(raw, &plan); err != nil {
 			return ActionCommitResult{}, err
 		}
-		return service.commitKubernetes(ctx, q, action.CreatorSubjectID.String(), action.EnterpriseID, plan)
+		return service.commitKubernetes(ctx, q, action.CreatorSubjectID.String(), action.CreatorSubjectType, action.EnterpriseID, plan)
 	}
 	if service.Extension != nil {
 		return service.Extension.CommitAction(ctx, q, action, raw)
@@ -489,7 +449,7 @@ func (service Service) commitAction(ctx context.Context, q *db.Queries, action d
 	return ActionCommitResult{}, ErrActionInvalidated
 }
 
-func (service Service) commitHost(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, plan hostActionPlan) (ActionCommitResult, error) {
+func (service Service) commitHost(ctx context.Context, q *db.Queries, actorID, actorType string, enterpriseID uuid.UUID, plan hostActionPlan) (ActionCommitResult, error) {
 	var host db.Host
 	var err error
 	switch plan.Operation {
@@ -508,6 +468,12 @@ func (service Service) commitHost(ctx context.Context, q *db.Queries, enterprise
 			}
 			_, err = q.CreateManagedAccount(ctx, db.CreateManagedAccountParams{ID: newResourceID(), EnterpriseID: enterpriseID, HostID: host.ID,
 				Username: plan.Input.Username, PrivilegeLevel: privilege, CredentialID: plan.Input.CredentialID.UUID, AllowedProtocols: []string{protocol}})
+		}
+		if err == nil {
+			creator, parseErr := uuid.Parse(actorID)
+			if parseErr == nil {
+				_, err = q.AddDataAuthorizationGrant(ctx, db.AddDataAuthorizationGrantParams{ID: newResourceID(), EnterpriseID: enterpriseID, SubjectType: explicitGrantSubjectType(actorType), SubjectID: creator, ResourceType: "host", ResourceID: host.ID, CreatedBy: uuid.NullUUID{UUID: creator, Valid: true}})
+			}
 		}
 	case "update":
 		params := db.UpdateHostParams{ID: plan.HostID, EnterpriseID: enterpriseID, ResourceVersion: plan.Input.ExpectedVersion, Name: text(plan.Input.Name),
@@ -542,8 +508,10 @@ func (service Service) commitHost(ctx context.Context, q *db.Queries, enterprise
 	if err != nil {
 		return ActionCommitResult{}, err
 	}
-	if err := ApplyLabelImpact(ctx, q, enterpriseID, plan.Impact); err != nil {
-		return ActionCommitResult{}, err
+	if plan.Operation == "update" || plan.Operation == "delete" {
+		if err := revocation.Source(ctx, q, enterpriseID, "host", host.ID, "host_changed"); err != nil {
+			return ActionCommitResult{}, err
+		}
 	}
 	return ActionCommitResult{ResourceType: "host", ResourceID: host.ID, ResourceVersion: host.ResourceVersion, Summary: "Host change committed"}, nil
 }

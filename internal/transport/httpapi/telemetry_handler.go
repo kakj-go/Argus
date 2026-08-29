@@ -478,7 +478,7 @@ func (handler TelemetryHandler) actor(ctx context.Context, mutation bool, csrf, 
 		return telemetryservice.Actor{}, identity.Principal{}, &denied
 	}
 	return telemetryservice.Actor{EnterpriseID: principal.EnterpriseUser.EnterpriseID, SubjectID: principal.EnterpriseUser.ID,
-		AuthorizationVersion: principal.EnterpriseUser.AuthorizationVersion, DataScopeIDs: slices.Clone(principal.DataScopeIDs)}, principal, nil
+		AuthorizationVersion: principal.EnterpriseUser.AuthorizationVersion, AuthorizedResourceIDs: slices.Clone(principal.AuthorizedResourceIDs)}, principal, nil
 }
 
 func (handler TelemetryHandler) previewCollector(ctx context.Context, actor telemetryservice.Actor, resourceType string, resourceID uuid.UUID, action string, body *telemetryapi.CollectorPreview, key string) (db.PendingAction, error) {

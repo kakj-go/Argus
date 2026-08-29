@@ -18,7 +18,7 @@
 | ConnectorCommand | PostgreSQL | 路由和进度通知 | 根据 Command 状态和 Connector 对账 |
 | 在线 Connector Session | PostgreSQL 保存最后事实 | 带 TTL 的实时 Registry | Connector 心跳重建 |
 | BastionScope/成员关系 | PostgreSQL | 可选列表和权限投影缓存 | 从数据库重建，不能随 Connector Session 消失 |
-| Department/RoleBinding/DataScope/RemoteAccessGrant/AuthorizationVersion | PostgreSQL | 权限投影、版本和失效通知 | 从数据库重建；旧票据、Binding 和查询按版本拒绝 |
+| Department/RoleBinding/explicit resource authorization/RemoteAccessGrant/AuthorizationVersion | PostgreSQL | 权限投影、版本和失效通知 | 从数据库重建；旧票据、Binding 和查询按版本拒绝 |
 | RemoteAccessSession/票据消费事实 | PostgreSQL 加密记录或专用 Secret Store | 在线路由、短 TTL 票据/JTI 和状态通知 | 从会话状态恢复；原一次性票据不恢复，必要时重新授权 |
 | Remote Session Recording | Artifact Store + PostgreSQL 索引 | 不缓存正文 | 按 recording_ref 校验和读取；Gateway 本地临时分片必须上传后清理 |
 | 登录 Session/撤销列表 | PostgreSQL 保存身份和撤销事实 | 热 Session、速率限制 | 重新认证或从数据库加载 |
@@ -195,8 +195,8 @@ M4 将普通 Worker 的职责拆为四个独立 Pool：`agent` 运行模型与�
 
 可以横向扩展。
 
-- 所有实例使用 ClickHouse 只读账号并强制注入 EnterpriseId、授权 ResourceIds 或标签选择器解析结果、Signal、字段投影与脱敏。
-- 游标包含 `enterprise_id`、AuthorizationVersion、DataScope/查询哈希和稳定排序位置，不依赖实例内存。
+- 所有实例使用 ClickHouse 只读账号并强制注入 EnterpriseId、授权 ResourceIds、用户筛选条件、Signal、字段投影与脱敏；筛选条件不能扩大授权 ResourceIds。
+- 游标包含 `enterprise_id`、AuthorizationVersion、explicit resource authorization/查询哈希和稳定排序位置，不依赖实例内存。
 - 查询预算和并发按企业通过 Redis 协调，数据库保存权威策略。
 - HPA 使用查询并发、P95 延迟、排队长度和 ClickHouse 拒绝率。
 

@@ -5,6 +5,7 @@ export interface WebSocketTransportOptions {
   protocols?: string | string[];
   on_message?: (data: string | ArrayBuffer | Blob) => void;
   on_close?: (event: CloseEvent) => void;
+  on_error?: (event: Event) => void;
   on_protocol_error?: (code: string, detail: unknown) => void;
 }
 
@@ -32,6 +33,7 @@ export class WebSocketTransport {
     this.close_state = undefined;
     this.socket.addEventListener("message", this.onMessage);
     this.socket.addEventListener("close", this.onClose);
+    this.socket.addEventListener("error", this.onError);
     return this.socket;
   }
 
@@ -45,6 +47,7 @@ export class WebSocketTransport {
   close(code = 1000, reason = "normal"): void {
     this.socket?.removeEventListener("message", this.onMessage);
     this.socket?.removeEventListener("close", this.onClose);
+    this.socket?.removeEventListener("error", this.onError);
     this.socket?.close(code, reason);
     this.socket = undefined;
   }
@@ -67,6 +70,10 @@ export class WebSocketTransport {
     };
     this.options.on_close?.(event);
     this.socket = undefined;
+  };
+
+  private readonly onError = (event: Event) => {
+    this.options.on_error?.(event);
   };
 }
 

@@ -61,7 +61,13 @@ func (resolver ConnectorOwnerResolver) SaveRoute(ctx context.Context, target Con
 		ConnectorEpoch: pgtype.Int8{Int64: target.ConnectionEpoch, Valid: target.ConnectionEpoch > 0},
 		SessionFence:   target.Session.SessionFence, LeaseExpiresAt: timestamp(target.LeaseExpiresAt),
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return resolver.Store.Queries.SetRemoteAccessSessionRouteMetadata(ctx, db.SetRemoteAccessSessionRouteMetadataParams{
+		ID: target.Session.ID, GatewayInstance: pgtype.Text{String: owner, Valid: true},
+		ConnectorEpoch: pgtype.Int8{Int64: target.ConnectionEpoch, Valid: target.ConnectionEpoch > 0}, SessionFence: target.Session.SessionFence,
+	})
 }
 
 func (resolver ConnectorOwnerResolver) DeleteRoute(ctx context.Context, target ConnectionTarget) {

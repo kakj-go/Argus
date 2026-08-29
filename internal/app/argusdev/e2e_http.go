@@ -21,11 +21,19 @@ import (
 type ScenarioHTTP struct {
 	BaseURL   string
 	Artifacts string
+	Transport http.RoundTripper
 	Clients   map[string]*http.Client
 }
 
-func NewScenarioHTTP(baseURL, artifacts string) *ScenarioHTTP {
-	return &ScenarioHTTP{BaseURL: baseURL, Artifacts: artifacts, Clients: map[string]*http.Client{}}
+func NewScenarioHTTP(baseURL, artifacts string, transport http.RoundTripper) *ScenarioHTTP {
+	return &ScenarioHTTP{BaseURL: baseURL, Artifacts: artifacts, Transport: transport, Clients: map[string]*http.Client{}}
+}
+
+// NewDomainScenarioHTTP builds the API client used by all scenarios: it goes
+// through the ingress with the public hostname (Origin, cookies, and TLS all
+// match the product's browser path).
+func NewDomainScenarioHTTP(env *E2EEnvironment) *ScenarioHTTP {
+	return NewScenarioHTTP(env.Endpoints.APIBase, env.Options.Artifacts, env.Endpoints.Transport())
 }
 
 func (h *ScenarioHTTP) Client(name string) *http.Client {
@@ -33,7 +41,7 @@ func (h *ScenarioHTTP) Client(name string) *http.Client {
 		return client
 	}
 	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar, Timeout: 30 * time.Second}
+	client := &http.Client{Jar: jar, Transport: h.Transport, Timeout: 30 * time.Second}
 	h.Clients[name] = client
 	return client
 }
@@ -95,7 +103,7 @@ func (h *ScenarioHTTP) jsonValue(ctx context.Context, name, clientName, method, 
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 30 * time.Second, Transport: h.Transport}
 	if clientName != "" {
 		client = h.Client(clientName)
 	}

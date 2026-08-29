@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -64,7 +66,22 @@ func enroll(ctx context.Context, options enrollOptions) (enrollResult, error) {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Argus-Enrollment-Token", options.Token)
 	request.Header.Set("Idempotency-Key", uuid.NewString())
-	response, err := (&http.Client{Timeout: 45 * time.Second}).Do(request)
+	pool := x509.NewCertPool()
+	customCA := false
+	if caFile := os.Getenv("ARGUS_CONNECTOR_CA_FILE"); caFile != "" {
+		caPEM, readErr := os.ReadFile(caFile)
+		if readErr != nil || !pool.AppendCertsFromPEM(caPEM) {
+			return enrollResult{}, errors.New("ARGUS_CONNECTOR_CA_FILE does not contain a valid CA bundle")
+		}
+		customCA = true
+	}
+	client := &http.Client{Timeout: 45 * time.Second}
+	if dialAddress := os.Getenv("ARGUS_CONNECTOR_ENROLL_ADDRESS"); dialAddress != "" {
+		client.Transport = pinnedAddressTransport(endpoint, dialAddress, pool)
+	} else if customCA {
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return enrollResult{}, err
 	}
@@ -170,4 +187,20 @@ func validateIssuedIdentity(connectorID uuid.UUID, keyPEM, certificatePEM, caPEM
 	}
 	_, err = certificate.Verify(x509.VerifyOptions{Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}})
 	return err
+}
+
+// pinnedAddressTransport dials a fixed address while keeping the URL hostname
+// as TLS ServerName; used by E2E to reach the ingress without DNS changes.
+func pinnedAddressTransport(rawURL, dialAddress string, pool *x509.CertPool) *http.Transport {
+	hostname := rawURL
+	if parsed, err := url.Parse(rawURL); err == nil {
+		hostname = parsed.Hostname()
+	}
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	return &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.DialContext(ctx, network, dialAddress)
+		},
+		TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: hostname},
+	}
 }

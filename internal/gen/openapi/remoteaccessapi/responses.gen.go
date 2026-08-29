@@ -6,10 +6,367 @@ package remoteaccessapi
 import (
 	"bytes"
 	"encoding/json"
-	"net/http"
-
 	openapi_types "github.com/oapi-codegen/runtime/types"
+	"net/http"
 )
+
+type ListApprovalWorkflowsRequestObject struct {
+	Params ListApprovalWorkflowsParams
+}
+
+type ListApprovalWorkflowsResponseObject interface {
+	VisitListApprovalWorkflowsResponse(w http.ResponseWriter) error
+}
+
+type ListApprovalWorkflows200JSONResponse ApprovalWorkflowPage
+
+func (response ListApprovalWorkflows200JSONResponse) VisitListApprovalWorkflowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListApprovalWorkflowsdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response ListApprovalWorkflowsdefaultJSONResponse) VisitListApprovalWorkflowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApprovalWorkflowRequestObject struct {
+	Params CreateApprovalWorkflowParams
+	Body   *CreateApprovalWorkflowJSONRequestBody
+}
+
+type CreateApprovalWorkflowResponseObject interface {
+	VisitCreateApprovalWorkflowResponse(w http.ResponseWriter) error
+}
+
+type CreateApprovalWorkflow201JSONResponse ApprovalWorkflow
+
+func (response CreateApprovalWorkflow201JSONResponse) VisitCreateApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApprovalWorkflowdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response CreateApprovalWorkflowdefaultJSONResponse) VisitCreateApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetApprovalWorkflowRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetApprovalWorkflowResponseObject interface {
+	VisitGetApprovalWorkflowResponse(w http.ResponseWriter) error
+}
+
+type GetApprovalWorkflow200JSONResponse ApprovalWorkflow
+
+func (response GetApprovalWorkflow200JSONResponse) VisitGetApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetApprovalWorkflowdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response GetApprovalWorkflowdefaultJSONResponse) VisitGetApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateApprovalWorkflowRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params UpdateApprovalWorkflowParams
+	Body   *UpdateApprovalWorkflowJSONRequestBody
+}
+
+type UpdateApprovalWorkflowResponseObject interface {
+	VisitUpdateApprovalWorkflowResponse(w http.ResponseWriter) error
+}
+
+type UpdateApprovalWorkflow200JSONResponse ApprovalWorkflow
+
+func (response UpdateApprovalWorkflow200JSONResponse) VisitUpdateApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateApprovalWorkflowdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response UpdateApprovalWorkflowdefaultJSONResponse) VisitUpdateApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveApprovalWorkflowRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params ArchiveApprovalWorkflowParams
+}
+
+type ArchiveApprovalWorkflowResponseObject interface {
+	VisitArchiveApprovalWorkflowResponse(w http.ResponseWriter) error
+}
+
+type ArchiveApprovalWorkflow200JSONResponse ApprovalWorkflow
+
+func (response ArchiveApprovalWorkflow200JSONResponse) VisitArchiveApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveApprovalWorkflowdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response ArchiveApprovalWorkflowdefaultJSONResponse) VisitArchiveApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DisableApprovalWorkflowRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params DisableApprovalWorkflowParams
+}
+
+type DisableApprovalWorkflowResponseObject interface {
+	VisitDisableApprovalWorkflowResponse(w http.ResponseWriter) error
+}
+
+type DisableApprovalWorkflow200JSONResponse ApprovalWorkflow
+
+func (response DisableApprovalWorkflow200JSONResponse) VisitDisableApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DisableApprovalWorkflowdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response DisableApprovalWorkflowdefaultJSONResponse) VisitDisableApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EnableApprovalWorkflowRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params EnableApprovalWorkflowParams
+}
+
+type EnableApprovalWorkflowResponseObject interface {
+	VisitEnableApprovalWorkflowResponse(w http.ResponseWriter) error
+}
+
+type EnableApprovalWorkflow200JSONResponse ApprovalWorkflow
+
+func (response EnableApprovalWorkflow200JSONResponse) VisitEnableApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EnableApprovalWorkflowdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response EnableApprovalWorkflowdefaultJSONResponse) VisitEnableApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetApprovalWorkflowReferencesRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetApprovalWorkflowReferencesResponseObject interface {
+	VisitGetApprovalWorkflowReferencesResponse(w http.ResponseWriter) error
+}
+
+type GetApprovalWorkflowReferences200JSONResponse RemoteAccessReferences
+
+func (response GetApprovalWorkflowReferences200JSONResponse) VisitGetApprovalWorkflowReferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetApprovalWorkflowReferencesdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response GetApprovalWorkflowReferencesdefaultJSONResponse) VisitGetApprovalWorkflowReferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RestoreApprovalWorkflowRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params RestoreApprovalWorkflowParams
+}
+
+type RestoreApprovalWorkflowResponseObject interface {
+	VisitRestoreApprovalWorkflowResponse(w http.ResponseWriter) error
+}
+
+type RestoreApprovalWorkflow200JSONResponse ApprovalWorkflow
+
+func (response RestoreApprovalWorkflow200JSONResponse) VisitRestoreApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RestoreApprovalWorkflowdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response RestoreApprovalWorkflowdefaultJSONResponse) VisitRestoreApprovalWorkflowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type ListRemoteAccessGrantsRequestObject struct {
 	Params ListRemoteAccessGrantsParams
@@ -79,40 +436,6 @@ type CreateRemoteAccessGrantdefaultJSONResponse struct {
 }
 
 func (response CreateRemoteAccessGrantdefaultJSONResponse) VisitCreateRemoteAccessGrantResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DisableRemoteAccessGrantRequestObject struct {
-	Id     openapi_types.UUID `json:"id"`
-	Params DisableRemoteAccessGrantParams
-}
-
-type DisableRemoteAccessGrantResponseObject interface {
-	VisitDisableRemoteAccessGrantResponse(w http.ResponseWriter) error
-}
-
-type DisableRemoteAccessGrant204Response struct {
-}
-
-func (response DisableRemoteAccessGrant204Response) VisitDisableRemoteAccessGrantResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DisableRemoteAccessGrantdefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response DisableRemoteAccessGrantdefaultJSONResponse) VisitDisableRemoteAccessGrantResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -204,6 +527,205 @@ func (response UpdateRemoteAccessGrantdefaultJSONResponse) VisitUpdateRemoteAcce
 	return err
 }
 
+type ArchiveRemoteAccessGrantRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params ArchiveRemoteAccessGrantParams
+}
+
+type ArchiveRemoteAccessGrantResponseObject interface {
+	VisitArchiveRemoteAccessGrantResponse(w http.ResponseWriter) error
+}
+
+type ArchiveRemoteAccessGrant200JSONResponse RemoteAccessGrant
+
+func (response ArchiveRemoteAccessGrant200JSONResponse) VisitArchiveRemoteAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveRemoteAccessGrantdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response ArchiveRemoteAccessGrantdefaultJSONResponse) VisitArchiveRemoteAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DisableRemoteAccessGrantRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params DisableRemoteAccessGrantParams
+}
+
+type DisableRemoteAccessGrantResponseObject interface {
+	VisitDisableRemoteAccessGrantResponse(w http.ResponseWriter) error
+}
+
+type DisableRemoteAccessGrant200JSONResponse RemoteAccessGrant
+
+func (response DisableRemoteAccessGrant200JSONResponse) VisitDisableRemoteAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DisableRemoteAccessGrantdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response DisableRemoteAccessGrantdefaultJSONResponse) VisitDisableRemoteAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EnableRemoteAccessGrantRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params EnableRemoteAccessGrantParams
+}
+
+type EnableRemoteAccessGrantResponseObject interface {
+	VisitEnableRemoteAccessGrantResponse(w http.ResponseWriter) error
+}
+
+type EnableRemoteAccessGrant200JSONResponse RemoteAccessGrant
+
+func (response EnableRemoteAccessGrant200JSONResponse) VisitEnableRemoteAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EnableRemoteAccessGrantdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response EnableRemoteAccessGrantdefaultJSONResponse) VisitEnableRemoteAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRemoteAccessGrantReferencesRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetRemoteAccessGrantReferencesResponseObject interface {
+	VisitGetRemoteAccessGrantReferencesResponse(w http.ResponseWriter) error
+}
+
+type GetRemoteAccessGrantReferences200JSONResponse RemoteAccessReferences
+
+func (response GetRemoteAccessGrantReferences200JSONResponse) VisitGetRemoteAccessGrantReferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRemoteAccessGrantReferencesdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response GetRemoteAccessGrantReferencesdefaultJSONResponse) VisitGetRemoteAccessGrantReferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RestoreRemoteAccessGrantRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params RestoreRemoteAccessGrantParams
+}
+
+type RestoreRemoteAccessGrantResponseObject interface {
+	VisitRestoreRemoteAccessGrantResponse(w http.ResponseWriter) error
+}
+
+type RestoreRemoteAccessGrant200JSONResponse RemoteAccessGrant
+
+func (response RestoreRemoteAccessGrant200JSONResponse) VisitRestoreRemoteAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RestoreRemoteAccessGrantdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response RestoreRemoteAccessGrantdefaultJSONResponse) VisitRestoreRemoteAccessGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListRemoteAccessLeasesRequestObject struct {
 	Params ListRemoteAccessLeasesParams
 }
@@ -283,17 +805,17 @@ func (response RevokeRemoteAccessLeasedefaultJSONResponse) VisitRevokeRemoteAcce
 	return err
 }
 
-type ListRemoteAccessPoliciesRequestObject struct {
-	Params ListRemoteAccessPoliciesParams
+type ListRemoteAccessRecordingsRequestObject struct {
+	Params ListRemoteAccessRecordingsParams
 }
 
-type ListRemoteAccessPoliciesResponseObject interface {
-	VisitListRemoteAccessPoliciesResponse(w http.ResponseWriter) error
+type ListRemoteAccessRecordingsResponseObject interface {
+	VisitListRemoteAccessRecordingsResponse(w http.ResponseWriter) error
 }
 
-type ListRemoteAccessPolicies200JSONResponse RemoteAccessPolicyPage
+type ListRemoteAccessRecordings200JSONResponse RemoteAccessRecordingPage
 
-func (response ListRemoteAccessPolicies200JSONResponse) VisitListRemoteAccessPoliciesResponse(w http.ResponseWriter) error {
+func (response ListRemoteAccessRecordings200JSONResponse) VisitListRemoteAccessRecordingsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -305,166 +827,12 @@ func (response ListRemoteAccessPolicies200JSONResponse) VisitListRemoteAccessPol
 	return err
 }
 
-type ListRemoteAccessPoliciesdefaultJSONResponse struct {
+type ListRemoteAccessRecordingsdefaultJSONResponse struct {
 	Body       ApiError
 	StatusCode int
 }
 
-func (response ListRemoteAccessPoliciesdefaultJSONResponse) VisitListRemoteAccessPoliciesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateRemoteAccessPolicyRequestObject struct {
-	Params CreateRemoteAccessPolicyParams
-	Body   *CreateRemoteAccessPolicyJSONRequestBody
-}
-
-type CreateRemoteAccessPolicyResponseObject interface {
-	VisitCreateRemoteAccessPolicyResponse(w http.ResponseWriter) error
-}
-
-type CreateRemoteAccessPolicy201JSONResponse RemoteAccessPolicy
-
-func (response CreateRemoteAccessPolicy201JSONResponse) VisitCreateRemoteAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateRemoteAccessPolicydefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response CreateRemoteAccessPolicydefaultJSONResponse) VisitCreateRemoteAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DisableRemoteAccessPolicyRequestObject struct {
-	Id     openapi_types.UUID `json:"id"`
-	Params DisableRemoteAccessPolicyParams
-}
-
-type DisableRemoteAccessPolicyResponseObject interface {
-	VisitDisableRemoteAccessPolicyResponse(w http.ResponseWriter) error
-}
-
-type DisableRemoteAccessPolicy204Response struct {
-}
-
-func (response DisableRemoteAccessPolicy204Response) VisitDisableRemoteAccessPolicyResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DisableRemoteAccessPolicydefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response DisableRemoteAccessPolicydefaultJSONResponse) VisitDisableRemoteAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetRemoteAccessPolicyRequestObject struct {
-	Id openapi_types.UUID `json:"id"`
-}
-
-type GetRemoteAccessPolicyResponseObject interface {
-	VisitGetRemoteAccessPolicyResponse(w http.ResponseWriter) error
-}
-
-type GetRemoteAccessPolicy200JSONResponse RemoteAccessPolicy
-
-func (response GetRemoteAccessPolicy200JSONResponse) VisitGetRemoteAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetRemoteAccessPolicydefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response GetRemoteAccessPolicydefaultJSONResponse) VisitGetRemoteAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateRemoteAccessPolicyRequestObject struct {
-	Id     openapi_types.UUID `json:"id"`
-	Params UpdateRemoteAccessPolicyParams
-	Body   *UpdateRemoteAccessPolicyJSONRequestBody
-}
-
-type UpdateRemoteAccessPolicyResponseObject interface {
-	VisitUpdateRemoteAccessPolicyResponse(w http.ResponseWriter) error
-}
-
-type UpdateRemoteAccessPolicy200JSONResponse RemoteAccessPolicy
-
-func (response UpdateRemoteAccessPolicy200JSONResponse) VisitUpdateRemoteAccessPolicyResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateRemoteAccessPolicydefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response UpdateRemoteAccessPolicydefaultJSONResponse) VisitUpdateRemoteAccessPolicyResponse(w http.ResponseWriter) error {
+func (response ListRemoteAccessRecordingsdefaultJSONResponse) VisitListRemoteAccessRecordingsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -703,205 +1071,6 @@ type DecideRemoteAccessRequestdefaultJSONResponse struct {
 }
 
 func (response DecideRemoteAccessRequestdefaultJSONResponse) VisitDecideRemoteAccessRequestResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListRemoteAccessSessionsRequestObject struct {
-	Params ListRemoteAccessSessionsParams
-}
-
-type ListRemoteAccessSessionsResponseObject interface {
-	VisitListRemoteAccessSessionsResponse(w http.ResponseWriter) error
-}
-
-type ListRemoteAccessSessions200JSONResponse RemoteAccessSessionPage
-
-func (response ListRemoteAccessSessions200JSONResponse) VisitListRemoteAccessSessionsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListRemoteAccessSessionsdefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response ListRemoteAccessSessionsdefaultJSONResponse) VisitListRemoteAccessSessionsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateRemoteAccessSessionRequestObject struct {
-	Params CreateRemoteAccessSessionParams
-	Body   *CreateRemoteAccessSessionJSONRequestBody
-}
-
-type CreateRemoteAccessSessionResponseObject interface {
-	VisitCreateRemoteAccessSessionResponse(w http.ResponseWriter) error
-}
-
-type CreateRemoteAccessSession201JSONResponse RemoteAccessSession
-
-func (response CreateRemoteAccessSession201JSONResponse) VisitCreateRemoteAccessSessionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateRemoteAccessSessiondefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response CreateRemoteAccessSessiondefaultJSONResponse) VisitCreateRemoteAccessSessionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetRemoteAccessSessionRequestObject struct {
-	Id openapi_types.UUID `json:"id"`
-}
-
-type GetRemoteAccessSessionResponseObject interface {
-	VisitGetRemoteAccessSessionResponse(w http.ResponseWriter) error
-}
-
-type GetRemoteAccessSession200JSONResponse RemoteAccessSession
-
-func (response GetRemoteAccessSession200JSONResponse) VisitGetRemoteAccessSessionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetRemoteAccessSessiondefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response GetRemoteAccessSessiondefaultJSONResponse) VisitGetRemoteAccessSessionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type TerminateRemoteAccessSessionRequestObject struct {
-	Id     openapi_types.UUID `json:"id"`
-	Params TerminateRemoteAccessSessionParams
-	Body   *TerminateRemoteAccessSessionJSONRequestBody
-}
-
-type TerminateRemoteAccessSessionResponseObject interface {
-	VisitTerminateRemoteAccessSessionResponse(w http.ResponseWriter) error
-}
-
-type TerminateRemoteAccessSession200JSONResponse RemoteAccessSession
-
-func (response TerminateRemoteAccessSession200JSONResponse) VisitTerminateRemoteAccessSessionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type TerminateRemoteAccessSessiondefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response TerminateRemoteAccessSessiondefaultJSONResponse) VisitTerminateRemoteAccessSessionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateRemoteAccessSessionTicketRequestObject struct {
-	Id     openapi_types.UUID `json:"id"`
-	Params CreateRemoteAccessSessionTicketParams
-}
-
-type CreateRemoteAccessSessionTicketResponseObject interface {
-	VisitCreateRemoteAccessSessionTicketResponse(w http.ResponseWriter) error
-}
-
-type CreateRemoteAccessSessionTicket201JSONResponse SessionTicketResult
-
-func (response CreateRemoteAccessSessionTicket201JSONResponse) VisitCreateRemoteAccessSessionTicketResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateRemoteAccessSessionTicketdefaultJSONResponse struct {
-	Body       ApiError
-	StatusCode int
-}
-
-func (response CreateRemoteAccessSessionTicketdefaultJSONResponse) VisitCreateRemoteAccessSessionTicketResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {

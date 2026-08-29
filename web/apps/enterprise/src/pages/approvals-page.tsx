@@ -142,7 +142,24 @@ export function ApprovalsPage() {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="remote">
-          <RemoteAccessApprovals />
+          <Tabs
+            className="argus-approval-scope-tabs"
+            onValueChange={(value) => setScope(value as ScopeFilter)}
+            value={scope}
+          >
+            <TabsList>
+              <TabsTrigger value="mine">
+                {t("governance.approvals.scope.mine")}
+              </TabsTrigger>
+              <TabsTrigger value="created">
+                {t("governance.approvals.scope.created")}
+              </TabsTrigger>
+              <TabsTrigger value="done">
+                {t("governance.approvals.scope.done")}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <RemoteAccessApprovals scope={scope} />
         </TabsContent>
         <TabsContent value="operation">
           <div className="argus-gov-stats">

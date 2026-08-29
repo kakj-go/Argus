@@ -13,6 +13,7 @@ import {
 } from "@argus/api-client";
 import type { EnterpriseUser } from "@argus/api-client/contracts";
 import {
+  ActionGroup,
   Alert,
   Badge,
   Button,
@@ -24,12 +25,15 @@ import {
   Field,
   FormDrawer,
   Input,
+  RowAction,
   Select,
   Spinner,
   StatusBadge,
 } from "@argus/ui";
 import { roleDisplayName } from "../../lib/role-presentation";
+import { usePermission } from "../../lib/permissions";
 import { formatDateTime } from "./shared";
+import { DataAuthorizationDialog } from "./data-authorization-dialog";
 
 export type UserRow = {
   id: string;
@@ -41,6 +45,8 @@ export type UserRow = {
   /** 由 user 主体且 active 的 RoleBinding 派生，仅用于展示。 */
   role_ids: string[];
   department_id: string;
+  version: number;
+  authorization_version: number;
 };
 
 function toRow(
@@ -64,13 +70,15 @@ function toRow(
       )
       .map((binding) => binding.role_id),
     department_id: enterpriseUser?.department_id ?? "",
+    version: enterpriseUser?.version ?? 1,
+    authorization_version: enterpriseUser?.authorization_version ?? 1,
   };
 }
 
 export function useOrgUsers() {
   const api = useApi();
   return useQuery({
-    queryKey: ["org", "users"],
+    queryKey: ["org", "users", "with-enterprise-record-and-roles"],
     queryFn: async () => {
       const [users, bindings] = await Promise.all([
         api.org.listUsers(),
@@ -149,10 +157,21 @@ export function OrgUsersTab() {
   const users = useOrgUsers();
   const roles = useOrgRoles();
   const departments = useOrgDepartments();
+  const bindings = useOrgRoleBindings();
+  const canManageRoles = usePermission("role.manage");
+  const canManageIdentity = usePermission("identity.manage");
+  const canManageAccess = canManageRoles && canManageIdentity;
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [created, setCreated] = useState<User | null>(null);
   const [statusTarget, setStatusTarget] = useState<UserRow | null>(null);
+  const [authorizationTarget, setAuthorizationTarget] =
+    useState<UserRow | null>(null);
+  const editedAssignments = useQuery({
+    queryKey: ["org", "users", editing?.id, "role-assignments"],
+    queryFn: () => api.org.getUserRoleAssignments(editing!.id),
+    enabled: editing !== null,
+  });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["org"] });
 
   const invite = useMutation({
@@ -171,10 +190,26 @@ export function OrgUsersTab() {
   });
 
   const save = useMutation({
-    mutationFn: (input: { userId: string; department_id: string }) =>
-      api.org.updateEnterpriseUser(input.userId, {
+    mutationFn: async (input: {
+      userId: string;
+      department_id: string;
+      role_ids: string[];
+      version: number;
+      authorization_version: number;
+    }) => {
+      if (canManageAccess) {
+        return api.org.replaceUserRoleAssignments(
+          input.userId,
+          input.department_id,
+          input.role_ids,
+          input.version,
+          input.authorization_version,
+        );
+      }
+      return api.org.updateEnterpriseUser(input.userId, {
         department_id: input.department_id,
-      }),
+      });
+    },
     onSuccess: () => {
       setEditing(null);
       void invalidate();
@@ -264,24 +299,19 @@ export function OrgUsersTab() {
               key: "actions",
               header: t("settings.common.actions"),
               render: (row) => (
-                <span className="argus-settings-inline-actions">
-                  <Button
-                    onClick={() => setEditing(row)}
-                    size="sm"
-                    variant="ghost"
-                  >
+                <ActionGroup>
+                  <RowAction onClick={() => setEditing(row)}>
                     {t("settings.common.edit")}
-                  </Button>
-                  <Button
-                    onClick={() => setStatusTarget(row)}
-                    size="sm"
-                    variant="ghost"
-                  >
+                  </RowAction>
+                  <RowAction onClick={() => setAuthorizationTarget(row)}>
+                    数据授权
+                  </RowAction>
+                  <RowAction onClick={() => setStatusTarget(row)}>
                     {row.status === "disabled"
                       ? t("settings.org.users.enable")
                       : t("settings.org.users.disable")}
-                  </Button>
-                </span>
+                  </RowAction>
+                </ActionGroup>
               ),
             },
           ]}
@@ -323,18 +353,26 @@ export function OrgUsersTab() {
       <EnterpriseUserDrawer
         departments={departments.data ?? []}
         editing={editing}
-        loading={save.isPending}
+        inheritedBindings={bindings.data ?? []}
+        loading={save.isPending || editedAssignments.isPending}
+        manageRoles={canManageAccess}
         onOpenChange={(open) => !open && setEditing(null)}
         onSubmit={(input) =>
           editing
             ? save.mutateAsync({
                 userId: editing.id,
                 department_id: input.department_id,
+                role_ids: input.role_ids,
+                version: editing.version,
+                authorization_version:
+                  editedAssignments.data?.authorization_version ??
+                  editing.authorization_version,
               })
             : Promise.resolve()
         }
         open={editing !== null}
         roles={roles.data ?? []}
+        roleAssignments={editedAssignments.data}
       />
       <ConfirmDialog
         danger={statusTarget?.status !== "disabled"}
@@ -353,6 +391,13 @@ export function OrgUsersTab() {
             : t("settings.org.users.disableTitle")
         }
       />
+      <DataAuthorizationDialog
+        open={authorizationTarget !== null}
+        onOpenChange={(open) => !open && setAuthorizationTarget(null)}
+        subjectId={authorizationTarget?.id ?? ""}
+        subjectLabel={authorizationTarget?.displayName ?? ""}
+        subjectType="user"
+      />
     </div>
   );
 }
@@ -365,6 +410,9 @@ function EnterpriseUserDrawer({
   roles,
   departments,
   editing,
+  inheritedBindings = [],
+  manageRoles = true,
+  roleAssignments,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -379,6 +427,9 @@ function EnterpriseUserDrawer({
   roles: Role[];
   departments: Array<{ id: string; name: string }>;
   editing?: UserRow | null;
+  inheritedBindings?: RoleBinding[];
+  manageRoles?: boolean;
+  roleAssignments?: import("@argus/api-client").UserRoleAssignments;
 }) {
   const { t } = useTranslation();
   const userSchema = useMemo(
@@ -406,6 +457,7 @@ function EnterpriseUserDrawer({
     reset,
     handleSubmit,
     setError,
+    watch,
     formState: { errors },
   } = useForm<UserForm>({
     resolver: zodResolver(userSchema),
@@ -420,14 +472,28 @@ function EnterpriseUserDrawer({
 
   useEffect(() => {
     if (!open) return;
+    if (editing && !roleAssignments) return;
     reset({
       username: editing?.username ?? "",
       display_name: editing?.displayName ?? "",
       email: editing?.email ?? "",
-      role_ids: editing?.role_ids ?? [],
+      role_ids: editing ? (roleAssignments?.direct_role_ids ?? []) : [],
       department_id: editing?.department_id ?? departments[0]?.id ?? "",
     });
-  }, [departments, editing, open, reset]);
+  }, [departments, editing, open, reset, roleAssignments]);
+  const selectedDepartmentId = watch("department_id");
+  const inheritedRoleIds = [
+    ...new Set(
+      inheritedBindings
+        .filter(
+          (binding) =>
+            binding.subject_type === "department" &&
+            binding.subject_id === selectedDepartmentId &&
+            binding.status === "active",
+        )
+        .map((binding) => binding.role_id),
+    ),
+  ];
   const submit = handleSubmit(async (values) => {
     clearErrors();
     try {
@@ -520,8 +586,17 @@ function EnterpriseUserDrawer({
             )}
           />
         </Field>
-        {!editing && (
-          <Field requirement="optional" label={t("settings.org.users.roles")}>
+        {(!editing || manageRoles) && (
+          <Field
+            controlMode="group"
+            hint={editing ? t("settings.org.users.directRolesHint") : undefined}
+            requirement="optional"
+            label={
+              editing
+                ? t("settings.org.users.directRoles")
+                : t("settings.org.users.roles")
+            }
+          >
             <Controller
               control={control}
               name="role_ids"
@@ -536,6 +611,44 @@ function EnterpriseUserDrawer({
                 />
               )}
             />
+          </Field>
+        )}
+        {editing && inheritedRoleIds.length > 0 && (
+          <Field
+            controlMode="group"
+            hint={t("settings.org.users.inheritedRolesHint")}
+            requirement="optional"
+            label={t("settings.org.users.inheritedRoles")}
+          >
+            <div className="argus-settings-inline-actions">
+              {inheritedRoleIds.map((roleId) => {
+                const role = roles.find((item) => item.id === roleId);
+                return (
+                  <Badge key={roleId} tone="neutral">
+                    {role ? roleDisplayName(role, t) : roleId}
+                  </Badge>
+                );
+              })}
+            </div>
+          </Field>
+        )}
+        {editing && !manageRoles && (
+          <Field
+            controlMode="group"
+            hint={t("settings.org.users.rolesReadOnlyHint")}
+            requirement="optional"
+            label={t("settings.org.users.roles")}
+          >
+            <div className="argus-settings-inline-actions">
+              {roleAssignments?.effective_role_ids.map((roleId) => {
+                const role = roles.find((item) => item.id === roleId);
+                return (
+                  <Badge key={roleId}>
+                    {role ? roleDisplayName(role, t) : roleId}
+                  </Badge>
+                );
+              })}
+            </div>
           </Field>
         )}
       </div>

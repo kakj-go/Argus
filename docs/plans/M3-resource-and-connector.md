@@ -4,7 +4,7 @@
 
 让企业管理员不依赖 AI 即可完成：
 
-`Secret/Credential → Host/Kubernetes → Bastion/Connector → 连接测试 → Preview/Confirm → DataScope 过滤与撤权`
+`Secret/Credential → Host/Kubernetes → Bastion/Connector → 连接测试 → Preview/Confirm → explicit resource authorization 过滤与撤权`
 
 完成状态只代表 Evaluation 资源接入闭环，不代表 Production 安全就绪。
 
@@ -26,7 +26,7 @@
 - [x] `M3-CONTRACT-01` 冻结 Host、Kubernetes、Secret、Credential、ManagedAccount、BastionScope、Connector、ConnectionTest、ConnectorCommand 和资源 PendingAction 契约，生成 Go Strict Server 与 TypeScript DTO。
 - [x] `M3-DATA-01` 增加 M3 Goose Migration、sqlc 查询、企业/状态/Scope/标签索引和资源版本约束。
 - [x] `M3-LABEL-01` 实现 Host/Kubernetes `labels` 存储、索引、过滤、分组、批量选择和 `argus.io/*` 保护。
-- [x] `M3-LABEL-02` 实现授权敏感标签影响预览、确定性影响哈希、Confirm 重算和 AuthorizationVersion 失效。
+- [x] `M3-LABEL-02` 保留资源标签校验、展示和筛选；动态标签授权、影响预览和标签驱动的 AuthorizationVersion 失效已移除。
 - [x] `M3-SECRET-01` 实现独立 DEK 的 AES-256-GCM Envelope Encryption、版本化 KEK、Credential、ManagedAccount 和最多五分钟的一次性 Lease。
 - [x] `M3-ACTION-01` 实现资源专用 PendingAction、私有 Plan/Token、幂等 Confirm/Cancel 和敏感字段扫描。
 - [x] `M3-HOST-01` 实现 Host 列表/详情、资源版本、三种连接模式、连接测试和 Preview/Confirm 变更。
@@ -53,23 +53,23 @@
 
 ## 测试
 
-- Labels、DataScope、PendingAction 幂等、Secret 加密/轮换和敏感字段深度扫描。
+- Labels、explicit resource authorization、PendingAction 幂等、Secret 加密/轮换和敏感字段深度扫描。
 - Connector Token 竞争、CSR/设备幂等、证书轮换/吊销、旧 epoch、Gateway 跨副本派发、Drain、Redis 清空、命令超时收敛和未知结果对账。
 - Direct Executor 与 Kubernetes Reader 允许部署网络可达的 RFC1918、IPv6 ULA 和内部 DNS，拒绝环回、链路本地、云元数据、配置的禁用网段、DNS rebinding、重定向、错误出口、Host Key 变化和 TLS 绕过。
-- Kubernetes 覆盖三种接入模式、Namespace DataScope、跨企业拒绝、列表边界和 Pod Logs 大小限制。
+- Kubernetes 覆盖三种接入模式、Namespace explicit resource authorization、跨企业拒绝、列表边界和 Pod Logs 大小限制。
 - 全量门禁：`go run ./cmd/argus-dev contracts check`、`go run ./cmd/argus-dev contracts breaking`、`go test ./...`、`go vet -stdmethods=false ./...`、`pnpm typecheck/lint/test/build/check:bundle/check:real-build/e2e`。
 - 临时集群门禁：`go run ./cmd/argus-dev e2e run --suite m3`，成功或失败均导出脱敏诊断并删除 Namespace/PVC/Lease。
 
 ## 验收记录
 
 - 2026-08-17：契约、Go、前端类型检查/lint/单测/构建、Bundle、real-build 和 mock Playwright 全量门禁通过；mock Playwright 为 32 passed，real 场景按环境开关隔离。
-- 2026-08-17：旧 Shell Harness 通过 M2 双 Audience 的 3 条 real Playwright 与 M3 的 6 条 real Playwright，并验证 ConnectionTest 冻结计划、Host 跨 Scope 迁移、Connector 证书轮换与 ACK 后卸载、双 Gateway 跨副本派发、Bastion Replacement/fencing/删除、三种 Kubernetes 接入、DataScope 撤权、Secret 轮换失效、Redis 清空、Gateway/Server 重启恢复和敏感值扫描。
+- 2026-08-17：旧 Shell Harness 通过 M2 双 Audience 的 3 条 real Playwright 与 M3 的 6 条 real Playwright，并验证 ConnectionTest 冻结计划、Host 跨 Scope 迁移、Connector 证书轮换与 ACK 后卸载、双 Gateway 跨副本派发、Bastion Replacement/fencing/删除、三种 Kubernetes 接入、explicit resource authorization 撤权、Secret 轮换失效、Redis 清空、Gateway/Server 重启恢复和敏感值扫描。
 - 成功运行号为 `20260817060430-49810`，脱敏诊断位于本地 `artifacts/m3-e2e/20260817060430-49810`；验收结束后 M3 临时 Namespace、PVC 和 Lease 均为零残留。
 
 ## 退出标准
 
 - 管理后台可真实完成 Secret、堡垒机、经堡垒机 Host、直连 Host 和 Kubernetes 接入。
-- 所有列表、详情和 Kubernetes 查询遵守企业边界与 DataScope；标签变化正确触发撤权。
+- 所有列表、详情和 Kubernetes 查询遵守企业边界与 explicit resource authorization；标签变化正确触发撤权。
 - 浏览器、日志、审计、命令和 Redis 中不存在 Secret 原值。
 - 全量门禁和 M3 临时 Namespace E2E 已通过，以上任务均有代码、测试、部署和清理证据。
 

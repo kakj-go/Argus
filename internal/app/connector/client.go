@@ -353,7 +353,19 @@ func (client connectorClient) transportCredentials(endpoint string) (credentials
 		return nil, "", err
 	}
 	configuration := &tls.Config{MinVersion: tls.VersionTLS13, ServerName: parsed.Hostname(), RootCAs: roots, Certificates: []tls.Certificate{certificate}}
-	return credentials.NewTLS(configuration), parsed.Host, nil
+	if caFile := os.Getenv("ARGUS_CONNECTOR_CA_FILE"); caFile != "" {
+		caPEM, readErr := os.ReadFile(caFile)
+		if readErr != nil || !roots.AppendCertsFromPEM(caPEM) {
+			return nil, "", errors.New("ARGUS_CONNECTOR_CA_FILE does not contain a valid CA bundle")
+		}
+	}
+	address := parsed.Host
+	// E2E/debug override: dial a pinned address (for example the public
+	// load-balancer IP) while TLS keeps verifying the endpoint hostname.
+	if override := os.Getenv("ARGUS_CONNECTOR_DIAL_ADDRESS"); override != "" {
+		address = override
+	}
+	return credentials.NewTLS(configuration), address, nil
 }
 
 func parseGatewayEndpoint(value string) (*url.URL, error) {

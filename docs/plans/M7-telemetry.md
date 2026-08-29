@@ -8,7 +8,7 @@
 
 - M3 资源、Connector 和 Secret/Credential Broker 完成；M3 不提供 Collector 安装或遥测命令。
 - M4 Preview/Commit、Execution 和授权快照完成。
-- M2 DataScope 可解析为授权 Resource IDs。
+- M2 explicit resource authorization 可解析为授权 Resource IDs。
 
 M7 Collector 安装写操作复用 M4 的 Preview → Confirmation/Approval → Action Executor → Execution，并沿用 `result_unknown` 对账；Telemetry Query Tool 复用 M4 Artifact/ToolResultProjection 上限与授权读取，不新增第二套 Agent Result Store。
 
@@ -33,7 +33,7 @@ M7 的 Linux arm64 Host 与 Kubernetes Evaluation 遥测闭环已经完成。控
 
 Kubernetes Agent 与 Gateway 使用各自本地生成的私钥/CSR 和短期证书完成 mTLS；Gateway 只接受内嵌 Collector ID、证书序列与外层可信身份一致的同 Collector 转发，Bastion 下游仍要求独立 Route/Gateway/Leaf 关系。NodeBinding 的人工确认哈希只绑定 Node UID、Node Name、Provider ID、Machine ID 和 System UUID 等稳定强身份，IP 只参与候选匹配，不因短暂 IPv4/IPv6 集合波动误撤权；强身份漂移仍使 Binding 失效。Kubelet 采集使用宿主 kubelet 证书链和最小 `nodes/stats` RBAC，保持 `insecure_skip_verify: false`。
 
-旧 Shell Harness 于 2026-08-19 以最终运行号 `20260819140437-21054` 通过：覆盖 Linux arm64 Collector 构建与安装、Kubernetes Agent/Gateway mTLS、NodeBinding 保持与漂移、真实 Metrics/Logs/Traces、Kafka backlog、永久坏记录 DLQ 隔离与受控 replay、Redis outage 持久队列恢复、Ingest/Writer/Query Pod 删除恢复、Telemetry Card 激活、M2-M5 real Playwright 和 M7 `zh-CN/en-US × light/dark` real/a11y 流程。`bastion_gateway` 为硬门禁，验证 Leaf mTLS 身份经 Edge Gateway 覆盖后，Metrics、Logs 和 Traces 均进入 Ingest、Kafka、Writer、ClickHouse 和对应授权 Query；Gateway 下游管线禁止跨 Collector batch，避免不同可信主体被合并为一个 OTLP 请求。Query 安全矩阵覆盖跨企业拒绝、DataScope `partial`、预算、敏感字段脱敏、AuthorizationVersion 失效以及 Web/Agent/Card 投影一致性。脱敏证据位于 `artifacts/m7-e2e/20260819140437-21054`；三个临时 Namespace、运行相关 PVC 和集群 Lease 均已删除。当前官方入口为 `go run ./cmd/argus-dev e2e run --suite m7`。
+旧 Shell Harness 于 2026-08-19 以最终运行号 `20260819140437-21054` 通过：覆盖 Linux arm64 Collector 构建与安装、Kubernetes Agent/Gateway mTLS、NodeBinding 保持与漂移、真实 Metrics/Logs/Traces、Kafka backlog、永久坏记录 DLQ 隔离与受控 replay、Redis outage 持久队列恢复、Ingest/Writer/Query Pod 删除恢复、Telemetry Card 激活、M2-M5 real Playwright 和 M7 `zh-CN/en-US × light/dark` real/a11y 流程。`bastion_gateway` 为硬门禁，验证 Leaf mTLS 身份经 Edge Gateway 覆盖后，Metrics、Logs 和 Traces 均进入 Ingest、Kafka、Writer、ClickHouse 和对应授权 Query；Gateway 下游管线禁止跨 Collector batch，避免不同可信主体被合并为一个 OTLP 请求。Query 安全矩阵覆盖跨企业拒绝、explicit resource authorization `partial`、预算、敏感字段脱敏、AuthorizationVersion 失效以及 Web/Agent/Card 投影一致性。脱敏证据位于 `artifacts/m7-e2e/20260819140437-21054`；三个临时 Namespace、运行相关 PVC 和集群 Lease 均已删除。当前官方入口为 `go run ./cmd/argus-dev e2e run --suite m7`。
 
 实现还固定了 canonical Operation Plan Hash、Kafka `IdempotentWrite`、严格 Artifact TLS 和 Query Redis 并发门禁。M8 本地 Profile 只同步 Linux arm64 Distribution；Windows amd64 保持不可选择，Linux amd64、真实 Windows、生产容量/HA 和长期 PKI 演练进入 Production Validation 清单。M8 本地范围补齐 OpenBao、最小 PostgreSQL Login、备份恢复和发布证据。
 
@@ -42,7 +42,7 @@ Evaluation 阶段不增加第五个自研控制服务。Ingest 和 Writer 通过
 ## 测试
 
 - 客户端伪造 Enterprise/Resource/Collector 属性被覆盖或拒绝。
-- 跨企业、超出 DataScope、跨 Signal 和敏感字段查询被拒绝。
+- 跨企业、超出 explicit resource authorization、跨 Signal 和敏感字段查询被拒绝。
 - Kafka 重试、Writer 重启、DLQ 跳过/重放不破坏可解释的去重语义。
 - Host Collector/DaemonSet 同一 Claim 冲突在 Commit 前阻止或形成有期限迁移。
 - Query Service 的 Web/Agent/Card 结果一致，未授权资源不泄露名称或属性。

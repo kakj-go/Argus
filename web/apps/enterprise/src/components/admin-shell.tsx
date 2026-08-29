@@ -13,6 +13,7 @@ import {
   KeyRound,
   Menu,
   ScrollText,
+  SquareTerminal,
   Search,
   Server,
   ShieldCheck,
@@ -20,12 +21,14 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@argus/api-client";
+import { useApi, useTerminalSessions } from "@argus/api-client";
 import { AppShell, Badge, Button, Dialog, Input, Tooltip } from "@argus/ui";
 import { useUiStore } from "../store/ui";
 import { AccountActions } from "./account-actions";
+import { usePermission } from "../lib/permissions";
+import { TerminalDock } from "./hosts/terminal-dock";
 
 type AdminNavItem = {
   key: string;
@@ -79,6 +82,7 @@ function useAdminCounts() {
 
 function buildSections(
   counts: ReturnType<typeof useAdminCounts>,
+  canManageRemoteSessions: boolean,
 ): AdminNavSection[] {
   const sections: AdminNavSection[] = [
     {
@@ -109,6 +113,15 @@ function buildSections(
           count: counts.pendingApprovals,
           alert: (counts.pendingApprovals ?? 0) > 0,
         },
+        ...(canManageRemoteSessions
+          ? [
+              {
+                key: "shell.nav.remoteSessions",
+                to: "/remote-sessions",
+                icon: SquareTerminal,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -145,7 +158,10 @@ function Sidebar() {
   const { t } = useTranslation();
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen } =
     useUiStore();
-  const sections = buildSections(useAdminCounts());
+  const sections = buildSections(
+    useAdminCounts(),
+    usePermission("remote_access.session.terminate"),
+  );
   return (
     <>
       <div
@@ -268,6 +284,7 @@ const pageTitles: Record<string, string> = {
   "/kubernetes": "shell.nav.kubernetes",
   "/tasks": "shell.nav.tasks",
   "/approvals": "shell.nav.approvals",
+  "/remote-sessions": "shell.nav.remoteSessions",
   "/settings/org": "shell.nav.settingsOrg",
   "/settings/ai": "shell.nav.settingsAi",
   "/settings/interactive-cards": "shell.nav.settingsInteractiveCards",
@@ -382,13 +399,19 @@ export function AdminShell() {
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
   const setCommandOpen = useUiStore((state) => state.setCommandOpen);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const terminalDock = useUiStore((state) => state.terminalDock);
+  const { dockOpen, sessions } = useTerminalSessions();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const mainRef = useRef<HTMLElement>(null);
+  // 只有 Dock 面板实际渲染时才让外壳为它切分网格，否则会预留空白区域。
+  const dockVisible =
+    dockOpen && Array.from(sessions.values()).some((session) => !session.hidden);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, left: 0 });
+      mainRef.current?.scrollTo({ top: 0, left: 0 });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [pathname]);
@@ -411,13 +434,16 @@ export function AdminShell() {
   return (
     <AppShell
       className={`argus-admin-shell ${collapsed ? "is-collapsed" : ""}`}
+      dockPlacement={dockVisible ? terminalDock : undefined}
       header={<Header />}
+      mainRef={mainRef}
       overlay={
         <>
           <MobileNavigation />
           <CommandDialog />
         </>
       }
+      dock={<TerminalDock />}
       sidebar={<Sidebar />}
     >
       <Outlet />

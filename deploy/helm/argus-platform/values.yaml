@@ -4,6 +4,11 @@ namespaces:
   system: argus-system
   sandbox: argus-sandbox
   observability: argus-observability
+hosts:
+  enterprise: argus.example.com
+  platform: platform.argus.example.com
+  cards: cards.argus.example.com
+  connector: connector.argus.example.com
 images:
   backend: host.docker.internal:5001/argus/argus-backend:dev
   web: host.docker.internal:5001/argus/argus-web:dev
@@ -40,8 +45,8 @@ runtime:
   telemetryIngestDatabasePassword: ""
   telemetryWriterDatabasePassword: ""
   telemetryQueryDatabasePassword: ""
-  connectorEnrollmentURL: http://localhost:8080
-  connectorGatewayAddress: grpcs://localhost:9443
+  connectorEnrollmentURL: https://argus.example.com
+  connectorGatewayAddress: grpcs://connector.argus.example.com:9443
   connectorIssuerName: argus-connector-ca
   connectorIssuerGeneration: 1
   directAdvertisedEgress: []
@@ -52,18 +57,16 @@ runtime:
   directExecutorEndpoint: ""
   directExecutorServerName: ""
   allowedOrigins:
-    - http://localhost:4173
-    - http://localhost:4174
-    - http://localhost:4176
-    - http://127.0.0.1:4173
-    - http://127.0.0.1:4174
-    - http://127.0.0.1:4176
-  secureCookies: false
+    - https://argus.example.com
+    - https://platform.argus.example.com
+    - https://cards.argus.example.com
+  secureCookies: true
   cardPresentationTtl: 10m
   cardValidationTtl: 30m
   cardRuntimeVersion: argus-card-runtime/v1
   cardMaxPresentationBytes: 1048576
-  remoteOrigin: http://localhost:9445
+  # 终端 WSS 与企业门户同源（wss://<enterprise>/v1/sessions），无独立远程域名。
+  remoteOrigin: https://argus.example.com
   remoteUserLimit: 3
   remoteHostLimit: 5
   remoteEnterpriseLimit: 50
@@ -78,9 +81,9 @@ runtime:
   telemetryClickhouseQueryPassword: ""
   telemetryIssuerName: argus-telemetry-ca
   telemetryIssuerGeneration: 1
-  telemetryIngestGrpcEndpoint: grpcs://localhost:4317
-  telemetryIngestHttpEndpoint: https://localhost:4318
-  telemetryEnrollmentEndpoint: https://localhost:4318/v1/identity/enroll
+  telemetryIngestGrpcEndpoint: grpcs://argus-telemetry-ingest.argus-observability.svc:4317
+  telemetryIngestHttpEndpoint: https://argus-telemetry-ingest.argus-observability.svc:4318
+  telemetryEnrollmentEndpoint: https://argus-telemetry-ingest.argus-observability.svc:4318/v1/identity/enroll
   telemetryToolCatalogEnabled: true
   otelcolVersion: 0.1.0-m7
   otelcolLinuxArm64Uri: ""
@@ -96,6 +99,15 @@ runtime:
   otelcolKubernetesImage: ""
   otelcolArtifactCABundleSecretName: ""
   certManagerNamespace: cert-manager
+ingressClassName: nginx
+tls:
+  enabled: true
+  mode: cert-manager-selfsigned
+  issuerName: ""
+  issuerKind: ClusterIssuer
+  secretName: ""
+connectorPublicService:
+  annotations: {}
 replicas: 1
 worker:
   replicas: 1
@@ -115,7 +127,6 @@ workerPools:
     replicas: 1
     resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
     production: {minReplicas: 2, maxReplicas: 8}
-    production: {minReplicas: 2, maxReplicas: 6}
   sandbox:
     replicas: 1
     resources: {requests: {cpu: 25m, memory: 96Mi}, limits: {cpu: 500m, memory: 384Mi}}
@@ -123,13 +134,3 @@ workerPools:
 production:
   minReplicas: 3
   maxReplicas: 10
-  ingressClassName: nginx
-  hosts:
-    enterprise: argus.example.com
-    platform: platform.argus.example.com
-    cards: cards.argus.example.com
-    connector: connector.argus.example.com
-    remote: remote.argus.example.com
-  connectorService:
-    type: LoadBalancer
-    annotations: {}

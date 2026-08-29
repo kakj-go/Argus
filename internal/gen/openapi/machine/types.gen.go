@@ -182,7 +182,6 @@ type ServiceAccount struct {
 	AllowedToolIds       *[]string            `json:"allowed_tool_ids,omitempty"`
 	AuthorizationVersion AuthorizationVersion `json:"authorization_version"`
 	CreatedAt            time.Time            `json:"created_at"`
-	DataScopeIds         *[]string            `json:"data_scope_ids,omitempty"`
 	Description          *string              `json:"description,omitempty"`
 	EnterpriseId         string               `json:"enterprise_id"`
 	Id                   string               `json:"id"`
@@ -197,10 +196,9 @@ type ServiceAccountStatus string
 
 // ServiceAccountCreate defines model for ServiceAccountCreate.
 type ServiceAccountCreate struct {
-	AllowedToolIds []string             `json:"allowed_tool_ids"`
-	DataScopeIds   []openapi_types.UUID `json:"data_scope_ids"`
-	Description    *string              `json:"description,omitempty"`
-	Name           string               `json:"name"`
+	AllowedToolIds []string `json:"allowed_tool_ids"`
+	Description    *string  `json:"description,omitempty"`
+	Name           string   `json:"name"`
 }
 
 // ServiceAccountPage defines model for ServiceAccountPage.
@@ -212,7 +210,6 @@ type ServiceAccountPage struct {
 // ServiceAccountUpdate defines model for ServiceAccountUpdate.
 type ServiceAccountUpdate struct {
 	AllowedToolIds  *[]string                   `json:"allowed_tool_ids,omitempty"`
-	DataScopeIds    *[]openapi_types.UUID       `json:"data_scope_ids,omitempty"`
 	Description     *string                     `json:"description,omitempty"`
 	ExpectedVersion int64                       `json:"expected_version"`
 	Status          *ServiceAccountUpdateStatus `json:"status,omitempty"`
