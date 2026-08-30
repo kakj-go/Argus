@@ -89,6 +89,12 @@ RETURNING *;
 -- name: GetTelemetryCollectorOperation :one
 SELECT * FROM telemetry_collector_operations WHERE id = $1 AND enterprise_id = $2;
 
+-- name: GetLatestCollectorOperation :one
+SELECT * FROM telemetry_collector_operations
+WHERE collector_id = $1 AND enterprise_id = $2
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: FinishTelemetryCollectorOperation :one
 UPDATE telemetry_collector_operations SET status = $4, result_hash = $5, error_code = $6,
   lease_owner = NULL, lease_expires_at = NULL, completed_at = now(), updated_at = now()

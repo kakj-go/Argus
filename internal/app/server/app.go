@@ -118,8 +118,7 @@ func (a *App) Run(ctx context.Context) error {
 	if a.config.TelemetryEnabled {
 		actionExtension = telemetryservice.ActionExtension{Next: bastionDomain, Credentials: secretDomain,
 			EnrollmentEndpoint: a.config.TelemetryEnrollment, IngestGRPCEndpoint: a.config.TelemetryIngestGRPC,
-			IngestHTTPEndpoint: a.config.TelemetryIngestHTTP, ServerCABundlePath: a.config.TelemetryCABundle,
-			KubernetesImage: a.config.OtelcolKubernetesImage}
+			IngestHTTPEndpoint: a.config.TelemetryIngestHTTP, ServerCABundlePath: a.config.TelemetryCABundle}
 	}
 	resourceDomain := resource.Service{Store: postgresStore, Actions: actionDomain, Access: resource.AccessService{},
 		Direct: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs}, Commands: connectorDomain, DirectCommands: directDispatcher, Extension: actionExtension,
@@ -129,7 +128,7 @@ func (a *App) Run(ctx context.Context) error {
 	workflowDomain := action.Service{Store: postgresStore, Idempotency: idempotency, Resources: resourceDomain,
 		OneTimeResultKey: a.config.PendingActionKey}
 	secretHandler := httpapi.SecretHandler{Identity: enterpriseIdentityHandler, Service: secretDomain}
-	hostHandler := httpapi.HostHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
+	hostHandler := httpapi.HostHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain, Queries: postgresStore.Queries}
 	kubernetesHandler := httpapi.KubernetesHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
 	connectionHandler := httpapi.ConnectionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
 	actionHandler := httpapi.ResourceActionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain, Workflow: workflowDomain, Cursor: cursorSigner}

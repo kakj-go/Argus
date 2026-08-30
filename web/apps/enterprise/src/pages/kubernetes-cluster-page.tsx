@@ -37,6 +37,13 @@ export function KubernetesClusterPage() {
     queryKey: ["kubernetes", "collector", id],
     queryFn: () => api.kubernetes.getCollector(id),
     enabled: id.length > 0,
+    refetchInterval: (query) =>
+      query.state.data &&
+      ["pending_install", "installing", "uninstalling"].includes(
+        query.state.data.status,
+      )
+        ? 2000
+        : false,
   });
 
   const cluster = clusterQuery.data;

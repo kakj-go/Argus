@@ -310,7 +310,11 @@ describe("hosts CRUD", () => {
       return current.status === "succeeded";
     });
     const collector = await client.hosts.getCollector("host-cache-bj-01");
-    expect(collector?.status).toBe("converged");
+    expect(collector?.status).toBe("installing");
+    await waitFor(async () => {
+      const settled = await client.hosts.getCollector("host-cache-bj-01");
+      return settled?.status === "converged";
+    });
 
     const route = await client.approvals.preview({
       tool: "telemetry.collector.route",

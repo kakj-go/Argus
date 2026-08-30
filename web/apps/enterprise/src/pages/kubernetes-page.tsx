@@ -41,6 +41,7 @@ export function KubernetesPage() {
   const clustersQuery = useQuery({
     queryKey: ["kubernetes", "clusters"],
     queryFn: () => api.kubernetes.listClusters(),
+    refetchInterval: 15_000,
   });
 
   const deleteCluster = useMutation({
@@ -161,6 +162,7 @@ export function KubernetesPage() {
         {deleteAction && (
           <PendingActionCard
             action={deleteAction}
+            onDismiss={() => setDeleteAction(null)}
             onSettled={() => {
               setDeleteAction(null);
               void queryClient.invalidateQueries({ queryKey: ["kubernetes"] });

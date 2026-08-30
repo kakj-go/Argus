@@ -73,8 +73,8 @@ func (a *App) startM3BastionConnector(ctx context.Context, env *E2EEnvironment) 
 		// E2E-only host overrides: dial the load balancers directly while TLS
 		// keeps the public hostnames as ServerName.
 		"ARGUS_CONNECTOR_CA_FILE":        env.Endpoints.CAFile,
-		"ARGUS_CONNECTOR_DIAL_ADDRESS":   env.Endpoints.ConnectorIP + ":9443",
-		"ARGUS_CONNECTOR_ENROLL_ADDRESS": env.Endpoints.IngressIP + ":443",
+		"ARGUS_CONNECTOR_DIAL_ADDRESS":   env.Endpoints.ConnectorDialAddress,
+		"ARGUS_CONNECTOR_ENROLL_ADDRESS": env.Endpoints.IngressDialAddress,
 	}
 	var tampered bytes.Buffer
 	tamperedArgs := append(append([]string{}, baseArgs[:2]...), "00000000-0000-4000-8000-000000000001")
@@ -144,7 +144,7 @@ func (a *App) startM3KubernetesConnector(ctx context.Context, env *E2EEnvironmen
 	instanceEnv := map[string]string{
 		"ARGUS_CONNECTOR_INSTANCE_ID":    "m3-kubernetes-" + env.Options.RunID,
 		"ARGUS_CONNECTOR_CA_FILE":        env.Endpoints.CAFile,
-		"ARGUS_CONNECTOR_ENROLL_ADDRESS": env.Endpoints.IngressIP + ":443",
+		"ARGUS_CONNECTOR_ENROLL_ADDRESS": env.Endpoints.IngressDialAddress,
 	}
 	if err := a.runner.Run(ctx, instanceEnv, binary, "enroll", "--connector-id", command.ConnectorID, "--token", command.Token,
 		"--server", env.Endpoints.EnrollServer, "--role", command.Role, "--name", "m3-in-cluster", "--data-dir", dataDir); err != nil {

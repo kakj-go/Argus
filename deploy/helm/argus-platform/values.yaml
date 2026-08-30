@@ -9,6 +9,8 @@ hosts:
   platform: platform.argus.example.com
   cards: cards.argus.example.com
   connector: connector.argus.example.com
+  # Collector 产物(经 MinIO)的对外 HTTPS 源;为空时不创建产物路由。
+  artifact: artifacts.argus.example.com
 images:
   backend: host.docker.internal:5001/argus/argus-backend:dev
   web: host.docker.internal:5001/argus/argus-web:dev
@@ -81,6 +83,9 @@ runtime:
   telemetryClickhouseQueryPassword: ""
   telemetryIssuerName: argus-telemetry-ca
   telemetryIssuerGeneration: 1
+  # 外部 Collector(主机/外部集群)可达的 ingest 主机名;为空时仅用集群内
+  # Service 地址(E2E 同集群目标)。设置后:证书追加该 SAN,并创建公网 LB。
+  telemetryExternalIngestHost: ""
   telemetryIngestGrpcEndpoint: grpcs://argus-telemetry-ingest.argus-observability.svc:4317
   telemetryIngestHttpEndpoint: https://argus-telemetry-ingest.argus-observability.svc:4318
   telemetryEnrollmentEndpoint: https://argus-telemetry-ingest.argus-observability.svc:4318/v1/identity/enroll
@@ -90,6 +95,10 @@ runtime:
   otelcolLinuxArm64Sha256: ""
   otelcolLinuxArm64Signature: ""
   otelcolLinuxArm64ByteSize: 0
+  otelcolLinuxAmd64Uri: ""
+  otelcolLinuxAmd64Sha256: ""
+  otelcolLinuxAmd64Signature: ""
+  otelcolLinuxAmd64ByteSize: 0
   otelcolWindowsAmd64Uri: ""
   otelcolWindowsAmd64Sha256: ""
   otelcolWindowsAmd64Signature: ""
@@ -98,6 +107,9 @@ runtime:
   otelcolSigningPublicKey: ""
   otelcolKubernetesImage: ""
   otelcolArtifactCABundleSecretName: ""
+  # verify(默认)| insecure:insecure 跳过产物下载的传输层证书校验(本地自签),
+  # 签名校验恒定执行。
+  otelcolArtifactTLSMode: ""
   certManagerNamespace: cert-manager
 ingressClassName: nginx
 tls:

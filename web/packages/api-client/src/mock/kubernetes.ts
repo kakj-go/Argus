@@ -9,6 +9,7 @@ import type {
 import type { K8sWorkload } from "../provisional";
 import type { MockKubernetesCluster } from "./resource-models";
 import type { MockContext } from "./context";
+import { settleCollectors } from "./store";
 
 function clusterContract(value: MockKubernetesCluster): KubernetesCluster {
   return {
@@ -330,13 +331,15 @@ export function createKubernetesDomain(
     },
     async getCollector(clusterId) {
       await ctx.pause();
-      return (
-        db.collectors.find(
-          (entry) =>
-            entry.resource_type === "kubernetes_cluster" &&
-            entry.resource_id === clusterId,
-        ) ?? null
+      settleCollectors(ctx.db);
+      ctx.save();
+      const found = db.collectors.find(
+        (entry) =>
+          entry.resource_type === "kubernetes_cluster" &&
+          entry.resource_id === clusterId,
       );
+      // 返回克隆:installing→converged 是原地变更,同引用会阻止轮询方重渲染。
+      return found ? { ...found, route: found.route && { ...found.route } } : null;
     },
     async previewCollectorAction(clusterId, action, input) {
       await ctx.pause();
@@ -355,6 +358,7 @@ export function createKubernetesDomain(
           route_kind: input.route_kind,
           gateway_collector_id: input.gateway_collector_id,
           expected_version: input.expected_version,
+          kubernetes_image: input.kubernetes_image,
         },
       });
     },

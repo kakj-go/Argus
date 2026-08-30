@@ -139,6 +139,9 @@ type ConnectionTestResult struct {
 	ResolvedIPs        []string            `json:"resolved_ips,omitempty"`
 	HostKeyFingerprint string              `json:"host_key_fingerprint,omitempty"`
 	RemoteVersion      string              `json:"remote_version,omitempty"`
+	// Architecture 为 uname -m 归一化后的目标架构(amd64/arm64),
+	// Collector 安装计划据此选择分发产物;探测失败为空。
+	Architecture string `json:"architecture,omitempty"`
 }
 
 type hostActionPlan struct {
@@ -146,6 +149,7 @@ type hostActionPlan struct {
 	HostID    uuid.UUID `json:"host_id"`
 	Input     HostInput `json:"input"`
 	PinnedKey string    `json:"pinned_host_key,omitempty"`
+	Arch      string    `json:"architecture,omitempty"`
 }
 
 type kubernetesActionPlan struct {
@@ -301,7 +305,7 @@ func (service Service) PreviewCreateHost(ctx context.Context, subject Subject, e
 	}
 	hostID := newResourceID()
 	snapshot := NewResourceAuthorizationSnapshot("host", hostID)
-	plan := hostActionPlan{Operation: "create", HostID: hostID, Input: input, PinnedKey: result.HostKeyFingerprint}
+	plan := hostActionPlan{Operation: "create", HostID: hostID, Input: input, PinnedKey: result.HostKeyFingerprint, Arch: result.Architecture}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.create", Title: "Create host", Summary: "Create a validated host resource",
 		Risk: "write", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
 		Preview: map[string]any{"host_id": hostID, "name": input.Name, "connection_test_id": test.ID},
@@ -324,7 +328,7 @@ func (service Service) PreviewUpdateHost(ctx context.Context, subject Subject, e
 		}
 		_ = encoded
 	}
-	result := ConnectionTestResult{HostKeyFingerprint: current.PinnedHostKey}
+	result := ConnectionTestResult{HostKeyFingerprint: current.PinnedHostKey, Architecture: hostArchitecture(current.Architecture)}
 	if hostNetworkPathChanged(current, input) || input.ConnectionTestID.Valid {
 		_, result, err = service.requireHostUpdateConnectionTest(ctx, service.Store.Queries, enterpriseID, current, input)
 		if err != nil {
@@ -332,7 +336,7 @@ func (service Service) PreviewUpdateHost(ctx context.Context, subject Subject, e
 		}
 	}
 	snapshot := NewResourceAuthorizationSnapshot("host", hostID)
-	plan := hostActionPlan{Operation: "update", HostID: hostID, Input: input, PinnedKey: result.HostKeyFingerprint}
+	plan := hostActionPlan{Operation: "update", HostID: hostID, Input: input, PinnedKey: result.HostKeyFingerprint, Arch: result.Architecture}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.update", Title: "Update host", Summary: "Apply validated host changes",
 		Risk: "write", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, ExpectedResourceVersion: pgtype.Int8{Int64: input.ExpectedVersion, Valid: true},
 		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID},
@@ -459,7 +463,7 @@ func (service Service) commitHost(ctx context.Context, q *db.Queries, actorID, a
 			return ActionCommitResult{}, normalizeErr
 		}
 		host, err = q.CreateHost(ctx, db.CreateHostParams{ID: plan.HostID, EnterpriseID: enterpriseID, Name: plan.Input.Name, Hostname: plan.Input.Hostname,
-			Address: plan.Input.Address, Port: plan.Input.Port, Platform: plan.Input.Platform, ConnectionMode: plan.Input.ConnectionMode,
+			Address: plan.Input.Address, Port: plan.Input.Port, Platform: plan.Input.Platform, Architecture: text(plan.Arch), ConnectionMode: plan.Input.ConnectionMode,
 			BastionScopeID: plan.Input.BastionScopeID, Environment: plan.Input.Environment, Labels: labels, LabelsHash: hash, ConnectionStatus: "online", PinnedHostKey: plan.PinnedKey})
 		if err == nil && plan.Input.CredentialID.Valid {
 			protocol, privilege := "ssh", "sudo"
@@ -478,7 +482,7 @@ func (service Service) commitHost(ctx context.Context, q *db.Queries, actorID, a
 	case "update":
 		params := db.UpdateHostParams{ID: plan.HostID, EnterpriseID: enterpriseID, ResourceVersion: plan.Input.ExpectedVersion, Name: text(plan.Input.Name),
 			Environment: text(plan.Input.Environment), Hostname: text(plan.Input.Hostname), Address: text(plan.Input.Address), ConnectionMode: text(plan.Input.ConnectionMode),
-			SetBastionScope: plan.Input.ConnectionMode != "", BastionScopeID: plan.Input.BastionScopeID, PinnedHostKey: text(plan.PinnedKey)}
+			SetBastionScope: plan.Input.ConnectionMode != "", BastionScopeID: plan.Input.BastionScopeID, PinnedHostKey: text(plan.PinnedKey), Architecture: text(plan.Arch)}
 		if plan.Input.Port > 0 {
 			params.Port = pgtype.Int4{Int32: plan.Input.Port, Valid: true}
 		}
@@ -585,6 +589,13 @@ func hostConnectionPlanMatches(plan connectionPlan, input HostInput) bool {
 	return plan.TargetType == "host" && plan.Address == input.Address && plan.Port == input.Port && plan.Platform == input.Platform &&
 		plan.Username == input.Username && plan.ConnectionMode == input.ConnectionMode && plan.BastionScopeID == input.BastionScopeID &&
 		plan.CredentialID == input.CredentialID
+}
+
+func hostArchitecture(value pgtype.Text) string {
+	if value.Valid && (value.String == "amd64" || value.String == "arm64") {
+		return value.String
+	}
+	return ""
 }
 
 func hostNetworkPathChanged(current db.Host, input HostInput) bool {

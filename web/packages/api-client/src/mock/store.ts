@@ -92,6 +92,8 @@ export interface MockDb {
   nodeBindings: KubernetesNodeHostBinding[];
   collectionClaims: CollectionClaim[];
   collectors: CollectorInstance[];
+  /** 安装过渡态截止时间(collector id → epoch ms),到期在读取时收敛为终态。 */
+  collectorSettling?: Record<string, number>;
   tasks: TaskViewModel[];
   pendingActions: PendingActionPublic[];
   actionPlans: Record<string, MockActionPlanRecord>;
@@ -162,6 +164,36 @@ export function nextId(db: MockDb, prefix: string): string {
   const value = (db.seq[prefix] ?? 0) + 1;
   db.seq[prefix] = value;
   return `${prefix}-${String(value).padStart(4, "0")}`;
+}
+
+/** 安装过渡态(模拟真实安装耗时):到期后把 installing 收敛为 converged。 */
+export function registerSettling(
+  db: MockDb,
+  collectorId: string,
+  durationMs = 2500,
+): void {
+  (db.collectorSettling ??= {})[collectorId] = Date.now() + durationMs;
+}
+
+export function settleCollectors(db: MockDb): void {
+  const settling = db.collectorSettling;
+  if (!settling) return;
+  const now = Date.now();
+  for (const collector of db.collectors) {
+    const deadline = settling[collector.id];
+    if (deadline !== undefined && now >= deadline) {
+      delete settling[collector.id];
+      if (collector.status === "installing" || collector.status === "pending_install") {
+        collector.status = "converged";
+        collector.effective_revision = collector.desired_revision;
+        collector.updated_at = new Date(now).toISOString();
+        if (collector.resource_type === "host") {
+          const host = db.hosts.find((entry) => entry.id === collector.resource_id);
+          if (host) host.collectorStatus = "converged";
+        }
+      }
+    }
+  }
 }
 
 /** Minimal topic-based event bus for task/chat subscriptions. */

@@ -11,7 +11,7 @@ import type {
   MockToolCallTrace as ToolCallTrace,
 } from "./chat-types";
 import type { BaseContext, Engine } from "./context";
-import { nextId } from "./store";
+import { nextId, registerSettling } from "./store";
 import type {
   ConnectorEnrollmentPurpose,
   MockBastionScope,
@@ -475,13 +475,16 @@ export function createEngine(ctx: BaseContext): Engine {
           entry.resource_type === "host" && entry.resource_id === hostId,
       );
       if (existing) {
-        existing.status = "converged";
-        existing.effective_revision = existing.desired_revision;
+        existing.status = "installing";
+        existing.desired_revision += 1;
+        existing.effective_revision = existing.desired_revision - 1;
         existing.updated_at = ctx.nowIso();
+        registerSettling(db, existing.id);
       } else {
         const now = ctx.nowIso();
+        const id = nextId(db, "col");
         db.collectors.push({
-          id: nextId(db, "col"),
+          id,
           enterprise_id: plan.enterprise_id,
           resource_type: "host",
           resource_id: hostId,
@@ -491,16 +494,17 @@ export function createEngine(ctx: BaseContext): Engine {
           platform: "linux_arm64",
           role: "leaf",
           desired_revision: 1,
-          effective_revision: 1,
-          status: "converged",
+          effective_revision: 0,
+          status: "installing",
           version: 1,
           created_at: now,
           updated_at: now,
         });
+        registerSettling(db, id);
       }
       const host = db.hosts.find((entry) => entry.id === hostId);
       if (host) {
-        host.collectorStatus = "converged";
+        host.collectorStatus = "installing";
         host.telemetryRoute = String(
           input_data["route_kind"] ??
             input_data["telemetryRoute"] ??
@@ -512,8 +516,9 @@ export function createEngine(ctx: BaseContext): Engine {
     }
     if (plan.tool === "telemetry.kubernetes.install") {
       const now = ctx.nowIso();
+      const id = nextId(db, "col");
       db.collectors.push({
-        id: nextId(db, "col"),
+        id,
         enterprise_id: plan.enterprise_id,
         resource_type: "kubernetes_cluster",
         resource_id: String(
@@ -525,12 +530,13 @@ export function createEngine(ctx: BaseContext): Engine {
         platform: "linux_arm64",
         role: "daemonset",
         desired_revision: 1,
-        effective_revision: 1,
-        status: "converged",
+        effective_revision: 0,
+        status: "installing",
         version: 1,
         created_at: now,
         updated_at: now,
       });
+      registerSettling(db, id);
       return;
     }
     if (plan.tool === "telemetry.collector.configure") {

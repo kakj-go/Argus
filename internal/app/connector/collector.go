@@ -2,15 +2,14 @@ package connector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"slices"
 
 	"google.golang.org/protobuf/types/known/anypb"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -25,9 +24,16 @@ func executeCollectorManagement(ctx context.Context, payload *anypb.Any, credent
 	if payload == nil || payload.UnmarshalTo(&command) != nil {
 		return nil, collectormanager.ErrInvalidCommand
 	}
-	artifactClient, err := collectormanager.NewArtifactHTTPClient(os.Getenv("ARGUS_OTELCOL_ARTIFACT_CA_PATH"))
-	if err != nil {
-		return nil, err
+	var err error
+	var artifactClient *http.Client
+	var clientErr error
+	if os.Getenv("ARGUS_OTELCOL_ARTIFACT_TLS_MODE") == "insecure" {
+		artifactClient, clientErr = collectormanager.NewArtifactHTTPClientInsecure()
+	} else {
+		artifactClient, clientErr = collectormanager.NewArtifactHTTPClient(os.Getenv("ARGUS_OTELCOL_ARTIFACT_CA_PATH"))
+	}
+	if clientErr != nil {
+		return nil, clientErr
 	}
 	manager := collectormanager.Manager{Root: os.Getenv("ARGUS_COLLECTOR_STATE_DIR"), HTTPClient: artifactClient}
 	var result collectormanager.Result
@@ -84,28 +90,7 @@ func executeCollectorManagement(ctx context.Context, payload *anypb.Any, credent
 }
 
 func collectorManagementFailureCode(err error) string {
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		return "COLLECTOR_HEALTH_CHECK_FAILED"
-	case errors.Is(err, collectormanager.ErrInvalidCommand):
-		return "COLLECTOR_COMMAND_INVALID"
-	case errors.Is(err, collectormanager.ErrUnsupportedPlatform):
-		return "COLLECTOR_DISTRIBUTION_UNSUPPORTED"
-	case errors.Is(err, collectormanager.ErrArtifactInvalid):
-		return "COLLECTOR_ARTIFACT_INVALID"
-	case errors.Is(err, telemetrybinding.ErrInvalidNodeEvidence):
-		return "COLLECTOR_NODE_EVIDENCE_INVALID"
-	case apierrors.IsForbidden(err):
-		return "COLLECTOR_KUBERNETES_FORBIDDEN"
-	case apierrors.IsInvalid(err):
-		return "COLLECTOR_KUBERNETES_RESOURCE_INVALID"
-	case apierrors.IsNotFound(err):
-		return "COLLECTOR_KUBERNETES_RESOURCE_MISSING"
-	case apierrors.IsConflict(err):
-		return "COLLECTOR_KUBERNETES_CONFLICT"
-	default:
-		return "COLLECTOR_MANAGEMENT_FAILED"
-	}
+	return collectormanager.FailureCode(err)
 }
 
 func resolveCollectorAddresses(ctx context.Context, hostname string) ([]netip.Addr, error) {

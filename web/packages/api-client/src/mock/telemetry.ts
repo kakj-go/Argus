@@ -34,6 +34,28 @@ const DISTRIBUTIONS: CollectorDistributionVersion[] = [
         byte_size: 48_000_000,
       },
     ],
+    kubernetes_image: "docker.io/kakj-go/argus-otelcol:0.132.0-argus.1",
+    created_at: "2026-08-18T00:00:00Z",
+  },
+  {
+    id: "dist-linux-amd64-v1",
+    name: "Argus OpenTelemetry Collector",
+    version: "0.132.0-argus.1",
+    collector_version: "0.132.0",
+    config_schema_version: "argus.otelcol/v1",
+    support_status: "supported",
+    components: ["otlp", "hostmetrics", "journald", "filelog", "prometheus"],
+    artifacts: [
+      {
+        platform: "linux_amd64",
+        uri: "https://artifacts.invalid/argus-otelcol-linux-amd64.tar.gz",
+        sha256: "c".repeat(64),
+        signature: "mock-signature",
+        signing_key_id: "argus-release-2026",
+        byte_size: 51_000_000,
+      },
+    ],
+    kubernetes_image: "docker.io/kakj-go/argus-otelcol:0.132.0-argus.1",
     created_at: "2026-08-18T00:00:00Z",
   },
   {
@@ -59,15 +81,15 @@ const DISTRIBUTIONS: CollectorDistributionVersion[] = [
 ];
 
 const PROFILES: CollectionProfile[] = [
-  profile("profile-host-basic", "host-basic", ["metrics"], ["linux_arm64"]),
-  profile("profile-linux-journald", "linux-journald", ["logs"], ["linux_arm64"]),
-  profile("profile-file-log", "file-log", ["logs"], ["linux_arm64"]),
-  profile("profile-prometheus", "prometheus-endpoint", ["metrics"], ["linux_arm64"]),
-  profile("profile-otlp", "otlp-receiver", ["metrics", "logs", "traces"], ["linux_arm64"]),
-  profile("profile-k8s-node-container", "k8s-node-container", ["metrics", "logs"], ["linux_arm64"]),
-  profile("profile-k8s-cluster", "k8s-cluster", ["metrics"], ["linux_arm64"]),
-  profile("profile-k8s-otlp-gateway", "k8s-otlp-gateway", ["metrics", "logs", "traces"], ["linux_arm64"]),
-  profile("profile-collector-self", "collector-self", ["metrics", "logs"], ["linux_arm64"]),
+  profile("profile-host-basic", "host-basic", ["metrics"], ["linux_arm64", "linux_amd64"]),
+  profile("profile-linux-journald", "linux-journald", ["logs"], ["linux_arm64", "linux_amd64"]),
+  profile("profile-file-log", "file-log", ["logs"], ["linux_arm64", "linux_amd64"]),
+  profile("profile-prometheus", "prometheus-endpoint", ["metrics"], ["linux_arm64", "linux_amd64"]),
+  profile("profile-otlp", "otlp-receiver", ["metrics", "logs", "traces"], ["linux_arm64", "linux_amd64"]),
+  profile("profile-k8s-node-container", "k8s-node-container", ["metrics", "logs"], ["linux_arm64", "linux_amd64"]),
+  profile("profile-k8s-cluster", "k8s-cluster", ["metrics"], ["linux_arm64", "linux_amd64"]),
+  profile("profile-k8s-otlp-gateway", "k8s-otlp-gateway", ["metrics", "logs", "traces"], ["linux_arm64", "linux_amd64"]),
+  profile("profile-collector-self", "collector-self", ["metrics", "logs"], ["linux_arm64", "linux_amd64"]),
   {
     ...profile("profile-windows-event-log", "windows-event-log", ["logs"], ["windows_amd64"]),
     support_status: "validation_pending",

@@ -320,6 +320,10 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 	platformHost := cfg.Spec.Exposure.PlatformHost
 	connectorHost := cfg.Spec.Exposure.ConnectorHost
 	cardsHost := "cards." + parentDomain(enterpriseHost)
+	artifactHost := cfg.Spec.Exposure.ArtifactHost
+	if artifactHost == "" {
+		artifactHost = "artifacts." + parentDomain(enterpriseHost)
+	}
 	allowedOrigins := []any{
 		"https://" + enterpriseHost,
 		"https://" + platformHost,
@@ -343,19 +347,25 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"telemetryClickhouseMigrationPassword": credentials["telemetry-clickhouse-migration-password"],
 		"telemetryClickhouseWriterPassword":    credentials["telemetry-clickhouse-writer-password"],
 		"telemetryClickhouseQueryPassword":     credentials["telemetry-clickhouse-query-password"],
-		"telemetryIngestGrpcEndpoint":          fmt.Sprintf("grpcs://argus-telemetry-ingest.%s.svc:4317", cfg.Spec.Namespaces.Observability),
-		"telemetryIngestHttpEndpoint":          fmt.Sprintf("https://argus-telemetry-ingest.%s.svc:4318", cfg.Spec.Namespaces.Observability),
-		"telemetryEnrollmentEndpoint":          fmt.Sprintf("https://argus-telemetry-ingest.%s.svc:4318/v1/identity/enroll", cfg.Spec.Namespaces.Observability),
+		"telemetryExternalIngestHost":          cfg.Spec.Telemetry.ExternalIngestHost,
+		"telemetryIngestGrpcEndpoint":          fmt.Sprintf("grpcs://%s:4317", ingestBase(cfg)),
+		"telemetryIngestHttpEndpoint":          fmt.Sprintf("https://%s:4318", ingestBase(cfg)),
+		"telemetryEnrollmentEndpoint":          fmt.Sprintf("https://%s:4318/v1/identity/enroll", ingestBase(cfg)),
 		"telemetryToolCatalogEnabled":          true,
 		"otelcolVersion":                       cfg.Spec.Telemetry.CollectorVersion, "otelcolLinuxArm64Uri": cfg.Spec.Telemetry.LinuxARM64URI,
 		"otelcolLinuxArm64Sha256": cfg.Spec.Telemetry.LinuxARM64SHA256, "otelcolLinuxArm64Signature": cfg.Spec.Telemetry.LinuxARM64Signature,
 		"otelcolLinuxArm64ByteSize": cfg.Spec.Telemetry.LinuxARM64ByteSize,
-		"otelcolWindowsAmd64Uri":    cfg.Spec.Telemetry.WindowsAMD64URI, "otelcolWindowsAmd64Sha256": cfg.Spec.Telemetry.WindowsAMD64SHA256,
+		"otelcolLinuxAmd64Uri":      cfg.Spec.Telemetry.LinuxAMD64URI, "otelcolLinuxAmd64Sha256": cfg.Spec.Telemetry.LinuxAMD64SHA256,
+		"otelcolLinuxAmd64Signature": cfg.Spec.Telemetry.LinuxAMD64Signature, "otelcolLinuxAmd64ByteSize": cfg.Spec.Telemetry.LinuxAMD64ByteSize,
+		"otelcolWindowsAmd64Uri": cfg.Spec.Telemetry.WindowsAMD64URI, "otelcolWindowsAmd64Sha256": cfg.Spec.Telemetry.WindowsAMD64SHA256,
 		"otelcolWindowsAmd64Signature": cfg.Spec.Telemetry.WindowsAMD64Signature, "otelcolWindowsAmd64ByteSize": cfg.Spec.Telemetry.WindowsAMD64ByteSize,
 		"otelcolSigningKeyId": cfg.Spec.Telemetry.SigningKeyID, "otelcolSigningPublicKey": cfg.Spec.Telemetry.SigningPublicKey,
-		"otelcolKubernetesImage": cfg.Image("argus-otelcol"),
-		"allowedOrigins":         allowedOrigins, "secureCookies": true,
+		"otelcolKubernetesImage":            cfg.collectorKubernetesImage(),
+		"otelcolArtifactCABundleSecretName": cfg.collectorArtifactCA(),
+		"otelcolArtifactTLSMode":            cfg.Spec.Telemetry.ArtifactTLSMode,
+		"allowedOrigins":                    allowedOrigins, "secureCookies": true,
 		"keyWrappingMode": "local_test", "breakGlassEnabled": false, "platformMfaRequired": cfg.Spec.Security.PlatformMFARequired, "databaseRolesEnabled": false,
+
 		"directDeniedCidrs": protectedPrefixes(network),
 	}
 	if cfg.Spec.Profile == "local-hardening" {
@@ -379,7 +389,7 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 	return map[string]any{
 		"releaseId": cfg.Spec.ReleaseID, "profile": cfg.Spec.Profile, "namespaces": namespacesValues(cfg), "replicas": 1, "setupTokenSecretName": setupSecret,
 		"images":           map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
-		"hosts":            map[string]any{"enterprise": enterpriseHost, "platform": platformHost, "cards": cardsHost, "connector": connectorHost},
+		"hosts":            map[string]any{"enterprise": enterpriseHost, "platform": platformHost, "cards": cardsHost, "connector": connectorHost, "artifact": artifactHost},
 		"ingressClassName": cfg.Spec.Exposure.IngressClassName,
 		"tls":              buildTLSValues(cfg),
 		"runtime":          runtimeValues,
@@ -389,6 +399,15 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 
 // parentDomain strips the leading service label from a three-or-more-label
 // host (platform.argus.dev -> argus.dev) and returns shorter hosts unchanged.
+// ingestBase 解析 Collector 注册/上报端点的主机部分:外部主机名优先,
+// 否则回退集群内 Service 地址(同集群目标,E2E 场景)。
+func ingestBase(cfg *InstallConfig) string {
+	if host := strings.TrimSpace(cfg.Spec.Telemetry.ExternalIngestHost); host != "" {
+		return host
+	}
+	return fmt.Sprintf("argus-telemetry-ingest.%s.svc", cfg.Spec.Namespaces.Observability)
+}
+
 func parentDomain(host string) string {
 	labels := strings.Split(host, ".")
 	if len(labels) < 3 {

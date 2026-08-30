@@ -17,6 +17,8 @@ const usage = `usage:
   argus-dev check query-parsers|production-artifacts|web-entrypoints|all
   argus-dev repo fmt|test|vet|run-server|migrate|sqlc
   argus-dev collector build linux-arm64|windows-amd64|all
+  argus-dev collector publish-image [--repository REPO] [--tag TAG] [--push]  # --push 发布 arm64+amd64 多架构 manifest
+  argus-dev collector publish-artifacts --endpoint URL --access-key K --secret-key K [--bucket B] [--public-base URL] [--key-id ID] [--windows]
   argus-dev query promql|kql|skywalking|tenant-schema
   argus-dev web build --api-mode mock|real
   argus-dev e2e run --suite m2|m3|m4|m5|m6|m7|m8|m10-query [options]

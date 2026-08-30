@@ -28,6 +28,8 @@ Argus 根据主机已有连接路径一键安装并管理 OpenTelemetry Collecto
 
 截至 2026-08-22，M7 已完成 Linux arm64 Host 与 Kubernetes Evaluation 闭环。M10 已完成单进程 Query、同步租户 Schema lifecycle、PromQL/KQL/SkyWalking GraphQL、真实 ClickHouse 差分、Schema 漂移门禁和最终 Kubernetes E2E；三种独立 wire format、固定 SDL 和 `MaxSeries` 收口后的成功运行号为 `20260822063330-17805`，结束后三个临时 Namespace、相关 PVC 和 E2E Lease 零残留。完整 SkyWalking OAP 和完整 KQL 兼容不在本次范围。
 
+Collector 产物自 2026-08-30 起支持 Linux 双架构：连接测试经 SSH `uname -m` 探测目标架构（归一化为 amd64/arm64）并存入主机记录，安装计划按"主机 OS + 架构"从分发目录选择 `linux_amd64` / `linux_arm64` 产物（未探测到的存量主机按 amd64 处理）；Linux amd64 产物在安装配置中按需注册（`spec.telemetry.linuxAmd64*`），Kubernetes 各 Profile 的支持平台矩阵同步包含两种 Linux 架构。平台自身（Argus 集群）的架构与被管理目标的架构完全解耦。
+
 Kubernetes 节点无法拉取镜像时，第一版只检测 Runtime 并提供离线导入提示，不实现镜像分发。
 
 ## 2. Collector 角色
@@ -385,11 +387,15 @@ SHA256
 
 第一版清单随 Argus 版本发布，企业管理员只能选择受支持版本，不提供任意上传二进制入口。
 
+Artifact Store 的落地实现为平台自带 MinIO：`argus-collector-artifacts` 桶经 ingress 以 HTTPS 暴露（默认域名 `artifacts.<平台父域名>`），桶开启匿名只读下载——产物完整性由 ed25519 签名 + SHA-256 校验保证，不依赖传输层认证。执行者侧信任该 HTTPS 源的证书（cert-manager 自签模式下挂载平台多 SAN 证书作为 `ARGUS_OTELCOL_ARTIFACT_CA_PATH` 信任锚）；本地自签环境可配置 `spec.telemetry.artifactTLSMode: insecure` 仅跳过传输层证书校验——产物完整性的信任根是计划内 pin 的 sha256 与 ed25519 签名（恒定执行，无开关），传输层默认 verify，evaluation/local-formal profile 默认 insecure。发布工具 `make otelcol-artifacts-publish`（`argus-dev collector publish-artifacts`）完成构建、签名、上传并打印可直接粘贴进安装配置 `spec.telemetry` 的值块；签名密钥持久化在 `deploy/.keys/otelcol-signing-key.json`。目标主机全程不需要外网出站能力。
+
+Kubernetes 侧的产物是容器镜像而非二进制：`argus-otelcol` 定制镜像（含 argusidentity/argusgatewayidentity 私有组件，不能用上游官方镜像替代）默认发布到 `docker.io/kakj-go/argus-otelcol:<version>`（`make otelcol-image-publish`，推送时合成 linux/arm64+amd64 多架构 manifest）。集群安装向导支持按次填写内网镜像全量地址（含 tag/digest，`CollectorPreview.kubernetes_image`），留空使用服务端默认镜像（安装配置 `spec.telemetry.kubernetesImage`，未配置时回退平台镜像 registry 派生值）。镜像引用进入不可变 plan，不落库；升级/修复时需重新指定或使用默认值。完全离线的集群通过交付流程把镜像灌入客户 registry 后在向导中填写地址即可。
+
 传输模式：
 
 - `direct_download`：目标从批准地址下载。
-- `connector_tunnel`：Argus Artifact Store 经 Connector Data Channel 发送。
-- `direct_executor_transfer`：公网独立主机由受控 Direct Executor 从 Artifact Store 读取批准包并经 SSH/WinRM 传输。
+- `connector_tunnel`：Argus Artifact Store 经 Connector Data Channel 发送。（尚未实现；堡垒机出向连产物源都不可达的极端隔离场景启用，见"后续工作"）
+- `direct_executor_transfer`：公网独立主机由受控 Direct Executor 从 Artifact Store 读取批准包并经 SSH/WinRM 传输。（当前实现：Direct Executor 从 MinIO HTTPS 源下载并经 SSH 推送，目标零下载）
 
 Tunnel 要求：
 

@@ -15,6 +15,7 @@ export interface MockHost {
   address: string;
   port: number;
   platform: "linux" | "windows";
+  architecture?: "amd64" | "arm64";
   connectionMode: MockHostConnectionMode;
   bastionScopeId?: string;
   connectorId?: string;
@@ -23,6 +24,8 @@ export interface MockHost {
   labels: Record<string, string>;
   connectionStatus: "online" | "offline" | "onboarding" | "degraded" | "unknown";
   collectorStatus: CollectorInstance["status"] | "not_installed";
+  liveStatus?: "online" | "offline" | "key_changed";
+  probeLatencyMs?: number;
   telemetryRoute?: string;
   lastSeenAt?: ISODateString;
   createdAt: ISODateString;

@@ -1,6 +1,6 @@
 -- name: CreateHost :one
-INSERT INTO hosts (id, enterprise_id, name, hostname, address, port, platform, connection_mode, bastion_scope_id, environment, labels, labels_hash, connection_status, pinned_host_key)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *;
+INSERT INTO hosts (id, enterprise_id, name, hostname, address, port, platform, architecture, connection_mode, bastion_scope_id, environment, labels, labels_hash, connection_status, pinned_host_key)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *;
 
 -- name: GetHost :one
 SELECT * FROM hosts WHERE id = $1 AND enterprise_id = $2 AND status <> 'deleted';
@@ -15,6 +15,7 @@ UPDATE hosts SET name = COALESCE(sqlc.narg('name'), name), environment = COALESC
  bastion_scope_id = CASE WHEN sqlc.arg('set_bastion_scope')::boolean THEN sqlc.narg('bastion_scope_id') ELSE bastion_scope_id END,
  connection_status = COALESCE(sqlc.narg('connection_status'), connection_status),
  pinned_host_key = COALESCE(sqlc.narg('pinned_host_key'), pinned_host_key),
+ architecture = COALESCE(sqlc.narg('architecture'), architecture),
  labels = COALESCE(sqlc.narg('labels'), labels), labels_hash = COALESCE(sqlc.narg('labels_hash'), labels_hash),
  labels_version = CASE WHEN sqlc.narg('labels')::jsonb IS NULL THEN labels_version ELSE labels_version + 1 END,
  resource_version = resource_version + 1, updated_at = now()

@@ -48,6 +48,11 @@ export const kubernetesZh = {
       config_stale: "配置过期",
       backlog: "待收敛",
       interrupted: "已中断",
+      degraded: "已降级",
+      uninstalling: "卸载中",
+      uninstalled: "已卸载",
+      result_unknown: "结果未知",
+      pending_install: "待安装",
     },
     health: {
       healthy: "健康",
@@ -203,8 +208,13 @@ export const kubernetesZh = {
         daemonsetSummary:
           "DaemonSet：每个节点一个 Collector Pod，采集节点与容器遥测",
         gatewaySummary: "Gateway Deployment：汇聚集群级数据并统一推送至 Argus",
-        imageDigest: "镜像 Digest",
-        imageDigestValue: "argus/otelcol:v24.2.0@sha256:8f2c…e91a（示例）",
+        imageDigest: "镜像（生效值）",
+        imageUnavailable: "未配置默认镜像，请填写内网镜像地址",
+        imageAddress: "内网镜像地址",
+        imageAddressDesc:
+          "集群可拉取的完整镜像地址（含 tag/digest），留空使用默认镜像",
+        imageInvalid:
+          "镜像地址无效：不能包含空白，且需含 tag 或 digest（如 registry.example.com/argus-otelcol:0.1.0）",
         rbac: "RBAC",
         rbacValue: "专用 ServiceAccount，仅授予 Node / Pod / 日志只读权限",
         profile: "采集 Profile",
@@ -290,6 +300,11 @@ export const kubernetesEn = {
       config_stale: "Config stale",
       backlog: "Backlog",
       interrupted: "Interrupted",
+      degraded: "Degraded",
+      uninstalling: "Uninstalling",
+      uninstalled: "Uninstalled",
+      result_unknown: "Result unknown",
+      pending_install: "Pending install",
     },
     health: {
       healthy: "Healthy",
@@ -447,8 +462,13 @@ export const kubernetesEn = {
           "DaemonSet: one Collector Pod per node for node and container telemetry",
         gatewaySummary:
           "Gateway Deployment: aggregates cluster-level data and pushes to Argus",
-        imageDigest: "Image digest",
-        imageDigestValue: "argus/otelcol:v24.2.0@sha256:8f2c…e91a (sample)",
+        imageDigest: "Image (effective)",
+        imageUnavailable: "No default image configured; enter an internal image",
+        imageAddress: "Internal image address",
+        imageAddressDesc:
+          "Full image reference (with tag/digest) reachable by the cluster; leave empty to use the default",
+        imageInvalid:
+          "Invalid image reference: no whitespace allowed and a tag or digest is required (e.g. registry.example.com/argus-otelcol:0.1.0)",
         rbac: "RBAC",
         rbacValue:
           "Dedicated ServiceAccount with read-only access to Nodes / Pods / logs",

@@ -10,6 +10,8 @@ import {
   Alert,
   DataTable,
   EmptyState,
+  Field,
+  Input,
   KeyValueGrid,
   RowAction,
   Spinner,
@@ -18,6 +20,7 @@ import {
   type Column,
 } from "@argus/ui";
 import { PendingActionCard } from "./pending-action-card";
+import { CollectorSettlementPanel } from "../telemetry/collector-settlement";
 import { bindingStatusTone } from "./status";
 
 type ClaimStateKey =
@@ -69,6 +72,8 @@ export function CollectorWizard({
   const [step, setStep] = useState(0);
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
+  const [customImage, setCustomImage] = useState("");
+  const [settling, setSettling] = useState(false);
 
   const bindingsQuery = useQuery({
     queryKey: ["kubernetes", "nodeBindings", cluster.id],
@@ -113,10 +118,12 @@ export function CollectorWizard({
       if (!distribution || profileIds.length === 0) {
         throw new Error("supported collector catalog is unavailable");
       }
+      const kubernetesImage = customImage.trim();
       return api.kubernetes.previewCollectorInstall(cluster.id, {
         distribution_version_id: distribution.id,
         profile_ids: profileIds,
         route_kind: "direct_argus",
+        ...(kubernetesImage ? { kubernetes_image: kubernetesImage } : {}),
       });
     },
     onSuccess: setPendingAction,
@@ -176,6 +183,17 @@ export function CollectorWizard({
 
   const unboundCount = Math.max(0, (cluster.node_count ?? 0) - bindings.length);
 
+  const defaultImage =
+    distributionsQuery.data?.find(
+      (item) =>
+        item.support_status === "supported" &&
+        item.artifacts.some((artifact) => artifact.platform === "linux_arm64"),
+    )?.kubernetes_image ?? "";
+  const trimmedImage = customImage.trim();
+  const imageInvalid =
+    trimmedImage !== "" && !/^\S+:\S+$/.test(trimmedImage);
+  const effectiveImage = trimmedImage || defaultImage;
+
   const bindingColumns: Column<BindingRow>[] = [
     { key: "node", header: t("kubernetes.table.node") },
     { key: "host", header: t("kubernetes.table.host") },
@@ -231,14 +249,31 @@ export function CollectorWizard({
     return <Spinner label={t("common.loading")} />;
   }
 
+  if (settling) {
+    return (
+      <CollectorSettlementPanel
+        onClose={() => {
+          setSettling(false);
+          void queryClient.invalidateQueries({ queryKey: ["kubernetes"] });
+          onInstalled?.();
+        }}
+        onSettled={() => {
+          setSettling(false);
+          void queryClient.invalidateQueries({ queryKey: ["kubernetes"] });
+          onInstalled?.();
+        }}
+        poll={() => api.kubernetes.getCollector(cluster.id)}
+      />
+    );
+  }
+
   if (pendingAction) {
     return (
       <PendingActionCard
         action={pendingAction}
         onSettled={() => {
           setPendingAction(null);
-          void queryClient.invalidateQueries({ queryKey: ["kubernetes"] });
-          onInstalled?.();
+          setSettling(true);
         }}
       />
     );
@@ -246,6 +281,7 @@ export function CollectorWizard({
 
   return (
     <Wizard
+      canNext={!imageInvalid}
       current={step}
       onBack={() => setStep((value) => Math.max(0, value - 1))}
       onNext={() => setStep((value) => value + 1)}
@@ -327,6 +363,23 @@ export function CollectorWizard({
           <h3 className="argus-k8s-section-title">
             {t("kubernetes.collector.wizard.previewTitle")}
           </h3>
+          <Field
+            label={t("kubernetes.collector.wizard.imageAddress")}
+            hint={t("kubernetes.collector.wizard.imageAddressDesc")}
+            requirement="optional"
+            error={
+              imageInvalid
+                ? t("kubernetes.collector.wizard.imageInvalid")
+                : undefined
+            }
+          >
+            <Input
+              className="argus-mono"
+              onChange={(event) => setCustomImage(event.target.value)}
+              placeholder={defaultImage || "registry.example.com/argus-otelcol:0.1.0-m7"}
+              value={customImage}
+            />
+          </Field>
           <KeyValueGrid
             columns={1}
             items={[
@@ -340,7 +393,12 @@ export function CollectorWizard({
               },
               {
                 label: t("kubernetes.collector.wizard.imageDigest"),
-                value: t("kubernetes.collector.wizard.imageDigestValue"),
+                value: (
+                  <span className="argus-mono">
+                    {effectiveImage ||
+                      t("kubernetes.collector.wizard.imageUnavailable")}
+                  </span>
+                ),
               },
               {
                 label: t("kubernetes.collector.wizard.rbac"),

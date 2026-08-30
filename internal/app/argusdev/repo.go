@@ -52,25 +52,37 @@ func (a *App) runRepo(ctx context.Context, args []string) error {
 }
 
 func (a *App) runCollector(ctx context.Context, args []string) error {
-	if len(args) != 2 || args[0] != "build" || !oneOf(args[1], "linux-arm64", "windows-amd64", "all") {
-		return fmt.Errorf("%w: usage: argus-dev collector build linux-arm64|windows-amd64|all", errUsage)
+	if len(args) < 1 {
+		return fmt.Errorf("%w: usage: argus-dev collector build linux-arm64|windows-amd64|all|publish-image|publish-artifacts", errUsage)
 	}
-	platforms := []string{args[1]}
-	if args[1] == "all" {
-		platforms = []string{"linux-arm64", "windows-amd64"}
-	}
-	for _, platform := range platforms {
-		destination := filepath.Join(a.root, "build", "otelcol", "artifacts", "argus-otelcol-"+platform)
-		if platform == "linux-arm64" {
-			destination += ".tar.gz"
-		} else {
-			destination += ".zip"
+	switch args[0] {
+	case "build":
+		if len(args) != 2 || !oneOf(args[1], "linux-arm64", "linux-amd64", "windows-amd64", "all") {
+			return fmt.Errorf("%w: usage: argus-dev collector build linux-arm64|linux-amd64|windows-amd64|all", errUsage)
 		}
-		if err := a.buildCollectorArtifact(ctx, platform, destination, true); err != nil {
-			return err
+		platforms := []string{args[1]}
+		if args[1] == "all" {
+			platforms = []string{"linux-arm64", "linux-amd64", "windows-amd64"}
 		}
+		for _, platform := range platforms {
+			destination := filepath.Join(a.root, "build", "otelcol", "artifacts", "argus-otelcol-"+platform)
+			if platform == "windows-amd64" {
+				destination += ".zip"
+			} else {
+				destination += ".tar.gz"
+			}
+			if err := a.buildCollectorArtifact(ctx, platform, destination, true); err != nil {
+				return err
+			}
+		}
+		return nil
+	case "publish-image":
+		return a.publishCollectorImage(ctx, args[1:])
+	case "publish-artifacts":
+		return a.publishCollectorArtifacts(ctx, args[1:])
+	default:
+		return fmt.Errorf("%w: unsupported collector command %q", errUsage, args[0])
 	}
-	return nil
 }
 
 func (a *App) runQuery(ctx context.Context, args []string) error {

@@ -367,6 +367,8 @@ export interface components {
             support_status: components["schemas"]["CollectorSupportStatus"];
             components: string[];
             artifacts: components["schemas"]["CollectorArtifact"][];
+            /** @description 服务端解析的 Kubernetes 默认镜像引用(未配置时缺省) */
+            readonly kubernetes_image?: string;
             /** Format: date-time */
             created_at: string;
         };
@@ -403,6 +405,8 @@ export interface components {
             /** Format: int64 */
             effective_revision: number;
             route?: components["schemas"]["TelemetryRoute"];
+            /** @description 最近一次管理操作失败的错误码(成功或无记录时缺省) */
+            readonly last_operation_error_code?: string;
             /** Format: date-time */
             last_seen_at?: string;
             /** Format: int64 */
@@ -527,6 +531,8 @@ export interface components {
             gateway_collector_id?: string;
             /** Format: int64 */
             expected_version?: number;
+            /** @description 集群内网镜像全量地址(含 tag/digest);仅 kubernetes_cluster 资源可填,留空使用服务端默认镜像 */
+            kubernetes_image?: string;
         };
         TelemetryRetentionPolicy: {
             metrics_days: number;
@@ -715,7 +721,7 @@ export interface components {
         /** @enum {string} */
         CollectorSupportStatus: "supported" | "validation_pending" | "retired";
         /** @enum {string} */
-        CollectorPlatform: "linux_arm64" | "windows_amd64";
+        CollectorPlatform: "linux_arm64" | "linux_amd64" | "windows_amd64";
         CollectorArtifact: {
             platform: components["schemas"]["CollectorPlatform"];
             /** Format: uri */

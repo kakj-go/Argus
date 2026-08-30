@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"log/slog"
 	"net"
 	"net/netip"
 	"strings"
@@ -94,10 +95,14 @@ func (executor *Executor) executeCollectorOperation(parent context.Context, oper
 		err = collectormanager.ErrInvalidCommand
 	}
 	if err != nil {
-		code := "COLLECTOR_MANAGEMENT_FAILED"
+		code := collectormanager.FailureCode(err)
 		if errors.Is(err, resource.ErrDirectTargetDenied) {
 			code = "DIRECT_TARGET_DENIED"
 		}
+		slog.Error("collector operation failed",
+			"operation_id", operation.ID, "collector_id", operation.CollectorID,
+			"operation", operation.Operation, "resource_id", command.GetResourceId(),
+			"error_code", code, "error", err)
 		executor.finishCollectorOperation(ctx, operation, "failed", nil, code)
 		return
 	}

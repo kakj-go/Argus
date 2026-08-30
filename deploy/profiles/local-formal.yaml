@@ -41,6 +41,8 @@ spec:
     windowsAmd64ByteSize: 1
     signingKeyId: argus-evaluation-collector-signing-v1
     signingPublicKey: KipqW8DuwdLu1utyo6JbL5u+vtVT/4ZFVKSjOuK8s64
+    kubernetesImage: docker.io/kakj-go/argus-otelcol:0.1.0-m7
+    artifactTLSMode: insecure
   persistence:
     postgresql: 2Gi
     redis: 1Gi

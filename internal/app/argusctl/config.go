@@ -69,12 +69,27 @@ type TelemetryArtifacts struct {
 	LinuxARM64SHA256      string `json:"linuxArm64Sha256"`
 	LinuxARM64Signature   string `json:"linuxArm64Signature"`
 	LinuxARM64ByteSize    uint64 `json:"linuxArm64ByteSize"`
+	LinuxAMD64URI         string `json:"linuxAmd64Uri"`
+	LinuxAMD64SHA256      string `json:"linuxAmd64Sha256"`
+	LinuxAMD64Signature   string `json:"linuxAmd64Signature"`
+	LinuxAMD64ByteSize    uint64 `json:"linuxAmd64ByteSize"`
 	WindowsAMD64URI       string `json:"windowsAmd64Uri"`
 	WindowsAMD64SHA256    string `json:"windowsAmd64Sha256"`
 	WindowsAMD64Signature string `json:"windowsAmd64Signature"`
 	WindowsAMD64ByteSize  uint64 `json:"windowsAmd64ByteSize"`
 	SigningKeyID          string `json:"signingKeyId"`
 	SigningPublicKey      string `json:"signingPublicKey"`
+	// KubernetesImage 为集群 Collector 的默认镜像引用;留空时回退到平台镜像
+	// registry 派生值(local-registry 开发模式),安装向导可按次覆盖。
+	KubernetesImage string `json:"kubernetesImage"`
+	// ArtifactCABundleSecretName 为产物 HTTPS 源 CA 的 Secret 名,留空表示产物源使用系统信任。
+	ArtifactCABundleSecretName string `json:"artifactCABundleSecretName"`
+	// ExternalIngestHost 为外部 Collector(主机/外部集群)可达的 ingest 主机名;
+	// 留空使用集群内 Service 地址(同集群目标,如 E2E)。
+	ExternalIngestHost string `json:"externalIngestHost"`
+	// ArtifactTLSMode 控制产物下载的传输层校验:verify(默认)或 insecure。
+	// insecure 仅跳过证书校验(本地自签),sha256+ed25519 签名校验恒定执行。
+	ArtifactTLSMode string `json:"artifactTLSMode"`
 }
 
 type Namespaces struct {
@@ -92,11 +107,14 @@ type Images struct {
 }
 
 type Exposure struct {
-	IngressClassName string     `json:"ingressClassName"`
-	EnterpriseHost   string     `json:"enterpriseHost"`
-	PlatformHost     string     `json:"platformHost"`
-	ConnectorHost    string     `json:"connectorHost"`
-	TLS              *TLSConfig `json:"tls,omitempty"`
+	IngressClassName string `json:"ingressClassName"`
+	EnterpriseHost   string `json:"enterpriseHost"`
+	PlatformHost     string `json:"platformHost"`
+	ConnectorHost    string `json:"connectorHost"`
+	// ArtifactHost 为 Collector 产物下载源的主机名;留空时按
+	// artifacts.<enterprise 父域名> 派生。
+	ArtifactHost string     `json:"artifactHost"`
+	TLS          *TLSConfig `json:"tls,omitempty"`
 }
 
 type TLSConfig struct {
@@ -204,6 +222,13 @@ func (c *InstallConfig) Validate() error {
 		return fmt.Errorf("spec.telemetry Collector version, signed Linux arm64 artifact, and signing key are required")
 	}
 	digests := map[string]string{"spec.telemetry.linuxArm64Sha256": c.Spec.Telemetry.LinuxARM64SHA256}
+	// Linux amd64 产物按需配置:配置了任一字段则要求完整(目录才会注册 amd64 产物)。
+	if c.Spec.Telemetry.LinuxAMD64URI != "" || c.Spec.Telemetry.LinuxAMD64SHA256 != "" || c.Spec.Telemetry.LinuxAMD64Signature != "" || c.Spec.Telemetry.LinuxAMD64ByteSize != 0 {
+		if c.Spec.Telemetry.LinuxAMD64URI == "" || c.Spec.Telemetry.LinuxAMD64Signature == "" || c.Spec.Telemetry.LinuxAMD64ByteSize == 0 {
+			return fmt.Errorf("complete spec.telemetry Linux amd64 artifact metadata is required when configured")
+		}
+		digests["spec.telemetry.linuxAmd64Sha256"] = c.Spec.Telemetry.LinuxAMD64SHA256
+	}
 	if c.Spec.Profile != "local-hardening" || c.Spec.Telemetry.WindowsAMD64URI != "" || c.Spec.Telemetry.WindowsAMD64SHA256 != "" || c.Spec.Telemetry.WindowsAMD64Signature != "" || c.Spec.Telemetry.WindowsAMD64ByteSize != 0 {
 		if c.Spec.Telemetry.WindowsAMD64URI == "" || c.Spec.Telemetry.WindowsAMD64Signature == "" || c.Spec.Telemetry.WindowsAMD64ByteSize == 0 {
 			return fmt.Errorf("complete spec.telemetry Windows artifact metadata is required outside local-hardening")
@@ -214,6 +239,9 @@ func (c *InstallConfig) Validate() error {
 		if matched, _ := regexp.MatchString(`^[0-9a-fA-F]{64}$`, value); !matched {
 			return fmt.Errorf("%s must be a SHA-256 hex digest", name)
 		}
+	}
+	if !contains([]string{"", "verify", "insecure"}, c.Spec.Telemetry.ArtifactTLSMode) {
+		return fmt.Errorf("unsupported spec.telemetry.artifactTLSMode %q (verify|insecure)", c.Spec.Telemetry.ArtifactTLSMode)
 	}
 	if !contains([]string{"local-registry", "oci-registry"}, c.Spec.Images.Mode) {
 		return fmt.Errorf("unsupported image mode %q", c.Spec.Images.Mode)
@@ -280,6 +308,32 @@ func (c *InstallConfig) Image(name string) string {
 		registry += "/argus"
 	}
 	return fmt.Sprintf("%s/%s:%s", registry, name, c.Spec.Images.Tag)
+}
+
+// collectorKubernetesImage 解析集群 Collector 默认镜像:显式配置的
+// spec.telemetry.kubernetesImage 优先(发布镜像或客户内网 registry),
+// 留空回退平台镜像派生值(local-registry 开发安装)。
+func (c *InstallConfig) collectorKubernetesImage() string {
+	if image := strings.TrimSpace(c.Spec.Telemetry.KubernetesImage); image != "" {
+		return image
+	}
+	return c.Image("argus-otelcol")
+}
+
+// collectorArtifactCA 解析产物 HTTPS 源的信任 Secret:显式配置优先;
+// cert-manager-selfsigned 模式下默认信任平台多 SAN 证书(其 ca.crt 即信任锚);
+// artifactTLSMode=insecure 时无需 CA,返回空避免无谓挂载。
+func (c *InstallConfig) collectorArtifactCA() string {
+	if strings.TrimSpace(c.Spec.Telemetry.ArtifactTLSMode) == "insecure" {
+		return ""
+	}
+	if name := strings.TrimSpace(c.Spec.Telemetry.ArtifactCABundleSecretName); name != "" {
+		return name
+	}
+	if tls := c.Spec.Exposure.TLS; tls != nil && tls.Enabled && tls.Mode == TLSModeCertManagerSelfSigned {
+		return "argus-web-tls"
+	}
+	return ""
 }
 
 func (c *InstallConfig) registryContainerName() string {

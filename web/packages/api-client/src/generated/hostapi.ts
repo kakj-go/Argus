@@ -122,6 +122,11 @@ export interface components {
             port: number;
             /** @enum {string} */
             platform: "linux" | "windows";
+            /**
+             * @description 连接测试探测的目标架构(uname -m 归一化),Collector 安装按此选择分发产物;缺省按 amd64 处理
+             * @enum {string}
+             */
+            readonly architecture?: "amd64" | "arm64";
             connection_mode: components["schemas"]["HostConnectionMode"];
             /** Format: uuid */
             bastion_scope_id?: string;
@@ -135,6 +140,18 @@ export interface components {
             resource_version: number;
             /** @enum {string} */
             connection_status: "online" | "offline" | "onboarding" | "degraded" | "unknown";
+            /**
+             * @description 周期探活的实时状态(直连主机);key_changed 表示 SSH 主机键与 pin 值不一致
+             * @enum {string}
+             */
+            readonly live_status?: "online" | "offline" | "key_changed";
+            /**
+             * Format: date-time
+             * @description 最近一次探活时间
+             */
+            readonly last_probe_at?: string;
+            /** @description 最近一次探活往返时延 */
+            readonly probe_latency_ms?: number;
             pinned_host_key?: string;
             /** Format: date-time */
             last_seen_at?: string;

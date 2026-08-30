@@ -2,7 +2,7 @@ import type { ArgusApiClient } from "../client";
 import type { Host, HostPage } from "../generated/contracts";
 import type { MockHost } from "./resource-models";
 import type { MockContext } from "./context";
-import { nextId } from "./store";
+import { nextId, settleCollectors } from "./store";
 
 function hostContract(value: MockHost): Host {
   const contract: Host = {
@@ -21,6 +21,7 @@ function hostContract(value: MockHost): Host {
     labels_version: 1,
     resource_version: value.resourceVersion ?? 1,
     connection_status: value.connectionStatus,
+    architecture: value.architecture,
     last_seen_at: value.lastSeenAt,
     status: "active",
     created_at: value.createdAt,
@@ -28,6 +29,8 @@ function hostContract(value: MockHost): Host {
   };
   return Object.assign(contract, {
     collectorStatus: value.collectorStatus,
+    live_status: value.liveStatus,
+    probe_latency_ms: value.probeLatencyMs,
     telemetryRoute: value.telemetryRoute,
   });
 }
@@ -150,11 +153,13 @@ export function createHostsDomain(ctx: MockContext): ArgusApiClient["hosts"] {
     },
     async getCollector(hostId) {
       await ctx.pause();
-      return (
-        db.collectors.find(
-          (entry) => entry.resource_type === "host" && entry.resource_id === hostId,
-        ) ?? null
+      settleCollectors(db);
+      ctx.save();
+      const found = db.collectors.find(
+        (entry) => entry.resource_type === "host" && entry.resource_id === hostId,
       );
+      // 返回克隆:installing→converged 是原地变更,同引用会阻止轮询方重渲染。
+      return found ? { ...found, route: found.route && { ...found.route } } : null;
     },
     async previewCollectorAction(hostId, action, input) {
       await ctx.pause();

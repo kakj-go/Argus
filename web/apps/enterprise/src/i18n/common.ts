@@ -9,6 +9,15 @@ export const commonZh = {
     cancel: "取消",
     requestReference: "请求 ID：{{requestId}}",
     unknown: "未知",
+    collectorSettlement: {
+      title: "正在应用 Collector 变更",
+      description: "安装与配置在后台执行，完成后自动关闭。",
+      status: "当前状态",
+      failed: "操作未完成",
+      failedWith: "失败：{{code}}",
+      timeout: "等待超时，请稍后在详情页查看最终状态。",
+      close: "关闭",
+    },
     underConstruction: {
       title: "建设中",
       description: "该页面正在建设中，敬请期待。",
@@ -67,6 +76,17 @@ export const commonEn = {
     cancel: "Cancel",
     requestReference: "Request ID: {{requestId}}",
     unknown: "Unknown",
+    collectorSettlement: {
+      title: "Applying collector change",
+      description:
+        "The change is applied in the background; this closes automatically when done.",
+      status: "Current status",
+      failed: "The operation did not complete",
+      failedWith: "Failed: {{code}}",
+      timeout:
+        "Timed out waiting; check the final status on the detail page later.",
+      close: "Close",
+    },
     underConstruction: {
       title: "Under construction",
       description: "This page is under construction. Stay tuned.",

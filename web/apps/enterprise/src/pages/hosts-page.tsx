@@ -41,6 +41,7 @@ import {
   collectorTone,
   connectionPathKey,
   environmentTone,
+  hostLiveTone,
   hostStatusTone,
   scopeOf,
 } from "../components/hosts/host-utils";
@@ -84,12 +85,27 @@ function HostTile({
           <Link params={{ hostId: host.id }} to="/hosts/$hostId">
             {host.name}
           </Link>
-          <StatusBadge
-            pulse={host.connection_status === "online"}
-            tone={hostStatusTone(host.connection_status)}
-          >
-            {t(`hosts.status.${host.connection_status}`)}
-          </StatusBadge>
+          {host.live_status ? (
+            <StatusBadge
+              pulse={host.live_status === "online"}
+              tone={hostLiveTone(host.live_status)}
+              title={t("hosts.liveStatus.probeHint", {
+                latency: host.probe_latency_ms ?? 0,
+                time: host.last_probe_at
+                  ? new Date(host.last_probe_at).toLocaleTimeString()
+                  : "",
+              })}
+            >
+              {t(`hosts.liveStatus.${host.live_status}`)}
+            </StatusBadge>
+          ) : (
+            <StatusBadge
+              pulse={host.connection_status === "online"}
+              tone={hostStatusTone(host.connection_status)}
+            >
+              {t(`hosts.status.${host.connection_status}`)}
+            </StatusBadge>
+          )}
         </span>
         <span className="argus-host-tile__addr">
           {host.address}:{host.port}
@@ -183,6 +199,7 @@ export function HostsPage() {
   const hostsQuery = useQuery({
     queryKey: ["hosts", filter],
     queryFn: () => api.hosts.list(filter),
+    refetchInterval: 15_000,
   });
   const scopesQuery = useQuery({
     queryKey: ["bastion-scopes"],
@@ -671,6 +688,7 @@ export function HostsPage() {
           <PendingActionConfirm
             action={deleteAction}
             onCancel={() => setDeleteAction(null)}
+            onDismiss={() => setDeleteAction(null)}
             onDone={() => {
               setDeleteAction(null);
               invalidateAll();
@@ -741,6 +759,7 @@ export function HostsPage() {
           <PendingActionConfirm
             action={deleteBastionAction}
             onCancel={() => setDeleteBastionAction(null)}
+            onDismiss={() => setDeleteBastionAction(null)}
             onDone={() => {
               setDeleteBastionAction(null);
               invalidateAll();

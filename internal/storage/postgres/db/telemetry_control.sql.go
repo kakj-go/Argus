@@ -898,6 +898,45 @@ func (q *Queries) GetKubernetesNodeHostBinding(ctx context.Context, arg GetKuber
 	return i, err
 }
 
+const getLatestCollectorOperation = `-- name: GetLatestCollectorOperation :one
+SELECT id, enterprise_id, collector_id, pending_action_id, operation, executor_kind, status, plan, plan_hash, lease_owner, fence, lease_expires_at, result_hash, error_code, attempts, expires_at, created_at, updated_at, completed_at FROM telemetry_collector_operations
+WHERE collector_id = $1 AND enterprise_id = $2
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestCollectorOperationParams struct {
+	CollectorID  uuid.UUID `json:"collector_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) GetLatestCollectorOperation(ctx context.Context, arg GetLatestCollectorOperationParams) (TelemetryCollectorOperation, error) {
+	row := q.db.QueryRow(ctx, getLatestCollectorOperation, arg.CollectorID, arg.EnterpriseID)
+	var i TelemetryCollectorOperation
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.CollectorID,
+		&i.PendingActionID,
+		&i.Operation,
+		&i.ExecutorKind,
+		&i.Status,
+		&i.Plan,
+		&i.PlanHash,
+		&i.LeaseOwner,
+		&i.Fence,
+		&i.LeaseExpiresAt,
+		&i.ResultHash,
+		&i.ErrorCode,
+		&i.Attempts,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const getTelemetryCollectorIdentity = `-- name: GetTelemetryCollectorIdentity :one
 SELECT id, enterprise_id, resource_type, resource_id, distribution_version_id, platform, role, status, desired_revision, effective_revision, authorization_version, last_seen_at, version, created_at, updated_at FROM collector_instances WHERE id = $1 AND status NOT IN ('uninstalled','uninstalling')
 `

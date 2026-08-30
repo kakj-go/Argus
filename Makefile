@@ -1,4 +1,4 @@
-.PHONY: fmt test vet run-server contract-lint contract-generate contract-check contract-breaking query-parser-check query-promql-conformance query-kql-check query-skywalking-graphql-check query-tenant-schema-check check-production-artifacts migrate sqlc otelcol-linux-arm64 otelcol-windows-amd64 otelcol-distributions e2e-m2-k8s e2e-m3-k8s e2e-m4-k8s e2e-m5-k8s e2e-m6-k8s e2e-m7-k8s e2e-m8-k8s e2e-m10-query-k8s release-local dev-upgrade
+.PHONY: fmt test vet run-server contract-lint contract-generate contract-check contract-breaking query-parser-check query-promql-conformance query-kql-check query-skywalking-graphql-check query-tenant-schema-check check-production-artifacts migrate sqlc otelcol-linux-arm64 otelcol-windows-amd64 otelcol-distributions otelcol-image-publish otelcol-artifacts-publish e2e-m2-k8s e2e-m3-k8s e2e-m4-k8s e2e-m5-k8s e2e-m6-k8s e2e-m7-k8s e2e-m8-k8s e2e-m10-query-k8s release-local dev-upgrade
 
 # 本地迭代一键构建升级：images build -> images load -> 滚动重启全部 Argus 工作负载。
 # 与 argusctl install 的 restartLocalRegistryWorkloads 保持同一份 Deployment 清单
@@ -47,11 +47,20 @@ migrate:
 otelcol-linux-arm64:
 	go run ./cmd/argus-dev collector build linux-arm64
 
+otelcol-linux-amd64:
+	go run ./cmd/argus-dev collector build linux-amd64
+
 otelcol-windows-amd64:
 	go run ./cmd/argus-dev collector build windows-amd64
 
 otelcol-distributions:
 	go run ./cmd/argus-dev collector build all
+
+otelcol-image-publish:
+	go run ./cmd/argus-dev collector publish-image --push
+
+otelcol-artifacts-publish:
+	go run ./cmd/argus-dev collector publish-artifacts
 
 e2e-m2-k8s:
 	go run ./cmd/argus-dev e2e run --suite m2

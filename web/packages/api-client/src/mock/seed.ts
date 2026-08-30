@@ -29,6 +29,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     hostname: partial.name ?? "",
     port: 22,
     platform: "linux",
+    architecture: "amd64",
     connectionMode: "direct_ssh",
     environment: "production",
     labels: {},
@@ -46,6 +47,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       name: "gw-sh-01",
       address: "10.0.0.2",
       connectionMode: "connector_local",
+      architecture: "arm64",
       bastionScopeId: "scope-sh",
       connectorId: "conn-sh-01",
       collectorStatus: "converged",
@@ -65,6 +67,8 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     }),
     host({
       id: "host-web-12",
+      liveStatus: "key_changed",
+      probeLatencyMs: 23,
       name: "host-web-12",
       address: "10.0.0.12",
       connectionMode: "via_bastion",
@@ -79,6 +83,8 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     }),
     host({
       id: "host-db-master-01",
+      liveStatus: "offline",
+      probeLatencyMs: 0,
       name: "db-master-01",
       address: "10.0.1.5",
       connectionMode: "via_bastion",

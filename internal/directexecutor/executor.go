@@ -317,7 +317,32 @@ func (executor *Executor) probeSSH(ctx context.Context, plan connectionPlan, add
 	}
 	client := ssh.NewClient(clientConnection, channels, requests)
 	defer client.Close()
-	return resource.ConnectionTestResult{ResolvedIPs: addressStrings(addresses), HostKeyFingerprint: fingerprint, RemoteVersion: string(clientConnection.ServerVersion())}, nil
+	// Collector 产物按目标架构分发,连接测试时探测 uname -m 并随主机记录,
+	// 安装计划据此选择 linux_amd64 / linux_arm64 产物。
+	architecture := probeArchitecture(client)
+	return resource.ConnectionTestResult{ResolvedIPs: addressStrings(addresses), HostKeyFingerprint: fingerprint, RemoteVersion: string(clientConnection.ServerVersion()), Architecture: architecture}, nil
+}
+
+// probeArchitecture 把远端 uname -m 归一化为 Go GOARCH 命名;
+// 探测失败返回空串,由上层按默认架构(amd64)处理。
+func probeArchitecture(client *ssh.Client) string {
+	session, err := client.NewSession()
+	if err != nil {
+		return ""
+	}
+	defer session.Close()
+	output, err := session.Output("uname -m 2>/dev/null || echo")
+	if err != nil {
+		return ""
+	}
+	switch strings.TrimSpace(string(output)) {
+	case "x86_64", "amd64":
+		return "amd64"
+	case "aarch64", "arm64":
+		return "arm64"
+	default:
+		return ""
+	}
 }
 
 func (executor *Executor) probeWinRM(ctx context.Context, plan connectionPlan, addresses []netip.Addr, username string, credential []byte) (resource.ConnectionTestResult, error) {

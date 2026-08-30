@@ -35,10 +35,13 @@ type E2EEndpoints struct {
 	EnrollServer     string
 	IngressIP        string
 	ConnectorIP      string
-	HostResolver     string
-	CAFile           string
-	RootCAs          *x509.CertPool
-	hostIPs          map[string]string
+	// 子进程拨号覆盖用的地址(优先宿主机 localhost 发布端口)。
+	IngressDialAddress   string
+	ConnectorDialAddress string
+	HostResolver         string
+	CAFile               string
+	RootCAs              *x509.CertPool
+	hostIPs              map[string]string
 }
 
 // Transport returns a shared round tripper that pins the public hostnames to
@@ -88,17 +91,29 @@ func (a *App) resolveE2EAccess(ctx context.Context, env *E2EEnvironment) error {
 	if err != nil {
 		return err
 	}
-	caPEM, err := env.Kube.SecretValue(ctx, env.SystemNS, "argus-web-enterprise-tls", "ca.crt")
+	// 与 ingress-certificates.yaml 的多 SAN 证书 secret 名保持一致。
+	caPEM, err := env.Kube.SecretValue(ctx, env.SystemNS, "argus-web-tls", "ca.crt")
 	if err != nil {
 		return fmt.Errorf("read ingress CA: %w", err)
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM([]byte(caPEM)) {
-		return fmt.Errorf("ingress CA from secret argus-web-enterprise-tls could not be parsed")
+		return fmt.Errorf("ingress CA from secret argus-web-tls could not be parsed")
 	}
 	caFile := filepath.Join(env.Options.Artifacts, "argus-e2e-ingress-ca.pem")
 	if err := writePrivate(caFile, []byte(caPEM)); err != nil {
 		return err
+	}
+
+	// Docker Desktop 把 LoadBalancer 端口同时发布到宿主机 localhost;
+	// 优先用 127.0.0.1 直连——某些本机代理(TUN)会拦截宿主机到
+	// Docker 桥网段 LB IP 的出站流量,导致直拨 LB IP 被重置。
+	ingressDialIP, connectorDialIP := ingressIP, connectorIP
+	if dialReachable(ctx, "127.0.0.1:443") {
+		ingressDialIP = "127.0.0.1"
+	}
+	if dialReachable(ctx, "127.0.0.1:9443") {
+		connectorDialIP = "127.0.0.1"
 	}
 
 	endpoints := &E2EEndpoints{
@@ -111,21 +126,25 @@ func (a *App) resolveE2EAccess(ctx context.Context, env *E2EEnvironment) error {
 		EnrollServer:     "https://" + hosts["enterprise"],
 		IngressIP:        ingressIP,
 		ConnectorIP:      connectorIP,
-		CAFile:           caFile,
-		RootCAs:          pool,
+		// 子进程(connector 等)经地址覆盖直拨;使用与 hostIPs 相同的回退地址,
+		// 避免宿主机代理拦截 Docker 桥网段 LB IP。
+		IngressDialAddress:   net.JoinHostPort(ingressDialIP, "443"),
+		ConnectorDialAddress: net.JoinHostPort(connectorDialIP, "9443"),
+		CAFile:               caFile,
+		RootCAs:              pool,
 		hostIPs: map[string]string{
-			hosts["enterprise"]: ingressIP,
-			hosts["platform"]:   ingressIP,
-			hosts["cards"]:      ingressIP,
-			hosts["remote"]:     ingressIP,
-			hosts["connector"]:  connectorIP,
+			hosts["enterprise"]: ingressDialIP,
+			hosts["platform"]:   ingressDialIP,
+			hosts["cards"]:      ingressDialIP,
+			hosts["remote"]:     ingressDialIP,
+			hosts["connector"]:  connectorDialIP,
 		},
 	}
 	var resolver strings.Builder
 	for _, host := range []string{hosts["enterprise"], hosts["platform"], hosts["cards"], hosts["remote"]} {
-		fmt.Fprintf(&resolver, "MAP %s %s,", host, ingressIP)
+		fmt.Fprintf(&resolver, "MAP %s %s,", host, ingressDialIP)
 	}
-	fmt.Fprintf(&resolver, "MAP %s %s", hosts["connector"], connectorIP)
+	fmt.Fprintf(&resolver, "MAP %s %s", hosts["connector"], connectorDialIP)
 	endpoints.HostResolver = resolver.String()
 	env.Endpoints = endpoints
 
@@ -257,4 +276,16 @@ func waitHTTPSReady(ctx context.Context, client *http.Client, url, expected stri
 		}
 	}
 	return fmt.Errorf("HTTPS endpoint %s did not become ready", url)
+}
+
+// dialReachable 探测 TCP 地址是否可建立连接;用于选择宿主机 localhost
+// 发布端口或 LoadBalancer IP 作为 E2E 拨号地址。
+func dialReachable(ctx context.Context, address string) bool {
+	dialer := net.Dialer{Timeout: 3 * time.Second}
+	connection, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return false
+	}
+	_ = connection.Close()
+	return true
 }

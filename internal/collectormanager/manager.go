@@ -31,9 +31,11 @@ const (
 )
 
 var (
-	ErrInvalidCommand      = errors.New("collector management command is invalid")
-	ErrUnsupportedPlatform = errors.New("collector platform is not supported")
-	ErrArtifactInvalid     = errors.New("collector artifact is invalid")
+	ErrInvalidCommand       = errors.New("collector management command is invalid")
+	ErrUnsupportedPlatform  = errors.New("collector platform is not supported")
+	ErrArtifactInvalid      = errors.New("collector artifact is invalid")
+	ErrTargetAuthFailed     = errors.New("collector target SSH authentication failed")
+	ErrTargetHostKeyChanged = errors.New("collector target SSH host key changed")
 )
 
 type Result struct {
@@ -61,16 +63,27 @@ func NewArtifactHTTPClient(caBundlePath string) (*http.Client, error) {
 			return nil, ErrArtifactInvalid
 		}
 	}
+	return newArtifactHTTPClient(&tls.Config{MinVersion: tls.VersionTLS13, RootCAs: pool}), nil
+}
+
+// NewArtifactHTTPClientInsecure 供 artifactTLSMode=insecure 使用:仅跳过
+// 传输层证书校验(本地自签场景),https 与重定向约束保持不变;产物完整性
+// 仍由 sha256 + ed25519 签名校验端到端保证,不受此开关影响。
+func NewArtifactHTTPClientInsecure() (*http.Client, error) {
+	return newArtifactHTTPClient(&tls.Config{MinVersion: tls.VersionTLS13, InsecureSkipVerify: true}), nil //nolint:gosec // 显式配置的本地部署模式,签名链是信任根
+}
+
+func newArtifactHTTPClient(tlsConfig *tls.Config) *http.Client {
 	return &http.Client{
 		Timeout:   2 * time.Minute,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: pool}},
+		Transport: &http.Transport{TLSClientConfig: tlsConfig},
 		CheckRedirect: func(next *http.Request, previous []*http.Request) error {
 			if len(previous) >= 3 || next.URL.Scheme != "https" || next.URL.Hostname() != previous[0].URL.Hostname() {
 				return ErrArtifactInvalid
 			}
 			return nil
 		},
-	}, nil
+	}
 }
 
 type persistedState struct {
@@ -139,7 +152,10 @@ func Validate(command *connectorv1.CollectorManagementCommand) error {
 		}
 	}
 	artifact := command.GetArtifact()
-	if artifact == nil || artifact.GetPlatform() != "linux_arm64" {
+	// 产物平台必须与目标匹配:计划生成时已按主机 OS + 探测架构选定
+	// (linux_amd64 / linux_arm64),此处只接受命令携带的合法 linux 产物;
+	// windows 产物暂无 SSH 安装路径,维持拒绝。
+	if artifact == nil || (artifact.GetPlatform() != "linux_arm64" && artifact.GetPlatform() != "linux_amd64") {
 		return ErrUnsupportedPlatform
 	}
 	if _, err := uuid.Parse(artifact.GetDistributionVersionId()); err != nil {
@@ -220,23 +236,23 @@ func (manager Manager) FetchArtifact(ctx context.Context, artifact *connectorv1.
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, artifact.GetUri(), nil)
 	if err != nil {
-		return nil, ErrArtifactInvalid
+		return nil, fmt.Errorf("%w: build request: %v", ErrArtifactInvalid, err)
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: fetch %s: %v", ErrArtifactInvalid, artifact.GetUri(), err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK || response.ContentLength > int64(artifact.GetByteSize()) {
-		return nil, ErrArtifactInvalid
+		return nil, fmt.Errorf("%w: status %d contentLength %d want %d bytes", ErrArtifactInvalid, response.StatusCode, response.ContentLength, artifact.GetByteSize())
 	}
 	value, err := io.ReadAll(io.LimitReader(response.Body, int64(artifact.GetByteSize())+1))
 	if err != nil || uint64(len(value)) != artifact.GetByteSize() {
-		return nil, ErrArtifactInvalid
+		return nil, fmt.Errorf("%w: read body: got %d bytes want %d: %v", ErrArtifactInvalid, len(value), artifact.GetByteSize(), err)
 	}
 	hash := sha256.Sum256(value)
 	if !strings.EqualFold(hex.EncodeToString(hash[:]), artifact.GetSha256()) {
-		return nil, ErrArtifactInvalid
+		return nil, fmt.Errorf("%w: sha256 mismatch", ErrArtifactInvalid)
 	}
 	keys := manager.TrustedSigningKeys
 	if len(keys) == 0 {
@@ -245,7 +261,7 @@ func (manager Manager) FetchArtifact(ctx context.Context, artifact *connectorv1.
 	key := keys[artifact.GetSigningKeyId()]
 	signature, decodeErr := base64.RawStdEncoding.DecodeString(artifact.GetSignature())
 	if len(key) != ed25519.PublicKeySize || decodeErr != nil || !ed25519.Verify(key, hash[:], signature) {
-		return nil, ErrArtifactInvalid
+		return nil, fmt.Errorf("%w: signature verify failed for key %q", ErrArtifactInvalid, artifact.GetSigningKeyId())
 	}
 	return value, nil
 }

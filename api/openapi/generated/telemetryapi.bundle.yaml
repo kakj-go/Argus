@@ -521,6 +521,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CollectorArtifact'
+        kubernetes_image:
+          type: string
+          maxLength: 512
+          readOnly: true
+          description: 服务端解析的 Kubernetes 默认镜像引用(未配置时缺省)
         created_at:
           type: string
           format: date-time
@@ -641,6 +646,11 @@ components:
           minimum: 0
         route:
           $ref: '#/components/schemas/TelemetryRoute'
+        last_operation_error_code:
+          type: string
+          maxLength: 128
+          readOnly: true
+          description: 最近一次管理操作失败的错误码(成功或无记录时缺省)
         last_seen_at:
           type: string
           format: date-time
@@ -967,6 +977,11 @@ components:
           type: integer
           format: int64
           minimum: 0
+        kubernetes_image:
+          type: string
+          maxLength: 512
+          pattern: ^\S+:\S+$
+          description: 集群内网镜像全量地址(含 tag/digest);仅 kubernetes_cluster 资源可填,留空使用服务端默认镜像
     TelemetryRetentionPolicy:
       type: object
       additionalProperties: false
@@ -1499,6 +1514,7 @@ components:
       type: string
       enum:
         - linux_arm64
+        - linux_amd64
         - windows_amd64
     CollectorArtifact:
       type: object

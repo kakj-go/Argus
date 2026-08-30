@@ -13,6 +13,8 @@ import {
   CardContent,
   CardHeader,
   DiffViewer,
+  Field,
+  Input,
   KeyValueGrid,
   Progress,
   StatCard,
@@ -81,6 +83,10 @@ export function CollectorStatusPanel({
     queryKey: ["telemetry", "profiles"],
     queryFn: () => api.telemetry.listProfiles(),
   });
+  const distributionsQuery = useQuery({
+    queryKey: ["telemetry", "distributions"],
+    queryFn: () => api.telemetry.listDistributions(),
+  });
 
   const [profiles, setProfiles] = useState(() =>
     initialProfiles("k8s-daemonset"),
@@ -88,6 +94,7 @@ export function CollectorStatusPanel({
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
   const [routeTested, setRouteTested] = useState(false);
+  const [customImage, setCustomImage] = useState("");
 
   const baseline = useMemo(
     () => initialProfiles("k8s-daemonset"),
@@ -118,6 +125,15 @@ export function CollectorStatusPanel({
 
   const changed = diffLines.length > 1;
 
+  // 镜像按次输入:configure/upgrade/repair 都会生成携带镜像的 plan,
+  // 留空回退服务端默认;与安装向导共用同一套格式规则。
+  const trimmedImage = customImage.trim();
+  const imageInvalid =
+    trimmedImage !== "" && !/^\S+:\S+$/.test(trimmedImage);
+  const imageOverride = trimmedImage && !imageInvalid
+    ? { kubernetes_image: trimmedImage }
+    : {};
+
   const previewChange = useMutation({
     mutationFn: () => {
       const keys = toProfileString(profiles).split(",");
@@ -137,6 +153,7 @@ export function CollectorStatusPanel({
         route_kind: collector.route?.kind ?? "direct_argus",
         gateway_collector_id: collector.route?.gateway_collector_id,
         expected_version: collector.version,
+        ...imageOverride,
       });
     },
     onSuccess: setPendingAction,
@@ -154,6 +171,7 @@ export function CollectorStatusPanel({
         route_kind: collector.route?.kind ?? "direct_argus",
         gateway_collector_id: collector.route?.gateway_collector_id,
         expected_version: collector.version,
+        ...(action === "uninstall" ? {} : imageOverride),
       });
     },
     onSuccess: setPendingAction,
@@ -173,6 +191,12 @@ export function CollectorStatusPanel({
     (claim) => claim.status === "conflict",
   );
   const egressOk = cluster.connection_status === "connected";
+  const defaultImage =
+    distributionsQuery.data?.find(
+      (item) =>
+        item.support_status === "supported" &&
+        item.artifacts.some((artifact) => artifact.platform === "linux_arm64"),
+    )?.kubernetes_image ?? "—";
 
   return (
     <div className="argus-k8s-stack">
@@ -214,6 +238,14 @@ export function CollectorStatusPanel({
             tone={collector.status === "converged" ? "success" : "accent"}
             value={collector.status === "converged" ? 100 : 60}
           />
+          {collector.status === "degraded" &&
+            collector.last_operation_error_code && (
+              <p className="argus-mono">
+                {t("hosts.components.lastFailure", {
+                  code: collector.last_operation_error_code,
+                })}
+              </p>
+            )}
         </CardContent>
       </Card>
 
@@ -231,8 +263,8 @@ export function CollectorStatusPanel({
                 {t("kubernetes.collector.status.testRoute")}
               </Button>
               {routeTested && <StatusBadge tone="success">{t("kubernetes.collector.status.routeOk")}</StatusBadge>}
-              <Button loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("upgrade")} variant="secondary">{t("kubernetes.collector.status.upgrade")}</Button>
-              <Button loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("repair")} variant="secondary">{t("kubernetes.collector.status.repair")}</Button>
+              <Button disabled={imageInvalid} loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("upgrade")} variant="secondary">{t("kubernetes.collector.status.upgrade")}</Button>
+              <Button disabled={imageInvalid} loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("repair")} variant="secondary">{t("kubernetes.collector.status.repair")}</Button>
               <Button loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("uninstall")} variant="danger">{t("kubernetes.collector.status.uninstall")}</Button>
             </div>
           )}
@@ -242,6 +274,23 @@ export function CollectorStatusPanel({
       <Card>
         <CardHeader title={t("kubernetes.detail.collectorTab")} />
         <CardContent>
+          <Field
+            label={t("kubernetes.collector.wizard.imageAddress")}
+            hint={t("kubernetes.collector.wizard.imageAddressDesc")}
+            requirement="optional"
+            error={
+              imageInvalid
+                ? t("kubernetes.collector.wizard.imageInvalid")
+                : undefined
+            }
+          >
+            <Input
+              className="argus-mono"
+              onChange={(event) => setCustomImage(event.target.value)}
+              placeholder={defaultImage === "—" ? "registry.example.com/argus-otelcol:0.1.0-m7" : defaultImage}
+              value={customImage}
+            />
+          </Field>
           <KeyValueGrid
             columns={2}
             items={[
@@ -255,7 +304,11 @@ export function CollectorStatusPanel({
               },
               {
                 label: t("kubernetes.collector.status.imageDigest"),
-                value: t("kubernetes.collector.wizard.imageDigestValue"),
+                value: (
+                  <span className="argus-mono">
+                    {trimmedImage || defaultImage}
+                  </span>
+                ),
               },
               {
                 label: t("kubernetes.collector.status.egress"),
@@ -344,7 +397,7 @@ export function CollectorStatusPanel({
             ) : (
               <div>
                 <Button
-                  disabled={!changed}
+                  disabled={!changed || imageInvalid}
                   loading={previewChange.isPending}
                   onClick={() => previewChange.mutate()}
                   variant="primary"

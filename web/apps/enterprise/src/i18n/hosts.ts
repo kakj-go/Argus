@@ -28,6 +28,12 @@ export const hostsZh = {
       degraded: "降级",
       unknown: "未知",
     },
+    liveStatus: {
+      online: "在线(实时)",
+      offline: "离线(实时)",
+      key_changed: "主机键已变更",
+      probeHint: "周期探活 · 时延 {{latency}}ms · 最近 {{time}}",
+    },
     collectorStatus: {
       not_installed: "未安装",
       installing: "安装中",
@@ -35,6 +41,11 @@ export const hostsZh = {
       config_stale: "配置待下发",
       backlog: "有积压",
       interrupted: "已中断",
+      degraded: "已降级",
+      uninstalling: "卸载中",
+      uninstalled: "已卸载",
+      result_unknown: "结果未知",
+      pending_install: "待安装",
     },
     connectionMode: {
       connector_local: "堡垒机本机",
@@ -220,6 +231,9 @@ export const hostsZh = {
       createResourceDiff: "+ 主机资源 {{name}}",
       collectorDiff: "+ OTLP 收集器",
       awaitingApproval: "已确认，等待审批通过后执行",
+      awaitingApprovalHint:
+        "操作已按审批策略进入双人审批，批准后才会真正执行；可稍后在「审批中心」查看进度，本列表将在批准后自动更新。",
+      close: "关闭",
       submitted: "已确认，执行任务已创建",
     },
     detail: {
@@ -329,6 +343,7 @@ export const hostsZh = {
       uninstall: "卸载 Connector",
       collectorNotInstalled: "未安装",
       collectorNotInstalledDesc: "安装后可采集主机指标、日志并上报 Argus。",
+      lastFailure: "最近一次操作失败：{{code}}",
       installCollector: "安装 OTLP 收集器",
       installWizard: {
         title: "安装 OTLP 收集器 · {{name}}",
@@ -433,6 +448,12 @@ export const hostsEn = {
       degraded: "Degraded",
       unknown: "Unknown",
     },
+    liveStatus: {
+      online: "Online (live)",
+      offline: "Offline (live)",
+      key_changed: "Host key changed",
+      probeHint: "Probed every cycle · latency {{latency}}ms · last {{time}}",
+    },
     collectorStatus: {
       not_installed: "Not installed",
       installing: "Installing",
@@ -440,6 +461,11 @@ export const hostsEn = {
       config_stale: "Config pending",
       backlog: "Backlog",
       interrupted: "Interrupted",
+      degraded: "Degraded",
+      uninstalling: "Uninstalling",
+      uninstalled: "Uninstalled",
+      result_unknown: "Result unknown",
+      pending_install: "Pending install",
     },
     connectionMode: {
       connector_local: "Bastion host",
@@ -631,6 +657,9 @@ export const hostsEn = {
       createResourceDiff: "+ host resource {{name}}",
       collectorDiff: "+ OTLP collector",
       awaitingApproval: "Confirmed; waiting for approval before execution",
+      awaitingApprovalHint:
+        "Submitted for dual approval per policy; it executes only after approval. Track it in the Approvals center — this list refreshes once approved.",
+      close: "Close",
       submitted: "Confirmed; execution task created",
     },
     detail: {
@@ -747,6 +776,7 @@ export const hostsEn = {
       collectorNotInstalled: "Not installed",
       collectorNotInstalledDesc:
         "Install to collect host metrics and logs into Argus.",
+      lastFailure: "Last operation failed: {{code}}",
       installCollector: "Install OTLP Collector",
       installWizard: {
         title: "Install OTLP Collector · {{name}}",

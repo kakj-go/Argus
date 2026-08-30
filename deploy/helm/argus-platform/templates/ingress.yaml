@@ -13,6 +13,9 @@ spec:
         - {{ .Values.hosts.enterprise }}
         - {{ .Values.hosts.platform }}
         - {{ .Values.hosts.cards }}
+        {{- with .Values.hosts.artifact }}
+        - {{ . }}
+        {{- end }}
       secretName: {{ if eq .Values.tls.mode "user-provided" }}{{ .Values.tls.secretName }}{{ else }}argus-web-tls{{ end }}
   {{- end }}
   rules:
@@ -44,3 +47,13 @@ spec:
             pathType: Prefix
             backend:
               service: {name: argus-web, port: {name: cards}}
+    {{- with .Values.hosts.artifact }}
+    # Collector 产物匿名下载源:MinIO S3 路径式 GET,完整性由产物签名保证。
+    - host: {{ . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: argus-minio, port: {name: api}}
+    {{- end }}

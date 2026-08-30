@@ -7,7 +7,7 @@ import {
   type ConfirmActionResult,
   type PendingActionPublic,
 } from "@argus/api-client";
-import { PreviewCommitCard, type PreviewCommitStatus } from "@argus/ui";
+import { Button, PreviewCommitCard, type PreviewCommitStatus } from "@argus/ui";
 import { presentPendingAction } from "../pending-action-presentation";
 
 function toDiffLines(diff: PendingActionPublic["diff"]) {
@@ -31,16 +31,20 @@ export function PendingActionCard({
   action,
   claimOneTimeResult = false,
   onSettled,
+  onDismiss,
 }: {
   action: PendingActionPublic;
   claimOneTimeResult?: boolean;
   onSettled: (confirmed: boolean, result?: ConfirmActionResult) => void;
+  /** 中性关闭(不取消动作):等待审批场景下由用户手动关闭卡片。 */
+  onDismiss?: () => void;
 }) {
   const { t } = useTranslation();
   const api = useApi();
   const presented = presentPendingAction(action, t);
   const [status, setStatus] = useState<PreviewCommitStatus>("pending");
   const [resultMessage, setResultMessage] = useState<string>();
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
   const timerRef = useRef<number | undefined>(undefined);
 
   useEffect(
@@ -60,7 +64,8 @@ export function PendingActionCard({
   const confirm = useMutation({
     mutationFn: async () => {
       let result = await api.approvals.confirm(action.action_ref);
-      if (!claimOneTimeResult || !result.execution || result.one_time_result) {
+      // 执行是异步的:轮询到终态再返回,确保父组件失效缓存时副作用已落库。
+      if (!result.execution || result.one_time_result) {
         return result;
       }
       const executionId = result.execution.execution_id;
@@ -87,11 +92,18 @@ export function PendingActionCard({
     },
     onSuccess: (result) => {
       setStatus("success");
+      const awaiting = result.pending_action.status === "awaiting_approval";
       setResultMessage(
-        result.pending_action.status === "awaiting_approval"
+        awaiting
           ? t("kubernetes.pendingAction.awaitingApproval")
           : t("kubernetes.pendingAction.executed"),
       );
+      // 等待双人审批:动作尚未生效,保持卡片与引导,不触发 settle,
+      // 避免用户误以为操作已执行而列表"没有刷新"。
+      if (awaiting) {
+        setAwaitingApproval(true);
+        return;
+      }
       settle(true, result);
     },
     onError: () => setStatus("failed"),
@@ -120,6 +132,16 @@ export function PendingActionCard({
       title={presented.title}
     >
       <p>{presented.summary}</p>
+      {awaitingApproval && (
+        <div className="argus-form-actions">
+          <span className="argus-muted">
+            {t("hosts.preview.awaitingApprovalHint")}
+          </span>
+          <Button onClick={() => onDismiss?.()} variant="secondary">
+            {t("hosts.preview.close")}
+          </Button>
+        </div>
+      )}
     </PreviewCommitCard>
   );
 }

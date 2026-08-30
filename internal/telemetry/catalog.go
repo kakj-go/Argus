@@ -17,22 +17,27 @@ const CatalogRevision = 1
 
 const (
 	LinuxARM64DistributionName   = "argus-otelcol-linux-arm64"
+	LinuxAMD64DistributionName   = "argus-otelcol-linux-amd64"
 	WindowsAMD64DistributionName = "argus-otelcol-windows-amd64"
 )
 
 type CatalogSync struct {
-	Service                  Service
-	Version                  string
-	LinuxArtifactURI         string
-	LinuxArtifactSHA256      string
-	LinuxArtifactSignature   string
-	LinuxArtifactByteSize    uint64
-	WindowsArtifactURI       string
-	WindowsArtifactSHA256    string
-	WindowsArtifactSignature string
-	WindowsArtifactByteSize  uint64
-	SigningKeyID             string
-	SigningPublicKey         string
+	Service                     Service
+	Version                     string
+	LinuxArtifactURI            string
+	LinuxArtifactSHA256         string
+	LinuxArtifactSignature      string
+	LinuxArtifactByteSize       uint64
+	LinuxAMD64ArtifactURI       string
+	LinuxAMD64ArtifactSHA256    string
+	LinuxAMD64ArtifactSignature string
+	LinuxAMD64ArtifactByteSize  uint64
+	WindowsArtifactURI          string
+	WindowsArtifactSHA256       string
+	WindowsArtifactSignature    string
+	WindowsArtifactByteSize     uint64
+	SigningKeyID                string
+	SigningPublicKey            string
 }
 
 func (sync CatalogSync) Run(ctx context.Context) error {
@@ -45,6 +50,17 @@ func (sync CatalogSync) Run(ctx context.Context) error {
 	linuxHash, err := validateArtifactHash(sync.LinuxArtifactSHA256)
 	if err != nil {
 		return err
+	}
+	linuxAMD64Configured := sync.LinuxAMD64ArtifactURI != "" || sync.LinuxAMD64ArtifactSHA256 != "" || sync.LinuxAMD64ArtifactSignature != "" || sync.LinuxAMD64ArtifactByteSize != 0
+	var linuxAMD64Hash string
+	if linuxAMD64Configured {
+		if sync.LinuxAMD64ArtifactURI == "" || sync.LinuxAMD64ArtifactSHA256 == "" || sync.LinuxAMD64ArtifactSignature == "" || sync.LinuxAMD64ArtifactByteSize == 0 {
+			return errors.New("telemetry Linux amd64 artifact must be configured completely")
+		}
+		linuxAMD64Hash, err = validateArtifactHash(sync.LinuxAMD64ArtifactSHA256)
+		if err != nil {
+			return err
+		}
 	}
 	windowsConfigured := sync.WindowsArtifactURI != "" || sync.WindowsArtifactSHA256 != "" || sync.WindowsArtifactSignature != "" || sync.WindowsArtifactByteSize != 0
 	var windowsHash string
@@ -64,18 +80,30 @@ func (sync CatalogSync) Run(ctx context.Context) error {
 	if err = validateArtifactSignature(publicKey, linuxHash, sync.LinuxArtifactSignature, sync.LinuxArtifactByteSize); err != nil {
 		return err
 	}
+	if linuxAMD64Configured {
+		if err = validateArtifactSignature(publicKey, linuxAMD64Hash, sync.LinuxAMD64ArtifactSignature, sync.LinuxAMD64ArtifactByteSize); err != nil {
+			return err
+		}
+	}
 	if windowsConfigured {
 		if err = validateArtifactSignature(publicKey, windowsHash, sync.WindowsArtifactSignature, sync.WindowsArtifactByteSize); err != nil {
 			return err
 		}
 	}
+	linuxComponents := []string{"otlp", "hostmetrics", "kubeletstats", "filelog", "journald", "prometheus", "batch", "memory_limiter", "file_storage", "argus_identity"}
 	distributions := []struct {
 		name, platform, uri, hash, signature, status string
 		byteSize                                     uint64
 		components                                   []string
 	}{
-		{LinuxARM64DistributionName, "linux_arm64", sync.LinuxArtifactURI, linuxHash, sync.LinuxArtifactSignature, "supported", sync.LinuxArtifactByteSize,
-			[]string{"otlp", "hostmetrics", "kubeletstats", "filelog", "journald", "prometheus", "batch", "memory_limiter", "file_storage", "argus_identity"}},
+		{LinuxARM64DistributionName, "linux_arm64", sync.LinuxArtifactURI, linuxHash, sync.LinuxArtifactSignature, "supported", sync.LinuxArtifactByteSize, linuxComponents},
+	}
+	if linuxAMD64Configured {
+		distributions = append(distributions, struct {
+			name, platform, uri, hash, signature, status string
+			byteSize                                     uint64
+			components                                   []string
+		}{LinuxAMD64DistributionName, "linux_amd64", sync.LinuxAMD64ArtifactURI, linuxAMD64Hash, sync.LinuxAMD64ArtifactSignature, "supported", sync.LinuxAMD64ArtifactByteSize, linuxComponents})
 	}
 	if windowsConfigured {
 		distributions = append(distributions, struct {
@@ -106,15 +134,15 @@ func (sync CatalogSync) Run(ctx context.Context) error {
 		key, name, description, status         string
 		signals, components, platforms, claims []string
 	}{
-		{"host-basic", "Host basic", "Bounded host metrics and Collector self telemetry.", "supported", []string{"metrics"}, []string{"hostmetrics", "collector-self"}, []string{"linux_arm64"}, []string{"host"}},
-		{"linux-journald", "Linux journald", "Controlled journald ingestion.", "supported", []string{"logs"}, []string{"journald"}, []string{"linux_arm64"}, []string{"host-log"}},
-		{"file-log", "File log", "Controlled allowlisted file log ingestion.", "supported", []string{"logs"}, []string{"filelog"}, []string{"linux_arm64"}, []string{"host-log"}},
-		{"prometheus-endpoint", "Prometheus endpoint", "Bounded Prometheus endpoint scraping.", "supported", []string{"metrics"}, []string{"prometheus"}, []string{"linux_arm64"}, []string{"prometheus-target"}},
-		{"otlp-receiver", "OTLP receiver", "Bounded local OTLP receiver.", "supported", []string{"metrics", "logs", "traces"}, []string{"otlp"}, []string{"linux_arm64"}, []string{"otlp-source"}},
-		{"k8s-node-container", "Kubernetes node and container", "DaemonSet node, pod, and container telemetry.", "supported", []string{"metrics", "logs"}, []string{"kubeletstats", "filelog"}, []string{"linux_arm64"}, []string{"kubernetes-node"}},
-		{"k8s-cluster", "Kubernetes cluster", "Cluster metadata telemetry.", "supported", []string{"metrics"}, []string{"k8scluster"}, []string{"linux_arm64"}, []string{"kubernetes-cluster"}},
-		{"k8s-otlp-gateway", "Kubernetes OTLP gateway", "In-cluster aggregation gateway.", "supported", []string{"metrics", "logs", "traces"}, []string{"otlp", "batch"}, []string{"linux_arm64"}, []string{"kubernetes-gateway"}},
-		{"collector-self", "Collector self", "Collector health and queue telemetry.", "supported", []string{"metrics", "logs"}, []string{"collector-self"}, []string{"linux_arm64"}, []string{"collector"}},
+		{"host-basic", "Host basic", "Bounded host metrics and Collector self telemetry.", "supported", []string{"metrics"}, []string{"hostmetrics", "collector-self"}, []string{"linux_arm64", "linux_amd64"}, []string{"host"}},
+		{"linux-journald", "Linux journald", "Controlled journald ingestion.", "supported", []string{"logs"}, []string{"journald"}, []string{"linux_arm64", "linux_amd64"}, []string{"host-log"}},
+		{"file-log", "File log", "Controlled allowlisted file log ingestion.", "supported", []string{"logs"}, []string{"filelog"}, []string{"linux_arm64", "linux_amd64"}, []string{"host-log"}},
+		{"prometheus-endpoint", "Prometheus endpoint", "Bounded Prometheus endpoint scraping.", "supported", []string{"metrics"}, []string{"prometheus"}, []string{"linux_arm64", "linux_amd64"}, []string{"prometheus-target"}},
+		{"otlp-receiver", "OTLP receiver", "Bounded local OTLP receiver.", "supported", []string{"metrics", "logs", "traces"}, []string{"otlp"}, []string{"linux_arm64", "linux_amd64"}, []string{"otlp-source"}},
+		{"k8s-node-container", "Kubernetes node and container", "DaemonSet node, pod, and container telemetry.", "supported", []string{"metrics", "logs"}, []string{"kubeletstats", "filelog"}, []string{"linux_arm64", "linux_amd64"}, []string{"kubernetes-node"}},
+		{"k8s-cluster", "Kubernetes cluster", "Cluster metadata telemetry.", "supported", []string{"metrics"}, []string{"k8scluster"}, []string{"linux_arm64", "linux_amd64"}, []string{"kubernetes-cluster"}},
+		{"k8s-otlp-gateway", "Kubernetes OTLP gateway", "In-cluster aggregation gateway.", "supported", []string{"metrics", "logs", "traces"}, []string{"otlp", "batch"}, []string{"linux_arm64", "linux_amd64"}, []string{"kubernetes-gateway"}},
+		{"collector-self", "Collector self", "Collector health and queue telemetry.", "supported", []string{"metrics", "logs"}, []string{"collector-self"}, []string{"linux_arm64", "linux_amd64"}, []string{"collector"}},
 	}
 	if windowsConfigured {
 		profiles = append(profiles, struct {

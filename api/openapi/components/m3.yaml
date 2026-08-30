@@ -156,6 +156,7 @@ components:
         address: {type: string, minLength: 1, maxLength: 512}
         port: {type: integer, minimum: 1, maximum: 65535}
         platform: {type: string, enum: [linux, windows]}
+        architecture: {type: string, enum: [amd64, arm64], readOnly: true, description: '连接测试探测的目标架构(uname -m 归一化),Collector 安装按此选择分发产物;缺省按 amd64 处理'}
         connection_mode: {$ref: "#/components/schemas/HostConnectionMode"}
         bastion_scope_id: {type: string, format: uuid}
         connector_id: {type: string, format: uuid}
@@ -164,6 +165,9 @@ components:
         labels_version: {type: integer, format: int64, minimum: 1}
         resource_version: {type: integer, format: int64, minimum: 1}
         connection_status: {type: string, enum: [online, offline, onboarding, degraded, unknown]}
+        live_status: {type: string, enum: [online, offline, key_changed], readOnly: true, description: '周期探活的实时状态(直连主机);key_changed 表示 SSH 主机键与 pin 值不一致'}
+        last_probe_at: {type: string, format: date-time, readOnly: true, description: '最近一次探活时间'}
+        probe_latency_ms: {type: integer, readOnly: true, description: '最近一次探活往返时延'}
         pinned_host_key: {type: string, maxLength: 512}
         last_seen_at: {type: string, format: date-time}
         status: {type: string, enum: [active, disabled, deleted]}

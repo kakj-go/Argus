@@ -744,6 +744,20 @@ type Host struct {
 	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Architecture     pgtype.Text        `json:"architecture"`
+	LastProbeClaimAt pgtype.Timestamptz `json:"last_probe_claim_at"`
+}
+
+type HostProbeState struct {
+	HostID              uuid.UUID          `json:"host_id"`
+	EnterpriseID        uuid.UUID          `json:"enterprise_id"`
+	Status              string             `json:"status"`
+	LastCheckedAt       pgtype.Timestamptz `json:"last_checked_at"`
+	LatencyMs           int32              `json:"latency_ms"`
+	Fingerprint         string             `json:"fingerprint"`
+	ConsecutiveFailures int32              `json:"consecutive_failures"`
+	Error               string             `json:"error"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type IdempotencyRecord struct {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -61,6 +62,8 @@ type CollectorPreviewInput struct {
 	RouteKind             string
 	GatewayCollectorID    uuid.NullUUID
 	ExpectedVersion       int64
+	// KubernetesImage 为空时使用服务端配置的默认镜像;仅 kubernetes_cluster 资源允许提供。
+	KubernetesImage string
 }
 
 type collectorActionPlan struct {
@@ -258,14 +261,16 @@ func (service Service) PreviewCollectorAction(ctx context.Context, actor Actor, 
 	plan.TargetResourceVersion, plan.TargetAddress, plan.TargetPort = target.ResourceVersion, target.Address, int32(target.Port)
 	plan.TargetUsername, plan.PinnedHostKey = target.Username, target.PinnedHostKey
 	plan.CredentialID, plan.CredentialVersion = target.CredentialID, target.CredentialVersion
-	if resourceType == "kubernetes_cluster" {
-		if service.OtelcolKubernetesImage == "" {
-			return db.PendingAction{}, ErrUnavailable
-		}
-		plan.KubernetesImage = service.OtelcolKubernetesImage
+	if image, imageErr := collectorPreviewImage(resourceType, input.KubernetesImage, service.OtelcolKubernetesImage); imageErr != nil {
+		return db.PendingAction{}, imageErr
+	} else if resourceType == "kubernetes_cluster" {
+		plan.KubernetesImage = image
 	}
 	preview := map[string]any{"operation": operation, "resource_type": resourceType, "resource_id": resourceID,
 		"distribution": distribution.Version, "profiles": profiles, "route_kind": input.RouteKind}
+	if plan.KubernetesImage != "" {
+		preview["kubernetes_image"] = plan.KubernetesImage
+	}
 	risk := collectorActionRisk(operation)
 	return service.Actions.Prepare(ctx, actor.SubjectID.String(), actor.EnterpriseID, resource.PrepareActionInput{
 		ActionType: "telemetry.collector." + operation, Title: "Collector " + operation,
@@ -276,6 +281,36 @@ func (service Service) PreviewCollectorAction(ctx context.Context, actor Actor, 
 		ImmutablePlan: plan, ResourceScopeSnapshot: map[string]any{"resource_id": resourceID, "profiles": input.ProfileIDs, "route_kind": input.RouteKind},
 		CommitHandler: "argus.telemetry.collector." + operation + ".commit",
 	}, idempotencyKey)
+}
+
+// validKubernetesImage 是 Collector 镜像引用的唯一格式规则:非空、无空白、
+// 含 tag 或 digest 分隔符、长度有界;preview 与 revalidate 共用。
+func validKubernetesImage(image string) bool {
+	return image != "" && len(image) <= 512 && !strings.ContainsAny(image, " \t\r\n") && strings.Contains(image, ":")
+}
+
+// collectorPreviewImage 解析 preview 请求中的镜像输入:host 资源不允许携带;
+// k8s 资源按 用户覆盖 → 服务端默认 顺序解析,二者皆空视为服务未配置,
+// 解析结果非空且格式合法时返回;对 host 资源恒返回空串。
+func collectorPreviewImage(resourceType, inputImage, configuredDefault string) (string, error) {
+	trimmed := strings.TrimSpace(inputImage)
+	if resourceType != "kubernetes_cluster" {
+		if trimmed != "" {
+			return "", ErrQueryInvalid
+		}
+		return "", nil
+	}
+	image := trimmed
+	if image == "" {
+		image = configuredDefault
+	}
+	if image == "" {
+		return "", ErrUnavailable
+	}
+	if !validKubernetesImage(image) {
+		return "", ErrQueryInvalid
+	}
+	return image, nil
 }
 
 func telemetryGatewayEndpoint(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, gatewayID uuid.NullUUID) (string, string, error) {
@@ -504,6 +539,18 @@ func (service Service) profiles(ctx context.Context, ids []uuid.UUID, schemaVers
 	return result, nil
 }
 
+// hostCollectorPlatform 按主机 OS + 探测架构解析分发产物平台;
+// 未探测到架构的存量主机按 amd64 处理(服务器多数派架构)。
+func hostCollectorPlatform(host db.Host) string {
+	if host.Platform == "windows" {
+		return "windows_amd64"
+	}
+	if host.Architecture.Valid && host.Architecture.String == "arm64" {
+		return "linux_arm64"
+	}
+	return "linux_amd64"
+}
+
 func (service Service) collectorTarget(ctx context.Context, enterpriseID uuid.UUID, resourceType string, resourceID uuid.UUID, routeKind string) (string, string, error) {
 	switch resourceType {
 	case "host":
@@ -511,10 +558,7 @@ func (service Service) collectorTarget(ctx context.Context, enterpriseID uuid.UU
 		if err != nil {
 			return "", "", ErrNotFound
 		}
-		platform, role := "linux_arm64", "direct"
-		if host.Platform == "windows" {
-			platform = "windows_amd64"
-		}
+		platform, role := hostCollectorPlatform(host), "direct"
 		if host.ConnectionMode == "connector_local" {
 			role = "edge_gateway"
 		} else if routeKind == "bastion_gateway" {

@@ -211,7 +211,7 @@ func TestIngressRendersUnifiedHostsWithTLS(t *testing.T) {
 	}
 	// The remote-access WSS endpoint shares the enterprise origin instead of
 	// a dedicated terminal domain.
-	for _, want := range []string{"argus.dev", "platform.argus.dev", "cards.argus.dev"} {
+	for _, want := range []string{"argus.dev", "platform.argus.dev", "cards.argus.dev", "artifacts.argus.dev"} {
 		if !hosts[want] {
 			t.Fatalf("Ingress rule for %s missing", want)
 		}
@@ -224,8 +224,8 @@ func TestIngressRendersUnifiedHostsWithTLS(t *testing.T) {
 		t.Fatalf("Ingress must terminate TLS with a single multi-SAN secret, got %#v", tls)
 	}
 	tlsHosts := tls[0].(map[string]any)["hosts"].([]any)
-	if len(tlsHosts) != 3 {
-		t.Fatalf("single TLS secret must cover the three browser-facing hosts, got %#v", tlsHosts)
+	if len(tlsHosts) != 4 {
+		t.Fatalf("single TLS secret must cover the browser-facing and artifact hosts, got %#v", tlsHosts)
 	}
 	for _, rawRule := range rules {
 		rule := rawRule.(map[string]any)

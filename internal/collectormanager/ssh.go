@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -38,7 +37,7 @@ func (manager Manager) ApplySSH(ctx context.Context, command *connectorv1.Collec
 	configuration := &ssh.ClientConfig{User: command.GetTargetUsername(), Auth: []ssh.AuthMethod{auth}, Timeout: 15 * time.Second,
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
 			if ssh.FingerprintSHA256(key) != command.GetPinnedHostKey() {
-				return errors.New("Collector target Host key changed")
+				return ErrTargetHostKeyChanged
 			}
 			return nil
 		}}
@@ -53,6 +52,9 @@ func (manager Manager) ApplySSH(ctx context.Context, command *connectorv1.Collec
 	transport, channels, requests, err := ssh.NewClientConn(connection,
 		net.JoinHostPort(command.GetTargetAddress(), fmt.Sprint(command.GetTargetPort())), configuration)
 	if err != nil {
+		if strings.Contains(err.Error(), "unable to authenticate") {
+			return Result{}, fmt.Errorf("%w: %w", ErrTargetAuthFailed, err)
+		}
 		return Result{}, err
 	}
 	client := ssh.NewClient(transport, channels, requests)
@@ -134,7 +136,17 @@ func runSSH(client *ssh.Client, command string, input []byte) error {
 	if input != nil {
 		session.Stdin = bytes.NewReader(input)
 	}
-	return session.Run(command)
+	// 远端 stderr 必须进入错误信息:目标缺命令(exit 127)、权限不足等
+	// 失败原因只有远端输出能说明,仅退出码无法诊断。
+	var stderr bytes.Buffer
+	session.Stderr = &stderr
+	if err = session.Run(command); err != nil {
+		if detail := strings.TrimSpace(stderr.String()); detail != "" {
+			return fmt.Errorf("%w: %s", err, detail)
+		}
+		return err
+	}
+	return nil
 }
 
 func sshResult(command *connectorv1.CollectorManagementCommand, status string) Result {

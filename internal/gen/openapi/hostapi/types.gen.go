@@ -122,27 +122,66 @@ func (e Environment) Valid() bool {
 	}
 }
 
+// Defines values for HostArchitecture.
+const (
+	Amd64 HostArchitecture = "amd64"
+	Arm64 HostArchitecture = "arm64"
+)
+
+// Valid indicates whether the value is a known member of the HostArchitecture enum.
+func (e HostArchitecture) Valid() bool {
+	switch e {
+	case Amd64:
+		return true
+	case Arm64:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HostConnectionStatus.
 const (
-	Degraded   HostConnectionStatus = "degraded"
-	Offline    HostConnectionStatus = "offline"
-	Onboarding HostConnectionStatus = "onboarding"
-	Online     HostConnectionStatus = "online"
-	Unknown    HostConnectionStatus = "unknown"
+	HostConnectionStatusDegraded   HostConnectionStatus = "degraded"
+	HostConnectionStatusOffline    HostConnectionStatus = "offline"
+	HostConnectionStatusOnboarding HostConnectionStatus = "onboarding"
+	HostConnectionStatusOnline     HostConnectionStatus = "online"
+	HostConnectionStatusUnknown    HostConnectionStatus = "unknown"
 )
 
 // Valid indicates whether the value is a known member of the HostConnectionStatus enum.
 func (e HostConnectionStatus) Valid() bool {
 	switch e {
-	case Degraded:
+	case HostConnectionStatusDegraded:
 		return true
-	case Offline:
+	case HostConnectionStatusOffline:
 		return true
-	case Onboarding:
+	case HostConnectionStatusOnboarding:
 		return true
-	case Online:
+	case HostConnectionStatusOnline:
 		return true
-	case Unknown:
+	case HostConnectionStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HostLiveStatus.
+const (
+	HostLiveStatusKeyChanged HostLiveStatus = "key_changed"
+	HostLiveStatusOffline    HostLiveStatus = "offline"
+	HostLiveStatusOnline     HostLiveStatus = "online"
+)
+
+// Valid indicates whether the value is a known member of the HostLiveStatus enum.
+func (e HostLiveStatus) Valid() bool {
+	switch e {
+	case HostLiveStatusKeyChanged:
+		return true
+	case HostLiveStatusOffline:
+		return true
+	case HostLiveStatusOnline:
 		return true
 	default:
 		return false
@@ -407,7 +446,10 @@ type Environment string
 
 // Host defines model for Host.
 type Host struct {
-	Address          string               `json:"address"`
+	Address string `json:"address"`
+
+	// Architecture 连接测试探测的目标架构(uname -m 归一化),Collector 安装按此选择分发产物;缺省按 amd64 处理
+	Architecture     *HostArchitecture    `json:"architecture,omitempty"`
 	BastionScopeId   *openapi_types.UUID  `json:"bastion_scope_id,omitempty"`
 	ConnectionMode   HostConnectionMode   `json:"connection_mode"`
 	ConnectionStatus HostConnectionStatus `json:"connection_status"`
@@ -419,18 +461,33 @@ type Host struct {
 	Id               openapi_types.UUID   `json:"id"`
 	Labels           Labels               `json:"labels"`
 	LabelsVersion    int64                `json:"labels_version"`
-	LastSeenAt       *time.Time           `json:"last_seen_at,omitempty"`
-	Name             string               `json:"name"`
-	PinnedHostKey    *string              `json:"pinned_host_key,omitempty"`
-	Platform         HostPlatform         `json:"platform"`
-	Port             int                  `json:"port"`
-	ResourceVersion  int64                `json:"resource_version"`
-	Status           HostStatus           `json:"status"`
-	UpdatedAt        time.Time            `json:"updated_at"`
+
+	// LastProbeAt 最近一次探活时间
+	LastProbeAt *time.Time `json:"last_probe_at,omitempty"`
+	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
+
+	// LiveStatus 周期探活的实时状态(直连主机);key_changed 表示 SSH 主机键与 pin 值不一致
+	LiveStatus    *HostLiveStatus `json:"live_status,omitempty"`
+	Name          string          `json:"name"`
+	PinnedHostKey *string         `json:"pinned_host_key,omitempty"`
+	Platform      HostPlatform    `json:"platform"`
+	Port          int             `json:"port"`
+
+	// ProbeLatencyMs 最近一次探活往返时延
+	ProbeLatencyMs  *int       `json:"probe_latency_ms,omitempty"`
+	ResourceVersion int64      `json:"resource_version"`
+	Status          HostStatus `json:"status"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
+
+// HostArchitecture 连接测试探测的目标架构(uname -m 归一化),Collector 安装按此选择分发产物;缺省按 amd64 处理
+type HostArchitecture string
 
 // HostConnectionStatus defines model for Host.ConnectionStatus.
 type HostConnectionStatus string
+
+// HostLiveStatus 周期探活的实时状态(直连主机);key_changed 表示 SSH 主机键与 pin 值不一致
+type HostLiveStatus string
 
 // HostPlatform defines model for Host.Platform.
 type HostPlatform string

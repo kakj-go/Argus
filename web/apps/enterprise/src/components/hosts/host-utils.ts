@@ -45,6 +45,18 @@ export function hostStatusTone(status: HostConnectionStatus): Tone {
   }
 }
 
+/** 周期探活的实时状态色调;key_changed(主机键漂移)用警示色。 */
+export function hostLiveTone(status: NonNullable<Host["live_status"]>): Tone {
+  switch (status) {
+    case "online":
+      return "success";
+    case "key_changed":
+      return "warning";
+    default:
+      return "danger";
+  }
+}
+
 export function collectorTone(status: CollectorStatus): Tone {
   switch (status) {
     case "converged":

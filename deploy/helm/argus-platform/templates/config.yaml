@@ -60,6 +60,9 @@ data:
   ARGUS_OTELCOL_KUBERNETES_IMAGE: ""
   {{- end }}
   ARGUS_OTELCOL_ARTIFACT_CA_PATH: {{ if .Values.runtime.otelcolArtifactCABundleSecretName }}"/var/run/secrets/argus/otelcol-artifact-ca/ca.crt"{{ else }}""{{ end }}
+  # verify(默认)| insecure:insecure 仅跳过产物下载的传输层证书校验,
+  # sha256+ed25519 签名校验不受影响;用于本地自签 TLS 的流畅体验。
+  ARGUS_OTELCOL_ARTIFACT_TLS_MODE: {{ .Values.runtime.otelcolArtifactTLSMode | quote }}
 ---
 apiVersion: v1
 kind: Secret

@@ -59,12 +59,24 @@ func (a *App) runM7Scenario(ctx context.Context, env *E2EEnvironment) error {
 	if clusterID == "" {
 		return fmt.Errorf("M7 requires the M3 Kubernetes cluster")
 	}
-	if err := a.applyM7CollectorAction(ctx, env, "kubernetes-cluster", clusterID, "install", distributionID, kubernetesProfiles); err != nil {
+	// 用显式 kubernetes_image 覆盖安装一次,验证按次镜像链路(preview→plan→DaemonSet)。
+	otelcolImage := env.State.FixtureImages["otelcol"]
+	if otelcolImage == "" {
+		return fmt.Errorf("M7 requires the fixture otelcol image reference")
+	}
+	if err := a.applyM7CollectorActionWithImage(ctx, env, "kubernetes-cluster", clusterID, "install", distributionID, kubernetesProfiles, otelcolImage); err != nil {
 		return err
 	}
 	env.ManagedNamespaces = append(env.ManagedNamespaces, m7CollectorNamespace)
 	if err := env.Kube.WaitDaemonSet(ctx, m7CollectorNamespace, "argus-otelcol-agent", 5*time.Minute); err != nil {
 		return err
+	}
+	daemonSet, err := env.Kube.Client.AppsV1().DaemonSets(m7CollectorNamespace).Get(ctx, "argus-otelcol-agent", metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	if got := daemonSet.Spec.Template.Spec.Containers[0].Image; got != otelcolImage {
+		return fmt.Errorf("DaemonSet image %q does not match the explicit kubernetes_image %q", got, otelcolImage)
 	}
 	if err := env.Kube.WaitDeployment(ctx, m7CollectorNamespace, "argus-otelcol-gateway", 5*time.Minute); err != nil {
 		return err
@@ -216,12 +228,21 @@ func (a *App) createM7Host(ctx context.Context, env *E2EEnvironment) (string, er
 }
 
 func (a *App) applyM7CollectorAction(ctx context.Context, env *E2EEnvironment, resourceType, resourceID, action, distributionID string, profiles []string) error {
+	return a.applyM7CollectorActionWithImage(ctx, env, resourceType, resourceID, action, distributionID, profiles, "")
+}
+
+// applyM7CollectorActionWithImage 允许 kubernetes 安装显式携带 kubernetes_image
+// 覆盖(空串走服务端默认),验证按次镜像配置从 preview 到 DaemonSet 的完整链路。
+func (a *App) applyM7CollectorActionWithImage(ctx context.Context, env *E2EEnvironment, resourceType, resourceID, action, distributionID string, profiles []string, kubernetesImage string) error {
 	client, _ := scenarioHTTP(env)
 	base := "/enterprise/hosts/" + resourceID + "/collector"
 	if resourceType == "kubernetes-cluster" {
 		base = "/enterprise/kubernetes-clusters/" + resourceID + "/collector"
 	}
 	body := map[string]any{"distribution_version_id": distributionID, "profile_ids": profiles, "route_kind": "direct_argus"}
+	if kubernetesImage != "" {
+		body["kubernetes_image"] = kubernetesImage
+	}
 	idempotencyKey := "m7-collector-" + resourceType + "-" + resourceID + "-" + action
 	if action != "install" {
 		current, err := client.JSON(ctx, "m7-collector-current-"+action, "enterprise", http.MethodGet, base, http.StatusOK, nil, map[string]string{"Origin": env.EnterpriseOrigin()})

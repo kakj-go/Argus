@@ -33,7 +33,6 @@ type ActionExtension struct {
 	IngestGRPCEndpoint string
 	IngestHTTPEndpoint string
 	ServerCABundlePath string
-	KubernetesImage    string
 }
 
 func (extension ActionExtension) RevalidateAction(ctx context.Context, q *db.Queries, action db.PendingAction, raw json.RawMessage) ([]byte, error) {
@@ -63,7 +62,7 @@ func (extension ActionExtension) RevalidateAction(ctx context.Context, q *db.Que
 	if json.Unmarshal(raw, &plan) != nil || action.ActionType != "telemetry.collector."+plan.Operation {
 		return nil, resource.ErrActionInvalidated
 	}
-	if err := validateCollectorPlan(ctx, q, action.EnterpriseID, plan, extension.KubernetesImage); err != nil {
+	if err := validateCollectorPlan(ctx, q, action.EnterpriseID, plan); err != nil {
 		return nil, resource.ErrActionInvalidated
 	}
 	return snapshotHash(map[string]any{
@@ -97,7 +96,7 @@ func (extension ActionExtension) revalidateNext(ctx context.Context, q *db.Queri
 	return extension.Next.RevalidateAction(ctx, q, action, raw)
 }
 
-func validateCollectorPlan(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, plan collectorActionPlan, kubernetesImage string) error {
+func validateCollectorPlan(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, plan collectorActionPlan) error {
 	distributions, err := q.ListCollectorDistributionVersions(ctx)
 	if err != nil {
 		return err
@@ -128,7 +127,9 @@ func validateCollectorPlan(ctx context.Context, q *db.Queries, enterpriseID uuid
 	if err := validateTarget(ctx, q, enterpriseID, plan); err != nil {
 		return err
 	}
-	if plan.ResourceType == "kubernetes_cluster" && (plan.KubernetesImage == "" || plan.KubernetesImage != kubernetesImage) {
+	// 镜像由不可变 plan 携带(preview 时已按次解析:用户覆盖或服务端默认),
+	// revalidate 只复核格式,不再与全局配置比对——全局值变化不应使进行中的计划失效。
+	if plan.ResourceType == "kubernetes_cluster" && !validKubernetesImage(plan.KubernetesImage) {
 		return resource.ErrActionInvalidated
 	}
 	if plan.Operation != "install" {
@@ -147,10 +148,7 @@ func validateTarget(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, 
 		if err != nil {
 			return err
 		}
-		expectedPlatform := "linux_arm64"
-		if host.Platform == "windows" {
-			expectedPlatform = "windows_amd64"
-		}
+		expectedPlatform := hostCollectorPlatform(host)
 		if expectedPlatform != plan.Platform {
 			return resource.ErrActionInvalidated
 		}

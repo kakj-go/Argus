@@ -28,7 +28,10 @@ type DirectExecutor struct {
 	TelemetryIngestGRPCEndpoint string
 	TelemetryIngestHTTPEndpoint string
 	OtelcolArtifactCABundle     string
-	TelemetryEnabled            bool
+	// OtelcolArtifactTLSInsecure 仅跳过产物下载的传输层证书校验
+	// (本地自签场景);产物 sha256 + ed25519 签名校验不受此开关影响。
+	OtelcolArtifactTLSInsecure bool
+	TelemetryEnabled           bool
 }
 
 func LoadDirectExecutor() DirectExecutor {
@@ -47,7 +50,8 @@ func LoadDirectExecutor() DirectExecutor {
 		TelemetryEnrollmentEndpoint: os.Getenv("ARGUS_TELEMETRY_ENROLLMENT_ENDPOINT"),
 		TelemetryIngestGRPCEndpoint: os.Getenv("ARGUS_TELEMETRY_INGEST_GRPC_ENDPOINT"),
 		TelemetryIngestHTTPEndpoint: os.Getenv("ARGUS_TELEMETRY_INGEST_HTTP_ENDPOINT"),
-		OtelcolArtifactCABundle:     os.Getenv("ARGUS_OTELCOL_ARTIFACT_CA_PATH"), TelemetryEnabled: telemetryEnabled}
+		OtelcolArtifactCABundle:     os.Getenv("ARGUS_OTELCOL_ARTIFACT_CA_PATH"),
+		OtelcolArtifactTLSInsecure:  os.Getenv("ARGUS_OTELCOL_ARTIFACT_TLS_MODE") == "insecure", TelemetryEnabled: telemetryEnabled}
 }
 
 func (cfg DirectExecutor) Validate() error {

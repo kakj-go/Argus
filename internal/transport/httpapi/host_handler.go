@@ -20,6 +20,7 @@ import (
 type HostHandler struct {
 	Identity EnterpriseIdentityHandler
 	Service  resource.Service
+	Queries  *db.Queries
 }
 
 func (handler HostHandler) ListHosts(ctx context.Context, _ hostapi.ListHostsRequestObject) (hostapi.ListHostsResponseObject, error) {
@@ -32,10 +33,31 @@ func (handler HostHandler) ListHosts(ctx context.Context, _ hostapi.ListHostsReq
 		return hostapi.ListHostsdefaultJSONResponse{Body: hostError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}
 	converted := make([]hostapi.Host, 0, len(items))
+	probeStates := handler.probeStates(ctx, items)
 	for _, item := range items {
-		converted = append(converted, toHost(item))
+		converted = append(converted, toHost(item, probeStates[item.ID]))
 	}
 	return hostapi.ListHosts200JSONResponse{Items: converted, Page: emptyHostPage()}, nil
+}
+
+// probeStates 批量读取主机的实时探活状态;查询失败时退化为不展示(不影响列表)。
+func (handler HostHandler) probeStates(ctx context.Context, items []db.Host) map[uuid.UUID]db.HostProbeState {
+	if handler.Queries == nil || len(items) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	states, err := handler.Queries.ListHostProbeStatesByHosts(ctx, ids)
+	if err != nil {
+		return nil
+	}
+	result := make(map[uuid.UUID]db.HostProbeState, len(states))
+	for _, state := range states {
+		result[state.HostID] = state
+	}
+	return result
 }
 
 func (handler HostHandler) GetHost(ctx context.Context, request hostapi.GetHostRequestObject) (hostapi.GetHostResponseObject, error) {
@@ -47,7 +69,11 @@ func (handler HostHandler) GetHost(ctx context.Context, request hostapi.GetHostR
 	if err != nil {
 		return hostapi.GetHostdefaultJSONResponse{Body: hostError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}
-	return hostapi.GetHost200JSONResponse(toHost(item)), nil
+	var probeState db.HostProbeState
+	if handler.Queries != nil {
+		probeState, _ = handler.Queries.GetHostProbeState(ctx, uuid.UUID(request.Id))
+	}
+	return hostapi.GetHost200JSONResponse(toHost(item, probeState)), nil
 }
 
 func (handler HostHandler) CreateHostConnectionTest(ctx context.Context, request hostapi.CreateHostConnectionTestRequestObject) (hostapi.CreateHostConnectionTestResponseObject, error) {
@@ -162,7 +188,7 @@ func hostUpdateInput(value hostapi.HostPreviewUpdate) resource.HostInput {
 	return result
 }
 
-func toHost(value db.Host) hostapi.Host {
+func toHost(value db.Host, probe db.HostProbeState) hostapi.Host {
 	labels, _ := resource.DecodeLabels(value.Labels)
 	result := hostapi.Host{Id: openapi_types.UUID(value.ID), EnterpriseId: pointerUUID(value.EnterpriseID), Name: value.Name, Address: value.Address, Port: int(value.Port),
 		Platform: hostapi.HostPlatform(value.Platform), ConnectionMode: hostapi.HostConnectionMode(value.ConnectionMode), Environment: hostapi.Environment(value.Environment),
@@ -181,6 +207,18 @@ func toHost(value db.Host) hostapi.Host {
 	}
 	if value.PinnedHostKey != "" {
 		result.PinnedHostKey = &value.PinnedHostKey
+	}
+	if value.Architecture.Valid {
+		architecture := hostapi.HostArchitecture(value.Architecture.String)
+		result.Architecture = &architecture
+	}
+	if probe.HostID != uuid.Nil {
+		liveStatus := hostapi.HostLiveStatus(probe.Status)
+		result.LiveStatus = &liveStatus
+		probeLatency := int(probe.LatencyMs)
+		result.ProbeLatencyMs = &probeLatency
+		probedAt := probe.LastCheckedAt.Time
+		result.LastProbeAt = &probedAt
 	}
 	if value.LastSeenAt.Valid {
 		result.LastSeenAt = &value.LastSeenAt.Time

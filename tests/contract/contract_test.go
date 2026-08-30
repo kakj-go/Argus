@@ -1435,6 +1435,8 @@ func schemaString(node map[string]any, mode fixtureMode) string {
 		{"^[a-f0-9]{64}$", strings.Repeat("a", 64)},
 		{"^argus_ak_", "argus_ak_ABC123.secret_abcdefghijklmnopqrstuvwxyz012345"},
 		{"^wss://", "wss://remote.argus.example/v1/sessions/0198b2b4-6dc0-7a2f-8d36-9f8ff244db18"},
+		{"^wss?://", "wss://remote.argus.example/v1/sessions/0198b2b4-6dc0-7a2f-8d36-9f8ff244db18"},
+		{"^\\S+:\\S+$", "registry.example.com/argus-otelcol:0.1.0-m7"},
 		{"^[a-z][a-z0-9-]{1,62}$", "example"},
 	}
 	for _, sample := range samples {

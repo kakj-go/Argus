@@ -105,6 +105,10 @@ spec:
                 sleep 2
               done
               mc mb --ignore-existing argus/argus-remote-recordings
+              # Collector 产物桶:匿名只读下载(执行者经 HTTPS ingress 拉取,
+              # 完整性由 ed25519 签名 + sha256 校验保证,不依赖传输认证)。
+              mc mb --ignore-existing argus/argus-collector-artifacts
+              mc anonymous set download argus/argus-collector-artifacts
           env:
             - name: MINIO_ROOT_USER
               valueFrom:

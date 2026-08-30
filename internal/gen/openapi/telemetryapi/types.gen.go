@@ -76,6 +76,7 @@ func (e CollectorInstanceResourceType) Valid() bool {
 
 // Defines values for CollectorPlatform.
 const (
+	LinuxAmd64   CollectorPlatform = "linux_amd64"
 	LinuxArm64   CollectorPlatform = "linux_arm64"
 	WindowsAmd64 CollectorPlatform = "windows_amd64"
 )
@@ -83,6 +84,8 @@ const (
 // Valid indicates whether the value is a known member of the CollectorPlatform enum.
 func (e CollectorPlatform) Valid() bool {
 	switch e {
+	case LinuxAmd64:
+		return true
 	case LinuxArm64:
 		return true
 	case WindowsAmd64:
@@ -564,15 +567,18 @@ type CollectorConfigRevision struct {
 
 // CollectorDistributionVersion defines model for CollectorDistributionVersion.
 type CollectorDistributionVersion struct {
-	Artifacts           []CollectorArtifact    `json:"artifacts"`
-	CollectorVersion    string                 `json:"collector_version"`
-	Components          []string               `json:"components"`
-	ConfigSchemaVersion string                 `json:"config_schema_version"`
-	CreatedAt           time.Time              `json:"created_at"`
-	Id                  openapi_types.UUID     `json:"id"`
-	Name                string                 `json:"name"`
-	SupportStatus       CollectorSupportStatus `json:"support_status"`
-	Version             string                 `json:"version"`
+	Artifacts           []CollectorArtifact `json:"artifacts"`
+	CollectorVersion    string              `json:"collector_version"`
+	Components          []string            `json:"components"`
+	ConfigSchemaVersion string              `json:"config_schema_version"`
+	CreatedAt           time.Time           `json:"created_at"`
+	Id                  openapi_types.UUID  `json:"id"`
+
+	// KubernetesImage 服务端解析的 Kubernetes 默认镜像引用(未配置时缺省)
+	KubernetesImage *string                `json:"kubernetes_image,omitempty"`
+	Name            string                 `json:"name"`
+	SupportStatus   CollectorSupportStatus `json:"support_status"`
+	Version         string                 `json:"version"`
 }
 
 // CollectorEnrollmentRequest defines model for CollectorEnrollmentRequest.
@@ -583,21 +589,24 @@ type CollectorEnrollmentRequest struct {
 
 // CollectorInstance defines model for CollectorInstance.
 type CollectorInstance struct {
-	CreatedAt             time.Time                     `json:"created_at"`
-	DesiredRevision       int64                         `json:"desired_revision"`
-	DistributionVersionId openapi_types.UUID            `json:"distribution_version_id"`
-	EffectiveRevision     int64                         `json:"effective_revision"`
-	EnterpriseId          *openapi_types.UUID           `json:"enterprise_id,omitempty"`
-	Id                    openapi_types.UUID            `json:"id"`
-	LastSeenAt            *time.Time                    `json:"last_seen_at,omitempty"`
-	Platform              CollectorPlatform             `json:"platform"`
-	ResourceId            openapi_types.UUID            `json:"resource_id"`
-	ResourceType          CollectorInstanceResourceType `json:"resource_type"`
-	Role                  CollectorRole                 `json:"role"`
-	Route                 *TelemetryRoute               `json:"route,omitempty"`
-	Status                CollectorStatus               `json:"status"`
-	UpdatedAt             time.Time                     `json:"updated_at"`
-	Version               int64                         `json:"version"`
+	CreatedAt             time.Time           `json:"created_at"`
+	DesiredRevision       int64               `json:"desired_revision"`
+	DistributionVersionId openapi_types.UUID  `json:"distribution_version_id"`
+	EffectiveRevision     int64               `json:"effective_revision"`
+	EnterpriseId          *openapi_types.UUID `json:"enterprise_id,omitempty"`
+	Id                    openapi_types.UUID  `json:"id"`
+
+	// LastOperationErrorCode 最近一次管理操作失败的错误码(成功或无记录时缺省)
+	LastOperationErrorCode *string                       `json:"last_operation_error_code,omitempty"`
+	LastSeenAt             *time.Time                    `json:"last_seen_at,omitempty"`
+	Platform               CollectorPlatform             `json:"platform"`
+	ResourceId             openapi_types.UUID            `json:"resource_id"`
+	ResourceType           CollectorInstanceResourceType `json:"resource_type"`
+	Role                   CollectorRole                 `json:"role"`
+	Route                  *TelemetryRoute               `json:"route,omitempty"`
+	Status                 CollectorStatus               `json:"status"`
+	UpdatedAt              time.Time                     `json:"updated_at"`
+	Version                int64                         `json:"version"`
 }
 
 // CollectorInstanceResourceType defines model for CollectorInstance.ResourceType.
@@ -614,11 +623,14 @@ type CollectorPlatform string
 
 // CollectorPreview defines model for CollectorPreview.
 type CollectorPreview struct {
-	DistributionVersionId openapi_types.UUID   `json:"distribution_version_id"`
-	ExpectedVersion       *int64               `json:"expected_version,omitempty"`
-	GatewayCollectorId    *openapi_types.UUID  `json:"gateway_collector_id,omitempty"`
-	ProfileIds            []openapi_types.UUID `json:"profile_ids"`
-	RouteKind             TelemetryRouteKind   `json:"route_kind"`
+	DistributionVersionId openapi_types.UUID  `json:"distribution_version_id"`
+	ExpectedVersion       *int64              `json:"expected_version,omitempty"`
+	GatewayCollectorId    *openapi_types.UUID `json:"gateway_collector_id,omitempty"`
+
+	// KubernetesImage 集群内网镜像全量地址(含 tag/digest);仅 kubernetes_cluster 资源可填,留空使用服务端默认镜像
+	KubernetesImage *string              `json:"kubernetes_image,omitempty"`
+	ProfileIds      []openapi_types.UUID `json:"profile_ids"`
+	RouteKind       TelemetryRouteKind   `json:"route_kind"`
 }
 
 // CollectorRole defines model for CollectorRole.

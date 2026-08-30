@@ -38,6 +38,24 @@ spec:
   ca:
     secretName: {{ .Values.releaseId }}-telemetry-root-ca
 ---
+{{- if .Values.runtime.telemetryExternalIngestHost }}
+---
+# 外部 Collector 的注册/上报入口:TCP 直通到 ingest,保留其 mTLS 体系。
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-telemetry-ingest-public
+  namespace: {{ .Values.namespaces.observability }}
+  labels: {app.kubernetes.io/name: argus-telemetry-ingest-public, app.kubernetes.io/part-of: argus}
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: argus-telemetry-ingest
+  ports:
+    - {name: otlp-grpc, port: 4317, targetPort: 4317}
+    - {name: otlp-http, port: 4318, targetPort: 4318}
+{{- end }}
+---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -52,6 +70,10 @@ spec:
     - argus-telemetry-ingest.{{ $observability }}.svc
     - argus-telemetry-query
     - argus-telemetry-query.{{ $observability }}.svc
+    {{- with .Values.runtime.telemetryExternalIngestHost }}
+    # 外部主机/集群的 Collector 经公网 LB 直连(同一张证书,TLS 由 ingest 自持)。
+    - {{ . }}
+    {{- end }}
   privateKey: {algorithm: ECDSA, size: 256}
   usages: [server auth, client auth]
   issuerRef: {name: {{ $issuer }}, kind: ClusterIssuer}
@@ -349,6 +371,12 @@ spec:
             - {name: ARGUS_OTELCOL_LINUX_ARM64_SHA256, value: {{ required "runtime.otelcolLinuxArm64Sha256 is required" .Values.runtime.otelcolLinuxArm64Sha256 | quote }}}
             - {name: ARGUS_OTELCOL_LINUX_ARM64_SIGNATURE, value: {{ required "runtime.otelcolLinuxArm64Signature is required" .Values.runtime.otelcolLinuxArm64Signature | quote }}}
             - {name: ARGUS_OTELCOL_LINUX_ARM64_BYTE_SIZE, value: {{ required "runtime.otelcolLinuxArm64ByteSize is required" .Values.runtime.otelcolLinuxArm64ByteSize | quote }}}
+            {{- if .Values.runtime.otelcolLinuxAmd64Uri }}
+            - {name: ARGUS_OTELCOL_LINUX_AMD64_URI, value: {{ .Values.runtime.otelcolLinuxAmd64Uri | quote }}}
+            - {name: ARGUS_OTELCOL_LINUX_AMD64_SHA256, value: {{ required "runtime.otelcolLinuxAmd64Sha256 is required when Linux amd64 artifact is configured" .Values.runtime.otelcolLinuxAmd64Sha256 | quote }}}
+            - {name: ARGUS_OTELCOL_LINUX_AMD64_SIGNATURE, value: {{ required "runtime.otelcolLinuxAmd64Signature is required when Linux amd64 artifact is configured" .Values.runtime.otelcolLinuxAmd64Signature | quote }}}
+            - {name: ARGUS_OTELCOL_LINUX_AMD64_BYTE_SIZE, value: {{ required "runtime.otelcolLinuxAmd64ByteSize is required when Linux amd64 artifact is configured" .Values.runtime.otelcolLinuxAmd64ByteSize | quote }}}
+            {{- end }}
             {{- if .Values.runtime.otelcolWindowsAmd64Uri }}
             - {name: ARGUS_OTELCOL_WINDOWS_AMD64_URI, value: {{ .Values.runtime.otelcolWindowsAmd64Uri | quote }}}
             - {name: ARGUS_OTELCOL_WINDOWS_AMD64_SHA256, value: {{ required "runtime.otelcolWindowsAmd64Sha256 is required when Windows artifact is configured" .Values.runtime.otelcolWindowsAmd64Sha256 | quote }}}

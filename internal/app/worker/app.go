@@ -24,6 +24,7 @@ import (
 	connectorservice "github.com/kakj-go/Argus/internal/connector"
 	"github.com/kakj-go/Argus/internal/directexecutor"
 	directv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/directexecutor/v1"
+	"github.com/kakj-go/Argus/internal/hostprobe"
 	"github.com/kakj-go/Argus/internal/keywrap"
 	"github.com/kakj-go/Argus/internal/kubernetesreader"
 	"github.com/kakj-go/Argus/internal/mcp"
@@ -106,8 +107,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 	bastionDomain := connectorservice.BastionService{Store: store, Actions: actionDomain, Enrollment: connectorDomain}
 	telemetryActions := telemetryservice.ActionExtension{Next: bastionDomain, Credentials: secretDomain,
 		EnrollmentEndpoint: cfg.TelemetryEnrollment, IngestGRPCEndpoint: cfg.TelemetryIngestGRPC,
-		IngestHTTPEndpoint: cfg.TelemetryIngestHTTP, ServerCABundlePath: cfg.TelemetryCABundle,
-		KubernetesImage: cfg.OtelcolKubernetesImage}
+		IngestHTTPEndpoint: cfg.TelemetryIngestHTTP, ServerCABundlePath: cfg.TelemetryCABundle}
 	resourceDomain := resource.Service{Store: store, Actions: actionDomain, Access: resource.AccessService{},
 		Direct: resource.DirectTargetValidator{DeniedCIDRs: denied}, Commands: connectorDomain, DirectCommands: directDispatcher,
 		Extension: telemetryActions, ClusterEnrollment: connectorDomain,
@@ -233,7 +233,12 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	artifactClient, err := collectormanager.NewArtifactHTTPClient(cfg.OtelcolArtifactCABundle)
+	var artifactClient *http.Client
+	if cfg.OtelcolArtifactTLSInsecure {
+		artifactClient, err = collectormanager.NewArtifactHTTPClientInsecure()
+	} else {
+		artifactClient, err = collectormanager.NewArtifactHTTPClient(cfg.OtelcolArtifactCABundle)
+	}
 	if err != nil {
 		return err
 	}
@@ -252,6 +257,9 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 	directv1.RegisterDirectExecutorServiceServer(grpcServer, directexecutor.RPCServer{Executor: executor, Context: ctx, Logger: logger})
 	health := &http.Server{Addr: cfg.HealthAddress, Handler: component.HealthHandler("argus-worker-direct-executor"), ReadHeaderTimeout: 5 * time.Second}
 	errorsChannel := make(chan error, 3)
+	// 主机实时探活归属 Direct Executor 池:它是唯一出站不受 NetworkPolicy
+	// 端口限制的组件(worker 只放行固定内部端口,探测任意目标端口会被拒)。
+	go func() { errorsChannel <- (hostprobe.Reconciler{Store: store, Logger: logger}).Run(ctx) }()
 	go func() {
 		if err := health.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errorsChannel <- err

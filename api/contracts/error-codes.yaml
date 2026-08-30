@@ -149,6 +149,8 @@ codes:
   COLLECTOR_KUBERNETES_RESOURCE_MISSING: {http_status: 404, message_key: errors.telemetry.kubernetes_resource_missing, retryable: false}
   COLLECTOR_KUBERNETES_CONFLICT: {http_status: 409, message_key: errors.telemetry.kubernetes_conflict, retryable: true}
   COLLECTOR_MANAGEMENT_FAILED: {http_status: 503, message_key: errors.telemetry.collector_management_failed, retryable: true}
+  COLLECTOR_TARGET_AUTH_FAILED: {http_status: 401, message_key: errors.telemetry.collector_target_auth_failed, retryable: false}
+  COLLECTOR_TARGET_HOST_KEY_CHANGED: {http_status: 409, message_key: errors.telemetry.collector_target_host_key_changed, retryable: false}
   COLLECTOR_ROUTE_INVALID: {http_status: 422, message_key: errors.telemetry.route_invalid, retryable: false}
   COLLECTION_CLAIM_CONFLICT: {http_status: 409, message_key: errors.telemetry.claim_conflict, retryable: false}
   NODE_HOST_BINDING_REQUIRED: {http_status: 409, message_key: errors.telemetry.node_host_binding_required, retryable: false}

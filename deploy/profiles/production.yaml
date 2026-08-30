@@ -45,6 +45,7 @@ spec:
     windowsAmd64ByteSize: 1
     signingKeyId: replace-before-production
     signingPublicKey: KipqW8DuwdLu1utyo6JbL5u+vtVT/4ZFVKSjOuK8s64
+    kubernetesImage: docker.io/kakj-go/argus-otelcol:0.1.0-m7
   persistence:
     postgresql: 200Gi
     redis: 20Gi

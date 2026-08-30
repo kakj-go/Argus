@@ -33,6 +33,7 @@ import {
   environmentTone,
   formatDateTime,
   formatUptime,
+  hostLiveTone,
   hostStatusTone,
   scopeOf,
   seededNumber,
@@ -255,12 +256,21 @@ export function HostDetailPage() {
         host ? (
           <>
             {host.name}{" "}
-            <StatusBadge
-              pulse={host.connection_status === "online"}
-              tone={hostStatusTone(host.connection_status)}
-            >
-              {t(`hosts.status.${host.connection_status}`)}
-            </StatusBadge>{" "}
+            {host.live_status ? (
+              <StatusBadge
+                pulse={host.live_status === "online"}
+                tone={hostLiveTone(host.live_status)}
+              >
+                {t(`hosts.liveStatus.${host.live_status}`)}
+              </StatusBadge>
+            ) : (
+              <StatusBadge
+                pulse={host.connection_status === "online"}
+                tone={hostStatusTone(host.connection_status)}
+              >
+                {t(`hosts.status.${host.connection_status}`)}
+              </StatusBadge>
+            )}{" "}
             {!realMode && <StatusBadge tone={collectorTone(collectorStatusOf(host))}>
               {t(`hosts.collectorStatus.${collectorStatusOf(host)}`)}
             </StatusBadge>}

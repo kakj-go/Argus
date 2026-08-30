@@ -6,7 +6,7 @@ import {
   type ConfirmActionResult,
   type PendingActionPublic,
 } from "@argus/api-client";
-import { PreviewCommitCard, type PreviewCommitStatus } from "@argus/ui";
+import { Button, PreviewCommitCard, type PreviewCommitStatus } from "@argus/ui";
 import { presentPendingAction } from "../pending-action-presentation";
 
 function diffLinesOf(action: PendingActionPublic) {
@@ -30,11 +30,14 @@ export function PendingActionConfirm({
   claimOneTimeResult = false,
   onDone,
   onCancel,
+  onDismiss,
 }: {
   action: PendingActionPublic;
   claimOneTimeResult?: boolean;
   onDone?: (result: ConfirmActionResult) => void;
   onCancel?: () => void;
+  /** 中性关闭(不取消动作):等待审批场景下由用户手动关闭卡片。 */
+  onDismiss?: () => void;
 }) {
   const { t } = useTranslation();
   const api = useApi();
@@ -42,13 +45,16 @@ export function PendingActionConfirm({
   const [status, setStatus] = useState<PreviewCommitStatus>("pending");
   const [resultMessage, setResultMessage] = useState<string | undefined>();
   const [confirming, setConfirming] = useState(false);
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
 
   const confirm = async () => {
     if (confirming) return;
     setConfirming(true);
     try {
       let result = await api.approvals.confirm(action.action_ref);
-      if (claimOneTimeResult && result.execution && !result.one_time_result) {
+      // 执行是异步的:必须轮询到终态再回调,否则父组件失效缓存时副作用
+      // 尚未落库,列表刷了个寂寞(如新增主机后短暂看不到新主机)。
+      if (result.execution && !result.one_time_result) {
         const executionId = result.execution.execution_id;
         for (let attempt = 0; attempt < 120; attempt += 1) {
           const execution = await api.executions.get(executionId);
@@ -74,11 +80,18 @@ export function PendingActionConfirm({
         }
       }
       setStatus("success");
+      const awaiting = result.pending_action.status === "awaiting_approval";
       setResultMessage(
-        result.pending_action.status === "awaiting_approval"
+        awaiting
           ? t("hosts.preview.awaitingApproval")
           : t("hosts.preview.submitted"),
       );
+      if (awaiting) {
+        // 等待双人审批:动作尚未生效,保持卡片与引导,不触发完成回调,
+        // 避免用户误以为操作已执行而列表"没有刷新"。
+        setAwaitingApproval(true);
+        return;
+      }
       onDone?.(result);
     } catch {
       setStatus("failed");
@@ -116,6 +129,19 @@ export function PendingActionConfirm({
       title={presented.title}
     >
       <p className="argus-muted">{presented.summary}</p>
+      {awaitingApproval && (
+        <div className="argus-form-actions">
+          <span className="argus-muted">
+            {t("hosts.preview.awaitingApprovalHint")}
+          </span>
+          <Button
+            onClick={() => (onDismiss ?? onCancel)?.()}
+            variant="secondary"
+          >
+            {t("hosts.preview.close")}
+          </Button>
+        </div>
+      )}
     </PreviewCommitCard>
   );
 }

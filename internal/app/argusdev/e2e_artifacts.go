@@ -107,6 +107,8 @@ func (a *App) buildCollectorArtifact(ctx context.Context, platform, destination 
 	switch platform {
 	case "linux-arm64":
 		env["GOOS"], env["GOARCH"] = "linux", "arm64"
+	case "linux-amd64":
+		env["GOOS"], env["GOARCH"] = "linux", "amd64"
 	case "windows-amd64":
 		env["GOOS"], env["GOARCH"] = "windows", "amd64"
 	default:
@@ -118,10 +120,10 @@ func (a *App) buildCollectorArtifact(ctx context.Context, platform, destination 
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 		return err
 	}
-	if platform == "linux-arm64" {
-		return writeCollectorTarGz(binaryPath, destination)
+	if platform == "windows-amd64" {
+		return writeCollectorZip(binaryPath, filepath.Join(a.root, "build", "otelcol", "install-windows.ps1"), destination)
 	}
-	return writeCollectorZip(binaryPath, filepath.Join(a.root, "build", "otelcol", "install-windows.ps1"), destination)
+	return writeCollectorTarGz(binaryPath, destination)
 }
 
 func signCollectorArtifact(privateKey ed25519.PrivateKey, path string) (string, uint64, string, error) {

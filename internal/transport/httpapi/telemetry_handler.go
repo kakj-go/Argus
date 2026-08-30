@@ -56,7 +56,7 @@ func (handler TelemetryHandler) ListCollectorDistributions(ctx context.Context, 
 	}
 	result := make([]telemetryapi.CollectorDistributionVersion, 0, len(distributions))
 	for _, item := range distributions {
-		result = append(result, toCollectorDistribution(item))
+		result = append(result, toCollectorDistribution(item, handler.Service.OtelcolKubernetesImage))
 	}
 	return telemetryapi.ListCollectorDistributions200JSONResponse(result), nil
 }
@@ -493,8 +493,13 @@ func (handler TelemetryHandler) previewCollector(ctx context.Context, actor tele
 	if body.ExpectedVersion != nil {
 		expected = *body.ExpectedVersion
 	}
+	kubernetesImage := ""
+	if body.KubernetesImage != nil {
+		kubernetesImage = *body.KubernetesImage
+	}
 	return handler.Service.PreviewCollectorAction(ctx, actor, resourceType, resourceID, action, telemetryservice.CollectorPreviewInput{
-		DistributionVersionID: uuid.UUID(body.DistributionVersionId), ProfileIDs: fromOpenAPIUUIDs(body.ProfileIds), RouteKind: string(body.RouteKind), GatewayCollectorID: gateway, ExpectedVersion: expected}, key)
+		DistributionVersionID: uuid.UUID(body.DistributionVersionId), ProfileIDs: fromOpenAPIUUIDs(body.ProfileIds), RouteKind: string(body.RouteKind), GatewayCollectorID: gateway, ExpectedVersion: expected,
+		KubernetesImage: kubernetesImage}, key)
 }
 
 func telemetryStatus(err error) int {
@@ -597,10 +602,15 @@ func optionalInt(value *int) int {
 	}
 	return *value
 }
-func toCollectorDistribution(value db.CollectorDistributionVersion) telemetryapi.CollectorDistributionVersion {
+func toCollectorDistribution(value db.CollectorDistributionVersion, defaultKubernetesImage string) telemetryapi.CollectorDistributionVersion {
 	var artifacts []telemetryapi.CollectorArtifact
 	_ = json.Unmarshal(value.ArtifactManifest, &artifacts)
-	return telemetryapi.CollectorDistributionVersion{Id: value.ID, Name: value.Name, Version: value.Version, CollectorVersion: value.CollectorVersion, ConfigSchemaVersion: value.ConfigSchemaVersion, SupportStatus: telemetryapi.CollectorSupportStatus(value.SupportStatus), Components: value.Components, Artifacts: artifacts, CreatedAt: value.CreatedAt.Time}
+	result := telemetryapi.CollectorDistributionVersion{Id: value.ID, Name: value.Name, Version: value.Version, CollectorVersion: value.CollectorVersion, ConfigSchemaVersion: value.ConfigSchemaVersion, SupportStatus: telemetryapi.CollectorSupportStatus(value.SupportStatus), Components: value.Components, Artifacts: artifacts, CreatedAt: value.CreatedAt.Time}
+	if defaultKubernetesImage != "" {
+		image := defaultKubernetesImage
+		result.KubernetesImage = &image
+	}
+	return result
 }
 func toCollectionProfile(value db.CollectionProfile) telemetryapi.CollectionProfile {
 	signals := make([]telemetryapi.TelemetrySignal, len(value.Signals))
@@ -630,6 +640,10 @@ func toCollectorWithRoute(ctx context.Context, q *db.Queries, value db.Collector
 	if err == nil {
 		converted := toTelemetryRoute(route)
 		result.Route = &converted
+	}
+	if operation, operationErr := q.GetLatestCollectorOperation(ctx, db.GetLatestCollectorOperationParams{CollectorID: value.ID, EnterpriseID: value.EnterpriseID}); operationErr == nil && operation.ErrorCode.Valid {
+		errorCode := operation.ErrorCode.String
+		result.LastOperationErrorCode = &errorCode
 	}
 	return result
 }

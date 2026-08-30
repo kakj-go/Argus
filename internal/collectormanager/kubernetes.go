@@ -200,16 +200,13 @@ func collectorPodTemplate(command *connectorv1.CollectorManagementCommand, image
 		Ports:        []corev1.ContainerPort{{Name: "otlp-grpc", ContainerPort: 4317}, {Name: "otlp-http", ContainerPort: 4318}},
 		VolumeMounts: []corev1.VolumeMount{{Name: "config", MountPath: "/etc/argus-otelcol", ReadOnly: true}, {Name: "identity", MountPath: "/var/lib/argus-otelcol/identity"}},
 		Resources:    corev1.ResourceRequirements{}}
+	// 身份材料直接以只读 Secret 挂载(defaultMode 0440 + Pod fsGroup 提供组读),
+	// 不再引入额外的 busybox init 容器——严格离线集群无法拉取外部镜像。
+	identityMode := int32(0o440)
 	volumes := []corev1.Volume{
 		{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: configName}}}},
-		{Name: "identity", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}}},
-		{Name: "identity-source", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: collectorIdentitySecret}}},
+		{Name: "identity", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: collectorIdentitySecret, DefaultMode: &identityMode}}},
 	}
-	initContainers := []corev1.Container{{
-		Name: "prepare-identity", Image: "busybox:1.37.0",
-		Command:      []string{"sh", "-ec", "cp /identity-source/* /identity/; chmod 0600 /identity/*"},
-		VolumeMounts: []corev1.VolumeMount{{Name: "identity-source", MountPath: "/identity-source", ReadOnly: true}, {Name: "identity", MountPath: "/identity"}},
-	}}
 	if isGateway {
 		container.Ports = append(container.Ports, corev1.ContainerPort{Name: "health", ContainerPort: 13133})
 		container.StartupProbe = collectorHealthProbe(60, 2)
@@ -230,7 +227,7 @@ func collectorPodTemplate(command *connectorv1.CollectorManagementCommand, image
 	}
 	return corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: map[string]string{"argus.io/config-sha256": command.GetConfigSha256()}},
 		Spec: corev1.PodSpec{ServiceAccountName: "argus-otelcol", SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: &nonRoot, RunAsUser: &runAsUser, FSGroup: &fsGroup},
-			InitContainers: initContainers, Containers: []corev1.Container{container}, Volumes: volumes}}
+			Containers: []corev1.Container{container}, Volumes: volumes}}
 }
 
 func collectorHealthProbe(failureThreshold int32, periodSeconds int32) *corev1.Probe {

@@ -914,10 +914,26 @@ test("kubernetes collector statuses install or open monitoring directly", async 
   await page
     .getByRole("button", { name: "为 k8s-staging 安装 OTLP 收集器" })
     .click();
+  const dialog = page.getByRole("dialog", {
+    name: /安装 OTLP 收集器.*k8s-staging/,
+  });
+  await expect(dialog).toBeVisible();
+
+  // 向导三步:绑定 → Claim 矩阵 → 预览;预览步填写内网镜像并展示生效值。
+  await dialog.getByRole("button", { name: "下一步" }).click();
+  await dialog.getByRole("button", { name: "下一步" }).click();
+  const imageInput = dialog.getByLabel("内网镜像地址");
+  await expect(imageInput).toBeVisible();
+  await imageInput.fill("registry.internal.corp/argus/otelcol:0.1.0-m7");
   await expect(
-    page.getByRole("dialog", { name: /安装 OTLP 收集器.*k8s-staging/ }),
+    dialog.getByText("registry.internal.corp/argus/otelcol:0.1.0-m7").last(),
   ).toBeVisible();
-  await page.keyboard.press("Escape");
+  await dialog.getByRole("button", { name: "生成安装预览" }).click();
+  await dialog.getByRole("button", { name: "确认执行" }).click();
+
+  // 确认后进入收敛面板:先呈现安装中,再自动收敛关闭。
+  await expect(dialog.getByText("安装中")).toBeVisible();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
   await page
     .getByRole("button", { name: "查看 k8s-prod-east 的 OTLP 收集器" })
@@ -1223,4 +1239,38 @@ test("org role drawer: permission matrix uses credential, not secret", async ({
   await expect(
     credentialRow.getByRole("checkbox", { name: "查看原值" }),
   ).toBeVisible();
+});
+
+test("host delete surfaces dual-approval state instead of silently closing", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/hosts");
+
+  // 选取一个已知独立主机,确认初始可见。
+  const target = page.locator(".argus-host-tile", { hasText: "public-web-01" });
+  await expect(target).toBeVisible();
+  await target.getByRole("button", { name: "删除" }).click();
+
+  // 第一段:删除确认框;第二段:Preview/Confirm 卡。
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "删除" }).click();
+  await dialog.getByRole("button", { name: "确认执行" }).click();
+
+  // 删除为危险操作,进入双人审批:卡片必须保持打开并给出明确引导,
+  // 而不是静默关闭让用户误以为"删除没有生效/列表没有刷新"。
+  await expect(dialog.getByText("已确认，等待审批通过后执行")).toBeVisible();
+  await expect(dialog.getByText(/双人审批/)).toBeVisible();
+  // Dialog 自身也有一个"关闭"(X)按钮,用卡片内的那个。
+  await dialog
+    .getByRole("button", { name: "关闭" })
+    .filter({ hasText: "关闭" })
+    .first()
+    .click();
+  await expect(dialog).toHaveCount(0);
+
+  // 未批准前主机仍在列表(治理语义正确);审批中心出现待办。
+  await expect(target).toBeVisible();
+  await expect(page.getByRole("link", { name: /审批中心/ })).toBeVisible();
 });

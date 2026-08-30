@@ -27,6 +27,7 @@ import {
   type PreviewCommitStatus,
 } from "@argus/ui";
 import { PendingActionConfirm } from "./pending-action-confirm";
+import { CollectorSettlementPanel } from "../telemetry/collector-settlement";
 import {
   collectorTone,
   formatDateTime,
@@ -263,6 +264,7 @@ export function CollectorInstallWizard({
   const [route, setRoute] = useState("direct_argus");
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
+  const [settling, setSettling] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const distributionsQuery = useQuery({
     queryKey: ["telemetry", "distributions"],
@@ -276,8 +278,12 @@ export function CollectorInstallWizard({
     queryKey: ["telemetry", "collectors"],
     queryFn: () => api.telemetry.listCollectors(),
   });
+  // 分发物按目标架构选择:与服务端 hostCollectorPlatform 的解析规则一致
+  // (windows → windows_amd64;linux 按 host.architecture,未探测按 amd64)。
   const platform =
-    host.platform === "windows" ? "windows_amd64" : "linux_arm64";
+    host.platform === "windows"
+      ? "windows_amd64"
+      : `linux_${host.architecture ?? "amd64"}`;
   const distribution = distributionsQuery.data?.find(
     (item) =>
       item.support_status === "supported" &&
@@ -303,6 +309,7 @@ export function CollectorInstallWizard({
       setProfile(COLLECTOR_PROFILES[0]!);
       setRoute("direct_argus");
       setPendingAction(null);
+      setSettling(false);
     }
     onOpenChange(next);
   };
@@ -348,13 +355,26 @@ export function CollectorInstallWizard({
       title={t("hosts.components.installWizard.title", { name: host.name })}
       width={560}
     >
-      {pendingAction ? (
+      {settling ? (
+        <CollectorSettlementPanel
+          onClose={() => {
+            setSettling(false);
+            onInstalled();
+            close(false);
+          }}
+          onSettled={() => {
+            setSettling(false);
+            onInstalled();
+            close(false);
+          }}
+          poll={() => api.hosts.getCollector(host.id)}
+        />
+      ) : pendingAction ? (
         <PendingActionConfirm
           action={pendingAction}
           onCancel={() => setPendingAction(null)}
           onDone={() => {
-            onInstalled();
-            close(false);
+            setSettling(true);
           }}
         />
       ) : (
@@ -474,6 +494,13 @@ function CollectorCard({
   const collectorQuery = useQuery({
     queryKey: ["host-collector", host.id],
     queryFn: () => api.hosts.getCollector(host.id),
+    refetchInterval: (query) =>
+      query.state.data &&
+      ["pending_install", "installing", "uninstalling"].includes(
+        query.state.data.status,
+      )
+        ? 2000
+        : false,
   });
   const collector: CollectorInstance | null = collectorQuery.data ?? null;
   const profilesQuery = useQuery({
@@ -681,6 +708,14 @@ function CollectorCard({
         }
       />
       <CardContent className="argus-detail-section">
+        {collector.status === "degraded" &&
+          collector.last_operation_error_code && (
+            <p className="argus-detail-section__title argus-mono">
+              {t("hosts.components.lastFailure", {
+                code: collector.last_operation_error_code,
+              })}
+            </p>
+          )}
         <KeyValueGrid
           columns={3}
           items={[

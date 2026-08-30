@@ -12,10 +12,16 @@ spec:
   secretName: argus-web-tls
   duration: 2160h
   renewBefore: 360h
+  # 显式 CN 让自签证书具备完整 Subject/Issuer DN;无 CN 时 issuer DN 为空,
+  # OpenSSL 系客户端(curl/mc)与部分链校验会拒绝该证书。
+  commonName: argus-ingress
   dnsNames:
     - {{ .Values.hosts.enterprise }}
     - {{ .Values.hosts.platform }}
     - {{ .Values.hosts.cards }}
+    {{- with .Values.hosts.artifact }}
+    - {{ . }}
+    {{- end }}
   privateKey:
     algorithm: ECDSA
     size: 256
