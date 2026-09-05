@@ -65,6 +65,7 @@ export const aiSettingsZh = {
       structuredFailures: "结构化输出失败",
       ranking: "部门 / 用户用量",
       noData: "暂无用量数据",
+      quotaCount: "{{count}} 项额度规则",
     },
     cards: {
       description: "检查、绑定、验证并启用企业交互卡片。",
@@ -75,6 +76,9 @@ export const aiSettingsZh = {
       draft: "草稿",
       active: "已启用",
       deprecated: "已废弃",
+      validating: "验证中",
+      validated: "已验证",
+      retired: "已停用",
       detail: "配置",
       validate: "验证",
       enable: "启用",
@@ -93,6 +97,15 @@ export const aiSettingsZh = {
       validationPassed: "验证通过",
       validationFailed: "验证未通过",
       preview: "会话样式预览",
+      slots: "数据槽位",
+      slotKind: { data: "数据", query: "查询", action: "操作" },
+      slotType: {
+        string: "文本",
+        number: "数值",
+        boolean: "布尔值",
+        array: "数组",
+        object: "对象",
+      },
     },
   },
 } as const;
@@ -166,6 +179,7 @@ export const aiSettingsEn = {
       structuredFailures: "Structured output failures",
       ranking: "Department / user usage",
       noData: "No usage data",
+      quotaCount: "{{count}} quota rules",
     },
     cards: {
       description:
@@ -177,6 +191,9 @@ export const aiSettingsEn = {
       draft: "Draft",
       active: "Enabled",
       deprecated: "Deprecated",
+      validating: "Validating",
+      validated: "Validated",
+      retired: "Retired",
       detail: "Configure",
       validate: "Validate",
       enable: "Enable",
@@ -195,6 +212,15 @@ export const aiSettingsEn = {
       validationPassed: "Validation passed",
       validationFailed: "Validation failed",
       preview: "Conversation preview",
+      slots: "Slots",
+      slotKind: { data: "Data", query: "Query", action: "Action" },
+      slotType: {
+        string: "Text",
+        number: "Number",
+        boolean: "Boolean",
+        array: "Array",
+        object: "Object",
+      },
     },
   },
 } as const;

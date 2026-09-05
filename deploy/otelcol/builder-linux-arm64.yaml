@@ -1,0 +1,31 @@
+dist:
+  module: github.com/kakj-go/Argus/cmd/argus-otelcol
+  name: argus-otelcol
+  description: Argus managed OpenTelemetry Collector for Linux arm64
+  version: 0.1.0-m7
+  output_path: ./build/otelcol/dist/linux-arm64
+  otelcol_version: 0.133.0
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.133.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver v0.133.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver v0.133.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver v0.133.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver v0.133.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/journaldreceiver v0.133.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver v0.133.0
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.133.0
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.133.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.133.0
+  - gomod: github.com/kakj-go/Argus/internal/otelcol/argusgatewayidentity v0.0.0
+    import: github.com/kakj-go/Argus/internal/otelcol/argusgatewayidentity
+    path: ./internal/otelcol/argusgatewayidentity
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.133.0
+extensions:
+  - gomod: github.com/kakj-go/Argus/internal/otelcol/argusidentity v0.0.0
+    import: github.com/kakj-go/Argus/internal/otelcol/argusidentity
+    path: ./internal/otelcol/argusidentity
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage v0.133.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.133.0

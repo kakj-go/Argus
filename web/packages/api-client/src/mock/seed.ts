@@ -6,10 +6,14 @@ import { createOrgSeed } from "./seed-org";
 import type { MockDb } from "./store";
 import type { MockInteractiveCard } from "./internal-types";
 import type { MockHost } from "./resource-models";
-
-const DAY = 86_400_000;
-const HOUR = 3_600_000;
-const MINUTE = 60_000;
+import { publicActionType } from "./action-type";
+import {
+  DAY,
+  HOUR,
+  MINUTE,
+  createSeedHost,
+  seedInstructionSets,
+} from "./seed-helpers";
 
 /**
  * Builds the seed database: one initialized platform with a super admin,
@@ -22,23 +26,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
   const iso = (offsetMs: number) => new Date(now + offsetMs).toISOString();
   const ago = (offsetMs: number) => iso(-offsetMs);
 
-  const host = (
-    partial: Partial<MockHost> & Pick<MockHost, "id" | "name" | "address">,
-  ): MockHost => ({
-    enterpriseId: "ent-acme",
-    hostname: partial.name ?? "",
-    port: 22,
-    platform: "linux",
-    architecture: "amd64",
-    connectionMode: "direct_ssh",
-    environment: "production",
-    labels: {},
-    connectionStatus: "online",
-    collectorStatus: "not_installed",
-    createdAt: ago(90 * DAY),
-    updatedAt: ago(DAY),
-    ...partial,
-  });
+  const host = createSeedHost(ago);
 
   const hosts: MockHost[] = [
     // Bastion Scope: 上海机房堡垒机-01
@@ -357,6 +345,7 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     return {
       schema_version: "argus.pending_action/v1",
       action_ref,
+      action_type: publicActionType(tool),
       summary: partial.title,
       preview: {},
       diff: [],
@@ -617,33 +606,101 @@ export function createSeedDb(now: number = Date.now()): MockDb {
   // 供录像列表 / 详情弹框 / TerminalPlayer 的 mock 演示与 E2E 使用。
   const recordingEvents: unknown[] = [
     { time: 0, type: "r", data: "120x30" },
-    { time: 0.2, type: "o", data: "\u001b[?2004h\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
+    {
+      time: 0.2,
+      type: "o",
+      data: "\u001b[?2004h\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ ",
+    },
     { time: 1.0, type: "i", data: "uptime\r" },
     { time: 1.6, type: "o", data: "uptime\r\n" },
-    { time: 1.7, type: "o", data: " 21:32:01 up 42 days,  3:17,  2 users,  load average: 0.18, 0.12, 0.09\r\n" },
-    { time: 2.2, type: "o", data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
+    {
+      time: 1.7,
+      type: "o",
+      data: " 21:32:01 up 42 days,  3:17,  2 users,  load average: 0.18, 0.12, 0.09\r\n",
+    },
+    {
+      time: 2.2,
+      type: "o",
+      data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ ",
+    },
     { time: 3.0, type: "i", data: "df -h /data\r" },
     { time: 3.7, type: "o", data: "df -h /data\r\n" },
-    { time: 3.8, type: "o", data: "Filesystem      Size  Used Avail Use% Mounted on\r\n" },
-    { time: 3.9, type: "o", data: "/dev/sdb1       200G   87G  103G  46% /data\r\n" },
-    { time: 4.4, type: "o", data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
+    {
+      time: 3.8,
+      type: "o",
+      data: "Filesystem      Size  Used Avail Use% Mounted on\r\n",
+    },
+    {
+      time: 3.9,
+      type: "o",
+      data: "/dev/sdb1       200G   87G  103G  46% /data\r\n",
+    },
+    {
+      time: 4.4,
+      type: "o",
+      data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ ",
+    },
     { time: 5.2, type: "i", data: "tail -n 3 /var/log/nginx/error.log\r" },
     { time: 5.9, type: "o", data: "tail -n 3 /var/log/nginx/error.log\r\n" },
-    { time: 6.0, type: "o", data: "\u001b[31m2026-08-29 21:18:44\u001b[0m [warn] 3101#3101: *8192 upstream server temporarily disabled while connecting to upstream\r\n" },
-    { time: 6.1, type: "o", data: "\u001b[31m2026-08-29 21:18:45\u001b[0m [warn] 3101#3101: *8194 upstream server temporarily disabled while connecting to upstream\r\n" },
-    { time: 6.2, type: "o", data: "\u001b[31m2026-08-29 21:18:47\u001b[0m [error] 3101#3101: *8196 connect() failed (111: Connection refused) while connecting to upstream\r\n" },
-    { time: 6.8, type: "o", data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
-    { time: 7.6, type: "i", data: "systemctl status argus-connector --no-pager\r" },
-    { time: 8.3, type: "o", data: "systemctl status argus-connector --no-pager\r\n" },
-    { time: 8.4, type: "o", data: "\u001b[1m● argus-connector.service - Argus Connector\u001b[0m\r\n" },
-    { time: 8.5, type: "o", data: "     Loaded: loaded (/etc/systemd/system/argus-connector.service; \u001b[32menabled\u001b[0m; preset: enabled)\r\n" },
-    { time: 8.6, type: "o", data: "     Active: \u001b[32mactive (running)\u001b[0m since Mon 2026-08-24 09:00:12 CST; 5 days ago\r\n" },
+    {
+      time: 6.0,
+      type: "o",
+      data: "\u001b[31m2026-08-29 21:18:44\u001b[0m [warn] 3101#3101: *8192 upstream server temporarily disabled while connecting to upstream\r\n",
+    },
+    {
+      time: 6.1,
+      type: "o",
+      data: "\u001b[31m2026-08-29 21:18:45\u001b[0m [warn] 3101#3101: *8194 upstream server temporarily disabled while connecting to upstream\r\n",
+    },
+    {
+      time: 6.2,
+      type: "o",
+      data: "\u001b[31m2026-08-29 21:18:47\u001b[0m [error] 3101#3101: *8196 connect() failed (111: Connection refused) while connecting to upstream\r\n",
+    },
+    {
+      time: 6.8,
+      type: "o",
+      data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ ",
+    },
+    {
+      time: 7.6,
+      type: "i",
+      data: "systemctl status argus-connector --no-pager\r",
+    },
+    {
+      time: 8.3,
+      type: "o",
+      data: "systemctl status argus-connector --no-pager\r\n",
+    },
+    {
+      time: 8.4,
+      type: "o",
+      data: "\u001b[1m● argus-connector.service - Argus Connector\u001b[0m\r\n",
+    },
+    {
+      time: 8.5,
+      type: "o",
+      data: "     Loaded: loaded (/etc/systemd/system/argus-connector.service; \u001b[32menabled\u001b[0m; preset: enabled)\r\n",
+    },
+    {
+      time: 8.6,
+      type: "o",
+      data: "     Active: \u001b[32mactive (running)\u001b[0m since Mon 2026-08-24 09:00:12 CST; 5 days ago\r\n",
+    },
     { time: 8.7, type: "o", data: "   Main PID: 3101 (argus-connector)\r\n" },
-    { time: 8.8, type: "o", data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ " },
+    {
+      time: 8.8,
+      type: "o",
+      data: "\u001b[32mops@host-web-11\u001b[0m:\u001b[34m~\u001b[0m$ ",
+    },
     { time: 9.6, type: "i", data: "exit\r" },
     { time: 10.2, type: "o", data: "exit\r\n" },
     { time: 10.3, type: "m", data: { status: "closed", reason: "user_exit" } },
-    { time: 10.4, type: "o", data: "\r\n\u001b[33m[Argus] 会话已结束，连接关闭。\u001b[0m\r\n" },
+    {
+      time: 10.4,
+      type: "o",
+      data: "\r\n\u001b[33m[Argus] 会话已结束，连接关闭。\u001b[0m\r\n",
+    },
   ];
   const remoteAccessRecordings: RemoteAccessRecording[] = [
     {
@@ -657,16 +714,19 @@ export function createSeedDb(now: number = Date.now()): MockDb {
       event_count: recordingEvents.length,
       size_bytes: 48_211,
       duration_ms: 10_400,
-      final_hash: "3f7a1c9d2e5b8406a1c3f9e7d2b58046c9a1e3f7d2b58046c9a1e3f7d2b58046",
+      final_hash:
+        "3f7a1c9d2e5b8406a1c3f9e7d2b58046c9a1e3f7d2b58046c9a1e3f7d2b58046",
       retention_until: iso(180 * DAY),
       created_at: ago(2 * HOUR),
       completed_at: ago(2 * HOUR - 10_400),
     },
   ];
-  const remoteAccessRecordingEvents: Record<string, unknown[]> = { "rar-seed-1": recordingEvents };
+  const remoteAccessRecordingEvents: Record<string, unknown[]> = {
+    "rar-seed-1": recordingEvents,
+  };
 
   const db: MockDb = {
-    schemaVersion: 11,
+    schemaVersion: 13,
     seq: {},
     platformState: { state: "initialized", name: "Argus" },
     enterprises: [
@@ -927,7 +987,63 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         createdAt: ago(HOUR),
         updatedAt: ago(HOUR),
       },
+      {
+        id: "scope-p4-installing",
+        enterpriseId: "ent-acme",
+        name: "P4 代装进行中",
+        environment: "staging",
+        labels: { acceptance: "p4" },
+        status: "pending",
+        memberHostIds: [],
+        onboardingMode: "direct_install",
+        onboardingState: "installing",
+        onboardingOperationId: "connector-operation-seed-running",
+        createdAt: ago(35 * MINUTE),
+        updatedAt: ago(2 * MINUTE),
+      },
+      {
+        id: "scope-p4-failed",
+        enterpriseId: "ent-acme",
+        name: "P4 隧道代装失败",
+        environment: "production",
+        labels: { acceptance: "p4" },
+        status: "pending",
+        memberHostIds: [],
+        onboardingMode: "direct_install_tunnel",
+        onboardingState: "install_failed",
+        onboardingOperationId: "connector-operation-seed-failed",
+        onboardingErrorCode: "CONNECTOR_INSTALL_FAILED",
+        createdAt: ago(50 * MINUTE),
+        updatedAt: ago(5 * MINUTE),
+      },
+      {
+        id: "scope-p4-consumed",
+        enterpriseId: "ent-acme",
+        name: "P4 命令已领取",
+        environment: "development",
+        labels: { acceptance: "p4" },
+        status: "pending",
+        memberHostIds: [],
+        onboardingMode: "command",
+        onboardingState: "command_consumed",
+        createdAt: ago(65 * MINUTE),
+        updatedAt: ago(10 * MINUTE),
+      },
+      {
+        id: "scope-p4-approval",
+        enterpriseId: "ent-acme",
+        name: "P4 等待审批",
+        environment: "production",
+        labels: { acceptance: "p4" },
+        status: "pending",
+        memberHostIds: [],
+        onboardingMode: "command",
+        onboardingState: "awaiting_approval",
+        createdAt: ago(80 * MINUTE),
+        updatedAt: ago(12 * MINUTE),
+      },
     ],
+    hostEnrollmentTokens: [],
     enrollmentTokens: [
       {
         id: "etok-0001",
@@ -936,8 +1052,11 @@ export function createSeedDb(now: number = Date.now()): MockDb {
         purpose: "initial_registration",
         status: "active",
         token: "enroll_7f3a9c2d1e4b",
-        installCommand:
-          "curl -fsSL https://argus.example/install.sh | sh -s -- --token enroll_7f3a9c2d1e4b",
+        instructionSets: seedInstructionSets(
+          "enroll_7f3a9c2d1e4b",
+          iso(23 * HOUR),
+          "connector",
+        ),
         expiresAt: iso(23 * HOUR),
         remainingUses: 1,
         createdBy: "u-chenxi",
@@ -1105,6 +1224,88 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     ],
     tasks,
     pendingActions,
+    executions: [],
+    connectorInstallOperations: [
+      {
+        id: "connector-operation-seed-running",
+        connector_id: "connector-seed-running",
+        bastion_scope_id: "scope-p4-installing",
+        host_id: "connector-host-seed-running",
+        connection_test_id: "connection-test-seed-running",
+        release_version_id: "connector-release-v1",
+        install_mode: "direct_install",
+        stage: "artifact_transferring",
+        status: "running",
+        attempt: 1,
+        max_attempts: 3,
+        events: [
+          {
+            id: "op-event-seed-running-1",
+            stage: "queued",
+            status: "succeeded",
+            occurred_at: ago(3 * MINUTE),
+          },
+          {
+            id: "op-event-seed-running-2",
+            stage: "ssh_connecting",
+            status: "succeeded",
+            occurred_at: ago(150_000),
+          },
+          {
+            id: "op-event-seed-running-3",
+            stage: "artifact_verifying",
+            status: "succeeded",
+            occurred_at: ago(120_000),
+          },
+          {
+            id: "op-event-seed-running-4",
+            stage: "artifact_transferring",
+            status: "started",
+            occurred_at: ago(90_000),
+          },
+        ],
+        started_at: ago(3 * MINUTE),
+        expires_at: iso(7 * MINUTE),
+        created_at: ago(3 * MINUTE),
+        updated_at: ago(90_000),
+      },
+      {
+        id: "connector-operation-seed-failed",
+        connector_id: "connector-seed-failed",
+        bastion_scope_id: "scope-p4-failed",
+        host_id: "connector-host-seed-failed",
+        connection_test_id: "connection-test-seed-failed",
+        release_version_id: "connector-release-v1",
+        install_mode: "direct_install_tunnel",
+        stage: "ssh_connecting",
+        status: "failed",
+        attempt: 3,
+        max_attempts: 3,
+        control_tunnel_status: "down",
+        error_code: "CONNECTOR_INSTALL_FAILED",
+        events: [
+          {
+            id: "op-event-seed-failed-1",
+            stage: "queued",
+            status: "succeeded",
+            occurred_at: ago(8 * MINUTE),
+          },
+          {
+            id: "op-event-seed-failed-2",
+            stage: "ssh_connecting",
+            status: "failed",
+            error_code: "CONNECTOR_INSTALL_FAILED",
+            occurred_at: ago(5 * MINUTE),
+          },
+        ],
+        started_at: ago(8 * MINUTE),
+        completed_at: ago(5 * MINUTE),
+        expires_at: iso(2 * MINUTE),
+        created_at: ago(8 * MINUTE),
+        updated_at: ago(5 * MINUTE),
+      },
+    ],
+    oneTimeResults: {},
     actionPlans,
     conversations: [
       {
@@ -1765,7 +1966,33 @@ export function createSeedDb(now: number = Date.now()): MockDb {
     (scope) => scope.id === "scope-sh2",
   );
   const token = db.enrollmentTokens[0];
-  if (pendingScope && token) pendingScope.registrationToken = token;
+  if (pendingScope && token) {
+    const executionId = "exec-seed-scope-command";
+    pendingScope.registrationToken = token;
+    pendingScope.onboardingMode = "command";
+    pendingScope.onboardingState = "command_available";
+    pendingScope.onboardingExecutionId = executionId;
+    db.executions.push({
+      execution_id: executionId,
+      action_ref: "seed-bastion-enrollment",
+      status: "succeeded",
+      one_time_result_state: "available",
+      resource_ref: {
+        resource_type: "bastion_scope",
+        resource_id: pendingScope.id,
+        version: pendingScope.resourceVersion ?? 1,
+      },
+      created_at: token.createdAt,
+      updated_at: token.createdAt,
+    });
+    db.oneTimeResults[executionId] = {
+      schema_version: "argus.action_one_time_result/v3",
+      execution_id: executionId,
+      result_kind: "connector_install_command",
+      instruction_sets: token.instructionSets,
+      expires_at: token.expiresAt,
+    };
+  }
 
   return db;
 }

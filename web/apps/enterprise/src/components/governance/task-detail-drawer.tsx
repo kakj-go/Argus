@@ -22,6 +22,7 @@ import {
   taskStatusTone,
   useNow,
 } from "./utils";
+import { taskDisplayTitle, taskStepDisplayTitle } from "./task-presentation";
 
 /**
  * 任务详情抽屉：概要 + 步骤 + 日志。
@@ -108,7 +109,7 @@ export function TaskDetailDrawer({
       }
       onOpenChange={onOpenChange}
       open={open}
-      title={task?.title ?? t("governance.tasks.title")}
+      title={task ? taskDisplayTitle(task, t) : t("governance.tasks.title")}
       width={560}
     >
       {!task ? (
@@ -117,7 +118,7 @@ export function TaskDetailDrawer({
         <div className="argus-task-detail">
           {task.error && (
             <div className="argus-task-detail__error" role="alert">
-              {task.error}
+              {t("governance.tasks.actionFailed")}
             </div>
           )}
 
@@ -201,8 +202,8 @@ export function TaskDetailDrawer({
               {t("governance.tasks.detail.steps")}
             </h3>
             <Timeline
-              items={task.steps.map((step) => ({
-                title: step.name,
+              items={task.steps.map((step, index) => ({
+                title: taskStepDisplayTitle(index, t),
                 status: stepTimelineStatus(step.status),
                 meta: (
                   <>
@@ -219,25 +220,13 @@ export function TaskDetailDrawer({
                         )}
                       </span>
                     )}
-                    {step.detail && (
-                      <span
-                        className={
-                          step.status === "failed"
-                            ? "argus-task-step-error"
-                            : "argus-task-step-detail"
-                        }
-                      >
-                        {" · "}
-                        {step.detail}
-                      </span>
-                    )}
                   </>
                 ),
               }))}
             />
-            {failedStep?.detail && !task.error && (
+            {failedStep && !task.error && (
               <div className="argus-task-detail__error" role="alert">
-                {failedStep.name}: {failedStep.detail}
+                {t("governance.tasks.actionFailed")}
               </div>
             )}
           </section>

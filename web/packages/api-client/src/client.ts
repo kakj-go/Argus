@@ -31,6 +31,7 @@ import type {
   PendingActionPublic,
   PendingActionFilter,
   PlatformAuditEvent,
+  PlatformPKIStatus,
   PreviewActionInput,
   Role,
   RoleBinding,
@@ -66,6 +67,7 @@ import type {
   ActionOneTimeResult,
   ApprovalRequestView,
   BastionPreviewCreate,
+  BastionConnectorReplacementPreview,
   BastionScope,
   BastionScopePage,
   CompletePasswordChangeRequest,
@@ -84,6 +86,7 @@ import type {
   HostPage,
   HostPreviewCreate,
   HostPreviewUpdate,
+  ConnectorInstallOperation,
   KubernetesCluster,
   KubernetesClusterPage,
   KubernetesConnectionTestCreate,
@@ -330,6 +333,14 @@ export interface ArgusApiClient {
       hostId: string,
       input: CollectorPreview,
     ): Promise<PendingActionPublic>;
+    previewEnrollmentRotate(
+      hostId: string,
+      expectedVersion: number,
+    ): Promise<PendingActionPublic>;
+    previewUninstallCommand(
+      hostId: string,
+      expectedVersion: number,
+    ): Promise<PendingActionPublic>;
   };
 
   /** Human-only remote access. Tickets never cross into Agent, Card, or Sandbox APIs. */
@@ -438,9 +449,19 @@ export interface ArgusApiClient {
       scopeId: string,
       expectedVersion: number,
     ): Promise<PendingActionPublic>;
-    previewReplaceBastionConnector(
+    previewEnrollmentRotate(
       scopeId: string,
       expectedVersion: number,
+    ): Promise<PendingActionPublic>;
+    previewConnectorReplacement(
+      scopeId: string,
+      input: BastionConnectorReplacementPreview,
+    ): Promise<PendingActionPublic>;
+    getInstallOperation(
+      operationId: string,
+    ): Promise<ConnectorInstallOperation>;
+    previewRetryInstallOperation(
+      operationId: string,
     ): Promise<PendingActionPublic>;
     previewUninstallConnector(
       connectorId: string,
@@ -784,6 +805,9 @@ export interface ArgusApiClient {
         filter?: AuditFilter,
         query?: ListQuery,
       ): Promise<Page<PlatformAuditEvent>>;
+    };
+    pki: {
+      get(): Promise<PlatformPKIStatus>;
     };
   };
 

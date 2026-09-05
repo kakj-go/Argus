@@ -13,13 +13,19 @@ import (
 
 // Defines values for ActionOneTimeResultResultKind.
 const (
-	ConnectorEnrollment ActionOneTimeResultResultKind = "connector_enrollment"
+	ConnectorInstallCommand ActionOneTimeResultResultKind = "connector_install_command"
+	HostInstallCommand      ActionOneTimeResultResultKind = "host_install_command"
+	HostUninstallCommand    ActionOneTimeResultResultKind = "host_uninstall_command"
 )
 
 // Valid indicates whether the value is a known member of the ActionOneTimeResultResultKind enum.
 func (e ActionOneTimeResultResultKind) Valid() bool {
 	switch e {
-	case ConnectorEnrollment:
+	case ConnectorInstallCommand:
+		return true
+	case HostInstallCommand:
+		return true
+	case HostUninstallCommand:
 		return true
 	default:
 		return false
@@ -28,13 +34,13 @@ func (e ActionOneTimeResultResultKind) Valid() bool {
 
 // Defines values for ActionOneTimeResultSchemaVersion.
 const (
-	ArgusActionOneTimeResultv1 ActionOneTimeResultSchemaVersion = "argus.action_one_time_result/v1"
+	ArgusActionOneTimeResultv3 ActionOneTimeResultSchemaVersion = "argus.action_one_time_result/v3"
 )
 
 // Valid indicates whether the value is a known member of the ActionOneTimeResultSchemaVersion enum.
 func (e ActionOneTimeResultSchemaVersion) Valid() bool {
 	switch e {
-	case ArgusActionOneTimeResultv1:
+	case ArgusActionOneTimeResultv3:
 		return true
 	default:
 		return false
@@ -152,6 +158,45 @@ func (e ApprovalRequirementStatus) Valid() bool {
 	}
 }
 
+// Defines values for InstallInstructionSetDownloadTlsMode.
+const (
+	InsecureFirstFetch InstallInstructionSetDownloadTlsMode = "insecure-first-fetch"
+	Strict             InstallInstructionSetDownloadTlsMode = "strict"
+)
+
+// Valid indicates whether the value is a known member of the InstallInstructionSetDownloadTlsMode enum.
+func (e InstallInstructionSetDownloadTlsMode) Valid() bool {
+	switch e {
+	case InsecureFirstFetch:
+		return true
+	case Strict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstallInstructionSetScope.
+const (
+	Kubernetes  InstallInstructionSetScope = "kubernetes"
+	LinuxSystem InstallInstructionSetScope = "linux-system"
+	LinuxUser   InstallInstructionSetScope = "linux-user"
+)
+
+// Valid indicates whether the value is a known member of the InstallInstructionSetScope enum.
+func (e InstallInstructionSetScope) Valid() bool {
+	switch e {
+	case Kubernetes:
+		return true
+	case LinuxSystem:
+		return true
+	case LinuxUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PartialMetadataReasons.
 const (
 	AuthorizationFiltered PartialMetadataReasons = "authorization_filtered"
@@ -178,11 +223,11 @@ func (e PartialMetadataReasons) Valid() bool {
 
 // ActionOneTimeResult defines model for ActionOneTimeResult.
 type ActionOneTimeResult struct {
-	Enrollment    EnrollmentResult                 `json:"enrollment"`
-	ExecutionId   openapi_types.UUID               `json:"execution_id"`
-	ExpiresAt     time.Time                        `json:"expires_at"`
-	ResultKind    ActionOneTimeResultResultKind    `json:"result_kind"`
-	SchemaVersion ActionOneTimeResultSchemaVersion `json:"schema_version"`
+	ExecutionId     openapi_types.UUID               `json:"execution_id"`
+	ExpiresAt       time.Time                        `json:"expires_at"`
+	InstructionSets []InstallInstructionSet          `json:"instruction_sets"`
+	ResultKind      ActionOneTimeResultResultKind    `json:"result_kind"`
+	SchemaVersion   ActionOneTimeResultSchemaVersion `json:"schema_version"`
 }
 
 // ActionOneTimeResultResultKind defines model for ActionOneTimeResult.ResultKind.
@@ -306,23 +351,25 @@ type CursorPage struct {
 	Partial    PartialMetadata `json:"partial"`
 }
 
-// EnrollmentResult defines model for EnrollmentResult.
-type EnrollmentResult struct {
-	EnrollmentId   openapi_types.UUID `json:"enrollment_id"`
-	ExpiresAt      time.Time          `json:"expires_at"`
-	InstallCommand *string            `json:"install_command,omitempty"`
-}
-
 // Execution defines model for Execution.
 type Execution struct {
-	ActionRef              string      `json:"action_ref"`
-	CreatedAt              time.Time   `json:"created_at"`
-	ErrorCode              *string     `json:"error_code,omitempty"`
-	ExecutionId            string      `json:"execution_id"`
-	OneTimeResultAvailable *bool       `json:"one_time_result_available,omitempty"`
-	ResultRef              *string     `json:"result_ref,omitempty"`
-	Status                 interface{} `json:"status"`
-	UpdatedAt              time.Time   `json:"updated_at"`
+	ActionRef          string      `json:"action_ref"`
+	CreatedAt          time.Time   `json:"created_at"`
+	ErrorCode          *string     `json:"error_code,omitempty"`
+	ExecutionId        string      `json:"execution_id"`
+	OneTimeResultState interface{} `json:"one_time_result_state,omitempty"`
+	OperationRef       *struct {
+		Id   openapi_types.UUID `json:"id"`
+		Kind interface{}        `json:"kind"`
+	} `json:"operation_ref,omitempty"`
+	ResourceRef *struct {
+		ResourceId   string `json:"resource_id"`
+		ResourceType string `json:"resource_type"`
+		Version      int    `json:"version"`
+	} `json:"resource_ref,omitempty"`
+	ResultRef *string     `json:"result_ref,omitempty"`
+	Status    interface{} `json:"status"`
+	UpdatedAt time.Time   `json:"updated_at"`
 }
 
 // ExecutionPage defines model for ExecutionPage.
@@ -333,6 +380,26 @@ type ExecutionPage struct {
 
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
+
+// InstallInstructionSet defines model for InstallInstructionSet.
+type InstallInstructionSet struct {
+	CapabilityWarnings []string `json:"capability_warnings"`
+
+	// Command 唯一面向用户展示的一键安装命令。Host 与手工 Connector 下载动态引导脚本；Kubernetes 使用等价的单命令临时脚本执行。
+	Command           *string                               `json:"command,omitempty"`
+	DownloadTlsMode   *InstallInstructionSetDownloadTlsMode `json:"download_tls_mode,omitempty"`
+	ExpiresAt         time.Time                             `json:"expires_at"`
+	InstallerSha256   string                                `json:"installer_sha256"`
+	Scope             InstallInstructionSetScope            `json:"scope"`
+	TrustBundleEpoch  int64                                 `json:"trust_bundle_epoch"`
+	TrustBundleSha256 string                                `json:"trust_bundle_sha256"`
+}
+
+// InstallInstructionSetDownloadTlsMode defines model for InstallInstructionSet.DownloadTlsMode.
+type InstallInstructionSetDownloadTlsMode string
+
+// InstallInstructionSetScope defines model for InstallInstructionSet.Scope.
+type InstallInstructionSetScope string
 
 // PartialMetadata defines model for PartialMetadata.
 type PartialMetadata struct {
@@ -375,8 +442,9 @@ type RequestId = string
 
 // PendingActionPublicSchema defines model for pending-action-public.schema.
 type PendingActionPublicSchema struct {
-	ActionRef string `json:"action_ref"`
-	Approval  *struct {
+	ActionRef  string `json:"action_ref"`
+	ActionType string `json:"action_type"`
+	Approval   *struct {
 		ApprovedCount    int     `json:"approved_count"`
 		MinimumApprovers int     `json:"minimum_approvers"`
 		PolicyRef        *string `json:"policy_ref,omitempty"`

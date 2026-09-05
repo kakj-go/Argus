@@ -148,35 +148,38 @@ func (a *App) confirmPendingAction(ctx context.Context, env *E2EEnvironment, nam
 	if err != nil {
 		return nil, err
 	}
-	if status, _ := nestedString(confirmed, "pending_action", "status"); status == "succeeded" {
-		return confirmed, nil
-	}
 	executionID, err := stringField(confirmed, "execution", "execution_id")
 	if err != nil {
+		if status, _ := nestedString(confirmed, "pending_action", "status"); status == "succeeded" {
+			return confirmed, nil
+		}
 		return nil, err
 	}
-	deadline := time.Now().Add(5 * time.Minute)
-	succeeded := false
-	for time.Now().Before(deadline) {
-		status, queryErr := a.postgresQuery(ctx, env, "SELECT status FROM executions WHERE id='"+executionID+"';")
-		if queryErr != nil {
-			return nil, queryErr
+	if status, _ := nestedString(confirmed, "execution", "status"); status != "succeeded" {
+		deadline := time.Now().Add(5 * time.Minute)
+		succeeded := false
+		for time.Now().Before(deadline) {
+			outcome, queryErr := a.postgresQuery(ctx, env, "SELECT status || '|' || coalesce(error_code,'') FROM executions WHERE id='"+executionID+"';")
+			if queryErr != nil {
+				return nil, queryErr
+			}
+			status, errorCode, _ := strings.Cut(strings.TrimSpace(outcome), "|")
+			if status == "succeeded" {
+				succeeded = true
+				break
+			}
+			if status == "failed" || status == "cancelled" {
+				return nil, fmt.Errorf("execution %s ended as %s (%s)", executionID, status, errorCode)
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Second):
+			}
 		}
-		if status == "succeeded" {
-			succeeded = true
-			break
+		if !succeeded {
+			return nil, fmt.Errorf("execution %s timed out", executionID)
 		}
-		if status == "failed" || status == "cancelled" {
-			return nil, fmt.Errorf("execution %s ended as %s", executionID, status)
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(time.Second):
-		}
-	}
-	if !succeeded {
-		return nil, fmt.Errorf("execution %s timed out", executionID)
 	}
 	resourceID, err := a.postgresQuery(ctx, env, "SELECT coalesce(result_resource_id::text,'') FROM pending_actions WHERE action_ref='"+actionRef+"';")
 	if err != nil {
@@ -195,9 +198,7 @@ func (a *App) confirmPendingAction(ctx context.Context, env *E2EEnvironment, nam
 		if claimErr != nil {
 			return nil, claimErr
 		}
-		if enrollment, ok := claimed["enrollment"].(map[string]any); ok {
-			result["enrollment"] = enrollment
-		}
+		result["one_time_result"] = claimed
 	}
 	return result, nil
 }
@@ -246,17 +247,17 @@ func (a *App) waitPostgresValue(ctx context.Context, env *E2EEnvironment, query,
 func (a *App) waitExecutionForAction(ctx context.Context, env *E2EEnvironment, actionRef string, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		value, err := a.postgresQuery(ctx, env, "SELECT execution.id::text || '|' || execution.status FROM executions execution JOIN pending_actions action ON action.id=execution.pending_action_id WHERE action.action_ref='"+actionRef+"' ORDER BY execution.created_at DESC LIMIT 1;")
+		value, err := a.postgresQuery(ctx, env, "SELECT execution.id::text || '|' || execution.status || '|' || COALESCE(execution.error_code, '') || '|' || COALESCE(action.error_code, '') FROM executions execution JOIN pending_actions action ON action.id=execution.pending_action_id WHERE action.action_ref='"+actionRef+"' ORDER BY execution.created_at DESC LIMIT 1;")
 		if err != nil {
 			return "", err
 		}
-		parts := strings.SplitN(strings.TrimSpace(value), "|", 2)
-		if len(parts) == 2 {
+		parts := strings.SplitN(strings.TrimSpace(value), "|", 4)
+		if len(parts) == 4 {
 			switch parts[1] {
 			case "succeeded":
 				return parts[0], nil
 			case "failed", "cancelled":
-				return "", fmt.Errorf("execution %s ended as %s", parts[0], parts[1])
+				return "", fmt.Errorf("execution %s ended as %s (execution_error=%s action_error=%s)", parts[0], parts[1], parts[2], parts[3])
 			}
 		}
 		select {

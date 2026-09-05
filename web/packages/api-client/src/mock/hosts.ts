@@ -24,6 +24,15 @@ function hostContract(value: MockHost): Host {
     architecture: value.architecture,
     last_seen_at: value.lastSeenAt,
     status: "active",
+    onboarding: {
+      state:
+        value.onboardingState ??
+        (value.connectionStatus === "onboarding" ? "installing" : "registered"),
+      execution_id: value.onboardingExecutionId,
+      operation_id: value.onboardingOperationId,
+      error_code: value.onboardingErrorCode,
+      updated_at: value.updatedAt,
+    },
     created_at: value.createdAt,
     updated_at: value.updatedAt,
   };
@@ -137,18 +146,18 @@ export function createHostsDomain(ctx: MockContext): ArgusApiClient["hosts"] {
     },
     async previewUpdateResource(id, input) {
       await ctx.pause();
+      const host = ctx.mustFind(db.hosts, (entry) => entry.id === id, "host");
       return ctx.createPendingAction({
         tool: "host.update",
-        title: `更新主机 ${id}`,
-        input_data: { id, ...input },
+        input_data: { id, name: host.name, ...input },
       });
     },
     async previewDeleteResource(id, expectedVersion) {
       await ctx.pause();
+      const host = ctx.mustFind(db.hosts, (entry) => entry.id === id, "host");
       return ctx.createPendingAction({
         tool: "host.delete",
-        title: `删除主机 ${id}`,
-        input_data: { id, expected_version: expectedVersion },
+        input_data: { id, name: host.name, expected_version: expectedVersion },
       });
     },
     async getCollector(hostId) {
@@ -156,10 +165,13 @@ export function createHostsDomain(ctx: MockContext): ArgusApiClient["hosts"] {
       settleCollectors(db);
       ctx.save();
       const found = db.collectors.find(
-        (entry) => entry.resource_type === "host" && entry.resource_id === hostId,
+        (entry) =>
+          entry.resource_type === "host" && entry.resource_id === hostId,
       );
       // 返回克隆:installing→converged 是原地变更,同引用会阻止轮询方重渲染。
-      return found ? { ...found, route: found.route && { ...found.route } } : null;
+      return found
+        ? { ...found, route: found.route && { ...found.route } }
+        : null;
     },
     async previewCollectorAction(hostId, action, input) {
       await ctx.pause();
@@ -176,6 +188,8 @@ export function createHostsDomain(ctx: MockContext): ArgusApiClient["hosts"] {
           distribution_version_id: input.distribution_version_id,
           profile_ids: input.profile_ids,
           route_kind: input.route_kind,
+          transport: input.transport,
+          loopback_port: input.loopback_port,
           gateway_collector_id: input.gateway_collector_id,
           expected_version: input.expected_version,
         },
@@ -183,6 +197,46 @@ export function createHostsDomain(ctx: MockContext): ArgusApiClient["hosts"] {
     },
     async previewCollectorInstall(hostId, input) {
       return this.previewCollectorAction(hostId, "install", input);
+    },
+    async previewEnrollmentRotate(hostId, expectedVersion) {
+      await ctx.pause();
+      const host = ctx.mustFind(
+        db.hosts,
+        (entry) => entry.id === hostId,
+        "host",
+      );
+      if (host.connectionMode !== "self_enrolled")
+        throw new Error("HOST_ENROLLMENT_ROTATE_NOT_ALLOWED");
+      return ctx.createPendingAction({
+        tool: "host.enrollment.rotate",
+        input_data: {
+          host_id: hostId,
+          name: host.name,
+          expected_version: expectedVersion,
+        },
+      });
+    },
+    async previewUninstallCommand(hostId, expectedVersion) {
+      await ctx.pause();
+      const host = ctx.mustFind(
+        db.hosts,
+        (entry) => entry.id === hostId,
+        "host",
+      );
+      if (
+        host.connectionMode !== "self_enrolled" ||
+        host.connectionStatus === "onboarding"
+      ) {
+        throw new Error("HOST_UNINSTALL_NOT_ALLOWED");
+      }
+      return ctx.createPendingAction({
+        tool: "host.uninstall.command",
+        input_data: {
+          host_id: hostId,
+          name: host.name,
+          expected_version: expectedVersion,
+        },
+      });
     },
   };
 }

@@ -45,13 +45,32 @@
     "Execution": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["execution_id", "action_ref", "status", "created_at", "updated_at"],
+      "required": ["execution_id", "action_ref", "status", "one_time_result_state", "created_at", "updated_at"],
       "properties": {
         "execution_id": {"type": "string"},
         "action_ref": {"type": "string"},
         "status": {"enum": ["pending", "running", "succeeded", "failed", "result_unknown", "cancelled"]},
         "result_ref": {"type": "string"},
-        "one_time_result_available": {"type": "boolean", "readOnly": true},
+        "one_time_result_state": {"enum": ["unavailable", "available", "consumed", "expired"], "readOnly": true},
+        "resource_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resource_type", "resource_id", "version"],
+          "properties": {
+            "resource_type": {"type": "string"},
+            "resource_id": {"type": "string"},
+            "version": {"type": "integer", "minimum": 1}
+          }
+        },
+        "operation_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": {"const": "connector_install"},
+            "id": {"type": "string", "format": "uuid"}
+          }
+        },
         "error_code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
         "created_at": {"type": "string", "format": "date-time"},
         "updated_at": {"type": "string", "format": "date-time"}

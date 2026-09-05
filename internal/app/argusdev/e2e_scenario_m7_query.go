@@ -34,25 +34,60 @@ func (a *App) verifyM7Signals(ctx context.Context, env *E2EEnvironment, resource
 	if err := a.waitM7Metric(ctx, env, resourceID, metric); err != nil {
 		return err
 	}
+	if err := a.waitM7Log(ctx, env, resourceID, marker, logBody); err != nil {
+		return err
+	}
+	return a.waitM7Trace(ctx, env, resourceID, marker, operation)
+}
+
+func (a *App) waitM7Log(ctx context.Context, env *E2EEnvironment, resourceID, marker, logBody string) error {
 	client, _ := scenarioHTTP(env)
-	logs, err := client.JSON(ctx, "m7-logs-"+marker, "enterprise", http.MethodPost, "/enterprise/logs/query", http.StatusOK, map[string]any{
-		"query": `service_name = argus-m7-e2e AND body : "` + logBody + `"`, "resource_ids": []string{resourceID},
-		"time_range": telemetryTimeRange(15 * time.Minute), "budget": telemetryBudget(100),
-	}, enterpriseHeaders(env, ""))
-	if err != nil {
-		return err
+	deadline := time.Now().Add(4 * time.Minute)
+	lastQueryErr := fmt.Errorf("query deadline expired before a valid response was observed")
+	for time.Now().Before(deadline) {
+		logs, err := client.JSON(ctx, "m7-logs-"+marker, "enterprise", http.MethodPost, "/enterprise/logs/query", http.StatusOK, map[string]any{
+			"query": `service_name = argus-m7-e2e AND body : "` + logBody + `"`, "resource_ids": []string{resourceID},
+			"time_range": telemetryTimeRange(15 * time.Minute), "budget": telemetryBudget(100),
+		}, enterpriseHeaders(env, ""))
+		if err != nil {
+			return err
+		}
+		lastQueryErr = assertKQLResponse(logs, logBody, 0)
+		if lastQueryErr == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
 	}
-	if err := assertKQLResponse(logs, logBody, 0); err != nil {
-		return fmt.Errorf("M7 log signal: %w", err)
+	return fmt.Errorf("M7 log signal did not traverse Collector, Kafka, Writer, ClickHouse, and Query: %w", lastQueryErr)
+}
+
+func (a *App) waitM7Trace(ctx context.Context, env *E2EEnvironment, resourceID, marker, operation string) error {
+	client, _ := scenarioHTTP(env)
+	deadline := time.Now().Add(4 * time.Minute)
+	lastQueryErr := fmt.Errorf("query deadline expired before a valid response was observed")
+	for time.Now().Before(deadline) {
+		traces, err := client.JSON(ctx, "m7-traces-"+marker, "enterprise", http.MethodPost, "/enterprise/traces/graphql", http.StatusOK, map[string]any{
+			"query":        fmt.Sprintf(`query { queryBasicTracesByName(serviceName: "argus-m7-e2e", operationName: %q, pageSize: 100) { total traces { traceId rootService rootOperation spans { spanId operationName } } } }`, operation),
+			"resource_ids": []string{resourceID}, "time_range": telemetryTimeRange(15 * time.Minute), "budget": telemetryBudget(100),
+		}, enterpriseHeaders(env, ""))
+		if err != nil {
+			return err
+		}
+		lastQueryErr = assertTraceResponse(traces, operation)
+		if lastQueryErr == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
 	}
-	traces, err := client.JSON(ctx, "m7-traces-"+marker, "enterprise", http.MethodPost, "/enterprise/traces/graphql", http.StatusOK, map[string]any{
-		"query":        fmt.Sprintf(`query { queryBasicTracesByName(serviceName: "argus-m7-e2e", operationName: %q, pageSize: 100) { total traces { traceId rootService rootOperation spans { spanId operationName } } } }`, operation),
-		"resource_ids": []string{resourceID}, "time_range": telemetryTimeRange(15 * time.Minute), "budget": telemetryBudget(100),
-	}, enterpriseHeaders(env, ""))
-	if err != nil {
-		return err
-	}
-	return assertTraceResponse(traces, operation)
+	return fmt.Errorf("M7 trace signal did not traverse Collector, Kafka, Writer, ClickHouse, and Query: %w", lastQueryErr)
 }
 
 func (a *App) waitM7Metric(ctx context.Context, env *E2EEnvironment, resourceID, metric string) error {

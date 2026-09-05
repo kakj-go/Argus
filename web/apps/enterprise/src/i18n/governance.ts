@@ -72,6 +72,7 @@ export const governanceZh = {
       detail: {
         overview: "概要",
         steps: "执行步骤",
+        stepTitle: "执行步骤 {{index}}",
         logs: "日志",
         noLogs: "暂无日志",
         errorLabel: "错误信息",
@@ -300,6 +301,7 @@ export const governanceEn = {
       detail: {
         overview: "Overview",
         steps: "Steps",
+        stepTitle: "Execution step {{index}}",
         logs: "Logs",
         noLogs: "No logs yet",
         errorLabel: "Error",

@@ -24,6 +24,7 @@ import {
 import "../styles/governance.css";
 import { ApprovalDetail } from "../components/governance/approval-detail";
 import { RemoteAccessApprovals } from "../components/governance/remote-access-approvals";
+import { presentPendingAction } from "../components/pending-action-presentation";
 import {
   DONE_PENDING_STATUSES,
   formatCountdown,
@@ -305,6 +306,7 @@ function ApprovalInboxItem({
   const { t } = useTranslation();
   const open = OPEN_PENDING_STATUSES.includes(action.status);
   const expired = open && isExpired(action.expires_at, now);
+  const presented = presentPendingAction(action, t);
 
   return (
     <button
@@ -320,7 +322,7 @@ function ApprovalInboxItem({
       type="button"
     >
       <span className="argus-approval-item__top">
-        <span className="argus-approval-item__title">{action.title}</span>
+        <span className="argus-approval-item__title">{presented.title}</span>
         <Badge tone={riskTone(action.risk)}>
           {t(`governance.approvals.risk.${action.risk}`)}
         </Badge>
@@ -328,7 +330,7 @@ function ApprovalInboxItem({
           {t(`governance.approvals.status.${action.status}`)}
         </StatusBadge>
       </span>
-      <p className="argus-approval-item__summary">{action.summary}</p>
+      <p className="argus-approval-item__summary">{presented.summary}</p>
       <span className="argus-approval-item__meta">
         <span>{formatDateTime(action.created_at, locale)}</span>
         {open && (

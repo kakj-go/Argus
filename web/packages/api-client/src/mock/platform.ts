@@ -444,5 +444,57 @@ export function createPlatformDomain(
         return ctx.paginate(items, query);
       },
     },
+    pki: {
+      async get() {
+        await platformPause();
+        const now = ctx.nowIso();
+        const bundleSha256 =
+          "5b2cc31ad7190d66c2fd4d39f6187c341f863e0d57d0a517be0152cf881b7483";
+        const caFingerprint =
+          "c8209260ec4f8399c98cb8d44b3614667d932fa14f93ca9f56641a48efab87b1";
+        return {
+          bundles: [
+            {
+              epoch: 1,
+              state: "stable" as const,
+              direction: "forward" as const,
+              bundleSha256,
+              currentCaFingerprints: [caFingerprint],
+              nextCaFingerprints: [],
+              startedAt: now,
+            },
+          ],
+          nodes: [
+            {
+              id: "argus-server/platform-0",
+              kind: "control_plane" as const,
+              epoch: 1,
+              bundleSha256,
+              caFingerprints: [caFingerprint],
+              status: "acked" as const,
+              blocksCutover: true,
+              acknowledgedAt: now,
+              updatedAt: now,
+            },
+            {
+              id: "connector-demo",
+              kind: "kubernetes_connector" as const,
+              enterpriseId: db.enterprises[0]?.id,
+              epoch: 1,
+              bundleSha256,
+              caFingerprints: [caFingerprint],
+              status: "acked" as const,
+              blocksCutover: true,
+              acknowledgedAt: now,
+              updatedAt: now,
+            },
+          ],
+          acknowledgedNodes: 2,
+          pendingNodes: 0,
+          failedNodes: 0,
+          trustExpiredNodes: 0,
+        };
+      },
+    },
   };
 }

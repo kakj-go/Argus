@@ -95,11 +95,9 @@ export function CollectorStatusPanel({
     useState<PendingActionPublic | null>(null);
   const [routeTested, setRouteTested] = useState(false);
   const [customImage, setCustomImage] = useState("");
+  const [imagePullSecretInput, setImagePullSecretInput] = useState("");
 
-  const baseline = useMemo(
-    () => initialProfiles("k8s-daemonset"),
-    [],
-  );
+  const baseline = useMemo(() => initialProfiles("k8s-daemonset"), []);
 
   const diffLines = useMemo(() => {
     const lines: Array<{
@@ -128,14 +126,29 @@ export function CollectorStatusPanel({
   // 镜像按次输入:configure/upgrade/repair 都会生成携带镜像的 plan,
   // 留空回退服务端默认;与安装向导共用同一套格式规则。
   const trimmedImage = customImage.trim();
-  const imageInvalid =
-    trimmedImage !== "" && !/^\S+:\S+$/.test(trimmedImage);
-  const imageOverride = trimmedImage && !imageInvalid
-    ? { kubernetes_image: trimmedImage }
+  const imageInvalid = trimmedImage !== "" && !/^\S+:\S+$/.test(trimmedImage);
+  const imageOverride =
+    trimmedImage && !imageInvalid ? { kubernetes_image: trimmedImage } : {};
+  const imagePullSecrets = imagePullSecretInput
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const imagePullSecretsInvalid =
+    imagePullSecrets.length > 16 ||
+    new Set(imagePullSecrets).size !== imagePullSecrets.length ||
+    imagePullSecrets.some(
+      (name) =>
+        name.length > 253 || !/^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/.test(name),
+    );
+  const imagePullSecretOverride = imagePullSecrets.length
+    ? { image_pull_secrets: imagePullSecrets }
     : {};
 
   const previewChange = useMutation({
     mutationFn: () => {
+      if (!collector.route) {
+        throw new Error("COLLECTOR_ROUTE_TRANSPORT_INVALID");
+      }
       const keys = toProfileString(profiles).split(",");
       const catalogKeys = new Set<string>();
       if (keys.includes("k8s-daemonset") || keys.includes("node-metrics")) {
@@ -150,10 +163,13 @@ export function CollectorStatusPanel({
       return api.kubernetes.previewCollectorAction(cluster.id, "configure", {
         distribution_version_id: collector.distribution_version_id,
         profile_ids: profileIds,
-        route_kind: collector.route?.kind ?? "direct_argus",
-        gateway_collector_id: collector.route?.gateway_collector_id,
+        route_kind: collector.route.kind,
+        transport: collector.route.transport,
+        loopback_port: collector.route.loopback_port,
+        gateway_collector_id: collector.route.gateway_collector_id,
         expected_version: collector.version,
         ...imageOverride,
+        ...imagePullSecretOverride,
       });
     },
     onSuccess: setPendingAction,
@@ -161,28 +177,49 @@ export function CollectorStatusPanel({
 
   const previewLifecycle = useMutation({
     mutationFn: (action: "upgrade" | "repair" | "uninstall") => {
-      const profileIds = [...new Set((claimsQuery.data ?? [])
-        .filter((claim) => claim.collector_id === collector.id && claim.status === "active")
-        .map((claim) => claim.profile_id)
-        .filter((id): id is string => Boolean(id)))];
+      if (!collector.route) {
+        throw new Error("COLLECTOR_ROUTE_TRANSPORT_INVALID");
+      }
+      const profileIds = [
+        ...new Set(
+          (claimsQuery.data ?? [])
+            .filter(
+              (claim) =>
+                claim.collector_id === collector.id &&
+                claim.status === "active",
+            )
+            .map((claim) => claim.profile_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
       return api.kubernetes.previewCollectorAction(cluster.id, action, {
         distribution_version_id: collector.distribution_version_id,
         profile_ids: profileIds,
-        route_kind: collector.route?.kind ?? "direct_argus",
-        gateway_collector_id: collector.route?.gateway_collector_id,
+        route_kind: collector.route.kind,
+        transport: collector.route.transport,
+        loopback_port: collector.route.loopback_port,
+        gateway_collector_id: collector.route.gateway_collector_id,
         expected_version: collector.version,
-        ...(action === "uninstall" ? {} : imageOverride),
+        ...(action === "uninstall"
+          ? {}
+          : { ...imageOverride, ...imagePullSecretOverride }),
       });
     },
     onSuccess: setPendingAction,
   });
 
   const testRoute = useMutation({
-    mutationFn: () => api.telemetry.testRoute({
-      collector_id: collector.id,
-      route_kind: collector.route?.kind ?? "direct_argus",
-      gateway_collector_id: collector.route?.gateway_collector_id,
-    }),
+    mutationFn: () => {
+      if (!collector.route) {
+        throw new Error("COLLECTOR_ROUTE_TRANSPORT_INVALID");
+      }
+      return api.telemetry.testRoute({
+        collector_id: collector.id,
+        route_kind: collector.route.kind,
+        transport: collector.route.transport,
+        gateway_collector_id: collector.route.gateway_collector_id,
+      });
+    },
     onSuccess: (result) => setRouteTested(result.status === "succeeded"),
   });
 
@@ -253,19 +290,52 @@ export function CollectorStatusPanel({
         <CardHeader title={t("kubernetes.collector.status.lifecycleTitle")} />
         <CardContent>
           {pendingAction ? (
-            <PendingActionCard action={pendingAction} onSettled={() => {
-              setPendingAction(null);
-              void queryClient.invalidateQueries({ queryKey: ["kubernetes"] });
-            }} />
+            <PendingActionCard
+              action={pendingAction}
+              onSettled={() => {
+                setPendingAction(null);
+                void queryClient.invalidateQueries({
+                  queryKey: ["kubernetes"],
+                });
+              }}
+            />
           ) : (
             <div className="argus-form-actions">
-              <Button loading={testRoute.isPending} onClick={() => testRoute.mutate()} variant="secondary">
+              <Button
+                loading={testRoute.isPending}
+                onClick={() => testRoute.mutate()}
+                variant="secondary"
+              >
                 {t("kubernetes.collector.status.testRoute")}
               </Button>
-              {routeTested && <StatusBadge tone="success">{t("kubernetes.collector.status.routeOk")}</StatusBadge>}
-              <Button disabled={imageInvalid} loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("upgrade")} variant="secondary">{t("kubernetes.collector.status.upgrade")}</Button>
-              <Button disabled={imageInvalid} loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("repair")} variant="secondary">{t("kubernetes.collector.status.repair")}</Button>
-              <Button loading={previewLifecycle.isPending} onClick={() => previewLifecycle.mutate("uninstall")} variant="danger">{t("kubernetes.collector.status.uninstall")}</Button>
+              {routeTested && (
+                <StatusBadge tone="success">
+                  {t("kubernetes.collector.status.routeOk")}
+                </StatusBadge>
+              )}
+              <Button
+                disabled={imageInvalid || imagePullSecretsInvalid}
+                loading={previewLifecycle.isPending}
+                onClick={() => previewLifecycle.mutate("upgrade")}
+                variant="secondary"
+              >
+                {t("kubernetes.collector.status.upgrade")}
+              </Button>
+              <Button
+                disabled={imageInvalid || imagePullSecretsInvalid}
+                loading={previewLifecycle.isPending}
+                onClick={() => previewLifecycle.mutate("repair")}
+                variant="secondary"
+              >
+                {t("kubernetes.collector.status.repair")}
+              </Button>
+              <Button
+                loading={previewLifecycle.isPending}
+                onClick={() => previewLifecycle.mutate("uninstall")}
+                variant="danger"
+              >
+                {t("kubernetes.collector.status.uninstall")}
+              </Button>
             </div>
           )}
         </CardContent>
@@ -287,8 +357,31 @@ export function CollectorStatusPanel({
             <Input
               className="argus-mono"
               onChange={(event) => setCustomImage(event.target.value)}
-              placeholder={defaultImage === "—" ? "registry.example.com/argus-otelcol:0.1.0-m7" : defaultImage}
+              placeholder={
+                defaultImage === "—"
+                  ? "registry.example.com/argus-otelcol:0.1.0-m7"
+                  : defaultImage
+              }
               value={customImage}
+            />
+          </Field>
+          <Field
+            label={t("kubernetes.collector.wizard.imagePullSecrets")}
+            hint={t("kubernetes.collector.wizard.imagePullSecretsDesc")}
+            requirement="optional"
+            error={
+              imagePullSecretsInvalid
+                ? t("kubernetes.collector.wizard.imagePullSecretsInvalid")
+                : undefined
+            }
+          >
+            <Input
+              className="argus-mono"
+              onChange={(event) => setImagePullSecretInput(event.target.value)}
+              placeholder={t(
+                "kubernetes.collector.wizard.imagePullSecretsPlaceholder",
+              )}
+              value={imagePullSecretInput}
             />
           </Field>
           <KeyValueGrid
@@ -397,7 +490,7 @@ export function CollectorStatusPanel({
             ) : (
               <div>
                 <Button
-                  disabled={!changed || imageInvalid}
+                  disabled={!changed || imageInvalid || imagePullSecretsInvalid}
                   loading={previewChange.isPending}
                   onClick={() => previewChange.mutate()}
                   variant="primary"

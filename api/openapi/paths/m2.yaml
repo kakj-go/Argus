@@ -182,6 +182,15 @@ platform_enterprise_admin_disable:
     responses:
       "200": {description: Disabled administrator., content: {application/json: {schema: {$ref: "../components/identity.yaml#/components/schemas/EnterpriseUser"}}}}
       default: {$ref: "#/components/responses/Error"}
+platform_pki:
+  get:
+    operationId: getPlatformPKIStatus
+    summary: Read versioned Argus Trust Bundle rotation and node acknowledgement status.
+    responses:
+      "200":
+        description: Current PKI state and acknowledgement inventory.
+        content: {application/json: {schema: {$ref: "../components/m2.yaml#/components/schemas/PKIStatus"}}}
+      default: {$ref: "#/components/responses/Error"}
 enterprise_users:
   get:
     operationId: listEnterpriseUsers

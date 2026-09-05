@@ -6,6 +6,7 @@ option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/connector
 
 import "argus/common/v1/common.proto";
 import "argus/connector/v1/commands.proto";
+import "argus/connector/v1/telemetry_tunnel.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -27,6 +28,8 @@ message ConnectRequest {
     RemoteAccessOutput remote_access_output = 10;
     RemoteAccessState remote_access_state = 12;
     RemoteAccessClose remote_access_close = 13;
+    TelemetryTunnelStatusSet telemetry_tunnel_status_set = 14;
+    TrustBundleAcknowledge trust_bundle_acknowledge = 15;
   }
   reserved 11;
 }
@@ -47,6 +50,8 @@ message ConnectResponse {
     RemoteAccessInput remote_access_input = 12;
     RemoteAccessResize remote_access_resize = 13;
     RemoteAccessState remote_access_state = 14;
+    TelemetryTunnelDesiredSet telemetry_tunnel_desired_set = 15;
+    TrustBundleUpdate trust_bundle_update = 16;
   }
 }
 
@@ -57,6 +62,9 @@ message ConnectorHello {
   repeated string capabilities = 4;
   uint64 last_acknowledged_server_sequence = 5;
   bytes client_nonce = 6;
+  uint64 trust_bundle_epoch = 7;
+  string trust_bundle_sha256 = 8;
+  repeated string trust_bundle_ca_fingerprints = 9;
 }
 
 message ConnectorWelcome {
@@ -75,6 +83,10 @@ message ConnectorHeartbeat {
   google.protobuf.Timestamp sent_at = 2;
   uint32 active_commands = 3;
   uint32 active_remote_access_streams = 4;
+  repeated TelemetryTunnelStatus telemetry_tunnels = 5;
+  uint64 trust_bundle_epoch = 6;
+  string trust_bundle_sha256 = 7;
+  repeated string trust_bundle_ca_fingerprints = 8;
 }
 
 message ClientAcknowledge {

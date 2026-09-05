@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -25,6 +27,7 @@ func HealthHandler(name string) http.Handler {
 	mux.HandleFunc("/readyz", func(writer http.ResponseWriter, _ *http.Request) {
 		writeHealth(writer, name, "ready")
 	})
+	mux.Handle("/metrics", promhttp.Handler())
 	return mux
 }
 

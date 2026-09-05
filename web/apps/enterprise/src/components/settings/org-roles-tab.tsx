@@ -43,7 +43,9 @@ export function OrgRolesTab() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
   const [deleting, setDeleting] = useState<Role | null>(null);
-  const [authorizationTarget, setAuthorizationTarget] = useState<Role | null>(null);
+  const [authorizationTarget, setAuthorizationTarget] = useState<Role | null>(
+    null,
+  );
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["org", "roles"] });
@@ -145,7 +147,15 @@ export function OrgRolesTab() {
               header: t("settings.common.actions"),
               render: (row) => (
                 <ActionGroup>
-                  <RowAction onClick={() => setAuthorizationTarget(roles.data?.find((role) => role.id === row.id) ?? null)}>数据授权</RowAction>
+                  <RowAction
+                    onClick={() =>
+                      setAuthorizationTarget(
+                        roles.data?.find((role) => role.id === row.id) ?? null,
+                      )
+                    }
+                  >
+                    {t("settings.org.dataAuthorization.action")}
+                  </RowAction>
                   {!row.builtin && (
                     <>
                       <RowAction
@@ -189,7 +199,13 @@ export function OrgRolesTab() {
           getRowKey={(row) => row.id}
         />
       )}
-      <DataAuthorizationDialog open={authorizationTarget !== null} onOpenChange={(open) => !open && setAuthorizationTarget(null)} subjectType="role" subjectId={authorizationTarget?.id ?? ""} subjectLabel={authorizationTarget?.name ?? ""} />
+      <DataAuthorizationDialog
+        open={authorizationTarget !== null}
+        onOpenChange={(open) => !open && setAuthorizationTarget(null)}
+        subjectType="role"
+        subjectId={authorizationTarget?.id ?? ""}
+        subjectLabel={authorizationTarget?.name ?? ""}
+      />
 
       <RoleDrawer
         loading={save.isPending}

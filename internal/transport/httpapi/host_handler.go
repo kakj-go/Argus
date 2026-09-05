@@ -15,12 +15,19 @@ import (
 	"github.com/kakj-go/Argus/internal/identity"
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
+	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 )
 
+type HostOnboardingActionService interface {
+	PreviewEnrollmentRotate(context.Context, resource.Subject, uuid.UUID, uuid.UUID, int64, string) (db.PendingAction, error)
+	PreviewUninstallCommand(context.Context, resource.Subject, uuid.UUID, uuid.UUID, int64, string) (db.PendingAction, error)
+}
+
 type HostHandler struct {
-	Identity EnterpriseIdentityHandler
-	Service  resource.Service
-	Queries  *db.Queries
+	Identity   EnterpriseIdentityHandler
+	Service    resource.Service
+	Queries    *db.Queries
+	Onboarding HostOnboardingActionService
 }
 
 func (handler HostHandler) ListHosts(ctx context.Context, _ hostapi.ListHostsRequestObject) (hostapi.ListHostsResponseObject, error) {
@@ -34,8 +41,9 @@ func (handler HostHandler) ListHosts(ctx context.Context, _ hostapi.ListHostsReq
 	}
 	converted := make([]hostapi.Host, 0, len(items))
 	probeStates := handler.probeStates(ctx, items)
+	onboarding := loadHostOnboarding(ctx, handler.Queries, p.EnterpriseIDValue(), items)
 	for _, item := range items {
-		converted = append(converted, toHost(item, probeStates[item.ID]))
+		converted = append(converted, toHost(item, probeStates[item.ID], onboarding[item.ID]))
 	}
 	return hostapi.ListHosts200JSONResponse{Items: converted, Page: emptyHostPage()}, nil
 }
@@ -73,7 +81,8 @@ func (handler HostHandler) GetHost(ctx context.Context, request hostapi.GetHostR
 	if handler.Queries != nil {
 		probeState, _ = handler.Queries.GetHostProbeState(ctx, uuid.UUID(request.Id))
 	}
-	return hostapi.GetHost200JSONResponse(toHost(item, probeState)), nil
+	onboarding := loadHostOnboarding(ctx, handler.Queries, p.EnterpriseIDValue(), []db.Host{item})
+	return hostapi.GetHost200JSONResponse(toHost(item, probeState, onboarding[item.ID])), nil
 }
 
 func (handler HostHandler) CreateHostConnectionTest(ctx context.Context, request hostapi.CreateHostConnectionTestRequestObject) (hostapi.CreateHostConnectionTestResponseObject, error) {
@@ -101,19 +110,71 @@ func (handler HostHandler) PreviewCreateHost(ctx context.Context, request hostap
 	if request.Body == nil {
 		return hostapi.PreviewCreateHostdefaultJSONResponse{Body: hostError(ctx, errors.New("invalid request")), StatusCode: http.StatusBadRequest}, nil
 	}
-	hostname := ""
-	if request.Body.Hostname != nil {
-		hostname = *request.Body.Hostname
-	}
-	input := resource.HostInput{Name: request.Body.Name, Hostname: hostname, Address: request.Body.Address, Port: int32(request.Body.Port), Platform: string(request.Body.Platform),
-		ConnectionMode: string(request.Body.ConnectionMode), Environment: string(request.Body.Environment), Labels: stringMap(request.Body.Labels),
-		BastionScopeID: optionalUUID(request.Body.BastionScopeId), CredentialID: uuid.NullUUID{UUID: uuid.UUID(request.Body.CredentialId), Valid: true}, Username: request.Body.Username,
-		ConnectionTestID: uuid.NullUUID{UUID: uuid.UUID(request.Body.ConnectionTestId), Valid: true}}
+	input := hostCreateInput(*request.Body)
 	action, err := handler.Service.PreviewCreateHost(ctx, resourceSubject(p), p.EnterpriseIDValue(), input, request.Params.IdempotencyKey)
 	if err != nil {
 		return hostapi.PreviewCreateHostdefaultJSONResponse{Body: hostError(ctx, err), StatusCode: resourceStatus(err)}, nil
 	}
 	return hostapi.PreviewCreateHost201JSONResponse(pendingForHost(action)), nil
+}
+
+// hostCreateInput 将可选的连接字段转换为 HostInput;self_enrolled 模式下
+// 地址/端口/凭据/账号/连接测试均不填写。
+func hostCreateInput(value hostapi.HostPreviewCreate) resource.HostInput {
+	input := resource.HostInput{Name: value.Name, Platform: string(value.Platform), ConnectionMode: string(value.ConnectionMode),
+		Environment: string(value.Environment), Labels: stringMap(value.Labels), BastionScopeID: optionalUUID(value.BastionScopeId)}
+	if value.Hostname != nil {
+		input.Hostname = *value.Hostname
+	}
+	if value.Address != nil {
+		input.Address = *value.Address
+	}
+	if value.Port != nil {
+		input.Port = int32(*value.Port)
+	}
+	if value.Architecture != nil {
+		input.Architecture = string(*value.Architecture)
+	}
+	if value.CredentialId != nil {
+		input.CredentialID = uuid.NullUUID{UUID: uuid.UUID(*value.CredentialId), Valid: true}
+	}
+	if value.Username != nil {
+		input.Username = *value.Username
+	}
+	if value.ConnectionTestId != nil {
+		input.ConnectionTestID = uuid.NullUUID{UUID: uuid.UUID(*value.ConnectionTestId), Valid: true}
+	}
+	return input
+}
+
+func (handler HostHandler) PreviewHostEnrollmentRotate(ctx context.Context, request hostapi.PreviewHostEnrollmentRotateRequestObject) (hostapi.PreviewHostEnrollmentRotateResponseObject, error) {
+	p, apiError := handler.auth(ctx, true, request.Params.XCSRFToken, "host.manage")
+	if apiError != nil {
+		return hostapi.PreviewHostEnrollmentRotatedefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
+	}
+	if request.Body == nil || handler.Onboarding == nil {
+		return hostapi.PreviewHostEnrollmentRotatedefaultJSONResponse{Body: hostError(ctx, errors.New("invalid request")), StatusCode: http.StatusBadRequest}, nil
+	}
+	action, err := handler.Onboarding.PreviewEnrollmentRotate(ctx, resourceSubject(p), p.EnterpriseIDValue(), uuid.UUID(request.Id), request.Body.ExpectedVersion, request.Params.IdempotencyKey)
+	if err != nil {
+		return hostapi.PreviewHostEnrollmentRotatedefaultJSONResponse{Body: hostError(ctx, err), StatusCode: resourceStatus(err)}, nil
+	}
+	return hostapi.PreviewHostEnrollmentRotate201JSONResponse(pendingForHost(action)), nil
+}
+
+func (handler HostHandler) PreviewHostUninstallCommand(ctx context.Context, request hostapi.PreviewHostUninstallCommandRequestObject) (hostapi.PreviewHostUninstallCommandResponseObject, error) {
+	p, apiError := handler.auth(ctx, true, request.Params.XCSRFToken, "host.manage")
+	if apiError != nil {
+		return hostapi.PreviewHostUninstallCommanddefaultJSONResponse{Body: *apiError, StatusCode: http.StatusForbidden}, nil
+	}
+	if request.Body == nil || handler.Onboarding == nil {
+		return hostapi.PreviewHostUninstallCommanddefaultJSONResponse{Body: hostError(ctx, errors.New("invalid request")), StatusCode: http.StatusBadRequest}, nil
+	}
+	action, err := handler.Onboarding.PreviewUninstallCommand(ctx, resourceSubject(p), p.EnterpriseIDValue(), uuid.UUID(request.Id), request.Body.ExpectedVersion, request.Params.IdempotencyKey)
+	if err != nil {
+		return hostapi.PreviewHostUninstallCommanddefaultJSONResponse{Body: hostError(ctx, err), StatusCode: resourceStatus(err)}, nil
+	}
+	return hostapi.PreviewHostUninstallCommand201JSONResponse(pendingForHost(action)), nil
 }
 
 func (handler HostHandler) PreviewUpdateHost(ctx context.Context, request hostapi.PreviewUpdateHostRequestObject) (hostapi.PreviewUpdateHostResponseObject, error) {
@@ -188,12 +249,12 @@ func hostUpdateInput(value hostapi.HostPreviewUpdate) resource.HostInput {
 	return result
 }
 
-func toHost(value db.Host, probe db.HostProbeState) hostapi.Host {
+func toHost(value db.Host, probe db.HostProbeState, onboarding onboardingView) hostapi.Host {
 	labels, _ := resource.DecodeLabels(value.Labels)
 	result := hostapi.Host{Id: openapi_types.UUID(value.ID), EnterpriseId: pointerUUID(value.EnterpriseID), Name: value.Name, Address: value.Address, Port: int(value.Port),
 		Platform: hostapi.HostPlatform(value.Platform), ConnectionMode: hostapi.HostConnectionMode(value.ConnectionMode), Environment: hostapi.Environment(value.Environment),
 		Labels: hostapi.Labels(labels), LabelsVersion: value.LabelsVersion, ResourceVersion: value.ResourceVersion, ConnectionStatus: hostapi.HostConnectionStatus(value.ConnectionStatus),
-		Status: hostapi.HostStatus(value.Status), CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time}
+		Status: hostapi.HostStatus(value.Status), Onboarding: toHostOnboarding(onboarding), CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time}
 	if value.Hostname != "" {
 		result.Hostname = &value.Hostname
 	}
@@ -222,6 +283,25 @@ func toHost(value db.Host, probe db.HostProbeState) hostapi.Host {
 	}
 	if value.LastSeenAt.Valid {
 		result.LastSeenAt = &value.LastSeenAt.Time
+	}
+	return result
+}
+
+func toHostOnboarding(value onboardingView) hostapi.OnboardingProjection {
+	result := hostapi.OnboardingProjection{State: hostapi.OnboardingProjectionState(value.State), UpdatedAt: value.UpdatedAt}
+	if value.PendingActionRef != "" {
+		result.PendingActionRef = &value.PendingActionRef
+	}
+	if value.ExecutionID.Valid {
+		id := openapi_types.UUID(value.ExecutionID.UUID)
+		result.ExecutionId = &id
+	}
+	if value.OperationID.Valid {
+		id := openapi_types.UUID(value.OperationID.UUID)
+		result.OperationId = &id
+	}
+	if value.ErrorCode != "" {
+		result.ErrorCode = &value.ErrorCode
 	}
 	return result
 }
@@ -288,7 +368,7 @@ func convertPending[T any](value db.PendingAction) T {
 	case "awaiting_approval":
 		available = []string{"approve", "reject", "cancel"}
 	}
-	body := map[string]any{"schema_version": "argus.pending_action/v1", "action_ref": value.ActionRef, "title": value.Title, "summary": value.Summary,
+	body := map[string]any{"schema_version": "argus.pending_action/v1", "action_ref": value.ActionRef, "action_type": value.ActionType, "title": value.Title, "summary": value.Summary,
 		"risk": value.Risk, "preview": preview, "diff": diff, "status": value.Status, "available_actions": available,
 		"expires_at": value.ExpiresAt.Time, "created_at": value.CreatedAt.Time, "updated_at": value.UpdatedAt.Time}
 	if value.ResultSummary != "" {
@@ -340,6 +420,25 @@ func hostErrorBase(ctx context.Context, err error) hostapi.ApiError {
 		base.Code, base.MessageKey = "WINRM_TLS_REQUIRED", "errors.remote_access.winrm_tls_required"
 	case errors.Is(err, resource.ErrActionInvalidated):
 		base.Code, base.MessageKey = "PENDING_ACTION_INVALIDATED", "errors.actions.pending_action_invalidated"
+	case errors.Is(err, resource.ErrSelfEnrollUnsupported):
+		base.Code, base.MessageKey = "HOST_SELF_ENROLL_UNSUPPORTED_PLATFORM", "errors.host_install.unsupported_platform"
+	case errors.Is(err, resource.ErrSelfEnrollConflictingInput):
+		base.Code, base.MessageKey = "INVALID_ARGUMENT", "errors.common.invalid_argument"
+	case errors.Is(err, telemetryservice.ErrDistributionPending):
+		base.Code, base.MessageKey = "COLLECTOR_DISTRIBUTION_VALIDATION_PENDING", "errors.telemetry.distribution_validation_pending"
+	case errors.Is(err, telemetryservice.ErrCollectorArtifactUnavailable):
+		base.Code, base.MessageKey = "COLLECTOR_ARTIFACT_UNAVAILABLE", "errors.telemetry.artifact_unavailable"
+		base.Retryable = retryablePointer(true)
+	case errors.Is(err, telemetryservice.ErrSelfEnrolledOperationUnsupported):
+		base.Code, base.MessageKey = "HOST_OPERATION_UNSUPPORTED_FOR_SELF_ENROLLED", "errors.host_install.operation_unsupported"
+	case errors.Is(err, telemetryservice.ErrHostInstallTokenInvalid):
+		base.Code, base.MessageKey = "HOST_INSTALL_TOKEN_INVALID", "errors.host_install.token_invalid"
+	case errors.Is(err, telemetryservice.ErrHostInstallTokenConflict):
+		base.Code, base.MessageKey = "HOST_INSTALL_TOKEN_CONFLICT", "errors.host_install.token_conflict"
+	case errors.Is(err, telemetryservice.ErrHostUninstallTokenInvalid):
+		base.Code, base.MessageKey = "HOST_UNINSTALL_TOKEN_INVALID", "errors.host_uninstall.token_invalid"
+	case errors.Is(err, telemetryservice.ErrHostUninstallTokenConflict):
+		base.Code, base.MessageKey = "HOST_UNINSTALL_TOKEN_CONFLICT", "errors.host_uninstall.token_conflict"
 	}
 	return hostapi.ApiError{Code: base.Code, Message: base.Message, MessageKey: base.MessageKey,
 		Params: copyErrorParams[map[string]hostapi.ApiError_Params_AdditionalProperties](base.Params), RequestId: base.RequestId,
@@ -354,8 +453,10 @@ func resourceStatus(err error) int {
 		return http.StatusForbidden
 	case errors.Is(err, actionservice.ErrStepUpRequired):
 		return http.StatusForbidden
-	case errors.Is(err, resource.ErrConnectionTestNeeded), errors.Is(err, resource.ErrWinRMTLSRequired):
+	case errors.Is(err, resource.ErrConnectionTestNeeded), errors.Is(err, resource.ErrWinRMTLSRequired), errors.Is(err, resource.ErrSelfEnrollUnsupported):
 		return http.StatusUnprocessableEntity
+	case errors.Is(err, telemetryservice.ErrCollectorArtifactUnavailable):
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusConflict
 	}

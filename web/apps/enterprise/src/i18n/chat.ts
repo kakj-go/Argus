@@ -76,6 +76,7 @@ export const chatZh = {
       mentionTitle: "引用资源",
       commandTitle: "命令",
       createInteractiveCard: "创建交互卡片",
+      removeCommand: "移除命令",
       createInteractiveCardHint: "AI 创建禁用草稿",
       noModel: "没有可用模型，请联系管理员配置或调整额度。",
       noMatch: "没有匹配项",
@@ -199,6 +200,7 @@ export const chatEn = {
       mentionTitle: "Reference a resource",
       commandTitle: "Command",
       createInteractiveCard: "Create interactive card",
+      removeCommand: "Remove command",
       createInteractiveCardHint: "AI creates a disabled draft",
       noModel:
         "No model is available. Ask an administrator to configure one or adjust budgets.",
@@ -245,7 +247,8 @@ export const chatEn = {
       request: "Compact context",
       running: "Compacting context ({{before}} tokens before compaction)…",
       completed: "Context compaction completed: {{before}} → {{after}} tokens.",
-      failed: "Context compaction failed; original conversation events were preserved.",
+      failed:
+        "Context compaction failed; original conversation events were preserved.",
     },
   },
 };

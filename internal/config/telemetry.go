@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"os"
 	"strconv"
@@ -11,6 +12,7 @@ type Telemetry struct {
 	Mode                        string
 	HealthAddress               string
 	DatabaseURL                 string
+	PendingActionKey            []byte
 	RedisURL                    string
 	KafkaBrokers                []string
 	KafkaGroup                  string
@@ -32,6 +34,7 @@ type Telemetry struct {
 	ClientCertPath              string
 	ClientKeyPath               string
 	ServerName                  string
+	AuthorizedClientURIs        []string
 	KubeconfigPath              string
 	CertificateRequestNamespace string
 	IssuerName                  string
@@ -39,13 +42,17 @@ type Telemetry struct {
 	IngestGRPCEndpoint          string
 	IngestHTTPEndpoint          string
 	QueryConcurrency            int
+	TrustBundlePath             string
+	TrustBundleEpoch            int64
 }
 
 func LoadTelemetry(mode string) Telemetry {
 	issuerGeneration, _ := strconv.ParseInt(valueOrDefault("ARGUS_TELEMETRY_ISSUER_GENERATION", "1"), 10, 32)
 	queryConcurrency, _ := strconv.Atoi(valueOrDefault("ARGUS_TELEMETRY_QUERY_CONCURRENCY", "4"))
+	trustBundleEpoch, _ := strconv.ParseInt(valueOrDefault("ARGUS_TRUST_BUNDLE_EPOCH", "1"), 10, 64)
+	pendingActionKey, _ := base64.RawURLEncoding.DecodeString(os.Getenv("ARGUS_PENDING_ACTION_ENCRYPTION_KEY"))
 	return Telemetry{
-		Mode: mode, HealthAddress: LoadHealthAddress(), DatabaseURL: os.Getenv("ARGUS_DATABASE_URL"), RedisURL: os.Getenv("ARGUS_REDIS_URL"),
+		Mode: mode, HealthAddress: LoadHealthAddress(), DatabaseURL: os.Getenv("ARGUS_DATABASE_URL"), PendingActionKey: pendingActionKey, RedisURL: os.Getenv("ARGUS_REDIS_URL"),
 		KafkaBrokers: splitList(os.Getenv("ARGUS_KAFKA_BROKERS")), KafkaGroup: valueOrDefault("ARGUS_TELEMETRY_KAFKA_GROUP", "argus-telemetry-writer-v1"),
 		KafkaUsername: os.Getenv("ARGUS_KAFKA_USERNAME"), KafkaPassword: os.Getenv("ARGUS_KAFKA_PASSWORD"),
 		ClickHouseAddress: os.Getenv("ARGUS_CLICKHOUSE_ADDRESS"), ClickHouseDatabase: valueOrDefault("ARGUS_CLICKHOUSE_DATABASE", "argus_telemetry"),
@@ -53,12 +60,14 @@ func LoadTelemetry(mode string) Telemetry {
 		ClickHouseSchemaUsername: os.Getenv("ARGUS_CLICKHOUSE_SCHEMA_USERNAME"), ClickHouseSchemaPassword: os.Getenv("ARGUS_CLICKHOUSE_SCHEMA_PASSWORD"),
 		IngestGRPCAddress: valueOrDefault("ARGUS_TELEMETRY_INGEST_GRPC_ADDRESS", ":4317"), IngestHTTPAddress: valueOrDefault("ARGUS_TELEMETRY_INGEST_HTTP_ADDRESS", ":4318"),
 		QueryAddress: valueOrDefault("ARGUS_TELEMETRY_QUERY_ADDRESS", ":9447"), QueryEndpoint: os.Getenv("ARGUS_TELEMETRY_QUERY_ENDPOINT"),
-		TLSCertPath:                 valueOrDefault("ARGUS_TELEMETRY_TLS_CERT_PATH", "/var/run/secrets/argus/telemetry-server/tls.crt"),
-		TLSKeyPath:                  valueOrDefault("ARGUS_TELEMETRY_TLS_KEY_PATH", "/var/run/secrets/argus/telemetry-server/tls.key"),
-		ClientCAPath:                valueOrDefault("ARGUS_TELEMETRY_CLIENT_CA_PATH", "/var/run/secrets/argus/telemetry-ca/ca.crt"),
-		ClientCertPath:              valueOrDefault("ARGUS_TELEMETRY_CLIENT_CERT_PATH", "/var/run/secrets/argus/telemetry-client/tls.crt"),
-		ClientKeyPath:               valueOrDefault("ARGUS_TELEMETRY_CLIENT_KEY_PATH", "/var/run/secrets/argus/telemetry-client/tls.key"),
-		ServerName:                  valueOrDefault("ARGUS_TELEMETRY_SERVER_NAME", "argus-telemetry"),
+		TLSCertPath:    valueOrDefault("ARGUS_TELEMETRY_TLS_CERT_PATH", "/var/run/secrets/argus/telemetry-server/tls.crt"),
+		TLSKeyPath:     valueOrDefault("ARGUS_TELEMETRY_TLS_KEY_PATH", "/var/run/secrets/argus/telemetry-server/tls.key"),
+		ClientCAPath:   valueOrDefault("ARGUS_TELEMETRY_CLIENT_CA_PATH", "/var/run/secrets/argus/trust/ca.crt"),
+		ClientCertPath: valueOrDefault("ARGUS_TELEMETRY_CLIENT_CERT_PATH", "/var/run/secrets/argus/telemetry-client/tls.crt"),
+		ClientKeyPath:  valueOrDefault("ARGUS_TELEMETRY_CLIENT_KEY_PATH", "/var/run/secrets/argus/telemetry-client/tls.key"),
+		ServerName:     valueOrDefault("ARGUS_TELEMETRY_SERVER_NAME", "argus-telemetry"),
+		AuthorizedClientURIs: splitList(valueOrDefault("ARGUS_TELEMETRY_AUTHORIZED_CLIENT_URIS",
+			"spiffe://argus.io/services/server/telemetry-client,spiffe://argus.io/services/worker/telemetry-client")),
 		KubeconfigPath:              os.Getenv("ARGUS_KUBECONFIG"),
 		CertificateRequestNamespace: valueOrDefault("ARGUS_TELEMETRY_CERTIFICATE_REQUEST_NAMESPACE", "argus-observability"),
 		IssuerName:                  valueOrDefault("ARGUS_TELEMETRY_ISSUER_NAME", "argus-telemetry-ca"),
@@ -66,6 +75,8 @@ func LoadTelemetry(mode string) Telemetry {
 		IngestGRPCEndpoint:          os.Getenv("ARGUS_TELEMETRY_INGEST_GRPC_ENDPOINT"),
 		IngestHTTPEndpoint:          os.Getenv("ARGUS_TELEMETRY_INGEST_HTTP_ENDPOINT"),
 		QueryConcurrency:            queryConcurrency,
+		TrustBundlePath:             valueOrDefault("ARGUS_TRUST_BUNDLE_PATH", "/var/run/secrets/argus/trust/ca.crt"),
+		TrustBundleEpoch:            trustBundleEpoch,
 	}
 }
 
@@ -89,8 +100,14 @@ func (cfg Telemetry) Validate() error {
 	if cfg.Mode == "ingest" && (cfg.RedisURL == "" || cfg.IngestGRPCAddress == "" || cfg.IngestHTTPAddress == "" || cfg.TLSCertPath == "" || cfg.TLSKeyPath == "" || cfg.ClientCAPath == "") {
 		return errors.New("telemetry ingest Redis, listeners, and mTLS configuration are required")
 	}
-	if cfg.Mode == "ingest" && (cfg.CertificateRequestNamespace == "" || cfg.IssuerName == "" || cfg.IssuerGeneration < 1 || cfg.IngestGRPCEndpoint == "" || cfg.IngestHTTPEndpoint == "") {
+	if cfg.Mode == "ingest" && (cfg.CertificateRequestNamespace == "" || cfg.IssuerName == "" || cfg.IssuerGeneration < 1 || cfg.IngestGRPCEndpoint == "" || cfg.IngestHTTPEndpoint == "" || cfg.TrustBundlePath == "" || cfg.TrustBundleEpoch < 1) {
 		return errors.New("telemetry Collector rotation issuer and endpoints are required")
+	}
+	if cfg.Mode == "query" && (cfg.TrustBundlePath == "" || cfg.TrustBundleEpoch < 1) {
+		return errors.New("telemetry query Trust Bundle configuration is required")
+	}
+	if cfg.Mode == "ingest" && len(cfg.PendingActionKey) != 32 {
+		return errors.New("telemetry ingest bootstrap encryption key must be 32 bytes")
 	}
 	if (cfg.Mode == "writer" || cfg.Mode == "query") && (cfg.ClickHouseAddress == "" || cfg.ClickHouseUsername == "" || cfg.ClickHousePassword == "") {
 		return errors.New("telemetry ClickHouse configuration is required")
@@ -98,7 +115,7 @@ func (cfg Telemetry) Validate() error {
 	if cfg.Mode == "query" && (cfg.ClickHouseSchemaUsername == "" || cfg.ClickHouseSchemaPassword == "") {
 		return errors.New("telemetry query ClickHouse schema manager configuration is required")
 	}
-	if cfg.Mode == "query" && (cfg.RedisURL == "" || cfg.QueryAddress == "" || cfg.TLSCertPath == "" || cfg.TLSKeyPath == "" || cfg.ClientCAPath == "" || cfg.QueryConcurrency < 1 || cfg.QueryConcurrency > 64) {
+	if cfg.Mode == "query" && (cfg.RedisURL == "" || cfg.QueryAddress == "" || cfg.TLSCertPath == "" || cfg.TLSKeyPath == "" || cfg.ClientCAPath == "" || len(cfg.AuthorizedClientURIs) == 0 || cfg.QueryConcurrency < 1 || cfg.QueryConcurrency > 64) {
 		return errors.New("telemetry query Redis, listener, concurrency, and mTLS configuration are required")
 	}
 	return nil

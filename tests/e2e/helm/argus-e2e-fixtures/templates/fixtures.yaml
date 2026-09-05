@@ -188,6 +188,11 @@ spec:
         - podSelector:
             matchExpressions:
               - {key: app.kubernetes.io/name, operator: In, values: [argus-worker, argus-direct-executor]}
+        {{- if .Values.features.p4Targets }}
+        - namespaceSelector:
+            matchLabels: {argus.io/release-id: {{ .Values.releaseId | quote }}}
+          podSelector: {}
+        {{- end }}
       ports: [{protocol: TCP, port: 8443}]
 ---
 apiVersion: networking.k8s.io/v1

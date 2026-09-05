@@ -12,6 +12,64 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateSelfEnrolledHost = `-- name: ActivateSelfEnrolledHost :one
+UPDATE hosts SET
+  hostname = CASE WHEN $1::text <> '' THEN $1 ELSE hostname END,
+  address = CASE WHEN $2::text <> '' THEN $2 ELSE address END,
+  architecture = CASE WHEN $3::text <> '' THEN $3 ELSE architecture END,
+  connection_status = 'online', last_seen_at = now(),
+  resource_version = resource_version + 1, updated_at = now()
+WHERE id = $4 AND enterprise_id = $5 AND connection_mode = 'self_enrolled' AND status <> 'deleted'
+RETURNING id, enterprise_id, name, hostname, address, port, platform, connection_mode, bastion_scope_id, connector_id, environment, labels, labels_hash, labels_version, resource_version, connection_status, pinned_host_key, last_seen_at, status, deleted_at, created_at, updated_at, architecture, last_probe_claim_at
+`
+
+type ActivateSelfEnrolledHostParams struct {
+	Hostname     string    `json:"hostname"`
+	Address      string    `json:"address"`
+	Architecture string    `json:"architecture"`
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+// 首次 enrollment 成功:回填自报 hostname/address,转 online 并刷新 last_seen。
+func (q *Queries) ActivateSelfEnrolledHost(ctx context.Context, arg ActivateSelfEnrolledHostParams) (Host, error) {
+	row := q.db.QueryRow(ctx, activateSelfEnrolledHost,
+		arg.Hostname,
+		arg.Address,
+		arg.Architecture,
+		arg.ID,
+		arg.EnterpriseID,
+	)
+	var i Host
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Hostname,
+		&i.Address,
+		&i.Port,
+		&i.Platform,
+		&i.ConnectionMode,
+		&i.BastionScopeID,
+		&i.ConnectorID,
+		&i.Environment,
+		&i.Labels,
+		&i.LabelsHash,
+		&i.LabelsVersion,
+		&i.ResourceVersion,
+		&i.ConnectionStatus,
+		&i.PinnedHostKey,
+		&i.LastSeenAt,
+		&i.Status,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Architecture,
+		&i.LastProbeClaimAt,
+	)
+	return i, err
+}
+
 const cancelPendingAction = `-- name: CancelPendingAction :one
 UPDATE pending_actions SET status = 'cancelled', updated_at = now()
 WHERE action_ref = $1 AND enterprise_id = $2 AND creator_subject_type = 'user' AND creator_subject_id = $3
@@ -573,6 +631,64 @@ func (q *Queries) CreatePendingActionToken(ctx context.Context, arg CreatePendin
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createSelfEnrolledHost = `-- name: CreateSelfEnrolledHost :one
+INSERT INTO hosts (id, enterprise_id, name, hostname, address, port, platform, architecture, connection_mode, bastion_scope_id, environment, labels, labels_hash, connection_status, pinned_host_key)
+VALUES ($1,$2,$3,'','',0,$4,$5,'self_enrolled',NULL,$6,$7,$8,'onboarding','') RETURNING id, enterprise_id, name, hostname, address, port, platform, connection_mode, bastion_scope_id, connector_id, environment, labels, labels_hash, labels_version, resource_version, connection_status, pinned_host_key, last_seen_at, status, deleted_at, created_at, updated_at, architecture, last_probe_claim_at
+`
+
+type CreateSelfEnrolledHostParams struct {
+	ID           uuid.UUID   `json:"id"`
+	EnterpriseID uuid.UUID   `json:"enterprise_id"`
+	Name         string      `json:"name"`
+	Platform     string      `json:"platform"`
+	Architecture pgtype.Text `json:"architecture"`
+	Environment  string      `json:"environment"`
+	Labels       []byte      `json:"labels"`
+	LabelsHash   []byte      `json:"labels_hash"`
+}
+
+// PlanV4 场景⑤:无入站路径、无凭据、无 ConnectionTest;activation 前地址未知。
+func (q *Queries) CreateSelfEnrolledHost(ctx context.Context, arg CreateSelfEnrolledHostParams) (Host, error) {
+	row := q.db.QueryRow(ctx, createSelfEnrolledHost,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.Name,
+		arg.Platform,
+		arg.Architecture,
+		arg.Environment,
+		arg.Labels,
+		arg.LabelsHash,
+	)
+	var i Host
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Hostname,
+		&i.Address,
+		&i.Port,
+		&i.Platform,
+		&i.ConnectionMode,
+		&i.BastionScopeID,
+		&i.ConnectorID,
+		&i.Environment,
+		&i.Labels,
+		&i.LabelsHash,
+		&i.LabelsVersion,
+		&i.ResourceVersion,
+		&i.ConnectionStatus,
+		&i.PinnedHostKey,
+		&i.LastSeenAt,
+		&i.Status,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Architecture,
+		&i.LastProbeClaimAt,
 	)
 	return i, err
 }
@@ -1378,6 +1494,24 @@ func (q *Queries) MarkConnectorConnectionTestRunning(ctx context.Context, arg Ma
 	return i, err
 }
 
+const markHostSeen = `-- name: MarkHostSeen :execrows
+UPDATE hosts SET last_seen_at = now(), updated_at = updated_at
+WHERE id = $1 AND enterprise_id = $2 AND status <> 'deleted'
+`
+
+type MarkHostSeenParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) MarkHostSeen(ctx context.Context, arg MarkHostSeenParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markHostSeen, arg.ID, arg.EnterpriseID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const markPendingActionExecuting = `-- name: MarkPendingActionExecuting :one
 UPDATE pending_actions SET status = 'executing', updated_at = now()
 WHERE id = $1 AND enterprise_id = $2 AND status = 'awaiting_confirmation' AND expires_at > now() RETURNING id, action_ref, enterprise_id, creator_subject_id, authorization_version, action_type, title, summary, risk, preview, diff, status, resource_type, resource_id, expected_resource_version, impact_hash, result_resource_type, result_resource_id, result_resource_version, result_summary, error_code, expires_at, created_at, updated_at, creator_subject_type, run_id, confirmation_required, policy_snapshot_hash
@@ -1422,6 +1556,27 @@ func (q *Queries) MarkPendingActionExecuting(ctx context.Context, arg MarkPendin
 		&i.PolicySnapshotHash,
 	)
 	return i, err
+}
+
+const setBastionRootHostArchitecture = `-- name: SetBastionRootHostArchitecture :execrows
+UPDATE hosts SET architecture = $3, resource_version = resource_version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND connection_mode = 'connector_local' AND status <> 'deleted'
+`
+
+type SetBastionRootHostArchitectureParams struct {
+	ID           uuid.UUID   `json:"id"`
+	EnterpriseID uuid.UUID   `json:"enterprise_id"`
+	Architecture pgtype.Text `json:"architecture"`
+}
+
+// Connector enrollment is authoritative for command-mode roots; B/C must
+// report the same architecture already frozen by their Connection Test.
+func (q *Queries) SetBastionRootHostArchitecture(ctx context.Context, arg SetBastionRootHostArchitectureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setBastionRootHostArchitecture, arg.ID, arg.EnterpriseID, arg.Architecture)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateHost = `-- name: UpdateHost :one

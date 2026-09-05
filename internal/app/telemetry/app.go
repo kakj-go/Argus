@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -22,6 +23,7 @@ import (
 	queryengine "github.com/kakj-go/Argus/internal/telemetry/queryengine"
 	promqlengine "github.com/kakj-go/Argus/internal/telemetry/queryengine/promql"
 	skywalking "github.com/kakj-go/Argus/internal/telemetry/queryengine/skywalking"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 const (
@@ -103,13 +105,37 @@ func runIngest(ctx context.Context, cfg config.Telemetry, store *postgres.Store,
 		_ = redisClient.Close()
 		return nil, err
 	}
-	identityService := &telemetryservice.IdentityService{Store: store, Issuer: connectorservice.CertManagerIssuer{
+	bundles := trustbundle.Service{Store: store, MountedPath: cfg.TrustBundlePath, InitialEpoch: cfg.TrustBundleEpoch}
+	activeBundle, err := bundles.EnsureInitial(ctx)
+	if err != nil {
+		producer.Close()
+		_ = redisClient.Close()
+		return nil, err
+	}
+	bundleNodeID := trustbundle.ProcessNodeID("telemetry-ingest")
+	if err := bundles.AcknowledgeMounted(ctx, bundleNodeID); err != nil {
+		producer.Close()
+		_ = redisClient.Close()
+		return nil, err
+	}
+	go bundles.RunMountedAcknowledger(ctx, bundleNodeID, 5*time.Second, func(err error) {
+		logger.Warn("Trust Bundle acknowledgement failed", "error", err)
+	})
+	identityService := &telemetryservice.IdentityService{Store: store, TrustBundles: bundles, Issuer: connectorservice.CertManagerIssuer{
 		Client: kubernetesClient, Namespace: cfg.CertificateRequestNamespace, IssuerName: cfg.IssuerName, IssuerKind: "ClusterIssuer",
-		RequestPrefix: "argus-telemetry-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: cfg.IssuerGeneration,
-		Usages: []string{"client auth", "server auth"},
+		RequestPrefix: "argus-telemetry-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: int32(activeBundle.Epoch),
+		Usages: []string{"client auth"},
+	}, ServerIssuer: connectorservice.CertManagerIssuer{
+		Client: kubernetesClient, Namespace: cfg.CertificateRequestNamespace, IssuerName: cfg.IssuerName, IssuerKind: "ClusterIssuer",
+		RequestPrefix: "argus-telemetry-server-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: int32(activeBundle.Epoch),
+		Usages: []string{"server auth"},
 	}}
+	enrollmentEndpoint := strings.TrimRight(cfg.IngestHTTPEndpoint, "/") + "/v1/identity/enroll"
+	selfEnroll := &telemetryservice.SelfEnrollService{Store: store, Identity: *identityService,
+		EnrollmentEndpoint: enrollmentEndpoint, IngestGRPCEndpoint: cfg.IngestGRPCEndpoint, IngestHTTPEndpoint: cfg.IngestHTTPEndpoint,
+		SigningPublicKeys: telemetryservice.LoadSelfEnrollSigningKeys(), BootstrapSecretKey: cfg.PendingActionKey}
 	domain := &telemetryservice.IngestServer{Control: telemetryservice.PostgresIngestControl{Queries: store.Queries}, Redis: redisClient, Kafka: producer, Identity: identityService, Logger: logger,
-		IngestGRPCEndpoint: cfg.IngestGRPCEndpoint, IngestHTTPEndpoint: cfg.IngestHTTPEndpoint}
+		SelfEnroll: selfEnroll, IngestGRPCEndpoint: cfg.IngestGRPCEndpoint, IngestHTTPEndpoint: cfg.IngestHTTPEndpoint}
 	grpcServer := telemetryservice.NewIngestGRPCServer(domain, tlsConfig)
 	grpcListener, err := net.Listen("tcp", cfg.IngestGRPCAddress)
 	if err != nil {
@@ -163,6 +189,17 @@ func runWriter(ctx context.Context, cfg config.Telemetry, store *postgres.Store,
 }
 
 func runQuery(ctx context.Context, cfg config.Telemetry, store *postgres.Store, logger *slog.Logger, errorsChannel chan<- error) (func(context.Context), error) {
+	bundles := trustbundle.Service{Store: store, MountedPath: cfg.TrustBundlePath, InitialEpoch: cfg.TrustBundleEpoch}
+	if _, err := bundles.EnsureInitial(ctx); err != nil {
+		return nil, err
+	}
+	bundleNodeID := trustbundle.ProcessNodeID("telemetry-query")
+	if err := bundles.AcknowledgeMounted(ctx, bundleNodeID); err != nil {
+		return nil, err
+	}
+	go bundles.RunMountedAcknowledger(ctx, bundleNodeID, 5*time.Second, func(err error) {
+		logger.Warn("Trust Bundle acknowledgement failed", "error", err)
+	})
 	redisClient, err := redisstore.Open(ctx, cfg.RedisURL)
 	if err != nil {
 		if redisClient != nil {
@@ -214,7 +251,8 @@ func runQuery(ctx context.Context, cfg config.Telemetry, store *postgres.Store, 
 		_ = redisClient.Close()
 		return nil, err
 	}
-	tlsConfig, err := telemetryservice.ServerTLSConfig(cfg.TLSCertPath, cfg.TLSKeyPath, cfg.ClientCAPath)
+	tlsConfig, err := telemetryservice.ServerTLSConfig(cfg.TLSCertPath, cfg.TLSKeyPath, cfg.ClientCAPath,
+		store.Queries, cfg.AuthorizedClientURIs)
 	if err != nil {
 		_ = schemaConn.Close()
 		_ = clickhouse.Close()

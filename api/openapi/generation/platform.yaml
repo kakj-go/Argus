@@ -13,6 +13,7 @@ paths:
     $ref: "../argus.yaml#/paths/~1platform~1enterprise-admins~1{id}~1reset-password"
   "/platform/enterprise-admins/{id}/disable":
     $ref: "../argus.yaml#/paths/~1platform~1enterprise-admins~1{id}~1disable"
+  /platform/pki: {$ref: ../argus.yaml#/paths/~1platform~1pki}
 components:
   securitySchemes:
     sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
@@ -23,3 +24,4 @@ components:
     EnterpriseAdminCreate: {$ref: ../components/m2.yaml#/components/schemas/EnterpriseAdminCreate}
     CreatedUserCredential: {$ref: ../components/m2.yaml#/components/schemas/CreatedUserCredential}
     EnterpriseUserPage: {$ref: ../components/m2.yaml#/components/schemas/EnterpriseUserPage}
+    PKIStatus: {$ref: ../components/m2.yaml#/components/schemas/PKIStatus}

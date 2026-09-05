@@ -5,19 +5,18 @@ metadata:
   namespace: {{ .Values.namespaces.system }}
 spec:
   ingressClassName: {{ .Values.ingressClassName }}
-  {{- if .Values.tls.enabled }}
   tls:
-    # One multi-SAN certificate covers every browser-facing host, so the
-    # browser only has to trust a single self-signed CA locally.
     - hosts:
         - {{ .Values.hosts.enterprise }}
-        - {{ .Values.hosts.platform }}
-        - {{ .Values.hosts.cards }}
-        {{- with .Values.hosts.artifact }}
-        - {{ . }}
-        {{- end }}
-      secretName: {{ if eq .Values.tls.mode "user-provided" }}{{ .Values.tls.secretName }}{{ else }}argus-web-tls{{ end }}
-  {{- end }}
+      secretName: argus-enterprise-tls
+    - hosts: [{{ .Values.hosts.platform }}]
+      secretName: argus-platform-tls
+    - hosts: [{{ .Values.hosts.cards }}]
+      secretName: argus-cards-tls
+    {{- with .Values.hosts.artifact }}
+    - hosts: [{{ . }}]
+      secretName: argus-artifact-tls
+    {{- end }}
   rules:
     # The remote-access WSS endpoint is served on the enterprise origin
     # (same host as the page, no dedicated terminal domain): the browser

@@ -107,6 +107,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/enterprise/hosts/{id}/actions/preview-enrollment-rotate": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Freeze a new self-enrolled Host installation command. */
+        post: operations["previewHostEnrollmentRotate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enterprise/hosts/{id}/actions/preview-uninstall-command": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Freeze a self-enrolled Host uninstall command. */
+        post: operations["previewHostUninstallCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -118,12 +160,14 @@ export interface components {
             readonly enterprise_id: string;
             name: string;
             hostname?: string;
+            /** @description self_enrolled 主机在激活前为空,激活后为自报地址 */
             address: string;
+            /** @description self_enrolled 主机在激活前为 0 */
             port: number;
             /** @enum {string} */
             platform: "linux" | "windows";
             /**
-             * @description 连接测试探测的目标架构(uname -m 归一化),Collector 安装按此选择分发产物;缺省按 amd64 处理
+             * @description 连接测试探测的目标架构(uname -m 归一化),Linux 连接测试必须成功识别架构,Collector 安装按此选择签名产物
              * @enum {string}
              */
             readonly architecture?: "amd64" | "arm64";
@@ -157,6 +201,7 @@ export interface components {
             last_seen_at?: string;
             /** @enum {string} */
             status: "active" | "disabled" | "deleted";
+            onboarding: components["schemas"]["OnboardingProjection"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -169,21 +214,38 @@ export interface components {
         HostPreviewCreate: {
             name: string;
             hostname?: string;
-            address: string;
-            port: number;
-            /** @enum {string} */
+            /** @description self_enrolled 模式不填写;其余模式必填(服务端按模式校验) */
+            address?: string;
+            /** @description self_enrolled 模式不填写;其余模式必填(服务端按模式校验) */
+            port?: number;
+            /**
+             * @description self_enrolled 第一版仅支持 linux
+             * @enum {string}
+             */
             platform: "linux" | "windows";
             /** @enum {string} */
-            connection_mode: "via_bastion" | "direct_ssh" | "direct_winrm";
+            connection_mode: "via_bastion" | "direct_ssh" | "direct_winrm" | "self_enrolled";
             /** Format: uuid */
             bastion_scope_id?: string;
-            /** Format: uuid */
-            credential_id: string;
-            username: string;
+            /**
+             * Format: uuid
+             * @description self_enrolled 模式不提供
+             */
+            credential_id?: string;
+            /** @description self_enrolled 模式不提供 */
+            username?: string;
+            /**
+             * @description self_enrolled 模式由用户按目标机器选择;其余模式由连接测试探测,不接受填写
+             * @enum {string}
+             */
+            architecture?: "amd64" | "arm64";
             environment: components["schemas"]["Environment"];
             labels: components["schemas"]["UserLabels"];
-            /** Format: uuid */
-            connection_test_id: string;
+            /**
+             * Format: uuid
+             * @description self_enrolled 模式免测试,不提供;其余模式必填(服务端按模式校验)
+             */
+            connection_test_id?: string;
         };
         HostPreviewUpdate: {
             name?: string;
@@ -233,7 +295,7 @@ export interface components {
             updated_at: string;
         };
         /** @enum {string} */
-        HostConnectionMode: "connector_local" | "via_bastion" | "direct_ssh" | "direct_winrm";
+        HostConnectionMode: "connector_local" | "via_bastion" | "direct_ssh" | "direct_winrm" | "self_enrolled";
         RequestId: string;
         ApiError: {
             code: string;
@@ -255,6 +317,18 @@ export interface components {
         Labels: {
             [key: string]: components["schemas"]["LabelValue"];
         };
+        OnboardingProjection: {
+            /** @enum {string} */
+            state: "command_available" | "command_consumed" | "command_expired" | "awaiting_approval" | "installing" | "install_failed" | "registered";
+            pending_action_ref?: string;
+            /** Format: uuid */
+            execution_id?: string;
+            /** Format: uuid */
+            operation_id?: string;
+            error_code?: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         PartialMetadata: {
             partial: boolean;
             reasons: ("authorization_filtered" | "budget_truncated" | "source_timeout" | "source_unavailable")[];
@@ -275,6 +349,7 @@ export interface components {
             /** @constant */
             schema_version: "argus.pending_action/v1";
             action_ref: string;
+            action_type: string;
             title: string;
             summary: string;
             /** @enum {unknown} */
@@ -508,6 +583,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConnectionTest"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    previewHostEnrollmentRotate: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourcePreviewDelete"];
+            };
+        };
+        responses: {
+            /** @description Pending Action. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["pending-action-public.schema"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    previewHostUninstallCommand: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourcePreviewDelete"];
+            };
+        };
+        responses: {
+            /** @description Dangerous Pending Action. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["pending-action-public.schema"];
                 };
             };
             default: components["responses"]["Error"];

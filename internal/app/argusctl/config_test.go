@@ -17,8 +17,24 @@ func TestLoadEvaluationConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Spec.Profile != "evaluation" || cfg.Image("argus-web") != "host.docker.internal:5001/argus/argus-web:dev" {
+	if cfg.Spec.Profile != "evaluation" || cfg.Image("argus-web") != "host.docker.internal:5001/argus/argus-web:dev" ||
+		cfg.Spec.PKI.BootstrapTLSMode != "insecure-first-fetch" {
 		t.Fatalf("unexpected config: %#v", cfg.Spec)
+	}
+}
+
+func TestConfigRejectsUnknownBootstrapTLSMode(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "evaluation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Spec.PKI.BootstrapTLSMode = "fallback-on-error"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "bootstrapTLSMode") {
+		t.Fatalf("Validate() error = %v, want bootstrap TLS mode error", err)
 	}
 }
 
@@ -34,6 +50,25 @@ func TestConfigRejectsReleaseIDThatCannotFitHelmStageSuffix(t *testing.T) {
 	cfg.Spec.ReleaseID = strings.Repeat("a", 35)
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "34 characters") {
 		t.Fatalf("Validate() error = %v, want release ID length error", err)
+	}
+}
+
+func TestConfigRequiresRootOverlapLongerThanClientIdentityLifetime(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "evaluation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Spec.PKI.Rotation.Overlap = "24h"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "32h") {
+		t.Fatalf("Validate() error = %v, want 32h overlap safety error", err)
+	}
+	cfg.Spec.PKI.Rotation.Overlap = "32h"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("minimum safe overlap rejected: %v", err)
 	}
 }
 
@@ -55,7 +90,7 @@ func TestLoadLocalHardeningConfigWithoutWindowsArtifact(t *testing.T) {
 	if openBao["enabled"] != true || openBao["transitKey"] != "argus-local-hardening" {
 		t.Fatalf("local-hardening data values did not enable OpenBao Transit: %#v", openBao)
 	}
-	platform := platformValues(cfg, credentials, "setup-secret", "idempotency", "cursor", "pending", "")
+	platform := platformValues(cfg, credentials, "setup-secret", "idempotency", "cursor", "pending", "", strings.Repeat("a", 64))
 	runtime := platform["runtime"].(map[string]any)
 	if runtime["keyWrappingMode"] != "openbao_transit" || runtime["openBaoToken"] != "openbao-token" || runtime["databaseRolesEnabled"] != true {
 		t.Fatalf("local-hardening platform values are incomplete: %#v", runtime)
@@ -65,6 +100,21 @@ func TestLoadLocalHardeningConfigWithoutWindowsArtifact(t *testing.T) {
 	}
 	if runtime["otelcolWindowsAmd64Uri"] != "" || runtime["otelcolSigningPublicKey"] == "" || runtime["otelcolKubernetesImage"] == "" {
 		t.Fatalf("local-hardening telemetry values are invalid: %#v", runtime)
+	}
+}
+
+func TestProductionRequiresExplicitDirectExecutorCapacity(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "production.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Spec.DirectExecutor = DirectExecutorCapacity{}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "spec.directExecutor") {
+		t.Fatalf("Validate() error = %v, want production Direct Executor capacity error", err)
 	}
 }
 

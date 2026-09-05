@@ -5,6 +5,7 @@ import {
   Building2,
   CircleUserRound,
   Gauge,
+  KeyRound,
   ScrollText,
   ShieldCheck,
   Users,
@@ -28,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: "shell.nav.admins", to: "/admins", icon: Users },
   { key: "shell.nav.sandbox", to: "/sandbox", icon: Boxes },
   { key: "shell.nav.audit", to: "/audit", icon: ScrollText },
+  { key: "shell.nav.pki", to: "/pki", icon: KeyRound },
   { key: "shell.nav.account", to: "/account", icon: CircleUserRound },
 ];
 

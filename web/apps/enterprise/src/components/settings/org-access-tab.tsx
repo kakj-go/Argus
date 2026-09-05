@@ -67,7 +67,8 @@ export function OrgAccessTab() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<ServiceAccount | null>(null);
   const [keysFor, setKeysFor] = useState<ServiceAccount | null>(null);
-  const [authorizationTarget, setAuthorizationTarget] = useState<ServiceAccount | null>(null);
+  const [authorizationTarget, setAuthorizationTarget] =
+    useState<ServiceAccount | null>(null);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["org", "serviceAccounts"] });
@@ -180,7 +181,17 @@ export function OrgAccessTab() {
               header: t("settings.common.actions"),
               render: (row) => (
                 <ActionGroup>
-                  <RowAction onClick={() => setAuthorizationTarget(serviceAccounts.data?.find((account) => account.id === row.id) ?? null)}>数据授权</RowAction>
+                  <RowAction
+                    onClick={() =>
+                      setAuthorizationTarget(
+                        serviceAccounts.data?.find(
+                          (account) => account.id === row.id,
+                        ) ?? null,
+                      )
+                    }
+                  >
+                    {t("settings.org.dataAuthorization.action")}
+                  </RowAction>
                   <RowAction
                     onClick={() => {
                       setEditing(
@@ -244,7 +255,13 @@ export function OrgAccessTab() {
           }}
         />
       )}
-      <DataAuthorizationDialog open={authorizationTarget !== null} onOpenChange={(open) => !open && setAuthorizationTarget(null)} subjectType="service_account" subjectId={authorizationTarget?.id ?? ""} subjectLabel={authorizationTarget?.name ?? ""} />
+      <DataAuthorizationDialog
+        open={authorizationTarget !== null}
+        onOpenChange={(open) => !open && setAuthorizationTarget(null)}
+        subjectType="service_account"
+        subjectId={authorizationTarget?.id ?? ""}
+        subjectLabel={authorizationTarget?.name ?? ""}
+      />
     </div>
   );
 }

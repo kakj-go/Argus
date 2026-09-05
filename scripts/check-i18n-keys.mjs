@@ -183,6 +183,98 @@ function translationReferences(sourceRoot) {
   ];
 }
 
+const technicalUiLiterals = new Set([
+  "Argus",
+  "enterprise",
+  "platform",
+  "Host",
+  "Kubernetes",
+  "Connector",
+  "OTLP",
+  "SSH",
+  "WinRM",
+  "Metrics",
+  "Logs",
+  "Traces",
+  "CPU",
+  "GPU",
+  "MFA",
+  "Fence",
+  "Gateway",
+  "epoch",
+  "ms",
+  "python:3.13",
+]);
+
+function isHardcodedUiLiteral(raw) {
+  const value = raw.replace(/\s+/g, " ").trim();
+  if (!value || technicalUiLiterals.has(value)) return false;
+  if (/^[\d\s.,:;|/+%()\[\]{}<>·—–-]+$/.test(value)) return false;
+  if (/^(?:https?:\/\/|sha256:|registry\.)/i.test(value)) return false;
+  if (/\p{Script=Han}/u.test(value)) return true;
+  return /[A-Za-z]{2,}/.test(value);
+}
+
+function hardcodedUiStrings(sourceRoot) {
+  if (!fs.existsSync(sourceRoot)) return [];
+  const findings = [];
+  const files = listFiles(sourceRoot).filter(
+    (file) =>
+      file.endsWith(".tsx") &&
+      !/\.test\.tsx$/.test(file) &&
+      !file.endsWith(`${path.sep}demo-page.tsx`),
+  );
+  const userFacingAttributes = new Set([
+    "alt",
+    "aria-label",
+    "description",
+    "emptyLabel",
+    "label",
+    "placeholder",
+    "submitLabel",
+    "title",
+  ]);
+
+  for (const file of files) {
+    const source = ts.createSourceFile(
+      file,
+      fs.readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const add = (node, value) => {
+      if (!isHardcodedUiLiteral(value)) return;
+      const position = source.getLineAndCharacterOfPosition(
+        node.getStart(source),
+      );
+      findings.push({ file, line: position.line + 1, value: value.trim() });
+    };
+    const visit = (node) => {
+      if (ts.isJsxText(node)) add(node, node.text);
+      if (
+        ts.isJsxAttribute(node) &&
+        ts.isIdentifier(node.name) &&
+        userFacingAttributes.has(node.name.text) &&
+        node.initializer &&
+        ts.isStringLiteral(node.initializer)
+      ) {
+        add(node.initializer, node.initializer.text);
+      }
+      if (
+        ts.isStringLiteral(node) &&
+        ts.isJsxExpression(node.parent) &&
+        node.parent.expression === node
+      ) {
+        add(node, node.text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return findings;
+}
+
 const errors = [];
 for (const app of apps) {
   const sourceRoot = path.join("web", "apps", app, "src");
@@ -216,11 +308,27 @@ for (const app of apps) {
       }
     }
   }
+
+  for (const finding of hardcodedUiStrings(sourceRoot)) {
+    errors.push(
+      `${finding.file}:${finding.line} hardcoded user-facing text ${JSON.stringify(finding.value)}`,
+    );
+  }
+}
+
+for (const finding of hardcodedUiStrings(
+  path.join("web", "packages", "ui", "src"),
+)) {
+  errors.push(
+    `${finding.file}:${finding.line} shared UI must receive localized labels instead of ${JSON.stringify(finding.value)}`,
+  );
 }
 
 if (errors.length > 0) {
   console.error(errors.join("\n"));
   process.exitCode = 1;
 } else {
-  console.log("i18n registration and source key coverage passed");
+  console.log(
+    "i18n registration, source key coverage, and UI literal checks passed",
+  );
 }

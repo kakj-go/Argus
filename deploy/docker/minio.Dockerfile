@@ -7,8 +7,11 @@ ARG MINIO_VERSION=RELEASE.2025-10-15T17-29-55Z
 
 RUN apk add --no-cache ca-certificates git
 WORKDIR /src
-RUN git clone --depth 1 --branch "$MINIO_VERSION" https://github.com/minio/minio.git .
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -tags kqueue -ldflags "-s -w" -o /out/minio .
+RUN --mount=type=cache,target=/root/.cache/git \
+    git clone --depth 1 --branch "$MINIO_VERSION" https://github.com/minio/minio.git .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -tags kqueue -ldflags "-s -w" -o /out/minio .
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates && addgroup -S minio && adduser -S -G minio minio

@@ -50,7 +50,7 @@ func parseFlags(args []string) (map[string]string, []string, error) {
 
 // collectorVersion 从 builder 配置读取分发包版本,作为镜像 tag 与产物路径的默认值。
 func (a *App) collectorVersion() (string, error) {
-	path := filepath.Join(a.root, "build", "otelcol", "builder-linux-arm64.yaml")
+	path := filepath.Join(a.root, "deploy", "otelcol", "builder-linux-arm64.yaml")
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -136,14 +136,14 @@ type signingKeyMaterial struct {
 
 // loadSigningKey 加载持久签名密钥:优先环境变量 ARGUS_OTELCOL_SIGNING_PRIVATE_KEY
 // (base64 RawStd 私钥),其次 deploy/.keys/otelcol-signing-key.json;不存在时生成并落盘。
-func (a *App) loadSigningKey(keyID string) (ed25519.PrivateKey, ed25519.PublicKey, error) {
+func (a *App) loadSigningKey(keyID string) (ed25519.PrivateKey, ed25519.PublicKey, string, error) {
 	if seed := strings.TrimSpace(os.Getenv("ARGUS_OTELCOL_SIGNING_PRIVATE_KEY")); seed != "" {
 		decoded, err := base64.RawStdEncoding.DecodeString(seed)
 		if err != nil || len(decoded) != ed25519.PrivateKeySize {
-			return nil, nil, fmt.Errorf("ARGUS_OTELCOL_SIGNING_PRIVATE_KEY must be a base64 ed25519 private key")
+			return nil, nil, "", fmt.Errorf("ARGUS_OTELCOL_SIGNING_PRIVATE_KEY must be a base64 ed25519 private key")
 		}
 		private := ed25519.PrivateKey(decoded)
-		return private, private.Public().(ed25519.PublicKey), nil
+		return private, private.Public().(ed25519.PublicKey), keyID, nil
 	}
 	path := filepath.Join(a.root, signingKeyFile)
 	if material, err := os.ReadFile(path); err == nil {
@@ -152,33 +152,33 @@ func (a *App) loadSigningKey(keyID string) (ed25519.PrivateKey, ed25519.PublicKe
 			private, decodeErr := base64.RawStdEncoding.DecodeString(stored.PrivateKey)
 			public, publicErr := base64.RawStdEncoding.DecodeString(stored.PublicKey)
 			if decodeErr != nil || publicErr != nil || len(private) != ed25519.PrivateKeySize || len(public) != ed25519.PublicKeySize {
-				return nil, nil, fmt.Errorf("signing key file %s is corrupted", path)
+				return nil, nil, "", fmt.Errorf("signing key file %s is corrupted", path)
 			}
 			if stored.KeyID != "" {
 				keyID = stored.KeyID
 			}
-			return ed25519.PrivateKey(private), ed25519.PublicKey(public), nil
+			return ed25519.PrivateKey(private), ed25519.PublicKey(public), keyID, nil
 		}
-		return nil, nil, fmt.Errorf("signing key file %s is corrupted", path)
+		return nil, nil, "", fmt.Errorf("signing key file %s is corrupted", path)
 	}
 	fmt.Fprintf(a.stdout, "generating new signing key at %s (keep it secret; reuse it for future releases)\n", path)
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	encoded, err := json.MarshalIndent(signingKeyMaterial{KeyID: keyID,
 		PrivateKey: base64.RawStdEncoding.EncodeToString(private),
 		PublicKey:  base64.RawStdEncoding.EncodeToString(public)}, "", "  ")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	if err := os.WriteFile(path, encoded, 0o600); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	return private, public, nil
+	return private, public, keyID, nil
 }
 
 // publishCollectorArtifacts 构建、签名并上传主机 Collector 产物到对象存储,
@@ -213,7 +213,7 @@ func (a *App) publishCollectorArtifacts(ctx context.Context, args []string) erro
 	if err != nil {
 		return err
 	}
-	private, public, err := a.loadSigningKey(keyID)
+	private, public, keyID, err := a.loadSigningKey(keyID)
 	if err != nil {
 		return err
 	}
@@ -255,6 +255,14 @@ func (a *App) publishCollectorArtifacts(ctx context.Context, args []string) erro
 		fmt.Fprintf(a.stdout, "  %sSignature: %s\n", item.specPrefix, signature)
 		fmt.Fprintf(a.stdout, "  %sByteSize: %d\n", item.specPrefix, size)
 	}
+	// 自助注册主机的安装脚本与产物同桶发布;脚本 URL 由安装命令按产物 origin 推导。
+	scriptPath := filepath.Join(a.root, "deploy", "scripts", "host-install.sh")
+	scriptKey := "install/host.sh"
+	fmt.Fprintf(a.stdout, "uploading %s → %s/%s\n", scriptPath, bucket, scriptKey)
+	if _, err = client.FPutObject(ctx, bucket, scriptKey, scriptPath, minio.PutObjectOptions{ContentType: "application/x-sh"}); err != nil {
+		return err
+	}
+
 	windowsPath := filepath.Join(a.root, "build", "otelcol", "artifacts", "argus-otelcol-windows-amd64.zip")
 	if withWindows {
 		if err := a.buildCollectorArtifact(ctx, "windows-amd64", windowsPath, true); err != nil {

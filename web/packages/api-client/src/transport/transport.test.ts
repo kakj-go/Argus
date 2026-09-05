@@ -16,7 +16,9 @@ describe("configured adapter", () => {
     const resolved = transport.resolve("setup/status");
 
     expect(resolved.pathname).toBe("/api/v1/setup/status");
-    expect(resolved.origin).toBe(globalThis.location?.origin ?? "http://localhost");
+    expect(resolved.origin).toBe(
+      globalThis.location?.origin ?? "http://localhost",
+    );
   });
 
   it("fails closed for unknown mode and missing real URL", async () => {
@@ -36,9 +38,7 @@ describe("configured adapter", () => {
     });
     await expect(
       client.auth.login({ username: "setup", password: "not-sent" }),
-    ).rejects.toBeInstanceOf(
-      ClientOperationUnavailableError,
-    );
+    ).rejects.toBeInstanceOf(ClientOperationUnavailableError);
     await expect(
       client.auth.login({ username: "setup", password: "not-sent" }),
     ).rejects.toMatchObject({ code: "CLIENT_OPERATION_UNAVAILABLE" });
@@ -237,14 +237,20 @@ describe("configured adapter", () => {
       .mockResolvedValueOnce(json(execution))
       .mockResolvedValueOnce(
         json({
-          schema_version: "argus.action_one_time_result/v1",
+          schema_version: "argus.action_one_time_result/v3",
           execution_id: "execution-1",
-          result_kind: "connector_enrollment",
-          enrollment: {
-            enrollment_id: "00000000-0000-0000-0000-000000000001",
-            install_command: "install --token redacted-in-test",
-            expires_at: "2026-08-17T00:05:00Z",
-          },
+          result_kind: "connector_install_command",
+          instruction_sets: [
+            {
+              scope: "linux-system",
+              command: "verified one-command install",
+              expires_at: "2026-08-17T00:05:00Z",
+              trust_bundle_epoch: 1,
+              trust_bundle_sha256: "a".repeat(64),
+              installer_sha256: "b".repeat(64),
+              capability_warnings: [],
+            },
+          ],
           expires_at: "2026-08-17T00:05:00Z",
         }),
       );
@@ -373,9 +379,11 @@ describe("configured adapter", () => {
 
 describe("HttpTransport", () => {
   it("does not duplicate an /api base path", async () => {
-    const fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    );
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      );
     const transport = new HttpTransport({
       base_url: "/api",
       fetch,

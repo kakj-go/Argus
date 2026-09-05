@@ -9,6 +9,8 @@ paths:
   "/enterprise/hosts/{id}/actions/preview-update": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1actions~1preview-update"}
   "/enterprise/hosts/{id}/actions/preview-delete": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1actions~1preview-delete"}
   /enterprise/hosts/connection-tests: {$ref: ../argus.yaml#/paths/~1enterprise~1hosts~1connection-tests}
+  "/enterprise/hosts/{id}/actions/preview-enrollment-rotate": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1actions~1preview-enrollment-rotate"}
+  "/enterprise/hosts/{id}/actions/preview-uninstall-command": {$ref: "../argus.yaml#/paths/~1enterprise~1hosts~1{id}~1actions~1preview-uninstall-command"}
 components:
   securitySchemes:
     sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}

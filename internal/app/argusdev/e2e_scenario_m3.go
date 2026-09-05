@@ -150,8 +150,8 @@ func (a *App) createM3InCluster(ctx context.Context, env *E2EEnvironment) (strin
 	if err != nil {
 		return "", err
 	}
-	if enrollment, ok := result["enrollment"].(map[string]any); ok {
-		if command, _ := enrollment["install_command"].(string); command != "" {
+	if oneTime, ok := result["one_time_result"].(map[string]any); ok {
+		if command, _ := oneTime["command"].(string); command != "" {
 			env.State.Values["m3_in_cluster_install_command"] = command
 		}
 	}
@@ -177,8 +177,8 @@ func (a *App) createM3Bastion(ctx context.Context, env *E2EEnvironment, name, ro
 	if err != nil {
 		return "", err
 	}
-	if enrollment, ok := result["enrollment"].(map[string]any); ok {
-		if command, _ := enrollment["install_command"].(string); command != "" {
+	if oneTime, ok := result["one_time_result"].(map[string]any); ok {
+		if command, _ := oneTime["command"].(string); command != "" {
 			env.State.Values[strings.ReplaceAll(name, "-", "_")+"_install_command"] = command
 		}
 	}

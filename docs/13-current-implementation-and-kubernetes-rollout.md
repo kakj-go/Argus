@@ -7,7 +7,7 @@
 本文连接三类信息：
 
 - `docs/00` 至 `docs/12` 已确定的产品和架构约束。
-- 仓库截至 2026-08-18 的实际代码状态。
+- 仓库截至 2026-09-01 的实际代码状态。
 - 从当前骨架推进到可安装、可升级、可验证的 Kubernetes 交付物的实施顺序。
 
 本文不改变既有架构边界。规范性约束仍以[已决策事项与系统不变量](./00-decisions-and-invariants.md)为准，完整目标部署设计仍以[服务组件与 Kubernetes 一键部署](./10-service-components-and-kubernetes-deployment.md)为准。
@@ -37,7 +37,7 @@
 
 ### 3.1 总体结论
 
-截至 2026-08-19，当前仓库已经完成 M0-M7。M2-M7 分别交付 Evaluation 身份授权、资源/Connector、Agent/确定性执行、Card 发布/渲染/Binding、人工远程访问和 OpenTelemetry 遥测闭环；Linux arm64 Host 与 Kubernetes 的 Metrics/Logs/Traces 已通过真实临时 Namespace 验证。
+截至 2026-09-01，当前仓库已经完成 M0-M7、既定 M8 本地加固范围和 PlanV4。M2-M7 分别交付 Evaluation 身份授权、资源/Connector、Agent/确定性执行、Card 发布/渲染/Binding、人工远程访问和 OpenTelemetry 遥测闭环；PlanV4 已交付主机五种网络接入、堡垒机 A/B/C、一次性结果 v2、持久化安装 operation、控制/遥测隧道和统一向导，并通过真实临时 Namespace 验证。
 
 | 范围                               | 当前状态                                                                                               | 可交付程度                                                              |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
@@ -45,13 +45,14 @@
 | 平台门户                           | 首次初始化、平台登录/改密、企业生命周期、临时密码企业管理员、平台审计和 M4 Sandbox 治理已接 real API   | 同一入口完成初始化并切换登录；平台管理与 Sandbox 治理可真实使用         |
 | Card Runtime                       | 独立 Origin、CSP/内容哈希/MessagePort 基座已接 CardVersion、公开 RenderPlan、八场景验证和受控 Binding  | 系统/企业 Card 可真实发布、渲染、重新鉴权和触发统一 Action Executor     |
 | API Client                         | 生成契约、领域 Port、显式 mock/real Adapter 和 HTTP/SSE/WebSocket Transport 已完成；M2-M7 Path 已接入  | mock/real 配置错误 fail closed；未冻结操作不回退 mock                   |
+| PlanV4 主机网络接入                | `self_enrolled`、route transport、Telemetry/Control Tunnel、A/B/C install operation、统一 onboarding 投影与共享向导已完成 | Task 01～07 已验收；真实运行号 `20260901-planv4-final41` |
 | `argus-server`                     | M2-M8 身份、资源、Agent/Action、Card、Remote Access、Telemetry 与本地 MFA/恢复 Handler 已接入          | Evaluation 与 local-hardening 可用；Production Profile 继续 fail closed |
 | Worker/Gateway/Telemetry/Connector | Worker、Direct Executor、Connector Gateway/Connector 和 Telemetry ingest/writer/query 已实现           | 外部副作用先对账；远程访问与 Collector 命令类型化，Redis 不保存唯一事实 |
 | `argusctl`                         | 已实现 preflight、plan、镜像、install、status、verify、uninstall（域名 + 强制 TLS 暴露，无 port-forward 模式）                               | 可安装和验证 Evaluation；Production 安装硬阻断                          |
 | OpenAPI/protobuf/migration         | M0 门禁、M2-M7 Path/DTO、Connector/Direct Executor/Telemetry protobuf 和六批 Goose/sqlc Schema 已完成  | Evaluation 第一版领域契约与数据模型已落地                               |
 | Kubernetes 交付物                  | Dockerfile、六个 Chart、Profile、Schema、版本锁和本地 Registry Loader 已存在；Web 镜像提供两个门户和独立 Card Origin | 可部署完整 Evaluation 基座                                     |
 
-因此，现阶段可以声明“完整依赖和运行角色可部署”，但不能把前端 mock 流程、后端进程健康和“业务后端已完成”视为同一完成度。
+因此，现阶段可以声明 PlanV4 在 Evaluation 产品范围内已完成业务和生产形态专项验收。Production Profile 的全局硬阻断仍由 §3.4 所列 HA、KMS、灾备与兼容矩阵决定，不能因 PlanV4 完成而移除。
 
 ### 3.2 前端应用
 
@@ -62,6 +63,8 @@
 | `web/apps/card-runtime` | 独立 Card Origin | CSP 下加载并运行已校验的 Card 文档，通过 MessagePort 与 Host 通信         |
 
 Enterprise 与 Platform 必须通过 `VITE_API_MODE=mock|real` 显式选择 API 模式。未知模式、real 缺少 `VITE_API_BASE_URL`，或 Enterprise real 缺少 `VITE_CARD_ORIGIN` 时都会停止启动，不会回退到 mock。M2-M7 的身份/IAM、资源/Connector、Conversation/Run、Model、Approval/Execution、Sandbox、Card、Remote Access 和 Telemetry Path 均已接入 real Adapter；未冻结领域操作继续稳定返回 `CLIENT_OPERATION_UNAVAILABLE`。当前企业门户只把桌面端作为正式支持与验收视口，移动端不纳入本版本交付承诺。
+
+PlanV4 前端已使用“第一步只选模式、第二步填写信息、第三步验证/确认、提交后进入结果”的共享状态机。普通主机覆盖五种模式，堡垒机覆盖 A/B/C；B/C 进入持久化 operation 时间线，A/self-enrolled 进入一次性结果。待注册卡片直接消费服务端 onboarding 投影，表单、Enter、错误焦点、步骤读屏、单滚动区和关闭敏感状态清理均由自动化验证。
 
 共享包目录已在 M1 按目标边界收敛；后续领域实现必须继续复用这些包，不能在业务应用内重新建立平行基座：
 
@@ -82,7 +85,7 @@ Agent 运行时已完成 Provider-neutral 单 Agent 小内核：PostgreSQL 持�
 
 ### 3.3 后端程序与运行角色
 
-仓库维护十三个 Go 入口：六个生产程序、四个一次性 Job/管理命令、两个仅 E2E 构建的测试程序，以及一个不进入生产部署的跨平台开发工具：
+仓库维护十四个 Go 入口：六个生产程序、四个一次性 Job/管理命令、两个仅 E2E 构建的测试程序，以及两个不进入生产部署的开发/CI 工具：
 
 | 二进制                         | 部署位置                 | 目标职责                                          | 当前状态                                                                                                   |
 | ------------------------------ | ------------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -98,6 +101,7 @@ Agent 运行时已完成 Provider-neutral 单 Agent 小内核：PostgreSQL 持�
 | `argus-telemetry-dlq-replay`   | 受控 Job/管理命令        | 重放已登记的 Telemetry DLQ                        | 以稳定记录 ID 和平台审计执行                                                                               |
 | `argus-replay-model`           | 临时 E2E Namespace       | 固定 Model/Sandbox 回放                           | 仅 `m4e2e` 测试构建使用，生产制品扫描禁止携带                                                              |
 | `argus-telemetry-e2e`          | 临时 E2E Namespace       | 生成确定性 OTLP 三信号                            | 仅 E2E 镜像包含，生产制品扫描禁止携带                                                                      |
+| `argus-sandbox-smoke`          | 开发者工作站/CI          | OpenSandbox 生命周期冒烟验证                       | 不进生产部署                                                                                                |
 | `argus-dev`                    | 开发者工作站或 CI Runner | 跨平台检查、构建、发布和 Kubernetes E2E 编排      | Windows、Linux、macOS 使用同一命令；E2E doctor 检查实际目标 Context；生产部署仍只由 `argusctl + Helm` 完成 |
 
 `argus-worker` 保留 agent、action、compaction、sandbox 四条队列和 Processor。Evaluation 通过一个 `argus-worker --pool=default` Deployment 运行这四类任务；Local Hardening 与 Production 使用四个独立 Deployment，以便分别扩缩容和限制网络权限。Direct Executor Pool 在所有 Profile 中均由独立 Deployment 运行。所有 Pool 使用 PostgreSQL Lease/Fence 恢复，Redis 只唤醒；Tool Gateway 当前是 Worker 进程内可信 Registry，未来拆分时才增加内部 mTLS 网络边界。
@@ -124,7 +128,7 @@ Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector 
 - `go run ./cmd/argus-dev e2e run --suite m2`：真实 Platform 初始化 → Platform 登录 → Enterprise → IAM → APIKey → Audit → 撤权，Redis 停止和 Server 重启恢复，三 Origin real Playwright，以及成功/失败无条件清理。
 - M3 OpenAPI/protobuf、Goose/sqlc、Envelope Encryption、Credential Lease、Host/Kubernetes、网络路径变更绑定冻结 ConnectionTest、最小 PendingAction、Bastion/Connector、Gateway Registry/Pub/Sub/Command/sweeper 和 DataAuthorizationGrant 撤权实现。
 - cert-manager Connector PKI、Gateway 独立 ServiceAccount/Issuer/RBAC、独立 Direct Executor CA/mTLS RPC、固定 IP/DNS 重校验、Redirect/TLS/SSRF 防护，以及对应 Helm Service/RBAC/NetworkPolicy。
-- Enterprise real Adapter 与页面已接 Host 路径迁移、Kubernetes 有界资源/Pod Logs、Secret/ManagedAccount、Bastion/Connector 卸载和 Preview/Confirm；`in_cluster` 一次性安装命令只在确认结果中展示，Collector、Remote Access 和 Agent 操作不读取 mock 数据。
+- Enterprise real Adapter 与页面已接 Host 路径迁移、Kubernetes 有界资源/Pod Logs、Secret/ManagedAccount、Bastion/Connector 卸载和 Preview/Confirm；`in_cluster` 安装命令通过 Execution 一次性结果能力领取并只在当前内存结果态展示，Collector、Remote Access 和 Agent 操作不读取 mock 数据。
 - Connector 卸载结果等待 Gateway ACK 后才删除本地身份；无类型化清理证明的 reconcile 保持 `result_unknown`。有效重连恢复 Bastion Scope/Kubernetes 在线状态，Scope 删除要求已卸载或已 fencing 离线，并逻辑删除根 Host。
 - `go run ./cmd/argus-dev e2e run --suite m3`：真实 Secret/Credential/ManagedAccount、Bastion/Connector、证书轮换与 ACK 后卸载、Host 跨 Scope 迁移、双 Gateway 派发、内网/公网 Host、三种 Kubernetes 接入、DataAuthorizationGrant 撤权、Redis 停止和 Server/Gateway 恢复，M2 3 条与 M3 6 条 real Playwright，以及成功/失败无条件清理。2026-08-17 的成功运行号为 `20260817060430-49810`，脱敏诊断位于本地同名 `artifacts/m3-e2e/` 目录，Namespace/PVC/Lease 零残留。
 - M4 Conversation/Run/Task/Model/Approval/Execution/Sandbox 契约、Migration、四个 Worker Pool、双协议 Model Provider、ContextAssembler/Compaction、Tool 权限与严格 Schema Registry、确定性 Projection 和确定性 Action Executor。
@@ -139,7 +143,7 @@ Evaluation 当前有 Web、Server、合并 Worker、Direct Executor、Connector 
 - `go run ./cmd/argus-dev e2e run --suite m6`：真实 SSH PTY、TLS WinRS 模拟器、Ticket 重放、跨 Gateway/Redis fallback/30 秒 Drain、AuthorizationVersion 旧 Lease 失效、MinIO 连续中断 fail closed、录像、终止、M6 real Playwright 和 Redis 降级恢复。2026-08-18 的最终成功运行号为 `20260818072400-79219`，脱敏诊断位于 `artifacts/m6-e2e/20260818072400-79219`，Namespace/PVC/Lease 零残留。
 - M7 Telemetry OpenAPI/protobuf、PostgreSQL/ClickHouse Migration、Distribution/Profile/Collector/Route/Claim/NodeBinding 控制面、独立 mTLS PKI、OTLP gRPC/HTTP Ingest、Kafka Topic/DLQ、最小 Go Writer、ClickHouse 三信号 Schema、授权 Query、Tool 与 Telemetry Overview Card 已完成。
 - Linux arm64 OCB Distribution、Host Direct/Bastion 类型化安装路径、Kubernetes Agent/Gateway mTLS 固定模板、严格 Artifact TLS、canonical Operation Plan Hash、Credential Lease、Fence、`result_unknown` 对账和 Windows amd64 `validation_pending` 支持矩阵已落地。
-- Artifact Store 落地为平台 MinIO：`argus-collector-artifacts` 桶经 ingress HTTPS（`artifacts.<平台父域名>`）匿名只读分发，执行者以平台多 SAN 证书为信任锚（本地 profile 可用 `artifactTLSMode: insecure` 跳过传输层校验，sha256+ed25519 签名校验恒定执行）；`make otelcol-artifacts-publish` 完成构建、ed25519 签名（持久密钥 `deploy/.keys/otelcol-signing-key.json`）与上传，并打印 `spec.telemetry` 值块（默认发布 Linux arm64+amd64 双架构，`--windows` 附带 Windows）。2026-08-30 起主机安装按目标架构自动选择产物：连接测试 SSH 探测 `uname -m` 存入 `hosts.architecture`（迁移 00025），`hostCollectorPlatform` 按 OS+架构解析 `linux_amd64`/`linux_arm64`（未知按 amd64），执行侧 `Validate` 接受两种 Linux 产物，Profile 平台矩阵包含双架构；Direct Executor 失败时记录含远端 stderr 的错误日志并输出细粒度错误码（`COLLECTOR_TARGET_AUTH_FAILED`/`COLLECTOR_TARGET_HOST_KEY_CHANGED` 等，错误码映射在 Connector 与 Direct 两条路径共用 `collectormanager.FailureCode`）。Kubernetes 镜像默认发布到 `docker.io/kakj-go/argus-otelcol:<version>`（`make otelcol-image-publish`，`--push` 时为 linux/arm64+amd64 多架构 manifest，两种架构集群拉取同一引用），安装向导与集群详情状态面板（configure/upgrade/repair）均支持按次 `kubernetes_image` 覆盖（`CollectorPreview.kubernetes_image`，进入不可变 plan 不落库，revalidate 只校验格式）；Kubernetes Collector Pod 已去除 busybox init 容器（身份 Secret 以 0440 + fsGroup 直接挂载），严格离线集群只需镜像可达。Host 实时探活自 2026-08-30 起由 worker（PoolDefault）的 hostprobe Reconciler 提供：每 60 秒对 direct_ssh/direct_winrm 主机做 TCP + SSH 握手探测（不使用凭据），最久未检优先 + SKIP LOCKED 批量认领；并发自适应（周期 >75% 间隔 ×1.5 至 256、<25% ×0.75 至 8、轮次重叠跳 tick）。结果仅状态变迁时写入 host_probe_states 并记审计（迁移 00027），连续 2 次失败才转 offline 去抖；SSH 主机键与 pin 值不一致报 key_changed。Host 列表/详情的实时徽章来自该表（live_status/last_probe_at/probe_latency_ms），hosts.connection_status 保留接入验证语义；堡垒机路径主机不经此通道（地址不可直达），活性走 collector last_seen。Enterprise 界面在确认提交后呈现收敛面板（installing → converged/uninstalled 自动关闭，失败展示 `last_operation_error_code`），主机与集群详情对过渡态每 2 秒轮询。
+- Artifact Store 落地为平台 MinIO：`argus-collector-artifacts` 桶经 ingress HTTPS（`artifacts.<平台父域名>`）匿名只读分发，所有执行者使用版本化 Argus Trust Bundle 严格验证传输 TLS，并恒定执行 SHA-256、大小和 Ed25519 签名校验；不存在 Profile 级 TLS 跳过模式。`make otelcol-artifacts-publish` 完成构建、签名与上传。主机安装按目标架构选择 Linux arm64/amd64 产物，Direct Executor 与 Connector 复用严格错误映射。Kubernetes 镜像默认发布为双架构 manifest，安装向导同时支持完整内部镜像引用与 `imagePullSecrets`；registry CA 和镜像同步由客户负责。Collector Pod 将只读 bootstrap Secret 复制到 writable identity volume，Gateway 把最后有效轮换身份镜像回固定 Secret；Bundle 更新、证书续期和 Pod 重启均不会回退到初始身份。Host 探活、安装收敛和详情轮询保持原有语义。完整 PKI 设计见 [全链路 PKI、TLS 与 Trust Bundle](./18-pki-and-tls.md)。
 - NodeBinding 保留完整 IP 证据用于匹配，但人工确认哈希只绑定 Node UID/Name、Provider ID、Machine ID 和 System UUID；IP 波动不误失效，强身份漂移会撤销 Binding。Kubernetes Gateway 同 Collector 转发还需匹配可信 Collector ID 与证书序列，kubelet 采集保持证书校验并使用最小 `nodes/stats` RBAC。
 - Enterprise Host/Kubernetes Collector 与 Metrics/Logs/Traces 页面、Telemetry 保留期/用量/Catalog 页面已接 real API；ECharts 图表包含表格替代、键盘和读屏语义。
 - `go run ./cmd/argus-dev e2e run --suite m7`：Linux arm64 Collector 构建/安装、Kubernetes Agent/Gateway mTLS、NodeBinding 保持/漂移、Direct 与 Bastion Gateway 的真实三信号、Kafka backlog、DLQ replay、Redis outage 持久队列、Pod 删除恢复、Query 跨企业/DataAuthorizationGrant/预算/脱敏/授权版本矩阵、Telemetry Card 激活、M2-M5 与 M7 real Playwright。2026-08-19 的最终成功运行号为 `20260819140437-21054`，脱敏诊断位于 `artifacts/m7-e2e/20260819140437-21054`，三个 Namespace、运行相关 PVC 和 Lease 零残留。
@@ -157,6 +161,23 @@ PlanV3 第三阶段（2026-08-26）已完成代码、迁移、OpenAPI、Go/前�
 
 - SBOM、镜像签名、漏洞门禁、备份恢复和独立 Upgrade 工作流。
 - Production PostgreSQL/Kafka/ClickHouse HA、外部 KMS/HSM、Connector/Telemetry CA 根轮换及重启恢复演练、Remote Access 录像不可变保留/恢复、Linux amd64 与真实 Windows 兼容矩阵、OpenSandbox 强化 Runtime ADR，以及平台超级管理员 MFA/恢复/Step-up 的生产验证；这些未完成前 Production 安装保持硬阻断。固定出口属于可选 Egress Gateway 能力，不再作为运行时配置硬门禁；需要时通过严格验证流程单独检查。MFA 能力已存在，但 `spec.security.platformMfaRequired` 在所有 Profile 中默认关闭，需要部署者显式开启。
+
+### 3.5 PlanV4 最终复核（2026-09-01）
+
+PlanV4 的底层网络与身份设计保持成立：route kind 与 transport 正交、enrollment 信任链复用、PostgreSQL 保存 Tunnel/operation 权威状态、Executor/Connector 只桥接端到端加密流量。实现期间发现的两处架构偏差已经修正：模式 C 的长期控制隧道已从短期安装 operation 和进程级全局状态中拆出；B/C Execution 已改为关联 operation 并等待真实终态，不再在安装刚开始时提前成功。修正没有改变 M3/M7 的资源身份和服务边界。
+
+| 范围 | 最终实现 | 验收结论 |
+| --- | --- | --- |
+| 领域与数据模型 | 重写迁移 00028～00031：独立安装/卸载 token、route transport、Telemetry/Control Tunnel、one-time result v2、release 与事件化 install operation | 全新数据库、SQLC、OpenAPI、protobuf 与客户端生成通过；无旧数据/API 兼容层 |
+| self-enrolled 主机 | 原子 bootstrap、同设备幂等、双重验签、enrollment 后激活、独立卸载完成回调、rotate/claim/audit | 受限出站、二次消费、撤权、卸载、三信号和零残留通过 |
+| 场景②/③遥测隧道 | 共享监督原语、desired/lease/epoch/fence、心跳恢复、撤权、配额、production NetworkPolicy | Executor Pod 删除后跨副本接管、Connector 成员隧道与队列收敛通过 |
+| 堡垒机 A | 默认一行下载并执行动态引导脚本；自签名模式仅首次下载显式放宽 TLS，完整脚本仍内嵌 CA 并固定摘要；加密一次性结果、未领取/领取/过期/轮换/审批状态 | 单元与 mock 浏览器已覆盖；真实命令安装需在下一次 P4 全量 E2E 复验 |
+| 堡垒机 B/C | 冻结 ConnectionTest 与 artifact、SSH 流式原子安装、阶段事件、人工重试；C 使用独立长期控制隧道 | B/C operation 完成、online、C 当前 epoch established、replacement fencing 与重启接管通过 |
+| 待注册动作 | `host.enrollment.rotate`、`host.uninstall.command`、`bastion.enrollment.rotate`、`bastion.connector.replace` 各自具有明确前件和风险 | 纯 pending 不再误用 replacement，前端只消费 onboarding 投影 |
+| 新增向导 | `select_mode → details → verify|confirm_command → installing|command_result|completed` | 主机和堡垒机均第一步选模式、第二步填信息；form、焦点、读屏、i18n 与敏感状态清理通过 |
+| 浏览器与 Kubernetes E2E | P4-WEB-01～08、real P4、P4 Kubernetes 六场景与回归清理 | 最终运行 `20260901-planv4-final41`，verify 19/19，证据在 `artifacts/p4-e2e/20260901-planv4-final41/verify` |
+
+Docker Desktop Evaluation 的 CNI 无法证明 NetworkPolicy enforcement，预检按既有策略保留 `unverified/degraded`；production 精确策略、配额、PDB、拓扑分散和产物检查均已通过静态门禁。唯一不支持的网络组合仍是“堡垒机无出站且 Argus 也无法 SSH”。详细实现与运行证据见 [PlanV4 总览](./planv4/README.md)。
 
 ## 4. Kubernetes 目标拓扑
 
@@ -368,22 +389,34 @@ argus-e2e-<run-id>-observability
 
 完整 E2E 对目标 Context 拥有独占生命周期；它只删除由本次 release 标记拥有的 CRD，找不到 ownership label 时拒绝宽泛删除。所有 E2E Secret、Bucket、Kafka Topic 和 ClickHouse 数据必须带 `run-id`，避免跨用例污染。
 
+PlanV4 已在同一清理纪律下取得以下专项证据，未使用旧 M3/M7 成功运行号替代；最终运行号为 `20260901-planv4-final41`：
+
+- `p4-self-enroll`：只允许目标出站到 artifacts/bootstrap/telemetry，验证安装、三信号、二次消费、撤权、卸载和零残留。
+- `p4-executor-tunnel`：目标不能出站访问 Ingest，验证回环 OTLP、Executor Pod 删除后的 epoch+1 接管、队列和审计。
+- `p4-bastion-tunnel`：成员不能访问堡垒机 4317/4318，验证 `bastion_tunnel`、断开/恢复和独立 Tunnel/Collector 状态。
+- `p4-bastion-direct-install`：模式 B 从 ConnectionTest、Preview、SSH 安装到 Connector online，浏览器不得看到内部 enrollment token。
+- `p4-bastion-control-tunnel`：模式 C 在堡垒机无出站时完成 8443/9443 control forward、enrollment、长连接和 Executor 重启恢复；Telemetry Route 另行验证。
+- mock/real Playwright 覆盖主机五模式、堡垒机 A/B/C、真实步骤、Back/Change、动态第三步、安装进度、一次性结果领取/轮换/审批/过期、i18n、键盘、axe 和浏览器持久化敏感值扫描。
+- 专项套件退出并完成零残留清理后，已恢复共享开发环境的 Strimzi、Altinity CRD、OpenSandbox、本地 registry、KafkaUser 和 Connector 公网 Service；恢复后的 `argusctl verify` 19/19 通过。
+
 ## 11. 实施路线
 
 里程碑唯一口径为[端到端实现计划](./15-end-to-end-implementation-plan.md)和[分阶段任务文件](./plans/README.md)，不在本盘点文档维护另一套编号。
 
 - M0 契约与文档、M1 前端/API 基座、M2 身份授权、M3 资源/Connector、M4 Agent/确定性执行、M5 Card、M6 Remote Access 和 M7 Telemetry Evaluation 闭环均已完成。
 - M8 本地范围已实现 MFA/Step-up、OpenBao Transit、备份恢复、升级和供应链基座；Production HA、容量、固定出口和跨集群灾备转入独立 Validation 清单。
+- PlanV4 是 M3/M7 基线上的已完成增量计划；实现没有反向修改已确定的企业身份、Connector PKI 或 Telemetry 身份边界。
 
 ## 12. 当前优先级结论
 
-截至 2026-08-24，M0-M7 与 M8 本地加固范围已完成，后续工作集中在持续回归和 Production Validation：
+截至 2026-09-01，M0-M7、M8 本地加固范围和 PlanV4 均已完成。当前优先级回到全局 Production Validation：
 
-1. 在专用测试 Context 先运行 `go run ./cmd/argus-dev doctor e2e`，能力满足后运行 `go run ./cmd/argus-dev e2e run --suite m8`，持续归档 OpenBao、故障注入、备份和新 Namespace 恢复证据。
-2. 运行 `go run ./cmd/argus-dev release local`，归档 SBOM、漏洞、License、离线 Manifest 和本地签名。
-3. 保持 Production Profile fail closed，并维护 HA、容量、固定出口、KMS HA、AMD64/Windows 和跨集群灾备清单。
+1. 持续运行 M8/PlanV4 回归和 `release local`，保持 Production Profile fail closed。
+2. 完成 PostgreSQL/Kafka/ClickHouse HA、外部 KMS/HSM、跨故障域备份恢复与容量基准。
+3. 完成 Connector/Telemetry CA 根轮换演练、AMD64/真实 Windows 兼容矩阵、OpenSandbox 强化 Runtime ADR 和录像不可变保留。
+4. 在后续变更中维持 PlanV4 的动作边界、一次性结果安全、隧道 fencing 与共享向导 E2E，不重新引入旧接口或默认值。
 
-详细顺序、任务拆分和阶段退出标准见[端到端实现计划](./15-end-to-end-implementation-plan.md)与[分阶段任务文件](./plans/README.md)。
+PlanV4 完成记录见 [PlanV4 总览](./planv4/README.md)；全局里程碑与生产验证继续见[端到端实现计划](./15-end-to-end-implementation-plan.md)和[分阶段任务文件](./plans/README.md)。
 
 ## 13. M8 最终验证记录（2026-08-24）
 

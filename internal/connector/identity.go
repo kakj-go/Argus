@@ -37,6 +37,23 @@ func GenerateLocalIdentity(directory string, connectorID uuid.UUID) (LocalIdenti
 	if keyErr == nil && csrErr == nil {
 		return parseLocalIdentity(connectorID, keyPEM, csrPEM)
 	}
+	// Kubernetes bootstraps the durable private key from a Secret into a
+	// writable emptyDir, but the CSR itself is intentionally not persisted.
+	// Re-create that public request from the existing key during PKI repair.
+	if keyErr == nil && errors.Is(csrErr, os.ErrNotExist) {
+		key, err := parsePrivateKey(keyPEM)
+		if err != nil {
+			return LocalIdentity{}, err
+		}
+		csrPEM, err = createCSR(connectorID, key)
+		if err != nil {
+			return LocalIdentity{}, err
+		}
+		if err = writePrivateFile(csrPath, csrPEM); err != nil {
+			return LocalIdentity{}, err
+		}
+		return LocalIdentity{ConnectorID: connectorID, PrivateKey: key, CSRPEM: string(csrPEM)}, nil
+	}
 	if (!errors.Is(keyErr, os.ErrNotExist) && keyErr != nil) || (!errors.Is(csrErr, os.ErrNotExist) && csrErr != nil) ||
 		(errors.Is(keyErr, os.ErrNotExist) != errors.Is(csrErr, os.ErrNotExist)) {
 		return LocalIdentity{}, errors.New("Connector enrollment identity is incomplete")
@@ -96,12 +113,36 @@ func GenerateCSR(connectorID uuid.UUID) (*ecdsa.PrivateKey, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	uri, _ := url.Parse(CertificateURI(connectorID))
-	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{URIs: []*url.URL{uri}}, key)
+	csrPEM, err := createCSR(connectorID, key)
 	if err != nil {
 		return nil, nil, err
 	}
-	return key, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER}), nil
+	return key, csrPEM, nil
+}
+
+func createCSR(connectorID uuid.UUID, key *ecdsa.PrivateKey) ([]byte, error) {
+	uri, _ := url.Parse(CertificateURI(connectorID))
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{URIs: []*url.URL{uri}}, key)
+	if err != nil {
+		return nil, err
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER}), nil
+}
+
+func parsePrivateKey(keyPEM []byte) (*ecdsa.PrivateKey, error) {
+	keyBlock, _ := pem.Decode(keyPEM)
+	if keyBlock == nil {
+		return nil, errors.New("Connector enrollment private key PEM is invalid")
+	}
+	keyValue, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	key, ok := keyValue.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("Connector enrollment key must be ECDSA")
+	}
+	return key, nil
 }
 
 func MarshalPrivateKey(key *ecdsa.PrivateKey) ([]byte, error) {

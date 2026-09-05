@@ -10,7 +10,6 @@ import (
 	"go/token"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -20,7 +19,6 @@ import (
 	"testing"
 
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
-	"sigs.k8s.io/yaml"
 )
 
 var legacyPattern = regexp.MustCompile(`(?i)(\bproject\b|project_id|ProjectId|\bmembership\b|EnterpriseMembership|memberships|scopeType.*project|projectIds|listProjects|createProject|updateProject|resourceGroupIds|ownerTeamId|\btags\b|PendingAction\.params|params: Record<string, unknown>)`)
@@ -874,16 +872,19 @@ func TestContractCompatibility(t *testing.T) {
 	}
 }
 
-// PlanV3 Task 02 is an explicitly approved direct cutover. Keep this list
-// exact so unrelated OpenAPI removals continue to fail the breaking gate.
+// PlanV3 Task 02, PlanV4, and the clean-deploy PKI/TLS redesign are explicitly
+// approved direct cutovers. Keep this list exact so unrelated OpenAPI removals
+// continue to fail the gate.
 var intentionalContractRemovals = map[string]map[string]struct{}{
 	"api/openapi/generated/argus.bundle.json/paths": {
-		"/enterprise/remote-access-policies":      {},
-		"/enterprise/remote-access-policies/{id}": {},
-		"/enterprise/data-scopes":                 {},
-		"/enterprise/data-scopes/{id}":            {},
+		"/enterprise/remote-access-policies":                          {},
+		"/enterprise/remote-access-policies/{id}":                     {},
+		"/enterprise/data-scopes":                                     {},
+		"/enterprise/data-scopes/{id}":                                {},
+		"/enterprise/bastion-scopes/{id}/actions/preview-replacement": {},
 	},
 	"api/openapi/generated/argus.bundle.json/components/schemas": {
+		"EnrollmentResult":         {},
 		"RemoteAccessPolicy":       {},
 		"RemoteAccessPolicyPage":   {},
 		"RemoteAccessPolicyWrite":  {},
@@ -892,6 +893,42 @@ var intentionalContractRemovals = map[string]map[string]struct{}{
 		"DataScopeCreate":          {},
 		"DataScopeUpdate":          {},
 		"DataScopePage":            {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ActionOneTimeResult": {
+		"enrollment": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ActionOneTimeResult/properties": {
+		"enrollment": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ConnectorEnrollResult": {
+		"ca_bundle_pem": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ConnectorEnrollResult/properties": {
+		"ca_bundle_pem": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/CollectorCertificateResult": {
+		"ca_bundle_pem": {}, "certificate_pem": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/CollectorCertificateResult/properties": {
+		"ca_bundle_pem": {}, "certificate_pem": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/CollectorEnrollmentRequest": {
+		"csr_pem": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/CollectorEnrollmentRequest/properties": {
+		"csr_pem": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/Execution": {
+		"one_time_result_available": {},
+	},
+	"api/openapi/generated/argus.bundle.json/components/schemas/Execution/properties": {
+		"one_time_result_available": {},
+	},
+	"api/schemas/action/workflow.schema.json/$defs/Execution": {
+		"one_time_result_available": {},
+	},
+	"api/schemas/action/workflow.schema.json/$defs/Execution/properties": {
+		"one_time_result_available": {},
 	},
 	"api/openapi/generated/argus.bundle.json/components/schemas/RoleBinding": {
 		"data_scope_ids": {},
@@ -999,14 +1036,52 @@ func isIntentionalContractRemoval(path, name string) bool {
 }
 
 var intentionalContractRequiredAdditions = map[string]map[string]struct{}{
-	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantWrite":  {"status": {}},
-	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantUpdate": {"status": {}},
-	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrant":       {"status": {}},
-	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessSession":     {"authorization_version": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/pending-action-public.schema":       {"action_type": {}},
+	"api/schemas/action/pending-action-public.schema.json":                                          {"action_type": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ActionOneTimeResult":                {"command": {}, "instruction_sets": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/BastionConnectorReplacementPreview": {"expected_version": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/BastionPreviewCreate":               {"install_mode": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/BastionScope":                       {"onboarding": {}, "onboarding_mode": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/CollectorCertificateResult":         {"client_certificate_pem": {}, "server_certificate_pem": {}, "trust_bundle": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/CollectorEnrollmentRequest":         {"client_csr_pem": {}, "server_csr_pem": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/CollectorPreview":                   {"transport": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ConnectorEnrollRequest":             {"architecture": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/ConnectorEnrollResult":              {"trust_bundle": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/Execution":                          {"one_time_result_state": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/Host":                               {"onboarding": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RouteTestCreate":                    {"transport": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/TelemetryRoute":                     {"transport": {}},
+	"api/schemas/action/workflow.schema.json/$defs/Execution":                                       {"one_time_result_state": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantWrite":             {"status": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrantUpdate":            {"status": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessGrant":                  {"status": {}},
+	"api/openapi/generated/argus.bundle.json/components/schemas/RemoteAccessSession":                {"authorization_version": {}},
 }
 
 func isIntentionalContractRequiredAddition(path, name string) bool {
 	_, allowed := intentionalContractRequiredAdditions[path][name]
+	return allowed
+}
+
+var intentionalContractEnumRemovals = map[string]map[string]struct{}{
+	"api/openapi/generated/argus.bundle.json/components/schemas/ActionOneTimeResult/properties/result_kind": {
+		"connector_enrollment": {},
+	},
+}
+
+func isIntentionalContractEnumRemoval(path, value string) bool {
+	_, allowed := intentionalContractEnumRemovals[path][value]
+	return allowed
+}
+
+var intentionalContractScalarChanges = map[string]map[string]struct{}{
+	"api/openapi/generated/argus.bundle.json/components/schemas/ActionOneTimeResult/properties/schema_version": {
+		"const": {},
+	},
+}
+
+func isIntentionalContractScalarChange(path, key string) bool {
+	_, allowed := intentionalContractScalarChanges[path][key]
 	return allowed
 }
 
@@ -1666,13 +1741,13 @@ func compatible(path string, oldValue, newValue any) error {
 		for _, key := range []string{"enum"} {
 			newSet := valueSet(newMap[key])
 			for value := range valueSet(oldMap[key]) {
-				if !newSet[value] {
+				if !newSet[value] && !isIntentionalContractEnumRemoval(path, value) {
 					return fmt.Errorf("%s removed %s value %s", path, key, value)
 				}
 			}
 		}
 		for _, key := range []string{"const", "pattern"} {
-			if old, exists := oldMap[key]; exists && fmt.Sprint(old) != fmt.Sprint(newMap[key]) {
+			if old, exists := oldMap[key]; exists && fmt.Sprint(old) != fmt.Sprint(newMap[key]) && !isIntentionalContractScalarChange(path, key) {
 				return fmt.Errorf("%s changed %s", path, key)
 			}
 		}
@@ -1731,210 +1806,4 @@ func compatible(path string, oldValue, newValue any) error {
 		}
 	}
 	return nil
-}
-
-func readJSON(t *testing.T, path string) any {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var value any
-	if err := json.Unmarshal(data, &value); err != nil {
-		t.Fatal(err)
-	}
-	return value
-}
-
-func schemaCompiler(t *testing.T, root string) *jsonschema.Compiler {
-	t.Helper()
-	compiler := jsonschema.NewCompiler()
-	compiler.AssertFormat()
-	err := filepath.WalkDir(filepath.Join(root, "api/schemas"), func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".schema.json") {
-			return err
-		}
-		file, openErr := os.Open(path)
-		if openErr != nil {
-			return openErr
-		}
-		defer file.Close()
-		document, decodeErr := jsonschema.UnmarshalJSON(file)
-		if decodeErr != nil {
-			return decodeErr
-		}
-		rootObject, ok := document.(map[string]any)
-		if !ok {
-			return fmt.Errorf("schema %s is not an object", path)
-		}
-		id, ok := rootObject["$id"].(string)
-		if !ok || id == "" {
-			return fmt.Errorf("schema %s has no $id", path)
-		}
-		return compiler.AddResource(id, document)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return compiler
-}
-
-func openAPISchemaCompiler(t *testing.T, root string) *jsonschema.Compiler {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, "api/openapi/generated/argus.bundle.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var document any
-	if err := json.Unmarshal(data, &document); err != nil {
-		t.Fatal(err)
-	}
-	compiler := jsonschema.NewCompiler()
-	compiler.AssertFormat()
-	if err := compiler.AddResource("https://argus.io/openapi/v1/argus.bundle.json", document); err != nil {
-		t.Fatal(err)
-	}
-	return compiler
-}
-
-func readYAML(t *testing.T, path string, target any) {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := yaml.Unmarshal(data, target); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func decodeStructured(t *testing.T, path string, data []byte, target any) {
-	t.Helper()
-	if strings.HasSuffix(path, ".json") {
-		if err := json.Unmarshal(data, target); err != nil {
-			t.Fatal(err)
-		}
-		return
-	}
-	if err := yaml.Unmarshal(data, target); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func gitFile(root, ref, path string) ([]byte, bool) {
-	command := exec.Command("git", "show", ref+":"+path)
-	command.Dir = root
-	data, err := command.Output()
-	return data, err == nil
-}
-
-func gitFileList(root, ref string, directories ...string) []string {
-	args := []string{"ls-tree", "-r", "--name-only", ref, "--"}
-	args = append(args, directories...)
-	command := exec.Command("git", args...)
-	command.Dir = root
-	data, err := command.Output()
-	if err != nil {
-		return nil
-	}
-	var result []string
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
-		if line != "" && (strings.HasSuffix(line, ".json") || strings.HasSuffix(line, ".yaml")) {
-			result = append(result, line)
-		}
-	}
-	return result
-}
-
-func requiresStableMapKeys(path string) bool {
-	for _, suffix := range []string{"/schemas", "/properties", "/$defs", "/codes", "/machines", "/transitions", "/paths"} {
-		if strings.HasSuffix(path, suffix) {
-			return true
-		}
-	}
-	return false
-}
-
-func typeCompatible(oldValue, newValue any) bool {
-	oldSet := scalarOrSliceSet(oldValue)
-	newSet := scalarOrSliceSet(newValue)
-	for value := range oldSet {
-		if !newSet[value] {
-			return false
-		}
-	}
-	return true
-}
-
-func scalarOrSliceSet(value any) map[string]bool {
-	if values, ok := value.([]any); ok {
-		return valueSet(values)
-	}
-	if value == nil {
-		return map[string]bool{}
-	}
-	return map[string]bool{fmt.Sprint(value): true}
-}
-
-func numberValue(value any) (float64, bool) {
-	switch typed := value.(type) {
-	case float64:
-		return typed, true
-	case int:
-		return float64(typed), true
-	default:
-		return 0, false
-	}
-}
-
-func valueSet(value any) map[string]bool {
-	result := map[string]bool{}
-	values, _ := value.([]any)
-	for _, item := range values {
-		result[fmt.Sprint(item)] = true
-	}
-	return result
-}
-
-func sliceSet(values []string) map[string]bool {
-	result := map[string]bool{}
-	for _, value := range values {
-		result[value] = true
-	}
-	return result
-}
-
-func walkKeys(value any, visit func(string) error) error {
-	switch typed := value.(type) {
-	case map[string]any:
-		for key, child := range typed {
-			if err := visit(key); err != nil {
-				return err
-			}
-			if err := walkKeys(child, visit); err != nil {
-				return err
-			}
-		}
-	case []any:
-		for _, child := range typed {
-			if err := walkKeys(child, visit); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func cloneJSON(t *testing.T, value any) any {
-	t.Helper()
-	data, err := json.Marshal(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	var cloned any
-	if err := decoder.Decode(&cloned); err != nil {
-		t.Fatal(err)
-	}
-	return cloned
 }

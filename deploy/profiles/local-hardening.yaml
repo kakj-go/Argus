@@ -21,9 +21,11 @@ spec:
     enterpriseHost: argus.dev
     platformHost: platform.argus.dev
     connectorHost: connector.argus.dev
-    tls:
-      enabled: true
-      mode: cert-manager-selfsigned
+  pki:
+    mode: managed
+    bootstrapTLSMode: insecure-first-fetch
+    rotation:
+      overlap: 168h
   security:
     platformMfaRequired: false
   network:

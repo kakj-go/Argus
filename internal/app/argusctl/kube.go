@@ -168,12 +168,10 @@ func (a *App) buildPreflight(ctx context.Context, cfg *InstallConfig) (Preflight
 		add("ingress-class", "pass", ingressClass.Name, true)
 	}
 
-	if tlsErr := checkExposureTLS(ctx, clients, cfg); tlsErr != nil {
-		add("exposure-tls", "fail", tlsErr.Error(), true)
-	} else if tlsWarning := exposureTLSWarning(ctx, clients, cfg); tlsWarning != "" {
-		add("exposure-tls", "warn", tlsWarning, false)
+	if pkiErr := checkPKI(ctx, clients, cfg); pkiErr != nil {
+		add("pki", "fail", pkiErr.Error(), true)
 	} else {
-		add("exposure-tls", "pass", string(cfg.Spec.Exposure.TLS.Mode), true)
+		add("pki", "pass", string(cfg.Spec.PKI.Mode), true)
 	}
 
 	var fs syscall.Statfs_t
@@ -227,20 +225,16 @@ func productionChecks(ctx context.Context, clients *kubeClients, cfg *InstallCon
 	add("postgresql-ha", "fail", "POSTGRES_HA_ADR_REQUIRED", true)
 }
 
-// checkExposureTLS verifies the cluster-side prerequisites of the mandatory
-// TLS configuration: the referenced cert-manager issuer or the user-provided
-// TLS secret must already exist before install.
-func checkExposureTLS(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
-	tls := cfg.Spec.Exposure.TLS
-	switch tls.Mode {
-	case TLSModeCertManagerIssuer:
-		issuerGVR := schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "issuers"}
-		if tls.IssuerRef.Kind == "ClusterIssuer" {
-			issuerGVR.Resource = "clusterissuers"
-		}
-		issuer, err := clients.dynamic.Resource(issuerGVR).Get(ctx, tls.IssuerRef.Name, metav1.GetOptions{})
+// checkPKI verifies the existing global ClusterIssuer. Managed mode creates
+// the issuer after cert-manager is installed and therefore has no external
+// cluster prerequisite.
+func checkPKI(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
+	switch cfg.Spec.PKI.Mode {
+	case PKIModeExistingClusterIssuer:
+		issuerGVR := schema.GroupVersionResource{Group: cfg.Spec.PKI.IssuerRef.Group, Version: "v1", Resource: "clusterissuers"}
+		issuer, err := clients.dynamic.Resource(issuerGVR).Get(ctx, cfg.Spec.PKI.IssuerRef.Name, metav1.GetOptions{})
 		if err != nil {
-			return fmt.Errorf("%s %s is not available: %w", tls.IssuerRef.Kind, tls.IssuerRef.Name, err)
+			return fmt.Errorf("ClusterIssuer %s is not available: %w", cfg.Spec.PKI.IssuerRef.Name, err)
 		}
 		conditions, found, err := unstructuredNestedSlice(issuer.Object, "status", "conditions")
 		if err == nil && found {
@@ -251,29 +245,10 @@ func checkExposureTLS(ctx context.Context, clients *kubeClients, cfg *InstallCon
 				}
 			}
 		}
-		return fmt.Errorf("%s %s exists but is not Ready", tls.IssuerRef.Kind, tls.IssuerRef.Name)
-	case TLSModeUserProvided:
-		return nil
+		return fmt.Errorf("ClusterIssuer %s exists but is not Ready", cfg.Spec.PKI.IssuerRef.Name)
 	default:
 		return nil
 	}
-}
-
-// exposureTLSWarning reports non-blocking follow-ups for the TLS mode. The
-// user-provided secret cannot be required before the system namespace exists,
-// so a missing secret is only a warning; the rendered Ingress will reject
-// traffic until the operator creates it.
-func exposureTLSWarning(ctx context.Context, clients *kubeClients, cfg *InstallConfig) string {
-	if cfg.Spec.Exposure.TLS.Mode != TLSModeUserProvided {
-		return ""
-	}
-	if _, err := clients.typed.CoreV1().Namespaces().Get(ctx, cfg.Spec.Namespaces.System, metav1.GetOptions{}); err != nil {
-		return fmt.Sprintf("namespace %s does not exist yet; create TLS secret %s there before first access", cfg.Spec.Namespaces.System, cfg.Spec.Exposure.TLS.SecretName)
-	}
-	if _, err := clients.typed.CoreV1().Secrets(cfg.Spec.Namespaces.System).Get(ctx, cfg.Spec.Exposure.TLS.SecretName, metav1.GetOptions{}); err != nil {
-		return fmt.Sprintf("TLS secret %s/%s is missing; ingress will reject HTTPS until it is created", cfg.Spec.Namespaces.System, cfg.Spec.Exposure.TLS.SecretName)
-	}
-	return ""
 }
 
 func unstructuredNestedSlice(object map[string]any, fields ...string) ([]any, bool, error) {

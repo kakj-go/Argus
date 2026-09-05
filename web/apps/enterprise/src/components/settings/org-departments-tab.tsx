@@ -45,7 +45,8 @@ export function OrgDepartmentsTab() {
     undefined,
   );
   const [statusTarget, setStatusTarget] = useState<DepartmentRow | null>(null);
-  const [authorizationTarget, setAuthorizationTarget] = useState<DepartmentRow | null>(null);
+  const [authorizationTarget, setAuthorizationTarget] =
+    useState<DepartmentRow | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["org"] });
   const save = useMutation({
     mutationFn: (input: { id?: string; name: string; description?: string }) =>
@@ -113,7 +114,7 @@ export function OrgDepartmentsTab() {
             render: (row) => (
               <ActionGroup>
                 <RowAction onClick={() => setAuthorizationTarget(row)}>
-                  数据授权
+                  {t("settings.org.dataAuthorization.action")}
                 </RowAction>
                 <RowAction
                   onClick={() =>
@@ -185,7 +186,13 @@ export function OrgDepartmentsTab() {
             : t("settings.org.departments.enableTitle")
         }
       />
-      <DataAuthorizationDialog open={authorizationTarget !== null} onOpenChange={(open) => !open && setAuthorizationTarget(null)} subjectType="department" subjectId={authorizationTarget?.id ?? ""} subjectLabel={authorizationTarget?.name ?? ""} />
+      <DataAuthorizationDialog
+        open={authorizationTarget !== null}
+        onOpenChange={(open) => !open && setAuthorizationTarget(null)}
+        subjectType="department"
+        subjectId={authorizationTarget?.id ?? ""}
+        subjectLabel={authorizationTarget?.name ?? ""}
+      />
     </div>
   );
 }

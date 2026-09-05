@@ -425,11 +425,14 @@ type KubernetesPreviewCreate struct {
 	BastionScopeId   *openapi_types.UUID      `json:"bastion_scope_id,omitempty"`
 	ConnectionMode   KubernetesConnectionMode `json:"connection_mode"`
 	ConnectionTestId *openapi_types.UUID      `json:"connection_test_id,omitempty"`
-	CredentialId     *openapi_types.UUID      `json:"credential_id,omitempty"`
-	DefaultNamespace *string                  `json:"default_namespace,omitempty"`
-	Environment      Environment              `json:"environment"`
-	Labels           UserLabels               `json:"labels"`
-	Name             string                   `json:"name"`
+
+	// ConnectorImagePullSecrets 仅 in_cluster：目标集群中已存在的 Connector 镜像拉取 Secret
+	ConnectorImagePullSecrets *[]string           `json:"connector_image_pull_secrets,omitempty"`
+	CredentialId              *openapi_types.UUID `json:"credential_id,omitempty"`
+	DefaultNamespace          *string             `json:"default_namespace,omitempty"`
+	Environment               Environment         `json:"environment"`
+	Labels                    UserLabels          `json:"labels"`
+	Name                      string              `json:"name"`
 }
 
 // KubernetesPreviewUpdate defines model for KubernetesPreviewUpdate.
@@ -530,8 +533,9 @@ type UserLabels map[string]LabelValue
 
 // PendingActionPublicSchema defines model for pending-action-public.schema.
 type PendingActionPublicSchema struct {
-	ActionRef string `json:"action_ref"`
-	Approval  *struct {
+	ActionRef  string `json:"action_ref"`
+	ActionType string `json:"action_type"`
+	Approval   *struct {
 		ApprovedCount    int     `json:"approved_count"`
 		MinimumApprovers int     `json:"minimum_approvers"`
 		PolicyRef        *string `json:"policy_ref,omitempty"`

@@ -18,6 +18,7 @@ import (
 	"github.com/kakj-go/Argus/internal/action"
 	"github.com/kakj-go/Argus/internal/agent"
 	"github.com/kakj-go/Argus/internal/app/component"
+	"github.com/kakj-go/Argus/internal/artifactcheck"
 	cardservice "github.com/kakj-go/Argus/internal/card"
 	"github.com/kakj-go/Argus/internal/collectormanager"
 	"github.com/kakj-go/Argus/internal/config"
@@ -37,6 +38,7 @@ import (
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
 	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 const (
@@ -77,6 +79,18 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		return err
 	}
 	defer store.Close()
+	bundles := trustbundle.Service{Store: store, MountedPath: cfg.TrustBundlePath, InitialEpoch: cfg.TrustBundleEpoch}
+	activeBundle, err := bundles.EnsureInitial(ctx)
+	if err != nil {
+		return err
+	}
+	bundleNodeID := trustbundle.ProcessNodeID("worker-" + pool)
+	if err := bundles.AcknowledgeMounted(ctx, bundleNodeID); err != nil {
+		return err
+	}
+	go bundles.RunMountedAcknowledger(ctx, bundleNodeID, 5*time.Second, func(err error) {
+		logger.Warn("Trust Bundle acknowledgement failed", "error", err)
+	})
 	redisClient, err := redisstore.Open(ctx, cfg.RedisURL)
 	if err != nil && redisClient == nil {
 		return err
@@ -100,14 +114,29 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 	defer directDispatcher.Close()
 	secretDomain := secretservice.Service{Store: store, Keyring: keyring}
 	actionDomain := resource.PendingActionService{Store: store, Idempotency: idempotency, Key: cfg.PendingActionKey}
+	artifactChecker, err := artifactcheck.NewHTTPChecker(cfg.OtelcolArtifactCABundle, cfg.ArtifactProbeBaseURL)
+	if err != nil {
+		return err
+	}
 	connectorDomain := connectorservice.Service{Store: store, Redis: redisClient, GatewayEndpoint: cfg.ConnectorGatewayAddress,
-		EnrollmentURL: cfg.ConnectorEnrollmentURL, Credentials: secretDomain,
+		EnrollmentURL: cfg.ConnectorEnrollmentURL, Credentials: secretDomain, Artifacts: artifactChecker,
+		TrustBundlePath: cfg.TrustBundlePath, TrustBundleEpoch: cfg.TrustBundleEpoch,
+		TrustBundles:    bundles,
+		KubernetesImage: cfg.ConnectorKubernetesImage,
 		Issuer: connectorservice.CertManagerIssuer{Client: kubernetesClient, Namespace: cfg.SystemNamespace,
-			IssuerName: cfg.ConnectorIssuerName, IssuerGeneration: cfg.ConnectorIssuerGeneration}}
-	bastionDomain := connectorservice.BastionService{Store: store, Actions: actionDomain, Enrollment: connectorDomain}
+			IssuerName: cfg.ConnectorIssuerName, IssuerKind: "ClusterIssuer", IssuerGeneration: int32(activeBundle.Epoch)}}
+	bastionDomain, err := connectorservice.NewBastionService(store, actionDomain, connectorDomain,
+		cfg.PendingActionKey, cfg.ConnectorEnrollForwardTarget, cfg.ConnectorGatewayForwardTarget)
+	if err != nil {
+		return err
+	}
+	workerSelfEnroll := &telemetryservice.SelfEnrollService{Store: store, Actions: actionDomain, Identity: telemetryservice.IdentityService{Store: store, TrustBundles: bundles},
+		EnrollmentEndpoint: cfg.TelemetryEnrollment, IngestGRPCEndpoint: cfg.TelemetryIngestGRPC,
+		IngestHTTPEndpoint: cfg.TelemetryIngestHTTP, BootstrapSecretKey: cfg.PendingActionKey, Artifacts: artifactChecker,
+		TrustBundles: bundles, TrustBundlePath: cfg.TrustBundlePath, TrustBundleEpoch: cfg.TrustBundleEpoch, InstallerSHA256: cfg.HostInstallerSHA256}
 	telemetryActions := telemetryservice.ActionExtension{Next: bastionDomain, Credentials: secretDomain,
 		EnrollmentEndpoint: cfg.TelemetryEnrollment, IngestGRPCEndpoint: cfg.TelemetryIngestGRPC,
-		IngestHTTPEndpoint: cfg.TelemetryIngestHTTP, ServerCABundlePath: cfg.TelemetryCABundle}
+		IngestHTTPEndpoint: cfg.TelemetryIngestHTTP, TrustBundles: bundles, SelfEnroll: workerSelfEnroll}
 	resourceDomain := resource.Service{Store: store, Actions: actionDomain, Access: resource.AccessService{},
 		Direct: resource.DirectTargetValidator{DeniedCIDRs: denied}, Commands: connectorDomain, DirectCommands: directDispatcher,
 		Extension: telemetryActions, ClusterEnrollment: connectorDomain,
@@ -153,7 +182,7 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 	}
 	workerCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	errorsChannel := make(chan error, len(queues)+3)
+	errorsChannel := make(chan error, len(queues)+4)
 	var group sync.WaitGroup
 	for _, queue := range queues {
 		queue := queue
@@ -175,6 +204,11 @@ func runRuntimeWorker(ctx context.Context, logger *slog.Logger, pool string) err
 		go func() {
 			defer group.Done()
 			errorsChannel <- (action.Reconciler{Executor: action.Executor{Store: store, Resources: resourceDomain}, Logger: logger}).Run(workerCtx)
+		}()
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			errorsChannel <- (secretservice.LeaseReconciler{Store: store, Logger: logger}).Run(workerCtx)
 		}()
 	}
 	if pool == PoolDefault {
@@ -229,18 +263,32 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	defer store.Close()
-	tlsConfig, err := directexecutor.LoadServerTLS(cfg.TLSCertificate, cfg.TLSPrivateKey, cfg.ClientCABundle, cfg.AuthorizedClientNames)
+	bundles := trustbundle.Service{Store: store, MountedPath: cfg.TrustBundlePath, InitialEpoch: cfg.TrustBundleEpoch}
+	if _, err := bundles.EnsureInitial(ctx); err != nil {
+		return err
+	}
+	bundleNodeID := trustbundle.ProcessNodeID("direct-executor")
+	if err := bundles.AcknowledgeMounted(ctx, bundleNodeID); err != nil {
+		return err
+	}
+	go bundles.RunMountedAcknowledger(ctx, bundleNodeID, 5*time.Second, func(err error) {
+		logger.Warn("Trust Bundle acknowledgement failed", "error", err)
+	})
+	tlsConfig, err := directexecutor.LoadServerTLS(cfg.TLSCertificate, cfg.TLSPrivateKey, cfg.ClientCABundle, store, cfg.AuthorizedClientURIs)
 	if err != nil {
 		return err
 	}
 	var artifactClient *http.Client
-	if cfg.OtelcolArtifactTLSInsecure {
-		artifactClient, err = collectormanager.NewArtifactHTTPClientInsecure()
-	} else {
-		artifactClient, err = collectormanager.NewArtifactHTTPClient(cfg.OtelcolArtifactCABundle)
-	}
+	artifactClient, err = collectormanager.NewArtifactHTTPClient(cfg.OtelcolArtifactCABundle)
 	if err != nil {
 		return err
+	}
+	var artifactCABundle []byte
+	if cfg.OtelcolArtifactCABundle != "" {
+		artifactCABundle, err = os.ReadFile(cfg.OtelcolArtifactCABundle)
+		if err != nil {
+			return err
+		}
 	}
 	listener, err := net.Listen("tcp", cfg.GRPCAddress)
 	if err != nil {
@@ -251,7 +299,16 @@ func runDirectExecutor(ctx context.Context, logger *slog.Logger) error {
 		Validator: resource.DirectTargetValidator{DeniedCIDRs: denied}, InstanceID: cfg.InstanceID, Concurrency: 8,
 		CollectorIdentity: telemetryservice.IdentityService{Store: store}, TelemetryEnrollmentEndpoint: cfg.TelemetryEnrollmentEndpoint,
 		TelemetryIngestGRPCEndpoint: cfg.TelemetryIngestGRPCEndpoint, TelemetryIngestHTTPEndpoint: cfg.TelemetryIngestHTTPEndpoint,
-		CollectorArtifactHTTPClient: artifactClient}
+		TunnelForwardTarget:           cfg.TunnelForwardTarget,
+		TunnelIdentityForwardTarget:   cfg.TunnelIdentityForwardTarget,
+		ConnectorEnrollForwardTarget:  cfg.ConnectorEnrollForwardTarget,
+		ConnectorGatewayForwardTarget: cfg.ConnectorGatewayForwardTarget,
+		OperationSecretKey:            cfg.PendingActionKey,
+		TelemetryTunnelLimit:          cfg.TelemetryTunnelLimit,
+		ControlTunnelLimit:            cfg.ControlTunnelLimit,
+		TunnelBytesPerSecond:          cfg.TunnelBytesPerSecond,
+		CollectorArtifactHTTPClient:   artifactClient,
+		CollectorArtifactCABundle:     artifactCABundle}
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)),
 		grpc.MaxRecvMsgSize(64*1024), grpc.MaxSendMsgSize(64*1024))
 	directv1.RegisterDirectExecutorServiceServer(grpcServer, directexecutor.RPCServer{Executor: executor, Context: ctx, Logger: logger})

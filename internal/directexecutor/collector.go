@@ -46,6 +46,21 @@ func (executor *Executor) executeCollectorOperation(parent context.Context, oper
 		executor.finishCollectorOperation(ctx, operation, "failed", nil, "COLLECTOR_PLAN_INVALID")
 		return
 	}
+	if command.GetTransport() == "executor_tunnel" && command.GetOperation() != "uninstall" {
+		ready, failureCode := executor.tunnelGateForCollector(ctx, operation.CollectorID)
+		if !ready {
+			if failureCode != "" {
+				// 不可恢复的隧道前件失败(回环端口冲突/转发端点未配置):
+				// 直接失败 operation,而不是无限等待重排。
+				executor.finishCollectorOperation(ctx, operation, "failed", nil, failureCode)
+				return
+			}
+			// 隧道未就绪:放弃本轮执行,operation 保持 running,租约到期后
+			// 由 Recover 重新排队,隧道建立后再收敛。
+			slog.Info("collector operation waiting for tunnel", "operation_id", operation.ID, "collector_id", operation.CollectorID)
+			return
+		}
+	}
 	if command.GetOperation() == "install" {
 		token, tokenErr := executor.CollectorIdentity.CreateEnrollmentToken(ctx, nil, operation.CollectorID)
 		if tokenErr != nil {

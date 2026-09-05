@@ -310,6 +310,19 @@ func (q *Queries) DisableSecret(ctx context.Context, arg DisableSecretParams) (i
 	return result.RowsAffected(), nil
 }
 
+const expireCredentialLeases = `-- name: ExpireCredentialLeases :execrows
+UPDATE credential_leases SET status = 'expired'
+WHERE status = 'active' AND expires_at <= now()
+`
+
+func (q *Queries) ExpireCredentialLeases(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, expireCredentialLeases)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getCredential = `-- name: GetCredential :one
 SELECT id, enterprise_id, name, protocol, username, secret_id, status, version, created_at, updated_at FROM credentials WHERE id = $1 AND enterprise_id = $2
 `
@@ -644,6 +657,61 @@ func (q *Queries) MarkSecretAccessed(ctx context.Context, arg MarkSecretAccessed
 	return err
 }
 
+const renewCredentialLease = `-- name: RenewCredentialLease :one
+UPDATE credential_leases AS lease SET
+  expires_at = $1
+FROM credentials AS credential
+WHERE lease.id = $2
+  AND lease.enterprise_id = $3
+  AND lease.status = 'active'
+  AND lease.expires_at > now()
+  AND lease.recipient_type = $4
+  AND lease.recipient_id = $5
+  AND credential.id = lease.credential_id
+  AND credential.enterprise_id = lease.enterprise_id
+  AND credential.status = 'active'
+  AND credential.version = $6
+RETURNING lease.id, lease.enterprise_id, lease.credential_id, lease.secret_version_id, lease.operation_ref, lease.target_resource_type, lease.target_resource_id, lease.recipient_type, lease.recipient_id, lease.protocol, lease.status, lease.expires_at, lease.consumed_at, lease.created_at
+`
+
+type RenewCredentialLeaseParams struct {
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	ID                uuid.UUID          `json:"id"`
+	EnterpriseID      uuid.UUID          `json:"enterprise_id"`
+	RecipientType     string             `json:"recipient_type"`
+	RecipientID       string             `json:"recipient_id"`
+	CredentialVersion int64              `json:"credential_version"`
+}
+
+func (q *Queries) RenewCredentialLease(ctx context.Context, arg RenewCredentialLeaseParams) (CredentialLease, error) {
+	row := q.db.QueryRow(ctx, renewCredentialLease,
+		arg.ExpiresAt,
+		arg.ID,
+		arg.EnterpriseID,
+		arg.RecipientType,
+		arg.RecipientID,
+		arg.CredentialVersion,
+	)
+	var i CredentialLease
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.CredentialID,
+		&i.SecretVersionID,
+		&i.OperationRef,
+		&i.TargetResourceType,
+		&i.TargetResourceID,
+		&i.RecipientType,
+		&i.RecipientID,
+		&i.Protocol,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const revokeCredentialLease = `-- name: RevokeCredentialLease :exec
 UPDATE credential_leases SET status = 'revoked'
 WHERE id = $1 AND enterprise_id = $2 AND status = 'active'
@@ -657,6 +725,24 @@ type RevokeCredentialLeaseParams struct {
 func (q *Queries) RevokeCredentialLease(ctx context.Context, arg RevokeCredentialLeaseParams) error {
 	_, err := q.db.Exec(ctx, revokeCredentialLease, arg.ID, arg.EnterpriseID)
 	return err
+}
+
+const revokeCredentialLeasesByCredential = `-- name: RevokeCredentialLeasesByCredential :execrows
+UPDATE credential_leases SET status = 'revoked'
+WHERE credential_id = $1 AND enterprise_id = $2 AND status = 'active'
+`
+
+type RevokeCredentialLeasesByCredentialParams struct {
+	CredentialID uuid.UUID `json:"credential_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) RevokeCredentialLeasesByCredential(ctx context.Context, arg RevokeCredentialLeasesByCredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeCredentialLeasesByCredential, arg.CredentialID, arg.EnterpriseID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeCredentialLeasesBySecret = `-- name: RevokeCredentialLeasesBySecret :exec

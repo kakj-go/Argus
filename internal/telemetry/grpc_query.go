@@ -3,7 +3,6 @@ package telemetry
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -350,12 +349,12 @@ type GRPCQueryBackend struct {
 	logger     *slog.Logger
 }
 
-func NewGRPCQueryBackend(endpoint string, tlsConfig *tls.Config, logger *slog.Logger) (*GRPCQueryBackend, error) {
+func NewGRPCQueryBackend(endpoint string, tlsCredentials credentials.TransportCredentials, logger *slog.Logger) (*GRPCQueryBackend, error) {
 	target, err := grpcTarget(endpoint)
-	if err != nil || tlsConfig == nil {
+	if err != nil || tlsCredentials == nil {
 		return nil, ErrQueryBackend
 	}
-	connection, err := grpc.NewClient(target, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	connection, err := grpc.NewClient(target, grpc.WithTransportCredentials(tlsCredentials))
 	if err != nil {
 		return nil, err
 	}

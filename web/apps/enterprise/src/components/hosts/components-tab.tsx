@@ -1,6 +1,9 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
+import { z } from "zod";
 import {
   useApi,
   type BastionScope,
@@ -18,6 +21,7 @@ import {
   DiffViewer,
   Field,
   FormDrawer,
+  Input,
   KeyValueGrid,
   PreviewCommitCard,
   Select,
@@ -76,6 +80,27 @@ const COLLECTOR_PROFILES = [
   "host-basic,linux-journald",
   "host-basic,linux-journald,collector-self",
 ];
+
+const collectorInstallSchema = (loopbackPortMessage: string) =>
+  z
+    .object({
+      profile: z.string().min(1),
+      route: z.string().min(1),
+      transport: z.enum(["direct", "executor_tunnel", "bastion_tunnel"]),
+      loopbackPort: z.string(),
+    })
+    .superRefine((value, context) => {
+      if (value.transport === "direct") return;
+      const port = Number(value.loopbackPort);
+      if (!Number.isInteger(port) || port < 1 || port > 65_534) {
+        context.addIssue({
+          code: "custom",
+          path: ["loopbackPort"],
+          message: loopbackPortMessage,
+        });
+      }
+    });
+type CollectorInstallForm = z.infer<ReturnType<typeof collectorInstallSchema>>;
 
 /** Connector 卡片：仅堡垒机（connector_local）主机显示。 */
 function ConnectorCard({
@@ -262,10 +287,22 @@ export function CollectorInstallWizard({
   const [step, setStep] = useState(0);
   const [profile, setProfile] = useState(COLLECTOR_PROFILES[0]!);
   const [route, setRoute] = useState("direct_argus");
+  const [transport, setTransport] = useState<
+    "direct" | "executor_tunnel" | "bastion_tunnel"
+  >("direct");
+  const [loopbackPort, setLoopbackPort] = useState("4317");
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
   const [settling, setSettling] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const collectorForm = useForm<CollectorInstallForm>({
+    resolver: zodResolver(
+      collectorInstallSchema(
+        t("hosts.components.installWizard.loopbackPortInvalid"),
+      ),
+    ),
+    values: { profile, route, transport, loopbackPort },
+  });
   const distributionsQuery = useQuery({
     queryKey: ["telemetry", "distributions"],
     queryFn: () => api.telemetry.listDistributions(),
@@ -278,12 +315,14 @@ export function CollectorInstallWizard({
     queryKey: ["telemetry", "collectors"],
     queryFn: () => api.telemetry.listCollectors(),
   });
-  // 分发物按目标架构选择:与服务端 hostCollectorPlatform 的解析规则一致
-  // (windows → windows_amd64;linux 按 host.architecture,未探测按 amd64)。
+  // 分发物按目标架构选择。Linux 架构缺失时保持不可提交，禁止默认
+  // amd64 后向错误目标发送产物。
   const platform =
     host.platform === "windows"
       ? "windows_amd64"
-      : `linux_${host.architecture ?? "amd64"}`;
+      : host.architecture === "amd64" || host.architecture === "arm64"
+        ? `linux_${host.architecture}`
+        : "";
   const distribution = distributionsQuery.data?.find(
     (item) =>
       item.support_status === "supported" &&
@@ -308,23 +347,27 @@ export function CollectorInstallWizard({
       setStep(0);
       setProfile(COLLECTOR_PROFILES[0]!);
       setRoute("direct_argus");
+      setTransport("direct");
+      setLoopbackPort("4317");
       setPendingAction(null);
       setSettling(false);
     }
     onOpenChange(next);
   };
 
-  const submit = async () => {
+  const submit = async (input: CollectorInstallForm) => {
     if (submitting || !distribution) return;
-    const profileIds = profile
+    const profileIds = input.profile
       .split(",")
       .map((key) => profilesQuery.data?.find((item) => item.key === key)?.id)
       .filter((id): id is string => Boolean(id));
     if (profileIds.length === 0) return;
     const gatewayCollector =
-      route === "direct_argus"
+      input.route === "direct_argus"
         ? undefined
-        : collectorsQuery.data?.find((item) => item.resource_id === route);
+        : collectorsQuery.data?.find(
+            (item) => item.resource_id === input.route,
+          );
     setSubmitting(true);
     try {
       setPendingAction(
@@ -332,8 +375,12 @@ export function CollectorInstallWizard({
           distribution_version_id: distribution.id,
           profile_ids: profileIds,
           route_kind:
-            route === "direct_argus" ? "direct_argus" : "bastion_gateway",
+            input.route === "direct_argus" ? "direct_argus" : "bastion_gateway",
+          transport: input.transport,
           gateway_collector_id: gatewayCollector?.id,
+          ...(input.transport !== "direct"
+            ? { loopback_port: Number(input.loopbackPort) }
+            : {}),
         }),
       );
     } finally {
@@ -351,6 +398,7 @@ export function CollectorInstallWizard({
     <FormDrawer
       footer={<></>}
       onOpenChange={close}
+      onSubmit={collectorForm.handleSubmit(submit)}
       open={open}
       title={t("hosts.components.installWizard.title", { name: host.name })}
       width={560}
@@ -379,11 +427,17 @@ export function CollectorInstallWizard({
         />
       ) : (
         <Wizard
-          canNext={step === 0 ? Boolean(profile && distribution) : true}
+          canNext={
+            step === 0
+              ? Boolean(profile && distribution)
+              : transport === "direct" ||
+                (Number.isInteger(Number(loopbackPort)) &&
+                  Number(loopbackPort) >= 1 &&
+                  Number(loopbackPort) <= 65_534)
+          }
           current={step}
           onBack={() => setStep(0)}
           onNext={() => setStep(1)}
-          onSubmit={() => void submit()}
           steps={[
             {
               id: "profile",
@@ -397,6 +451,7 @@ export function CollectorInstallWizard({
             },
           ]}
           submitLabel={t("hosts.components.installWizard.submit")}
+          submitType="submit"
           submitting={submitting}
         >
           {step === 0 ? (
@@ -453,6 +508,52 @@ export function CollectorInstallWizard({
                   </button>
                 );
               })}
+              <button
+                className={`argus-choice ${transport !== "direct" ? "is-selected" : ""}`}
+                onClick={() => {
+                  setTransport(
+                    host.connection_mode === "via_bastion"
+                      ? "bastion_tunnel"
+                      : "executor_tunnel",
+                  );
+                  if (
+                    route === "direct_argus" &&
+                    host.connection_mode === "via_bastion"
+                  ) {
+                    const first = gatewayScopes[0];
+                    if (first) setRoute(first.connector_host_id ?? first.id);
+                  }
+                }}
+                type="button"
+              >
+                <span className="argus-choice__text">
+                  <b>{t("hosts.components.installWizard.transportTunnel")}</b>
+                  <small>
+                    {t("hosts.components.installWizard.transportTunnelDesc")}
+                  </small>
+                </span>
+              </button>
+              {transport !== "direct" && (
+                <div className="argus-form-row">
+                  <Field
+                    error={collectorForm.formState.errors.loopbackPort?.message}
+                    label={t("hosts.components.installWizard.loopbackPort")}
+                    requirement="required"
+                  >
+                    <Input
+                      inputMode="numeric"
+                      onChange={(event) => setLoopbackPort(event.target.value)}
+                      value={loopbackPort}
+                    />
+                  </Field>
+                  <Button
+                    onClick={() => setTransport("direct")}
+                    variant="secondary"
+                  >
+                    {t("hosts.components.installWizard.transportDirectBack")}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </Wizard>
@@ -546,7 +647,10 @@ function CollectorCard({
     () => [
       ...new Set(
         (claimsQuery.data ?? [])
-          .filter((claim) => claim.collector_id === collector?.id && claim.status === "active")
+          .filter(
+            (claim) =>
+              claim.collector_id === collector?.id && claim.status === "active",
+          )
           .map((claim) => claim.profile_id)
           .filter((id): id is string => Boolean(id)),
       ),
@@ -554,13 +658,15 @@ function CollectorCard({
     [claimsQuery.data, collector?.id],
   );
   const activeProfileKeys = useMemo(
-    () => (profilesQuery.data ?? [])
-      .filter((profile) => activeProfileIds.includes(profile.id))
-      .map((profile) => profile.key),
+    () =>
+      (profilesQuery.data ?? [])
+        .filter((profile) => activeProfileIds.includes(profile.id))
+        .map((profile) => profile.key),
     [profilesQuery.data, activeProfileIds],
   );
   const current = useMemo(
-    () => (collector ? capabilitiesFromProfile(activeProfileKeys.join(",")) : null),
+    () =>
+      collector ? capabilitiesFromProfile(activeProfileKeys.join(",")) : null,
     [collector, activeProfileKeys],
   );
   const effective = draft ?? current;
@@ -580,7 +686,7 @@ function CollectorCard({
       : [];
 
   const previewConfig = async () => {
-    if (!effective || !collector || previewing) return;
+    if (!effective || !collector || !currentRoute || previewing) return;
     const keys = profileFromCapabilities(effective).split(",");
     const profileIds = (profilesQuery.data ?? [])
       .filter((profile) => keys.includes(profile.key))
@@ -592,8 +698,10 @@ function CollectorCard({
         await api.hosts.previewCollectorAction(host.id, "configure", {
           distribution_version_id: collector.distribution_version_id,
           profile_ids: profileIds,
-          route_kind: currentRoute?.kind ?? "direct_argus",
-          gateway_collector_id: currentRoute?.gateway_collector_id,
+          route_kind: currentRoute.kind,
+          transport: currentRoute.transport,
+          loopback_port: currentRoute.loopback_port,
+          gateway_collector_id: currentRoute.gateway_collector_id,
           expected_version: collector.version,
         }),
       );
@@ -603,8 +711,21 @@ function CollectorCard({
   };
 
   const previewRoute = async () => {
-    if (previewing || !collector || activeProfileIds.length === 0) return;
-    const gatewayCollectorId = routeChoice === "direct_argus" ? undefined : routeChoice;
+    if (
+      previewing ||
+      !collector ||
+      !currentRoute ||
+      activeProfileIds.length === 0
+    )
+      return;
+    const gatewayCollectorId =
+      routeChoice === "direct_argus" ? undefined : routeChoice;
+    const nextTransport =
+      gatewayCollectorId && currentRoute.transport === "bastion_tunnel"
+        ? "bastion_tunnel"
+        : !gatewayCollectorId && currentRoute.transport === "executor_tunnel"
+          ? "executor_tunnel"
+          : "direct";
     setPreviewing(true);
     try {
       setRouteAction(
@@ -612,6 +733,10 @@ function CollectorCard({
           distribution_version_id: collector.distribution_version_id,
           profile_ids: activeProfileIds,
           route_kind: gatewayCollectorId ? "bastion_gateway" : "direct_argus",
+          transport: nextTransport,
+          ...(nextTransport !== "direct"
+            ? { loopback_port: currentRoute.loopback_port ?? 4317 }
+            : {}),
           gateway_collector_id: gatewayCollectorId,
           expected_version: collector.version,
         }),
@@ -629,6 +754,7 @@ function CollectorCard({
       const result = await api.telemetry.testRoute({
         collector_id: collector.id,
         route_kind: currentRoute.kind,
+        transport: currentRoute.transport,
         gateway_collector_id: currentRoute.gateway_collector_id,
       });
       setRouteTested(result.status === "succeeded");
@@ -637,20 +763,40 @@ function CollectorCard({
     }
   };
 
-  const previewLifecycle = async (action: "upgrade" | "repair" | "uninstall") => {
-    if (!collector || activeProfileIds.length === 0 || previewing) return;
-    const distribution = action === "upgrade"
-      ? distributionsQuery.data?.find((item) => item.support_status === "supported" && item.artifacts.some((artifact) => artifact.platform === collector.platform))
-      : undefined;
+  const previewLifecycle = async (
+    action: "upgrade" | "repair" | "uninstall",
+  ) => {
+    if (
+      !collector ||
+      !currentRoute ||
+      activeProfileIds.length === 0 ||
+      previewing
+    )
+      return;
+    const distribution =
+      action === "upgrade"
+        ? distributionsQuery.data?.find(
+            (item) =>
+              item.support_status === "supported" &&
+              item.artifacts.some(
+                (artifact) => artifact.platform === collector.platform,
+              ),
+          )
+        : undefined;
     setPreviewing(true);
     try {
-      setLifecycleAction(await api.hosts.previewCollectorAction(host.id, action, {
-        distribution_version_id: distribution?.id ?? collector.distribution_version_id,
-        profile_ids: activeProfileIds,
-        route_kind: currentRoute?.kind ?? "direct_argus",
-        gateway_collector_id: currentRoute?.gateway_collector_id,
-        expected_version: collector.version,
-      }));
+      setLifecycleAction(
+        await api.hosts.previewCollectorAction(host.id, action, {
+          distribution_version_id:
+            distribution?.id ?? collector.distribution_version_id,
+          profile_ids: activeProfileIds,
+          route_kind: currentRoute.kind,
+          transport: currentRoute.transport,
+          loopback_port: currentRoute.loopback_port,
+          gateway_collector_id: currentRoute.gateway_collector_id,
+          expected_version: collector.version,
+        }),
+      );
     } finally {
       setPreviewing(false);
     }
@@ -803,7 +949,7 @@ function CollectorCard({
           <h3 className="argus-detail-section__title">
             {t("hosts.components.installed.route")}
           </h3>
-          <p>
+          <p className="argus-form-actions">
             {telemetryRouteOf(host) &&
             telemetryRouteOf(host) !== "direct_argus" ? (
               <Badge tone="accent">
@@ -816,6 +962,29 @@ function CollectorCard({
                 {t("hosts.components.installed.routeDirect")}
               </Badge>
             )}
+            {currentRoute?.transport && currentRoute.transport !== "direct" && (
+              <Badge tone="warning">
+                {t(
+                  `hosts.components.installed.transport.${currentRoute.transport}`,
+                )}
+              </Badge>
+            )}
+            {currentRoute?.tunnel_status && (
+              <StatusBadge
+                pulse={currentRoute.tunnel_status === "established"}
+                tone={
+                  currentRoute.tunnel_status === "established"
+                    ? "success"
+                    : currentRoute.tunnel_status === "down"
+                      ? "danger"
+                      : "warning"
+                }
+              >
+                {t(
+                  `hosts.components.installed.tunnelStatus.${currentRoute.tunnel_status}`,
+                )}
+              </StatusBadge>
+            )}
           </p>
           {!routeEditing && !routeAction && (
             <div className="argus-form-actions">
@@ -823,21 +992,34 @@ function CollectorCard({
                 onClick={() => {
                   setRouteEditing(true);
                   setRouteTested(false);
-                  setRouteChoice(currentRoute?.gateway_collector_id ?? "direct_argus");
+                  setRouteChoice(
+                    currentRoute?.gateway_collector_id ?? "direct_argus",
+                  );
                 }}
                 variant="secondary"
               >
                 {t("hosts.components.installed.changeRoute")}
               </Button>
-              <Button loading={routeTesting} onClick={() => void testCurrentRoute()} variant="secondary">
+              <Button
+                loading={routeTesting}
+                onClick={() => void testCurrentRoute()}
+                variant="secondary"
+              >
                 {t("hosts.components.installed.routeTest")}
               </Button>
-              {routeTested && <StatusBadge tone="success">{t("hosts.components.installed.routeOk")}</StatusBadge>}
+              {routeTested && (
+                <StatusBadge tone="success">
+                  {t("hosts.components.installed.routeOk")}
+                </StatusBadge>
+              )}
             </div>
           )}
           {routeEditing && !routeAction && (
             <>
-              <Field requirement="optional" label={t("hosts.components.installed.route")}>
+              <Field
+                requirement="optional"
+                label={t("hosts.components.installed.route")}
+              >
                 <Select
                   onValueChange={(value) => {
                     setRouteChoice(value);
@@ -849,8 +1031,23 @@ function CollectorCard({
                       label: t("hosts.components.installed.routeDirect"),
                     },
                     ...gatewayScopes.flatMap((gatewayScope) => {
-                      const gateway = collectorsQuery.data?.find((entry) => entry.resource_id === gatewayScope.connector_host_id && entry.role === "edge_gateway");
-                      return gateway ? [{ value: gateway.id, label: t("hosts.components.installed.routeViaGateway", { route: gatewayScope.name }) }] : [];
+                      const gateway = collectorsQuery.data?.find(
+                        (entry) =>
+                          entry.resource_id ===
+                            gatewayScope.connector_host_id &&
+                          entry.role === "edge_gateway",
+                      );
+                      return gateway
+                        ? [
+                            {
+                              value: gateway.id,
+                              label: t(
+                                "hosts.components.installed.routeViaGateway",
+                                { route: gatewayScope.name },
+                              ),
+                            },
+                          ]
+                        : [];
                     }),
                   ]}
                   value={routeChoice}
@@ -883,14 +1080,41 @@ function CollectorCard({
           )}
         </section>
         <section className="argus-detail-section">
-          <h3 className="argus-detail-section__title">{t("hosts.components.installed.lifecycle")}</h3>
+          <h3 className="argus-detail-section__title">
+            {t("hosts.components.installed.lifecycle")}
+          </h3>
           {lifecycleAction ? (
-            <PendingActionConfirm action={lifecycleAction} onCancel={() => setLifecycleAction(null)} onDone={() => { setLifecycleAction(null); onChanged(); }} />
+            <PendingActionConfirm
+              action={lifecycleAction}
+              onCancel={() => setLifecycleAction(null)}
+              onDone={() => {
+                setLifecycleAction(null);
+                onChanged();
+              }}
+            />
           ) : (
             <div className="argus-form-actions">
-              <Button loading={previewing} onClick={() => void previewLifecycle("upgrade")} variant="secondary">{t("hosts.components.installed.upgrade")}</Button>
-              <Button loading={previewing} onClick={() => void previewLifecycle("repair")} variant="secondary">{t("hosts.components.installed.repair")}</Button>
-              <Button loading={previewing} onClick={() => void previewLifecycle("uninstall")} variant="danger">{t("hosts.components.installed.uninstall")}</Button>
+              <Button
+                loading={previewing}
+                onClick={() => void previewLifecycle("upgrade")}
+                variant="secondary"
+              >
+                {t("hosts.components.installed.upgrade")}
+              </Button>
+              <Button
+                loading={previewing}
+                onClick={() => void previewLifecycle("repair")}
+                variant="secondary"
+              >
+                {t("hosts.components.installed.repair")}
+              </Button>
+              <Button
+                loading={previewing}
+                onClick={() => void previewLifecycle("uninstall")}
+                variant="danger"
+              >
+                {t("hosts.components.installed.uninstall")}
+              </Button>
             </div>
           )}
         </section>

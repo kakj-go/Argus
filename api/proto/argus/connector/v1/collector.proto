@@ -38,6 +38,19 @@ message CollectorManagementCommand {
   string ingest_grpc_endpoint = 21;
   string ingest_http_endpoint = 22;
   string kubernetes_image = 23;
+  // PlanV4: telemetry physical transport (direct|executor_tunnel|bastion_tunnel),
+  // orthogonal to route_kind. Tunnel transports export to a loopback endpoint.
+  string transport = 24;
+  uint32 loopback_port = 25;
+  // Versioned public trust material is attached when the operation is queued,
+  // rather than frozen into the reusable Collector configuration revision.
+  bytes trust_bundle_pem = 26;
+  uint64 trust_bundle_epoch = 27;
+  string trust_bundle_sha256 = 28;
+  repeated string trust_bundle_ca_fingerprints = 29;
+  // Names only. Registry credentials and registry CA configuration remain
+  // owned by the target cluster administrator.
+  repeated string image_pull_secrets = 30;
 }
 
 message CollectorManagementResult {
@@ -57,4 +70,40 @@ message KubernetesNodeEvidence {
   string machine_id = 4;
   string system_uuid = 5;
   repeated string internal_ips = 6;
+}
+
+// PlanV4 Task 06: 堡垒机平台代安装命令(模式B/C)。enroll 命令内含一次性令牌,
+// 仅经 SSH 交付到目标机,不得进入浏览器/模型上下文。
+message ConnectorInstallCommand {
+  string connector_id = 1;
+  string bastion_scope_id = 2;
+  string host_id = 3;
+  string operation = 4;
+  // direct_install(双向可达) | direct_install_tunnel(堡垒机无出站,经控制隧道)
+  string install_mode = 5;
+  // 注册端点是公开配置；一次性 enrollment token 只存在于独立加密的
+  // operation secret envelope，不得进入 protobuf plan、审计或日志。
+  string enrollment_endpoint = 6;
+  // 模式C:隧道拨号地址覆写(enroll 与长连接各一)。
+  string enroll_dial_address = 7;
+  string gateway_dial_address = 8;
+  // SSH 目标(与 CollectorManagementCommand 同源语义)。
+  string target_address = 10;
+  uint32 target_port = 11;
+  string target_username = 12;
+  string pinned_host_key = 13;
+  string credential_id = 14;
+  uint64 credential_version = 15;
+  string platform = 16;
+  CollectorArtifact artifact = 17;
+  string release_version_id = 18;
+  // 安装后持久化到 Connector 的本地只读信任文件，供后续 Collector
+  // 产物下载做 Ed25519 验签。该值属于冻结的 Connector release manifest。
+  string artifact_signing_public_key = 19;
+  // Public Argus Trust Bundle frozen with the install plan. Direct Executor
+  // writes it to the target before enrollment; it never mutates system trust.
+  bytes trust_bundle_pem = 20;
+  uint64 trust_bundle_epoch = 21;
+  string trust_bundle_sha256 = 22;
+  repeated string trust_bundle_ca_fingerprints = 23;
 }

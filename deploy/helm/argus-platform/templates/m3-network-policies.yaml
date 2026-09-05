@@ -19,19 +19,41 @@ spec:
               app.kubernetes.io/name: argus-connector-gateway
   egress:
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
       ports:
         - {protocol: UDP, port: 53}
         - {protocol: TCP, port: 53}
-    # External targets may use arbitrary TCP ports, including custom SSH ports.
-    # Application-level target validation protects internal addresses.
-    - {}
     - to:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: argus-postgresql
       ports:
         - {protocol: TCP, port: 5432}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespaces.observability }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-telemetry-ingest
+      ports:
+        - {protocol: TCP, port: 4317}
+        - {protocol: TCP, port: 4318}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argus-connector-gateway
+      ports:
+        - {protocol: TCP, port: 9443}
+    # SSH, WinRM, artifact HTTPS and Kubernetes API targets are selected only
+    # after DirectTargetValidator resolves, pins and revalidates the address.
+    # NetworkPolicy supplies a TCP-only transport gate; the application is the
+    # authoritative destination policy because managed hosts may use any CIDR
+    # and custom port.
+    - ports:
+        - {protocol: TCP}
 {{- if eq .Values.profile "evaluation" }}
 ---
 apiVersion: networking.k8s.io/v1

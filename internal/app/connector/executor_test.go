@@ -29,7 +29,7 @@ func TestExecuteHostProbeSSH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executeHostProbe() error = %v", err)
 	}
-	if result.HostKeyFingerprint != fingerprint || result.RemoteVersion == "" {
+	if result.HostKeyFingerprint != fingerprint || result.RemoteVersion == "" || result.Architecture != "arm64" {
 		t.Fatalf("unexpected probe result: %+v", result)
 	}
 
@@ -89,7 +89,28 @@ func serveSSHTestConnection(connection net.Conn, configuration *ssh.ServerConfig
 	}
 	defer server.Close()
 	go ssh.DiscardRequests(requests)
-	for channel := range channels {
-		_ = channel.Reject(ssh.UnknownChannelType, "test server does not provide sessions")
+	for incoming := range channels {
+		if incoming.ChannelType() != "session" {
+			_ = incoming.Reject(ssh.UnknownChannelType, "only session channels are supported")
+			continue
+		}
+		channel, channelRequests, acceptErr := incoming.Accept()
+		if acceptErr != nil {
+			continue
+		}
+		go func() {
+			defer channel.Close()
+			for request := range channelRequests {
+				var payload struct{ Command string }
+				if request.Type != "exec" || ssh.Unmarshal(request.Payload, &payload) != nil || payload.Command != "uname -m" {
+					_ = request.Reply(false, nil)
+					continue
+				}
+				_ = request.Reply(true, nil)
+				_, _ = channel.Write([]byte("aarch64\n"))
+				_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{Status: 0}))
+				return
+			}
+		}()
 	}
 }

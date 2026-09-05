@@ -66,7 +66,7 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 - RoleBinding 只在企业范围内向 User、Department 或 ServiceAccount 授予稳定的功能能力。
 - DataAuthorizationGrant 向主体授予明确资源 ID；用户有效范围为直接、部门和角色授权并集，RoleBinding 不携带显式资源授权。
 - RemoteAccessGrant 独立限定明确 Host、ManagedAccount、协议、动作和有效期，不能使用标签过滤条件或企业全量隐式默认。
-- PostgreSQL 保存所有唯一业务状态，包括 User、Department、RoleBinding、explicit resource authorization、RemoteAccessGrant、ManagedAccount、AuthorizationVersion、Run、Step、Task、ToolCall、PendingAction、Approval、ActionBinding、Execution、ConnectorCommand、BastionScope、RemoteAccessSession 和审计索引。
+- PostgreSQL 保存所有唯一业务状态，包括 User、Department、RoleBinding、explicit resource authorization、RemoteAccessGrant、ManagedAccount、AuthorizationVersion、Run、Step、Task、ToolCall、PendingAction、Approval、ActionBinding、Execution、ExecutionOneTimeResult、ConnectorCommand、BastionScope、HostEnrollmentToken、TelemetryTunnel、ConnectorInstallOperation、RemoteAccessSession 和审计索引。
 - Redis 用于短期锁、租约加速、幂等窗口、限流、Session Registry 缓存、状态变更通知和短期一次性数据，但不能成为任何不可恢复状态的唯一存储。
 - PostgreSQL 与 Redis 之间不使用跨存储分布式事务。业务状态先通过 PostgreSQL 事务和条件更新提交，再通过 Transactional Outbox 发布 Redis Stream/PubSub 通知。
 - Redis 丢失或被清空后，系统必须能够从 PostgreSQL 重建可恢复状态并继续运行。
@@ -79,6 +79,8 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 - `.commit` 只接受 `argus__token` 和由服务端生成的幂等上下文，不接受可由用户、浏览器或模型修改的业务参数。
 - 用户点击确认后，由 `argus-server` 内的 Action Executor 使用服务端私有 Token 直接调用 `.commit`，不再启动模型推理。
 - Commit 必须重新检查当前身份、企业状态、功能权限、explicit resource authorization、远程/操作授权、授权版本、审批、资源归属、资源标签/版本和执行前置条件。审批只能满足 Rule 的附加条件，不能补齐缺失的基础权限。
+- 产生安装命令等敏感结果的 Execution 公开对象只返回 `one_time_result_available`。结果使用 `execution_one_time_results` AES-GCM 加密、短时保存并由原发起人通过独立幂等接口原子领取；同一 Idempotency-Key 可以重放同一响应，新 Key 二次领取稳定失败。明文不得进入 PendingAction、Execution、普通资源 DTO、浏览器持久化、日志、审计或 Redis。
+- 领取已有一次性结果不是令牌轮换。待注册主机/堡垒机的 `host.enrollment.rotate`/`bastion.enrollment.rotate`、`host.uninstall.command` 和 `bastion.connector.replace` 是不同的写动作，必须分别定义前件、风险、审计和 Preview/Commit；服务端不能依赖前端入口区分它们。
 
 ## 5. AI、Card 和 Sandbox 不变量
 
@@ -101,6 +103,15 @@ Bastion Scope、Telemetry Group 或标签关系都不能跨企业传播权限。
 
 ## 6. Connector、远程访问和遥测不变量
 
+### 6.0 PlanV4 网络接入与遥测传输不变量
+
+- 遥测路由的 `transport`（`direct`/`executor_tunnel`/`bastion_tunnel`）与 `kind` 正交：transport 只改变字节物理路径，不参与任何身份、凭证签发与授权判定；隧道路径上的 OTLP 仍是端到端 Collector TLS，不得进入 Connector 控制通道或远程会话流。隧道断开不等于 Collector 故障，两者必须以独立状态呈现。
+- `self_enrolled`（只出不进）主机不进入任何执行器命令派发路径；其配置在安装时冻结，变更必须生成新的一次性自助命令在目标侧收敛；远程会话对该类主机 fail closed；在线事实以 `last_seen`（证书签发/轮换刷新）为准。
+- 普通主机的产品模式固定为双向可达、只进不出、只出不进/自助安装、标准堡垒机成员和受限端口堡垒机成员；前两者可映射到相同 `connection_mode`、通过 transport 区分物理路径，后两者同理。界面模式不能反向改变服务端身份与路由不变量。
+- 堡垒机安装固定为 A 手动命令、B 平台 SSH 代安装和 C 平台代安装加控制隧道。C 的 SSH remote forward 只承载 enrollment Web/API 与 Connector 9443 控制长连接，不自动成为 Telemetry Route；堡垒机及成员的遥测仍按 route kind × transport 独立选择和验证。
+- 自助安装命令与令牌遵守单次原子消费、同设备幂等、他设备 409 和轮换先撤销旧未消费令牌。初次创建或轮换产生的命令走 Execution 一次性结果领取；待注册资源不得调用会 fencing 已有身份的 Connector replacement。
+- 主机与堡垒机新增流程使用真实状态机：第一步只选择模式，第二步才填写该模式信息，第三步执行 ConnectionTest/Preview 或确认命令计划，提交后进入安装进度、一次性命令或完成结果。步骤条、可见 DOM、焦点和提交行为必须由同一状态驱动。
+
 ### 6.1 PlanV3 远程访问治理边界
 
 远程访问配置拆分为 `RemoteAccessGrant`、`RemoteAccessRule`、`ApprovalWorkflow` 和 `SessionProfile` 四个对象。Grant 是正向基础访问资格；Rule 是可选的条件与义务叠加层，只能增加 `deny`、MFA、审批、通知或 SessionProfile 限制，不能扩大 Grant。Workflow 只表达审批主体、人数、职责分离和超时；SessionProfile 只表达会话时长、交互能力、录像、命令审计和留存。Rule 不再提供冗余的 `allow` effect；`deny` 不能与其它 effect 或 Workflow/Profile 引用共存。
@@ -118,7 +129,7 @@ Grant、Rule、Workflow、SessionProfile、explicit resource authorization/RBAC�
 - Connector 只建立出站 mTLS 长连接，处理控制命令、批准 Artifact、端口/协议隧道和经授权的人工远程会话；Collector 不复用 Connector 通道发送遥测。
 - Connector 命令必须具有持久化状态、幂等键、连接代次 `connection_epoch`、过期时间和结果未知状态，不能把断连直接视为执行失败。
 - 安装 Connector 并注册为堡垒机时必须创建稳定的 Bastion Scope 和对应 Host；经堡垒机接入的内网主机只能归属一个 Bastion Scope。Bastion Scope 不能与可轮换、可重装的 Connector 实例共用同一主键和生命周期。
-- 主机连接模式第一版固定为 `connector_local`、`via_bastion`、`direct_ssh` 和 `direct_winrm`。Direct 模式由受控 Direct Executor 访问其部署网络可达且经过校验的目标，不以公网/私网划分；必须执行 Host Key/目标身份校验、DNS Rebinding 防护，并拦截环回、链路本地、云元数据、Argus/集群保护地址及配置的禁用网段。用户私网和自定义端口默认允许；固定出口由用户管理的 Egress Gateway 提供。
+- 主机连接模式第一版固定为 `connector_local`、`via_bastion`、`direct_ssh`、`direct_winrm` 和 `self_enrolled`。Direct 模式由受控 Direct Executor 访问其部署网络可达且经过校验的目标，不以公网/私网划分；必须执行 Host Key/目标身份校验、DNS Rebinding 防护，并拦截环回、链路本地、云元数据、Argus/集群保护地址及配置的禁用网段。用户私网和自定义端口默认允许；固定出口由用户管理的 Egress Gateway 提供。
 - Remote Access Session 是人工操作边界，不等同于 MCP Tool Commit。它必须使用短期一次性会话票据，并校验 Enterprise、Host、ManagedAccount、协议、动作、Grant、explicit resource authorization、授权版本、MFA/审批、最长时长、录像与审计；AI、Card 和 OpenSandbox 不得获得交互式会话票据。当前版本不提供定时无人值守任务。
 - 所有已建立管理连接的 Host 都提供统一的“命令行”入口；人工命令行与后台任务可以复用底层连接适配器，但必须使用不同的票据、API、队列、状态机和审计类型。
 - Bastion Scope 成员的 Telemetry Route 只能是直接推送 Argus 或推送到所属堡垒机上已启用 Gateway 模式的 Collector；独立主机不得选择任何 Bastion Scope 内成员作为上游。
@@ -146,7 +157,7 @@ Direct Executor 默认允许用户私网和自定义端口，只拒绝 Argus/集
 
 ## 7.5 对外暴露不变量（2026-08 确立）
 
-对外访问只有域名 + Ingress + 强制 TLS 一种形态：安装配置必须显式提供 `enterpriseHost`/`platformHost`/`connectorHost` 并开启 `tls.enabled`（cert-manager-selfsigned / cert-manager-issuer / user-provided），HTTP 暴露与 port-forward/tunnel 模式一律不支持。浏览器 Origin 允许列表只包含三个 HTTPS 门户域名。Connector mTLS `9443` 由专用 LoadBalancer Service 在所有 Profile 统一暴露（TCP 直通）；Remote WSS 与企业门户同源，统一由 `argus.<domain>` 的 `/v1/sessions` 路径承载（无独立终端域名）。Web 镜像不烧录域名，卡片 Origin 与 Platform 跳转地址由部署时运行时配置（`/argus-runtime.json`）注入。E2E 与产品形态一致，通过域名直连访问，不使用宿主机 port-forward。
+对外访问只有域名 + Ingress + 强制 TLS 一种形态：安装配置必须显式提供 `enterpriseHost`/`platformHost`/`connectorHost`；PKI 只支持 `managed` 或 `existing-cluster-issuer`，稳态全局只有一个 `ClusterIssuer`，不接收用户提供的叶证书。HTTP 暴露与产品 port-forward 模式不支持。浏览器 Origin 允许列表只包含三个 HTTPS 门户域名。Connector mTLS `9443` 由专用 LoadBalancer Service 在所有 Profile 统一暴露（TCP 直通）；Remote WSS 与企业门户同源，统一由 `argus.<domain>` 的 `/v1/sessions` 路径承载（无独立终端域名）。Web 镜像不烧录域名，卡片 Origin 与 Platform 跳转地址由部署时运行时配置（`/argus-runtime.json`）注入。私有 CA 通过版本化 Trust Bundle 提供给 Argus 客户端，不修改其系统信任库；浏览器仍需客户信任该 CA。完整约束见 [全链路 PKI、TLS 与 Trust Bundle](./18-pki-and-tls.md)。
 
 ## 8. 第一版开放问题
 

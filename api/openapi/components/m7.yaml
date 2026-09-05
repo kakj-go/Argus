@@ -7,6 +7,51 @@ components:
     CollectorStatus: {type: string, enum: [pending_install, installing, converged, degraded, backlog, result_unknown, uninstalling, uninstalled]}
     ConfigRevisionStatus: {type: string, enum: [prepared, applying, effective, failed, rolled_back, superseded]}
     TelemetryRouteKind: {type: string, enum: [direct_argus, bastion_gateway]}
+    HostInstallBootstrap:
+      type: object
+      additionalProperties: false
+      required: [collector_id, host_id, desired_revision, mode, expires_at]
+      description: '一次性自助安装令牌交换的冻结计划;install 模式额外返回配置包、产物与 enrollment 物料,uninstall 模式仅返回删除指令'
+      properties:
+        collector_id: {type: string, format: uuid}
+        host_id: {type: string, format: uuid}
+        desired_revision: {type: integer, format: int64, minimum: 1}
+        config_bundle: {type: string, minLength: 1, maxLength: 1398104, description: '运行时 Collector 配置(JSON)的 base64;install 模式必返'}
+        trust_bundle: {type: string, minLength: 1, maxLength: 174764, description: '版本化 Argus Trust Bundle(PEM)的 base64;install 模式必返'}
+        trust_bundle_epoch: {type: integer, format: int64, minimum: 1}
+        trust_bundle_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        trust_bundle_ca_fingerprints: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[a-f0-9]{64}$'}}
+        mode: {type: string, enum: [install, uninstall]}
+        artifact:
+          type: object
+          additionalProperties: false
+          required: [distribution_version_id, platform, uri, sha256, signature, signing_key_id, byte_size]
+          properties:
+            distribution_version_id: {type: string, format: uuid}
+            platform: {type: string}
+            uri: {type: string, format: uri}
+            sha256: {type: string, minLength: 64, maxLength: 64}
+            signature: {type: string}
+            signing_key_id: {type: string}
+            byte_size: {type: integer, format: int64, minimum: 1}
+        signing_public_key: {type: string, minLength: 43, maxLength: 64, writeOnly: true, description: 'RawStd base64 Ed25519 public key; install fails closed when absent'}
+        signing_key_id: {type: string, minLength: 1, maxLength: 128}
+        enrollment_token: {type: string, minLength: 16, maxLength: 256, description: '短期 Collector enrollment 令牌,仅本次安装有效'}
+        enrollment_endpoint: {type: string, format: uri}
+        ingest_grpc_endpoint: {type: string}
+        ingest_http_endpoint: {type: string}
+        expires_at: {type: string, format: date-time}
+    HostUninstallBootstrap:
+      type: object
+      additionalProperties: false
+      required: [host_id, collector_id, completion_url, completion_token, expires_at]
+      properties:
+        host_id: {type: string, format: uuid}
+        collector_id: {type: string, format: uuid}
+        completion_url: {type: string, format: uri}
+        completion_token: {type: string, minLength: 32, maxLength: 256, writeOnly: true}
+        expires_at: {type: string, format: date-time}
+    TelemetryRouteTransport: {type: string, enum: [direct, executor_tunnel, bastion_tunnel], description: '遥测字节的物理路径,与路由 kind 正交;隧道形态见 PlanV4'}
     CollectorArtifact:
       type: object
       additionalProperties: false
@@ -66,12 +111,17 @@ components:
     TelemetryRoute:
       type: object
       additionalProperties: false
-      required: [id, enterprise_id, collector_id, kind, status, version, created_at, updated_at]
+      required: [id, enterprise_id, collector_id, kind, transport, status, version, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         enterprise_id: {type: string, format: uuid, readOnly: true}
         collector_id: {type: string, format: uuid}
         kind: {$ref: '#/components/schemas/TelemetryRouteKind'}
+        transport: {$ref: '#/components/schemas/TelemetryRouteTransport'}
+        loopback_port: {type: integer, minimum: 1, maximum: 65534, description: '隧道形态下 Collector OTLP 出口的本机回环端口;相邻端口保留给身份注册与轮换;direct 形态为空'}
+        tunnel_status: {type: string, enum: [desired, establishing, established, degraded, down, removed], readOnly: true, description: '隧道运行状态;direct 形态为空。隧道断开不等于 Collector 故障'}
+        tunnel_last_established_at: {type: string, format: date-time, readOnly: true}
+        tunnel_last_drop_reason: {type: string, readOnly: true, maxLength: 256}
         gateway_collector_id: {type: string, format: uuid}
         status: {type: string, enum: [pending, testing, active, degraded, invalidated]}
         last_tested_at: {type: string, format: date-time}
@@ -102,18 +152,20 @@ components:
     CollectorEnrollmentRequest:
       type: object
       additionalProperties: false
-      required: [collector_id, csr_pem]
+      required: [collector_id, client_csr_pem, server_csr_pem]
       properties:
         collector_id: {type: string, format: uuid}
-        csr_pem: {type: string, minLength: 128, maxLength: 16384, writeOnly: true}
+        client_csr_pem: {type: string, minLength: 128, maxLength: 16384, writeOnly: true}
+        server_csr_pem: {type: string, minLength: 128, maxLength: 16384, writeOnly: true}
     CollectorCertificateResult:
       type: object
       additionalProperties: false
-      required: [collector_id, certificate_pem, ca_bundle_pem, ingest_grpc_endpoint, ingest_http_endpoint, certificate_expires_at]
+      required: [collector_id, client_certificate_pem, server_certificate_pem, trust_bundle, ingest_grpc_endpoint, ingest_http_endpoint, certificate_expires_at]
       properties:
         collector_id: {type: string, format: uuid}
-        certificate_pem: {type: string, minLength: 128, maxLength: 32768, writeOnly: true}
-        ca_bundle_pem: {type: string, minLength: 128, maxLength: 32768}
+        client_certificate_pem: {type: string, minLength: 128, maxLength: 32768, writeOnly: true}
+        server_certificate_pem: {type: string, minLength: 128, maxLength: 32768, writeOnly: true}
+        trust_bundle: {$ref: ./common.yaml#/components/schemas/TrustBundleSnapshot}
         ingest_grpc_endpoint: {type: string, format: uri, readOnly: true}
         ingest_http_endpoint: {type: string, format: uri, readOnly: true}
         certificate_expires_at: {type: string, format: date-time}
@@ -162,14 +214,17 @@ components:
     CollectorPreview:
       type: object
       additionalProperties: false
-      required: [distribution_version_id, profile_ids, route_kind]
+      required: [distribution_version_id, profile_ids, route_kind, transport]
       properties:
         distribution_version_id: {type: string, format: uuid}
         profile_ids: {type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: {type: string, format: uuid}}
         route_kind: {$ref: '#/components/schemas/TelemetryRouteKind'}
+        transport: {$ref: '#/components/schemas/TelemetryRouteTransport'}
+        loopback_port: {type: integer, minimum: 1, maximum: 65534, description: '隧道形态的 OTLP 回环端口;缺省 4317,相邻端口保留给身份注册与轮换'}
         gateway_collector_id: {type: string, format: uuid}
         expected_version: {type: integer, format: int64, minimum: 0}
         kubernetes_image: {type: string, maxLength: 512, pattern: '^\S+:\S+$', description: '集群内网镜像全量地址(含 tag/digest);仅 kubernetes_cluster 资源可填,留空使用服务端默认镜像'}
+        image_pull_secrets: {type: array, maxItems: 16, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 253, pattern: '^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$'}, description: '目标集群中已存在的 imagePullSecret 名称;Argus 不创建或读取仓库凭据'}
     TelemetryRetentionPolicy:
       type: object
       additionalProperties: false
@@ -338,10 +393,11 @@ components:
     RouteTestCreate:
       type: object
       additionalProperties: false
-      required: [collector_id, route_kind]
+      required: [collector_id, route_kind, transport]
       properties:
         collector_id: {type: string, format: uuid}
         route_kind: {$ref: '#/components/schemas/TelemetryRouteKind'}
+        transport: {$ref: '#/components/schemas/TelemetryRouteTransport'}
         gateway_collector_id: {type: string, format: uuid}
     RouteTestResult:
       type: object

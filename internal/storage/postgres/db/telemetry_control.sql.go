@@ -57,7 +57,7 @@ const claimTelemetryCollectorOperation = `-- name: ClaimTelemetryCollectorOperat
 UPDATE telemetry_collector_operations SET
   status = 'running', lease_owner = $2, fence = fence + 1,
   lease_expires_at = now() + interval '2 minutes', attempts = attempts + 1, updated_at = now()
-WHERE id = $1 AND status = 'queued' AND expires_at > now()
+WHERE id = $1 AND status = 'queued' AND executor_kind = 'direct' AND expires_at > now()
 RETURNING id, enterprise_id, collector_id, pending_action_id, operation, executor_kind, status, plan, plan_hash, lease_owner, fence, lease_expires_at, result_hash, error_code, attempts, expires_at, created_at, updated_at, completed_at
 `
 
@@ -96,7 +96,7 @@ func (q *Queries) ClaimTelemetryCollectorOperation(ctx context.Context, arg Clai
 const claimTelemetryCollectorOperations = `-- name: ClaimTelemetryCollectorOperations :many
 WITH claimed AS (
   SELECT id FROM telemetry_collector_operations
-  WHERE status = 'queued' AND expires_at > now()
+  WHERE status = 'queued' AND executor_kind = 'direct' AND expires_at > now()
   ORDER BY created_at, id
   LIMIT $1
   FOR UPDATE SKIP LOCKED
@@ -268,7 +268,7 @@ func (q *Queries) ConfirmKubernetesNodeHostBinding(ctx context.Context, arg Conf
 const consumeTelemetryEnrollmentToken = `-- name: ConsumeTelemetryEnrollmentToken :one
 UPDATE telemetry_enrollment_tokens SET consumed_at = now()
 WHERE id = $1 AND consumed_at IS NULL AND expires_at > now()
-RETURNING id, collector_id, token_hash, expires_at, consumed_at, created_at
+RETURNING id, collector_id, token_hash, expires_at, consumed_at, created_at, host_enrollment_token_id
 `
 
 func (q *Queries) ConsumeTelemetryEnrollmentToken(ctx context.Context, id uuid.UUID) (TelemetryEnrollmentToken, error) {
@@ -281,6 +281,7 @@ func (q *Queries) ConsumeTelemetryEnrollmentToken(ctx context.Context, id uuid.U
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.CreatedAt,
+		&i.HostEnrollmentTokenID,
 	)
 	return i, err
 }
@@ -440,8 +441,8 @@ func (q *Queries) CreateMigrationCollectionClaim(ctx context.Context, arg Create
 const createTelemetryCertificate = `-- name: CreateTelemetryCertificate :one
 INSERT INTO telemetry_certificates (
   id, collector_id, serial_number, uri_san, csr_hash, certificate_hash,
-  certificate_request_name, issuer_generation, not_before, not_after
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, collector_id, serial_number, uri_san, csr_hash, certificate_hash, certificate_request_name, issuer_generation, not_before, not_after, revoked_at, revoke_reason, created_at
+  certificate_request_name, issuer_generation, not_before, not_after, certificate_usage
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, collector_id, serial_number, uri_san, csr_hash, certificate_hash, certificate_request_name, issuer_generation, not_before, not_after, revoked_at, revoke_reason, created_at, certificate_usage
 `
 
 type CreateTelemetryCertificateParams struct {
@@ -455,6 +456,7 @@ type CreateTelemetryCertificateParams struct {
 	IssuerGeneration       int32              `json:"issuer_generation"`
 	NotBefore              pgtype.Timestamptz `json:"not_before"`
 	NotAfter               pgtype.Timestamptz `json:"not_after"`
+	CertificateUsage       string             `json:"certificate_usage"`
 }
 
 func (q *Queries) CreateTelemetryCertificate(ctx context.Context, arg CreateTelemetryCertificateParams) (TelemetryCertificate, error) {
@@ -469,6 +471,7 @@ func (q *Queries) CreateTelemetryCertificate(ctx context.Context, arg CreateTele
 		arg.IssuerGeneration,
 		arg.NotBefore,
 		arg.NotAfter,
+		arg.CertificateUsage,
 	)
 	var i TelemetryCertificate
 	err := row.Scan(
@@ -485,6 +488,7 @@ func (q *Queries) CreateTelemetryCertificate(ctx context.Context, arg CreateTele
 		&i.RevokedAt,
 		&i.RevokeReason,
 		&i.CreatedAt,
+		&i.CertificateUsage,
 	)
 	return i, err
 }
@@ -493,7 +497,7 @@ const createTelemetryCollectorOperation = `-- name: CreateTelemetryCollectorOper
 INSERT INTO telemetry_collector_operations (
   id, enterprise_id, collector_id, pending_action_id, operation, executor_kind,
   plan, plan_hash, expires_at
-) VALUES ($1,$2,$3,$4,$5,'direct',$6,$7,$8)
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 RETURNING id, enterprise_id, collector_id, pending_action_id, operation, executor_kind, status, plan, plan_hash, lease_owner, fence, lease_expires_at, result_hash, error_code, attempts, expires_at, created_at, updated_at, completed_at
 `
 
@@ -503,6 +507,7 @@ type CreateTelemetryCollectorOperationParams struct {
 	CollectorID     uuid.UUID          `json:"collector_id"`
 	PendingActionID uuid.UUID          `json:"pending_action_id"`
 	Operation       string             `json:"operation"`
+	ExecutorKind    string             `json:"executor_kind"`
 	Plan            []byte             `json:"plan"`
 	PlanHash        []byte             `json:"plan_hash"`
 	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
@@ -515,6 +520,7 @@ func (q *Queries) CreateTelemetryCollectorOperation(ctx context.Context, arg Cre
 		arg.CollectorID,
 		arg.PendingActionID,
 		arg.Operation,
+		arg.ExecutorKind,
 		arg.Plan,
 		arg.PlanHash,
 		arg.ExpiresAt,
@@ -545,15 +551,16 @@ func (q *Queries) CreateTelemetryCollectorOperation(ctx context.Context, arg Cre
 }
 
 const createTelemetryEnrollmentToken = `-- name: CreateTelemetryEnrollmentToken :one
-INSERT INTO telemetry_enrollment_tokens (id, collector_id, token_hash, expires_at)
-VALUES ($1,$2,$3,$4) RETURNING id, collector_id, token_hash, expires_at, consumed_at, created_at
+INSERT INTO telemetry_enrollment_tokens (id, collector_id, token_hash, expires_at, host_enrollment_token_id)
+VALUES ($1,$2,$3,$4,$5) RETURNING id, collector_id, token_hash, expires_at, consumed_at, created_at, host_enrollment_token_id
 `
 
 type CreateTelemetryEnrollmentTokenParams struct {
-	ID          uuid.UUID          `json:"id"`
-	CollectorID uuid.UUID          `json:"collector_id"`
-	TokenHash   []byte             `json:"token_hash"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	ID                    uuid.UUID          `json:"id"`
+	CollectorID           uuid.UUID          `json:"collector_id"`
+	TokenHash             []byte             `json:"token_hash"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	HostEnrollmentTokenID uuid.NullUUID      `json:"host_enrollment_token_id"`
 }
 
 func (q *Queries) CreateTelemetryEnrollmentToken(ctx context.Context, arg CreateTelemetryEnrollmentTokenParams) (TelemetryEnrollmentToken, error) {
@@ -562,6 +569,7 @@ func (q *Queries) CreateTelemetryEnrollmentToken(ctx context.Context, arg Create
 		arg.CollectorID,
 		arg.TokenHash,
 		arg.ExpiresAt,
+		arg.HostEnrollmentTokenID,
 	)
 	var i TelemetryEnrollmentToken
 	err := row.Scan(
@@ -571,6 +579,7 @@ func (q *Queries) CreateTelemetryEnrollmentToken(ctx context.Context, arg Create
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.CreatedAt,
+		&i.HostEnrollmentTokenID,
 	)
 	return i, err
 }
@@ -686,7 +695,10 @@ func (q *Queries) FinalizeCollectorClaimMigrations(ctx context.Context, arg Fina
 const finishTelemetryCollectorOperation = `-- name: FinishTelemetryCollectorOperation :one
 UPDATE telemetry_collector_operations SET status = $4, result_hash = $5, error_code = $6,
   lease_owner = NULL, lease_expires_at = NULL, completed_at = now(), updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND fence = $3 AND status IN ('running','result_unknown')
+WHERE id = $1 AND enterprise_id = $2 AND fence = $3 AND (
+  status IN ('running','result_unknown') OR
+  (executor_kind = 'bootstrap' AND status = 'queued' AND fence = 0)
+)
 RETURNING id, enterprise_id, collector_id, pending_action_id, operation, executor_kind, status, plan, plan_hash, lease_owner, fence, lease_expires_at, result_hash, error_code, attempts, expires_at, created_at, updated_at, completed_at
 `
 
@@ -771,6 +783,34 @@ func (q *Queries) GetActivePrimaryCollectionClaim(ctx context.Context, arg GetAc
 		&i.RollbackPlan,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCollectorConfigRevision = `-- name: GetCollectorConfigRevision :one
+SELECT id, collector_id, revision, profile_ids, rendered_config, config_hash, status, failure_code, rollback_revision, created_at, applied_at FROM collector_config_revisions WHERE collector_id = $1 AND revision = $2
+`
+
+type GetCollectorConfigRevisionParams struct {
+	CollectorID uuid.UUID `json:"collector_id"`
+	Revision    int64     `json:"revision"`
+}
+
+func (q *Queries) GetCollectorConfigRevision(ctx context.Context, arg GetCollectorConfigRevisionParams) (CollectorConfigRevision, error) {
+	row := q.db.QueryRow(ctx, getCollectorConfigRevision, arg.CollectorID, arg.Revision)
+	var i CollectorConfigRevision
+	err := row.Scan(
+		&i.ID,
+		&i.CollectorID,
+		&i.Revision,
+		&i.ProfileIds,
+		&i.RenderedConfig,
+		&i.ConfigHash,
+		&i.Status,
+		&i.FailureCode,
+		&i.RollbackRevision,
+		&i.CreatedAt,
+		&i.AppliedAt,
 	)
 	return i, err
 }
@@ -968,7 +1008,7 @@ const getTelemetryCollectorIdentityBySerial = `-- name: GetTelemetryCollectorIde
 SELECT ci.id, ci.enterprise_id, ci.resource_type, ci.resource_id, ci.distribution_version_id, ci.platform, ci.role, ci.status, ci.desired_revision, ci.effective_revision, ci.authorization_version, ci.last_seen_at, ci.version, ci.created_at, ci.updated_at, tc.serial_number, tc.uri_san, tc.not_after
 FROM telemetry_certificates tc
 JOIN collector_instances ci ON ci.id = tc.collector_id
-WHERE tc.serial_number = $1 AND tc.revoked_at IS NULL AND tc.not_before <= now() AND tc.not_after > now()
+WHERE tc.serial_number = $1 AND tc.certificate_usage = 'clientAuth' AND tc.revoked_at IS NULL AND tc.not_before <= now() AND tc.not_after > now()
   AND ci.status NOT IN ('uninstalled','uninstalling')
 `
 
@@ -1056,7 +1096,7 @@ func (q *Queries) GetTelemetryCollectorOperation(ctx context.Context, arg GetTel
 }
 
 const getTelemetryEnrollmentTokenForUpdate = `-- name: GetTelemetryEnrollmentTokenForUpdate :one
-SELECT id, collector_id, token_hash, expires_at, consumed_at, created_at FROM telemetry_enrollment_tokens WHERE token_hash = $1 FOR UPDATE
+SELECT id, collector_id, token_hash, expires_at, consumed_at, created_at, host_enrollment_token_id FROM telemetry_enrollment_tokens WHERE token_hash = $1 FOR UPDATE
 `
 
 func (q *Queries) GetTelemetryEnrollmentTokenForUpdate(ctx context.Context, tokenHash []byte) (TelemetryEnrollmentToken, error) {
@@ -1069,6 +1109,7 @@ func (q *Queries) GetTelemetryEnrollmentTokenForUpdate(ctx context.Context, toke
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.CreatedAt,
+		&i.HostEnrollmentTokenID,
 	)
 	return i, err
 }
@@ -1095,7 +1136,7 @@ func (q *Queries) GetTelemetryRetentionPolicy(ctx context.Context, enterpriseID 
 }
 
 const getTelemetryRoute = `-- name: GetTelemetryRoute :one
-SELECT id, enterprise_id, collector_id, kind, gateway_collector_id, status, version, last_tested_at, created_at, updated_at FROM telemetry_routes WHERE id = $1 AND enterprise_id = $2
+SELECT id, enterprise_id, collector_id, kind, gateway_collector_id, status, version, last_tested_at, created_at, updated_at, transport, loopback_port FROM telemetry_routes WHERE id = $1 AND enterprise_id = $2
 `
 
 type GetTelemetryRouteParams struct {
@@ -1117,12 +1158,14 @@ func (q *Queries) GetTelemetryRoute(ctx context.Context, arg GetTelemetryRoutePa
 		&i.LastTestedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Transport,
+		&i.LoopbackPort,
 	)
 	return i, err
 }
 
 const getTelemetryRouteByCollector = `-- name: GetTelemetryRouteByCollector :one
-SELECT id, enterprise_id, collector_id, kind, gateway_collector_id, status, version, last_tested_at, created_at, updated_at FROM telemetry_routes WHERE collector_id = $1 AND enterprise_id = $2
+SELECT id, enterprise_id, collector_id, kind, gateway_collector_id, status, version, last_tested_at, created_at, updated_at, transport, loopback_port FROM telemetry_routes WHERE collector_id = $1 AND enterprise_id = $2
 `
 
 type GetTelemetryRouteByCollectorParams struct {
@@ -1144,6 +1187,8 @@ func (q *Queries) GetTelemetryRouteByCollector(ctx context.Context, arg GetTelem
 		&i.LastTestedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Transport,
+		&i.LoopbackPort,
 	)
 	return i, err
 }
@@ -1187,8 +1232,9 @@ func (q *Queries) GetTelemetryUsage(ctx context.Context, arg GetTelemetryUsagePa
 }
 
 const getValidTelemetryCertificateBySerial = `-- name: GetValidTelemetryCertificateBySerial :one
-SELECT id, collector_id, serial_number, uri_san, csr_hash, certificate_hash, certificate_request_name, issuer_generation, not_before, not_after, revoked_at, revoke_reason, created_at FROM telemetry_certificates
-WHERE collector_id = $1 AND serial_number = $2 AND revoked_at IS NULL AND not_after > now()
+SELECT id, collector_id, serial_number, uri_san, csr_hash, certificate_hash, certificate_request_name, issuer_generation, not_before, not_after, revoked_at, revoke_reason, created_at, certificate_usage FROM telemetry_certificates
+WHERE collector_id = $1 AND serial_number = $2 AND certificate_usage = 'clientAuth'
+  AND revoked_at IS NULL AND not_after > now()
 `
 
 type GetValidTelemetryCertificateBySerialParams struct {
@@ -1213,6 +1259,7 @@ func (q *Queries) GetValidTelemetryCertificateBySerial(ctx context.Context, arg 
 		&i.RevokedAt,
 		&i.RevokeReason,
 		&i.CreatedAt,
+		&i.CertificateUsage,
 	)
 	return i, err
 }
@@ -1253,16 +1300,17 @@ func (q *Queries) IncrementTelemetryUsage(ctx context.Context, arg IncrementTele
 const limitTelemetryCertificateOverlap = `-- name: LimitTelemetryCertificateOverlap :exec
 UPDATE telemetry_certificates
 SET not_after = LEAST(not_after, now() + interval '15 minutes')
-WHERE collector_id = $1 AND revoked_at IS NULL AND serial_number <> $2
+WHERE collector_id = $1 AND revoked_at IS NULL AND serial_number NOT IN ($2, $3)
 `
 
 type LimitTelemetryCertificateOverlapParams struct {
-	CollectorID  uuid.UUID `json:"collector_id"`
-	SerialNumber string    `json:"serial_number"`
+	CollectorID    uuid.UUID `json:"collector_id"`
+	SerialNumber   string    `json:"serial_number"`
+	SerialNumber_2 string    `json:"serial_number_2"`
 }
 
 func (q *Queries) LimitTelemetryCertificateOverlap(ctx context.Context, arg LimitTelemetryCertificateOverlapParams) error {
-	_, err := q.db.Exec(ctx, limitTelemetryCertificateOverlap, arg.CollectorID, arg.SerialNumber)
+	_, err := q.db.Exec(ctx, limitTelemetryCertificateOverlap, arg.CollectorID, arg.SerialNumber, arg.SerialNumber_2)
 	return err
 }
 
@@ -1420,7 +1468,7 @@ func (q *Queries) ListKubernetesNodeHostBindings(ctx context.Context, arg ListKu
 }
 
 const listTelemetryRoutes = `-- name: ListTelemetryRoutes :many
-SELECT id, enterprise_id, collector_id, kind, gateway_collector_id, status, version, last_tested_at, created_at, updated_at FROM telemetry_routes WHERE enterprise_id = $1 ORDER BY updated_at DESC, id
+SELECT id, enterprise_id, collector_id, kind, gateway_collector_id, status, version, last_tested_at, created_at, updated_at, transport, loopback_port FROM telemetry_routes WHERE enterprise_id = $1 ORDER BY updated_at DESC, id
 `
 
 func (q *Queries) ListTelemetryRoutes(ctx context.Context, enterpriseID uuid.UUID) ([]TelemetryRoute, error) {
@@ -1443,6 +1491,8 @@ func (q *Queries) ListTelemetryRoutes(ctx context.Context, enterpriseID uuid.UUI
 			&i.LastTestedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Transport,
+			&i.LoopbackPort,
 		); err != nil {
 			return nil, err
 		}
@@ -1859,15 +1909,17 @@ func (q *Queries) UpsertKubernetesNodeHostBindingProposal(ctx context.Context, a
 
 const upsertTelemetryRoute = `-- name: UpsertTelemetryRoute :one
 INSERT INTO telemetry_routes (
-  id, enterprise_id, collector_id, kind, gateway_collector_id, status
-) VALUES ($1,$2,$3,$4,$5,'pending')
+  id, enterprise_id, collector_id, kind, gateway_collector_id, transport, loopback_port, status
+) VALUES ($1,$2,$3,$4,$5,$6,$7,'pending')
 ON CONFLICT (collector_id) DO UPDATE SET
   kind = EXCLUDED.kind,
   gateway_collector_id = EXCLUDED.gateway_collector_id,
+  transport = EXCLUDED.transport,
+  loopback_port = EXCLUDED.loopback_port,
   status = 'pending',
   version = telemetry_routes.version + 1,
   updated_at = now()
-RETURNING id, enterprise_id, collector_id, kind, gateway_collector_id, status, version, last_tested_at, created_at, updated_at
+RETURNING id, enterprise_id, collector_id, kind, gateway_collector_id, status, version, last_tested_at, created_at, updated_at, transport, loopback_port
 `
 
 type UpsertTelemetryRouteParams struct {
@@ -1876,6 +1928,8 @@ type UpsertTelemetryRouteParams struct {
 	CollectorID        uuid.UUID     `json:"collector_id"`
 	Kind               string        `json:"kind"`
 	GatewayCollectorID uuid.NullUUID `json:"gateway_collector_id"`
+	Transport          string        `json:"transport"`
+	LoopbackPort       pgtype.Int4   `json:"loopback_port"`
 }
 
 func (q *Queries) UpsertTelemetryRoute(ctx context.Context, arg UpsertTelemetryRouteParams) (TelemetryRoute, error) {
@@ -1885,6 +1939,8 @@ func (q *Queries) UpsertTelemetryRoute(ctx context.Context, arg UpsertTelemetryR
 		arg.CollectorID,
 		arg.Kind,
 		arg.GatewayCollectorID,
+		arg.Transport,
+		arg.LoopbackPort,
 	)
 	var i TelemetryRoute
 	err := row.Scan(
@@ -1898,6 +1954,8 @@ func (q *Queries) UpsertTelemetryRoute(ctx context.Context, arg UpsertTelemetryR
 		&i.LastTestedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Transport,
+		&i.LoopbackPort,
 	)
 	return i, err
 }

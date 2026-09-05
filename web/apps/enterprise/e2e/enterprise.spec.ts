@@ -2,7 +2,6 @@ import { enterpriseOrigin, platformOrigin, cardOrigin } from "./origins";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     if (!window.localStorage.getItem("argus.locale")) {
@@ -76,6 +75,8 @@ for (const locale of ["zh-CN", "en-US"] as const) {
         .fill("123456");
       await page.locator('form button[type="submit"]').click();
       await expect(page).toHaveURL(`${platformOrigin}/`);
+      await expectAppearance();
+      await page.goto(`${platformOrigin}/pki`);
       await expectAppearance();
 
       await page.goto(`${platformOrigin}/?initialized=false&reset=1`);
@@ -467,6 +468,15 @@ test("platform and enterprise accounts stay in their own portals", async ({
   await expect(page.getByRole("table")).not.toContainText(
     "platform.enterprise.create",
   );
+  await page.getByRole("link", { name: "PKI 与信任" }).click();
+  await expect(page).toHaveURL(`${platformOrigin}/pki`);
+  await expect(
+    page.getByRole("heading", { name: "PKI 与信任状态" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("term").filter({ hasText: /^Bundle SHA-256$/ }),
+  ).toBeVisible();
+  await expect(page.getByText("已确认", { exact: true }).first()).toBeVisible();
   const platformPadding = await page
     .locator(".argus-page-content")
     .evaluate((element) =>
@@ -627,32 +637,92 @@ test("add host wizard walks three steps to the confirm card", async ({
   const drawer = page.getByRole("dialog", { name: "添加普通主机" });
   await expect(drawer).toBeVisible();
 
-  // 第 1 步：选择直连；Direct Executor 可连接其部署网络可达的内网目标。
-  await drawer.getByRole("button", { name: /^直连/ }).click();
-  await drawer.getByRole("button", { name: "下一步" }).click();
+  // 第 1 步只选择场景；第 2 步才挂载业务表单。
+  await drawer.getByRole("button", { name: /^双向可达/ }).click();
+  await drawer.getByRole("button", { name: "下一步", exact: true }).click();
 
-  // 第 2 步：填写内网地址，验证直连模式不再要求公网地址。
+  // 填写内网地址与凭据。
   await drawer.getByLabel("主机名").fill("web-e2e-01");
   await drawer.getByLabel("地址").fill("10.0.1.5");
   await drawer.getByLabel("登录账号").fill("argus");
   await drawer.getByLabel("登录凭据或密钥").click();
   await page.getByRole("option", { name: "prod-ssh-key" }).click();
-  await drawer.getByRole("button", { name: "下一步" }).click();
 
-  // 第 3 步：模拟连接测试（前端约 900ms 后返回成功）后生成预览。
-  await drawer.getByRole("button", { name: "开始测试" }).click();
+  // 第二步提交后完成连接测试并进入第三步预览。
+  await drawer.getByRole("button", { name: "下一步", exact: true }).click();
   await expect(drawer.getByText("测试通过，可生成预览")).toBeVisible({
     timeout: 10_000,
   });
-  await drawer.getByRole("button", { name: "生成预览" }).click();
 
   // 确认卡（PreviewCommitCard）：标题、确认/取消操作。
   await expect(drawer.getByText("新增主机 web-e2e-01")).toBeVisible();
   await expect(drawer.getByRole("button", { name: "确认执行" })).toBeVisible();
-  await expect(drawer.getByRole("button", { name: "取消" })).toBeVisible();
+  await expect(
+    drawer.getByRole("button", { name: "取消" }).last(),
+  ).toBeVisible();
   await drawer.getByRole("button", { name: "确认执行" }).click();
+  await expect(drawer.getByText("主机创建完成")).toBeVisible();
+  await drawer
+    .locator(".argus-dialog__footer")
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
   await expect(drawer).not.toBeVisible();
   await expect(page.getByText("web-e2e-01")).toBeVisible();
+});
+
+test("add host wizard scenario cards gate planned tunnels and support self-enroll", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/hosts");
+  await page.getByRole("button", { name: "添加普通主机" }).click();
+  const drawer = page.getByRole("dialog", { name: "添加普通主机" });
+  await expect(drawer).toBeVisible();
+
+  // ⑤ 只出不进:免连接测试,表单仅名称/架构/环境/标签。
+  await drawer.getByRole("button", { name: /^只出不进/ }).click();
+  // 场景②(只进不出)与场景③(隧道成员)已随后端隧道链路开放,可选可提交。
+  const inboundOnly = drawer.getByRole("button", { name: /^只进不出/ });
+  await expect(inboundOnly).toBeEnabled();
+  await expect(drawer.getByText("场景 ②").first()).toBeVisible();
+  const tunnelMember = drawer.getByRole("button", {
+    name: /^成员连不上堡垒机端口/,
+  });
+  await expect(tunnelMember).toBeEnabled();
+  await drawer.getByRole("button", { name: "下一步", exact: true }).click();
+  await drawer.getByLabel("主机名").fill("office-self-01");
+  await drawer.getByText("前置条件", { exact: true }).waitFor();
+  // 提交会立刻进入 loading/确认卡,click 可能因按钮随即禁用而抛超时——
+  // 触发后以确认卡出现为准。
+  await drawer.getByRole("button", { name: "下一步", exact: true }).click();
+  await expect(drawer.getByText("新增主机 office-self-01")).toBeVisible({
+    timeout: 10_000,
+  });
+  await drawer.getByRole("button", { name: "确认执行" }).click();
+
+  // 一次性安装命令只在确认结果中出现,关闭后不残留浏览器状态。
+  await expect(drawer.getByText(/curl -fsS/)).toBeVisible({ timeout: 10_000 });
+  await expect(
+    drawer.getByRole("button", { name: "一行安装（推荐）", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    drawer.getByRole("button", { name: "交互式", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    drawer.getByRole("button", { name: "自动化", exact: true }),
+  ).toHaveCount(0);
+  const command = await drawer
+    .getByText(/curl -fsS/)
+    .first()
+    .textContent();
+  await drawer.getByRole("button", { name: "我已保存，关闭" }).click();
+  await expect(drawer).not.toBeVisible();
+  const browserState = JSON.stringify({
+    local: await page.evaluate(() => localStorage),
+    session: await page.evaluate(() => sessionStorage),
+    url: page.url(),
+  });
+  expect(browserState).not.toContain(command ?? "curl -fsS");
 });
 
 test("approvals inbox: open a pending action and approve it", async ({
@@ -842,11 +912,11 @@ test("online Bastion gates replacement and deletion while members remain", async
   await expect(drawer.getByLabel("标签")).toBeVisible();
   await expect(drawer.getByLabel("地址")).toHaveCount(0);
   await expect(drawer.getByLabel("端口")).toHaveCount(0);
-  await expect(drawer.getByText("堡垒机安装/更新命令")).toBeVisible();
-  await expect(drawer.getByText("当前堡垒机仍在线")).toBeVisible();
-  await expect(drawer.getByRole("button", { name: "生成新命令" })).toHaveCount(
-    0,
-  );
+  await expect(drawer.getByText("Connector 替换")).toBeVisible();
+  await expect(drawer.getByText("替换会执行 fencing")).toBeVisible();
+  await expect(
+    drawer.getByRole("button", { name: "替换 Connector" }),
+  ).toBeVisible();
 
   await drawer.getByLabel("名称").fill("上海核心堡垒机-E2E");
   await drawer.getByRole("button", { name: "保存", exact: true }).click();
@@ -871,10 +941,10 @@ test("online Bastion gates replacement and deletion while members remain", async
   const onlineDrawer = page.getByRole("dialog", {
     name: /编辑堡垒机.*上海核心堡垒机-E2E/,
   });
-  await expect(onlineDrawer.getByText("当前堡垒机仍在线")).toBeVisible();
+  await expect(onlineDrawer.getByText("Connector 替换")).toBeVisible();
   await expect(
-    onlineDrawer.getByRole("button", { name: "生成新命令" }),
-  ).toHaveCount(0);
+    onlineDrawer.getByRole("button", { name: "替换 Connector" }),
+  ).toBeVisible();
 });
 
 test("new Bastion shows one-time enrollment and can register", async ({
@@ -885,19 +955,45 @@ test("new Bastion shows one-time enrollment and can register", async ({
   await page.getByRole("button", { name: "添加堡垒机" }).click();
 
   const addDrawer = page.getByRole("dialog", { name: "添加堡垒机" });
+  // PlanV4 Task 06:三张场景卡(命令行/平台代装/代装+隧道)全部可选。
+  await expect(
+    addDrawer.getByRole("button", { name: /^堡垒机可出站访问 Argus/ }),
+  ).toBeEnabled();
+  await expect(
+    addDrawer.getByRole("button", { name: /^平台代装（双向可达）/ }),
+  ).toBeEnabled();
+  await expect(
+    addDrawer.getByRole("button", { name: /平台代装.*控制隧道/ }),
+  ).toBeEnabled();
+  await addDrawer.getByRole("button", { name: "下一步" }).click();
   await addDrawer.getByLabel("名称").fill("新堡垒机-E2E");
-  await addDrawer.getByRole("button", { name: "创建并生成令牌" }).click();
+  await addDrawer.getByRole("button", { name: "下一步", exact: true }).click();
   await addDrawer.getByRole("button", { name: "确认执行" }).click();
-  await expect(addDrawer.locator(".argus-code code")).toContainText(
-    "--token enroll_",
-  );
-  await addDrawer.getByRole("button", { name: "关闭" }).click();
+  const downloadCommand =
+    (await addDrawer.locator(".argus-code code").textContent()) ?? "";
+  expect(downloadCommand).toContain("curl -fsS");
+  expect(downloadCommand).toContain("--insecure");
+  expect(downloadCommand).toContain("X-Argus-Enrollment-Token:");
+  expect(downloadCommand).not.toContain("curl -fsSL");
+  expect(downloadCommand).toContain("bootstrap-script?scope=linux-system");
+  expect(downloadCommand).toContain("enroll_");
+  expect(downloadCommand).not.toContain("\n");
+  await expect(
+    addDrawer.getByRole("button", { name: "一行安装（推荐）", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    addDrawer.getByRole("button", { name: "交互式", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    addDrawer.getByRole("button", { name: "自动化", exact: true }),
+  ).toHaveCount(0);
+  await addDrawer.getByRole("button", { name: "我已保存，关闭" }).click();
 
   const pendingScope = page
     .locator(".argus-scope-card")
     .filter({ hasText: "新堡垒机-E2E" })
     .first();
-  await expect(pendingScope.getByText("等待堡垒机注册")).toBeVisible();
+  await expect(pendingScope.getByText("安装命令已领取")).toBeVisible();
   await pendingScope.getByRole("button", { name: /模拟堡垒机上线/ }).click();
   await expect(pendingScope.getByText("堡垒机在线")).toBeVisible();
   await expect(
@@ -1111,10 +1207,14 @@ test("remote access governance and session center expose the production flow", a
   await expect(page.getByRole("tab", { name: "历史会话" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "会话录像" })).toBeVisible();
   const tabsBox = await page.getByRole("tablist").boundingBox();
-  const filtersBox = await page.locator(".argus-remote-sessions-tabs > .argus-filter-bar").boundingBox();
+  const filtersBox = await page
+    .locator(".argus-remote-sessions-tabs > .argus-filter-bar")
+    .boundingBox();
   expect(tabsBox).not.toBeNull();
   expect(filtersBox).not.toBeNull();
-  expect(filtersBox!.y - (tabsBox!.y + tabsBox!.height)).toBeGreaterThanOrEqual(12);
+  expect(filtersBox!.y - (tabsBox!.y + tabsBox!.height)).toBeGreaterThanOrEqual(
+    12,
+  );
 });
 
 test("org users remain renderable after the raw user directory is cached", async ({
@@ -1141,7 +1241,9 @@ test("org users remain renderable after the raw user directory is cached", async
   await expect(userRow.getByText("资源查看者")).toBeVisible();
 });
 
-test("remote access governance supports CRUD, lifecycle, details, validation, and simulation", async ({ page }) => {
+test("remote access governance supports CRUD, lifecycle, details, validation, and simulation", async ({
+  page,
+}) => {
   test.setTimeout(60_000);
   await login(page);
   await page.goto("/settings/org");
@@ -1158,7 +1260,9 @@ test("remote access governance supports CRUD, lifecycle, details, validation, an
   await row.getByRole("button", { name: "启用" }).click();
   await expect(row.getByText("已启用")).toBeVisible();
   await row.getByRole("button", { name: "详情" }).click();
-  await expect(page.getByRole("dialog", { name: "生产会话策略" }).getByText("v2")).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "生产会话策略" }).getByText("v2"),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.getByRole("tab", { name: "审批流程" }).click();
@@ -1180,14 +1284,20 @@ test("remote access governance supports CRUD, lifecycle, details, validation, an
   await simulator.getByLabel("托管账号").click();
   await page.getByRole("option").first().click();
   await simulator.getByRole("button", { name: "运行模拟" }).click();
-  await expect(simulator.locator(".argus-status-badge").getByText("allowed", { exact: true })).toBeVisible();
+  await expect(
+    simulator
+      .locator(".argus-status-badge")
+      .getByText("allowed", { exact: true }),
+  ).toBeVisible();
   await expect(simulator.getByText(/REMOTE_ACCESS_ALLOWED/)).toBeVisible();
 
   await page.getByRole("button", { name: "新建访问规则" }).click();
   drawer = page.getByRole("dialog", { name: "新建访问规则" });
   await drawer.getByLabel("名称").fill("生产 SSH 规则");
   await drawer.getByRole("button", { name: "保存" }).click();
-  await expect(drawer.getByText("请至少选择一个处理效果或会话策略")).toBeVisible();
+  await expect(
+    drawer.getByText("请至少选择一个处理效果或会话策略"),
+  ).toBeVisible();
   await drawer.getByLabel("会话策略").click();
   await page.getByRole("option", { name: /生产会话策略/ }).click();
   await drawer.getByRole("button", { name: "保存" }).click();
@@ -1196,14 +1306,24 @@ test("remote access governance supports CRUD, lifecycle, details, validation, an
   await row.getByRole("button", { name: "启用" }).click();
 
   await simulator.getByRole("button", { name: "运行模拟" }).click();
-  await expect(simulator.locator(".argus-status-badge").getByText("allowed", { exact: true })).toBeVisible();
+  await expect(
+    simulator
+      .locator(".argus-status-badge")
+      .getByText("allowed", { exact: true }),
+  ).toBeVisible();
 
   row = page.getByRole("row").filter({ hasText: "生产 SSH 规则" });
   await row.getByRole("button", { name: "停用" }).click();
-  await page.getByRole("dialog", { name: "确认配置变更" }).getByRole("button", { name: "停用" }).click();
+  await page
+    .getByRole("dialog", { name: "确认配置变更" })
+    .getByRole("button", { name: "停用" })
+    .click();
   await expect(row.getByText("已停用")).toBeVisible();
   await row.getByRole("button", { name: "归档" }).click();
-  await page.getByRole("dialog", { name: "确认配置变更" }).getByRole("button", { name: "归档" }).click();
+  await page
+    .getByRole("dialog", { name: "确认配置变更" })
+    .getByRole("button", { name: "归档" })
+    .click();
   await expect(row.getByText("已归档")).toBeVisible();
   await row.getByRole("button", { name: "恢复为草稿" }).click();
   await expect(row.getByText("草稿")).toBeVisible();

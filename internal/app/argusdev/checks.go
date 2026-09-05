@@ -19,8 +19,8 @@ import (
 )
 
 func (a *App) runCheck(ctx context.Context, args []string) error {
-	if len(args) != 1 || !oneOf(args[0], "query-parsers", "production-artifacts", "web-entrypoints", "all") {
-		return fmt.Errorf("%w: usage: argus-dev check query-parsers|production-artifacts|web-entrypoints|all", errUsage)
+	if len(args) != 1 || !oneOf(args[0], "query-parsers", "production-artifacts", "tls-security", "web-entrypoints", "all") {
+		return fmt.Errorf("%w: usage: argus-dev check query-parsers|production-artifacts|tls-security|web-entrypoints|all", errUsage)
 	}
 	checks := []struct {
 		name string
@@ -28,6 +28,7 @@ func (a *App) runCheck(ctx context.Context, args []string) error {
 	}{
 		{"query-parsers", a.checkQueryParsers},
 		{"production-artifacts", a.checkProductionArtifacts},
+		{"tls-security", a.checkTLSSecurity},
 		{"web-entrypoints", a.checkWebEntrypoints},
 	}
 	for _, check := range checks {
@@ -37,6 +38,77 @@ func (a *App) runCheck(ctx context.Context, args []string) error {
 		_, _ = fmt.Fprintf(a.stdout, "Running %s check\n", check.name)
 		if err := check.run(ctx); err != nil {
 			return fmt.Errorf("%s check: %w", check.name, err)
+		}
+	}
+	return nil
+}
+
+var forbiddenTLSProductionPatterns = []struct {
+	name    string
+	pattern *regexp.Regexp
+}{
+	{"Go TLS verification bypass", regexp.MustCompile(`\bInsecureSkipVerify\s*:\s*true\b`)},
+	{"configuration TLS verification bypass", regexp.MustCompile(`\binsecure_skip_verify\s*[:=]\s*true\b`)},
+	{"insecure downloader option", regexp.MustCompile(`(^|[[:space:]])--insecure([[:space:]]|$)`)},
+	{"curl short TLS bypass", regexp.MustCompile(`\bcurl[^\r\n]*[[:space:]]-[A-Za-z]*k[A-Za-z]*([[:space:]]|$)`)},
+	{"unverified download pipeline", regexp.MustCompile(`\b(curl|wget)[^\r\n]*\|[[:space:]]*(sudo[[:space:]]+)?(bash|sh|pwsh|powershell)([[:space:]]|$)`)},
+	{"legacy insecure artifact mode", regexp.MustCompile(`\bartifactTLSMode[[:space:]]*[:=][[:space:]]*["']?insecure\b`)},
+}
+
+const insecureFirstFetchMarker = "ARGUS_INSECURE_FIRST_FETCH_ONLY"
+
+var insecureFirstFetchFiles = map[string]struct{}{
+	"internal/installinstruction/instruction.go":               {},
+	"web/packages/api-client/src/mock/install-instructions.ts": {},
+}
+
+func (a *App) checkTLSSecurity(_ context.Context) error {
+	roots := []string{"cmd", "internal", "deploy/helm", "deploy/docker", "deploy/scripts", "deploy/otelcol", "web"}
+	for _, relativeRoot := range roots {
+		err := filepath.WalkDir(filepath.Join(a.root, filepath.FromSlash(relativeRoot)), func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			relative, _ := filepath.Rel(a.root, path)
+			normalized := filepath.ToSlash(relative)
+			if entry.IsDir() {
+				if oneOf(entry.Name(), "node_modules", "dist", ".cache", ".turbo", "generated") || strings.Contains(normalized, "/integration/") || strings.Contains(normalized, "/e2e/") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if entry.Type()&os.ModeSymlink != 0 || strings.HasSuffix(normalized, "_test.go") || normalized == "internal/app/argusdev/checks.go" {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			return scanTLSProductionContent(normalized, content)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	_, _ = fmt.Fprintln(a.stdout, "production source contains no unscoped TLS verification bypass or unverified download pipeline")
+	return nil
+}
+
+func scanTLSProductionContent(name string, content []byte) error {
+	lines := strings.Split(string(content), "\n")
+	for index, line := range lines {
+		if !strings.Contains(line, insecureFirstFetchMarker) {
+			continue
+		}
+		if _, allowed := insecureFirstFetchFiles[name]; !allowed || strings.Count(line, "--insecure") != 1 {
+			return fmt.Errorf("invalid scoped insecure first-fetch marker in %s", name)
+		}
+		lines[index] = strings.Replace(line, "--insecure", "--reviewed-first-fetch", 1)
+	}
+	content = []byte(strings.Join(lines, "\n"))
+	for _, forbidden := range forbiddenTLSProductionPatterns {
+		if forbidden.pattern.Match(content) {
+			return fmt.Errorf("%s found in %s", forbidden.name, name)
 		}
 	}
 	return nil
@@ -182,6 +254,9 @@ func (a *App) checkProductionArtifacts(ctx context.Context) (returnErr error) {
 	if err := validateBackendDockerfile(backendDockerfile); err != nil {
 		return err
 	}
+	if err := a.validatePlanV4ArtifactPipeline(); err != nil {
+		return err
+	}
 	if bytes.Contains(backendDockerfile, []byte("GO_BUILD_TAGS=m4e2e")) || bytes.Contains(backendDockerfile, []byte("tags=m4e2e")) {
 		return fmt.Errorf("production Dockerfile enables the M4 E2E build tag")
 	}
@@ -192,6 +267,41 @@ func (a *App) checkProductionArtifacts(ctx context.Context) (returnErr error) {
 		return err
 	}
 	_, _ = fmt.Fprintln(a.stdout, "production artifacts contain no forbidden replay, mock, key, or bypass markers")
+	return nil
+}
+
+func (a *App) validatePlanV4ArtifactPipeline() error {
+	checks := []struct {
+		path     string
+		required []string
+		forbid   []string
+	}{
+		{path: "internal/app/argusdev/connector_publish.go", required: []string{"amd64", "arm64", "signCollectorArtifact", "immutable Connector artifact", "CreateConnectorReleaseVersion"}},
+		{path: "internal/app/argusdev/e2e_artifacts.go", required: []string{"collectorArtifactInputFingerprint", "deploy", "otelcol", "inputs.sha256"}},
+		{path: "deploy/otelcol/builder-linux-arm64.yaml", required: []string{"argusidentity", "argusgatewayidentity", "otelcol_version: 0.133.0"}},
+		{path: "deploy/otelcol/builder-linux-amd64.yaml", required: []string{"argusidentity", "argusgatewayidentity", "otelcol_version: 0.133.0"}},
+		{path: "deploy/otelcol/builder-windows-amd64.yaml", required: []string{"argusidentity", "otelcol_version: 0.133.0"}},
+		{path: "deploy/otelcol/install-windows.ps1", required: []string{"argus-otelcol.exe", "Assert-CABundle", "Assert-ArtifactSignature", "TrustBundleEpoch", "No privileged filesystem or service mutation"}},
+		{path: "deploy/scripts/host-install.sh", required: []string{"artifact ed25519 signature verification failed", "artifact sha256 mismatch", "X-Argus-Uninstall-Completion-Token"},
+			forbid: []string{"falling back to sha256", "WARNING: ed25519 public key unavailable"}},
+		{path: "deploy/docker/backend.Dockerfile", required: []string{"argus-connector"}},
+	}
+	for _, check := range checks {
+		content, err := os.ReadFile(filepath.Join(a.root, filepath.FromSlash(check.path)))
+		if err != nil {
+			return err
+		}
+		for _, expected := range check.required {
+			if !bytes.Contains(content, []byte(expected)) {
+				return fmt.Errorf("PlanV4 artifact pipeline %s is missing %q", check.path, expected)
+			}
+		}
+		for _, forbidden := range check.forbid {
+			if bytes.Contains(content, []byte(forbidden)) {
+				return fmt.Errorf("PlanV4 artifact pipeline %s contains forbidden fallback %q", check.path, forbidden)
+			}
+		}
+	}
 	return nil
 }
 
@@ -296,7 +406,12 @@ func (a *App) checkWebEntrypoints(ctx context.Context) (returnErr error) {
 		"--set-string", "runtime.otelcolWindowsAmd64Signature=m1-smoke-signature", "--set", "runtime.otelcolWindowsAmd64ByteSize=1",
 		"--set-string", "runtime.otelcolSigningKeyId=m1-smoke", "--set-string", "runtime.otelcolSigningPublicKey=m1-smoke-public-key",
 		"--set-string", "runtime.otelcolKubernetesImage=argus-otelcol:m1-smoke",
+		"--set-string", "runtime.hostInstallerSha256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		"--set-string", "runtime.connectorKubernetesImage=argus-backend:m1-smoke",
 		"--set-json", `runtime.secretKEKKeyring={"current_version":1,"keys":{"1":"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"}}`,
+		"--set", "production.directExecutor.telemetryTunnelLimit=64",
+		"--set", "production.directExecutor.controlTunnelLimit=32",
+		"--set", "production.directExecutor.tunnelBytesPerSecond=67108864",
 	}
 	lintArgs := append([]string{"lint", "deploy/helm/argus-platform"}, values...)
 	if err := a.runner.Run(ctx, nil, "helm", lintArgs...); err != nil {
@@ -308,11 +423,17 @@ func (a *App) checkWebEntrypoints(ctx context.Context) (returnErr error) {
 	if err != nil {
 		return err
 	}
+	if err := scanTLSProductionContent("rendered production Helm chart", []byte(rendered)); err != nil {
+		return err
+	}
 	for _, expected := range []string{
 		"host: cards.argus.example.com", "name: cards", "containerPort: 8083",
-		"ARGUS_DIRECT_EXECUTOR_CLIENT_NAMES: argus-server,argus-connector-gateway",
-		"secretName: argus-server-direct-executor-client-tls", "secretName: argus-connector-gateway-direct-executor-client-tls",
+		`ARGUS_DIRECT_EXECUTOR_CLIENT_URIS: "spiffe://argus.io/services/server/client,spiffe://argus.io/services/worker/client,spiffe://argus.io/services/connector-gateway/direct-executor-client"`,
+		"secretName: argus-server-direct-executor-client-tls", "secretName: argus-worker-direct-executor-client-tls", "secretName: argus-connector-gateway-direct-executor-client-tls",
+		"secretName: argus-server-telemetry-client-tls", "secretName: argus-worker-telemetry-client-tls", "secretName: argus-connector-gateway-peer-client-tls",
 		"name: argus-connector-gateway-remote-access", "IdempotentWrite",
+		"ARGUS_TELEMETRY_TUNNEL_LIMIT: \"64\"", "ARGUS_CONTROL_TUNNEL_LIMIT: \"32\"",
+		"ARGUS_TUNNEL_BYTES_PER_SECOND: \"67108864\"",
 	} {
 		if !strings.Contains(rendered, expected) {
 			return fmt.Errorf("rendered platform chart is missing %q", expected)

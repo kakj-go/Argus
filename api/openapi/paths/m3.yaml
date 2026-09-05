@@ -346,13 +346,40 @@ bastion_preview_delete:
     responses:
       "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
       default: {$ref: "#/components/responses/Error"}
-bastion_replacement:
+bastion_enrollment_rotate:
   parameters: [{$ref: "#/components/parameters/ResourceId"}]
   post:
-    operationId: previewReplaceBastionConnector
-    summary: Fence the active Connector through a confirmed replacement action.
+    operationId: previewBastionEnrollmentRotate
+    summary: Freeze a new mode A Connector installation command.
     parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
     requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ResourcePreviewDelete"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+bastion_connector_replacement:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewBastionConnectorReplacement
+    summary: Fence the active Connector through a confirmed replacement action.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/BastionConnectorReplacementPreview"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+connector_install_operation_item:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  get:
+    operationId: getConnectorInstallOperation
+    summary: Get the durable Connector installation progress and public event timeline.
+    responses:
+      "200": {description: Connector installation operation., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConnectorInstallOperation"}}}}
+      default: {$ref: "#/components/responses/Error"}
+connector_install_operation_retry:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}]
+  post:
+    operationId: previewRetryConnectorInstallOperation
+    summary: Freeze a retry of a terminal failed Connector installation operation.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}, {$ref: "#/components/parameters/CsrfToken"}]
     responses:
       "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
       default: {$ref: "#/components/responses/Error"}
@@ -400,6 +427,46 @@ connector_enroll:
     requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConnectorEnrollRequest"}}}}
     responses:
       "201": {description: Connector identity and certificate., content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ConnectorEnrollResult"}}}}
+      default: {$ref: "#/components/responses/Error"}
+connector_bootstrap_script:
+  get:
+    operationId: getConnectorBootstrapScript
+    summary: Download a strict Connector bootstrap script using a pending enrollment token.
+    description: 公开目标机端点；短命令可仅对本次脚本下载放宽 TLS，返回脚本内嵌版本化 Trust Bundle，后续请求保持严格校验。读取脚本不消费 enrollment token。
+    security: [{connectorEnrollmentToken: []}]
+    parameters:
+      - name: scope
+        in: query
+        required: true
+        schema: {type: string, enum: [linux-system, linux-user]}
+    responses:
+      "200":
+        description: Generated strict bootstrap script.
+        headers:
+          Cache-Control: {schema: {type: string}}
+          Content-Disposition: {schema: {type: string}}
+          X-Content-Type-Options: {schema: {type: string}}
+        content: {text/x-shellscript: {schema: {type: string, minLength: 1, maxLength: 131072}}}
+      default: {$ref: "#/components/responses/Error"}
+host_enrollment_rotate:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}, {$ref: "#/components/parameters/CsrfToken"}]
+  post:
+    operationId: previewHostEnrollmentRotate
+    summary: Freeze a new self-enrolled Host installation command.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ResourcePreviewDelete"}}}}
+    responses:
+      "201": {description: Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
+      default: {$ref: "#/components/responses/Error"}
+host_uninstall_command:
+  parameters: [{$ref: "#/components/parameters/ResourceId"}, {$ref: "#/components/parameters/CsrfToken"}]
+  post:
+    operationId: previewHostUninstallCommand
+    summary: Freeze a self-enrolled Host uninstall command.
+    parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+    requestBody: {required: true, content: {application/json: {schema: {$ref: "../components/m3.yaml#/components/schemas/ResourcePreviewDelete"}}}}
+    responses:
+      "201": {description: Dangerous Pending Action., content: {application/json: {schema: {$ref: "../../schemas/action/pending-action-public.schema.json"}}}}
       default: {$ref: "#/components/responses/Error"}
 components:
   parameters:

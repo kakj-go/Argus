@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
 	"github.com/kakj-go/Argus/internal/otelcol/configbundle"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 func TestEnrollIdentityUsesPinnedTLSAndValidatesIssuedIdentity(t *testing.T) {
@@ -32,7 +34,8 @@ func TestEnrollIdentityUsesPinnedTLSAndValidatesIssuedIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("enroll Collector identity: %v", err)
 	}
-	if len(material.CertificatePEM) == 0 || len(material.PrivateKeyPEM) == 0 || len(material.CABundlePEM) == 0 {
+	if len(material.ClientCertificatePEM) == 0 || len(material.ClientPrivateKeyPEM) == 0 ||
+		len(material.ServerCertificatePEM) == 0 || len(material.ServerPrivateKeyPEM) == 0 || len(material.CABundlePEM) == 0 {
 		t.Fatal("enrollment did not return complete identity material")
 	}
 	if err = validateIdentityMaterial(collectorID, material); err != nil {
@@ -91,16 +94,17 @@ func TestEnrollIdentityRejectsInvalidResponses(t *testing.T) {
 func enrollmentCommand(t *testing.T, collectorID, endpoint, serverCA string) *connectorv1.CollectorManagementCommand {
 	t.Helper()
 	config, err := configbundle.Render(configbundle.RenderInput{CollectorID: collectorID, ResourceID: uuid.NewString(), ResourceType: "kubernetes_cluster",
-		Role: "kubernetes", RouteKind: "direct_argus", ProfileKeys: []string{"k8s-node-container", "k8s-cluster", "k8s-otlp-gateway"},
+		Role: "kubernetes", RouteKind: "direct_argus", Transport: "direct", ProfileKeys: []string{"k8s-node-container", "k8s-cluster", "k8s-otlp-gateway"},
 		EnrollmentEndpoint: endpoint, IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317",
-		IngestHTTPEndpoint: "https://telemetry.example.com:4318", ServerCAPEM: serverCA})
+		IngestHTTPEndpoint: "https://telemetry.example.com:4318"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := collectorCommand(config, "linux_arm64", "https://artifacts.example/collector.tar.gz", []byte("artifact"))
+	command := collectorCommand(t, config, "linux_arm64", "https://artifacts.example/collector.tar.gz", []byte("artifact"))
 	command.ResourceType = "kubernetes_cluster"
 	command.EnrollmentEndpoint = endpoint
 	command.EnrollmentToken = []byte("0123456789abcdef0123456789abcdef")
+	setCommandTrustBundle(t, command, []byte(serverCA))
 	return command
 }
 
@@ -117,10 +121,12 @@ func enrollmentTLSServer(t *testing.T, collectorID string, statusCode, bodySize 
 			return
 		}
 		var body struct {
-			CollectorID string `json:"collector_id"`
-			CSRPem      string `json:"csr_pem"`
+			CollectorID  string `json:"collector_id"`
+			ClientCSRPem string `json:"client_csr_pem"`
+			ServerCSRPem string `json:"server_csr_pem"`
 		}
-		if json.NewDecoder(request.Body).Decode(&body) != nil || body.CollectorID != collectorID || strings.Contains(body.CSRPem, "0123456789abcdef") {
+		if json.NewDecoder(request.Body).Decode(&body) != nil || body.CollectorID != collectorID ||
+			strings.Contains(body.ClientCSRPem+body.ServerCSRPem, "0123456789abcdef") {
 			http.Error(writer, "invalid enrollment request", http.StatusBadRequest)
 			return
 		}
@@ -129,32 +135,51 @@ func enrollmentTLSServer(t *testing.T, collectorID string, statusCode, bodySize 
 			_, _ = writer.Write(make([]byte, bodySize))
 			return
 		}
-		block, rest := pem.Decode([]byte(body.CSRPem))
-		if block == nil || len(rest) != 0 {
-			http.Error(writer, "invalid CSR", http.StatusBadRequest)
-			return
+		issue := func(value string, serial int64, usage x509.ExtKeyUsage) ([]byte, time.Time, error) {
+			block, rest := pem.Decode([]byte(value))
+			if block == nil || len(rest) != 0 {
+				return nil, time.Time{}, errors.New("invalid CSR")
+			}
+			csr, parseErr := x509.ParseCertificateRequest(block.Bytes)
+			if parseErr != nil || csr.CheckSignature() != nil {
+				return nil, time.Time{}, errors.New("invalid CSR")
+			}
+			leaf := &x509.Certificate{SerialNumber: big.NewInt(serial), Subject: pkix.Name{CommonName: "argus-otelcol"}, NotBefore: time.Now().Add(-time.Minute),
+				NotAfter: time.Now().Add(time.Hour), URIs: csr.URIs, DNSNames: csr.DNSNames, KeyUsage: x509.KeyUsageDigitalSignature,
+				ExtKeyUsage: []x509.ExtKeyUsage{usage}}
+			if mutate != nil {
+				mutate(leaf)
+			}
+			der, issueErr := x509.CreateCertificate(rand.Reader, leaf, ca, csr.PublicKey, caKey)
+			return der, leaf.NotAfter, issueErr
 		}
-		csr, err := x509.ParseCertificateRequest(block.Bytes)
-		if err != nil || csr.CheckSignature() != nil {
-			http.Error(writer, "invalid CSR", http.StatusBadRequest)
-			return
-		}
-		leaf := &x509.Certificate{SerialNumber: big.NewInt(3), Subject: pkix.Name{CommonName: "argus-otelcol"}, NotBefore: time.Now().Add(-time.Minute),
-			NotAfter: time.Now().Add(time.Hour), URIs: csr.URIs, DNSNames: csr.DNSNames, KeyUsage: x509.KeyUsageDigitalSignature,
-			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}}
-		if mutate != nil {
-			mutate(leaf)
-		}
-		leafDER, err := x509.CreateCertificate(rand.Reader, leaf, ca, csr.PublicKey, caKey)
+		clientDER, clientExpiry, err := issue(body.ClientCSRPem, 3, x509.ExtKeyUsageClientAuth)
 		if err != nil {
 			http.Error(writer, "certificate issue failed", http.StatusInternalServerError)
 			return
 		}
+		serverDER, serverExpiry, err := issue(body.ServerCSRPem, 4, x509.ExtKeyUsageServerAuth)
+		if err != nil {
+			http.Error(writer, "certificate issue failed", http.StatusInternalServerError)
+			return
+		}
+		material, err := trustbundle.Parse(caPEM, time.Now().UTC())
+		if err != nil {
+			http.Error(writer, "CA invalid", http.StatusInternalServerError)
+			return
+		}
+		expiresAt := clientExpiry
+		if serverExpiry.Before(expiresAt) {
+			expiresAt = serverExpiry
+		}
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(statusCode)
 		_ = json.NewEncoder(writer).Encode(map[string]any{"collector_id": collectorID,
-			"certificate_pem": string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER})), "ca_bundle_pem": string(caPEM),
-			"certificate_expires_at": leaf.NotAfter.UTC()})
+			"client_certificate_pem": string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER})),
+			"server_certificate_pem": string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverDER})),
+			"trust_bundle": map[string]any{"epoch": 1, "state": "stable", "bundle_pem": string(material.PEM),
+				"bundle_sha256": material.SHA256, "current_ca_fingerprints": material.Fingerprints, "next_ca_fingerprints": []string{}},
+			"certificate_expires_at": expiresAt.UTC()})
 	})
 	server := httptest.NewUnstartedServer(handler)
 	server.TLS = &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCertificate}}

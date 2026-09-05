@@ -49,7 +49,11 @@ runtime:
   telemetryQueryDatabasePassword: ""
   connectorEnrollmentURL: https://argus.example.com
   connectorGatewayAddress: grpcs://connector.argus.example.com:9443
-  connectorIssuerName: argus-connector-ca
+  # Mode C remote forwards terminate at these platform-side TCP targets.
+  # Enrollment must traverse the TLS ingress so the Connector can verify the
+  # public enrollment URL while dialing its loopback control tunnel.
+  connectorEnrollmentForwardTarget: argus.example.com:443
+  connectorGatewayForwardTarget: argus-connector-gateway.argus-system.svc:9443
   connectorIssuerGeneration: 1
   directAdvertisedEgress: []
   directVerificationUrl: ""
@@ -58,6 +62,11 @@ runtime:
   sandboxAllowedCidrs: []
   directExecutorEndpoint: ""
   directExecutorServerName: ""
+  # Evaluation defaults. Production uses production.directExecutor and refuses
+  # zero/missing limits so capacity planning is explicit.
+  telemetryTunnelLimit: 64
+  controlTunnelLimit: 32
+  tunnelBytesPerSecond: 67108864
   allowedOrigins:
     - https://argus.example.com
     - https://platform.argus.example.com
@@ -81,13 +90,13 @@ runtime:
   telemetryClickhouseMigrationPassword: ""
   telemetryClickhouseWriterPassword: ""
   telemetryClickhouseQueryPassword: ""
-  telemetryIssuerName: argus-telemetry-ca
   telemetryIssuerGeneration: 1
   # 外部 Collector(主机/外部集群)可达的 ingest 主机名;为空时仅用集群内
   # Service 地址(E2E 同集群目标)。设置后:证书追加该 SAN,并创建公网 LB。
   telemetryExternalIngestHost: ""
   telemetryIngestGrpcEndpoint: grpcs://argus-telemetry-ingest.argus-observability.svc:4317
   telemetryIngestHttpEndpoint: https://argus-telemetry-ingest.argus-observability.svc:4318
+  telemetryIdentityForwardEndpoint: ""
   telemetryEnrollmentEndpoint: https://argus-telemetry-ingest.argus-observability.svc:4318/v1/identity/enroll
   telemetryToolCatalogEnabled: true
   otelcolVersion: 0.1.0-m7
@@ -106,18 +115,25 @@ runtime:
   otelcolSigningKeyId: ""
   otelcolSigningPublicKey: ""
   otelcolKubernetesImage: ""
-  otelcolArtifactCABundleSecretName: ""
-  # verify(默认)| insecure:insecure 跳过产物下载的传输层证书校验(本地自签),
-  # 签名校验恒定执行。
-  otelcolArtifactTLSMode: ""
+  otelcolArtifactCABundleConfigMapName: ""
+  hostInstallerSha256: ""
+  connectorKubernetesImage: ""
+  globalIssuerName: argus-ca
+  globalIssuerGroup: cert-manager.io
+  trustBundleConfigMapName: argus-trust-bundle
   certManagerNamespace: cert-manager
 ingressClassName: nginx
-tls:
-  enabled: true
-  mode: cert-manager-selfsigned
-  issuerName: ""
+pki:
+  mode: managed
+  bootstrapTLSMode: insecure-first-fetch
+  issuerName: argus-ca
   issuerKind: ClusterIssuer
-  secretName: ""
+  issuerGroup: cert-manager.io
+  rootSecretName: argus-root-ca
+  bundleName: argus-trust-bundle
+  trustSourceKind: ConfigMap
+  trustSourceName: argus-trust-source
+  trustSourceKey: ca.crt
 connectorPublicService:
   annotations: {}
 replicas: 1
@@ -146,3 +162,7 @@ workerPools:
 production:
   minReplicas: 3
   maxReplicas: 10
+  directExecutor:
+    telemetryTunnelLimit: 0
+    controlTunnelLimit: 0
+    tunnelBytesPerSecond: 0

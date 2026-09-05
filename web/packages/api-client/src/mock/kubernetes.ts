@@ -239,18 +239,30 @@ export function createKubernetesDomain(
     },
     async previewUpdateResource(id, input) {
       await ctx.pause();
+      const cluster = ctx.mustFind(
+        db.clusters,
+        (entry) => entry.id === id,
+        "cluster",
+      );
       return ctx.createPendingAction({
         tool: "kubernetes.cluster.update",
-        title: `更新集群 ${id}`,
-        input_data: { id, ...input },
+        input_data: { id, name: cluster.name, ...input },
       });
     },
     async previewDeleteResource(id, expectedVersion) {
       await ctx.pause();
+      const cluster = ctx.mustFind(
+        db.clusters,
+        (entry) => entry.id === id,
+        "cluster",
+      );
       return ctx.createPendingAction({
         tool: "kubernetes.cluster.delete",
-        title: `删除集群 ${id}`,
-        input_data: { id, expected_version: expectedVersion },
+        input_data: {
+          id,
+          name: cluster.name,
+          expected_version: expectedVersion,
+        },
       });
     },
     async listResources(clusterId, query) {
@@ -315,6 +327,7 @@ export function createKubernetesDomain(
         title: `验证节点绑定 ${binding.node_name} ↔ ${input.host_id}`,
         input_data: {
           binding_id: binding.id,
+          node_name: binding.node_name,
           host_id: input.host_id,
           expected_version: input.expected_version,
         },
@@ -339,7 +352,9 @@ export function createKubernetesDomain(
           entry.resource_id === clusterId,
       );
       // 返回克隆:installing→converged 是原地变更,同引用会阻止轮询方重渲染。
-      return found ? { ...found, route: found.route && { ...found.route } } : null;
+      return found
+        ? { ...found, route: found.route && { ...found.route } }
+        : null;
     },
     async previewCollectorAction(clusterId, action, input) {
       await ctx.pause();
@@ -356,9 +371,12 @@ export function createKubernetesDomain(
           distribution_version_id: input.distribution_version_id,
           profile_ids: input.profile_ids,
           route_kind: input.route_kind,
+          transport: input.transport,
+          loopback_port: input.loopback_port,
           gateway_collector_id: input.gateway_collector_id,
           expected_version: input.expected_version,
           kubernetes_image: input.kubernetes_image,
+          image_pull_secrets: input.image_pull_secrets,
         },
       });
     },

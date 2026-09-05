@@ -270,7 +270,7 @@ function CardDetailDrawer({
           {version.data && <VersionPreview version={version.data} />}
           {version.data && (
             <section>
-              <h3>Slots</h3>
+              <h3>{t("aiSettings.cards.slots")}</h3>
               <div className="argus-ic-slots">
                 {version.data.manifest.slots.map((slot) => (
                   <button
@@ -282,7 +282,10 @@ function CardDetailDrawer({
                     <Link2 size={13} />
                     <span>{slot.name}</span>
                     <small>
-                      {slot.kind} · {String(slot.value_type)}
+                      {t(`aiSettings.cards.slotKind.${slot.kind}`)} ·{" "}
+                      {t(
+                        `aiSettings.cards.slotType.${String(slot.value_type)}`,
+                      )}
                     </small>
                   </button>
                 ))}
@@ -331,6 +334,7 @@ function VersionPicker({
   versions: Array<{ revision: number; status: string }>;
   onChange: (revision: number) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="argus-ic-version-picker">
       <History size={16} />
@@ -338,7 +342,7 @@ function VersionPicker({
         onValueChange={(value) => onChange(Number(value))}
         options={versions.map((version) => ({
           value: String(version.revision),
-          label: `r${version.revision} · ${version.status}${version.revision === activeRevision ? " · active" : ""}`,
+          label: `r${version.revision} · ${t(`aiSettings.cards.${version.status}`)}${version.revision === activeRevision ? ` · ${t("aiSettings.cards.active")}` : ""}`,
         }))}
         value={String(revision)}
       />

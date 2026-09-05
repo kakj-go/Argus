@@ -1,43 +1,9 @@
 apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: argus-direct-executor-selfsigned
-  namespace: {{ .Values.namespaces.system }}
-spec:
-  selfSigned: {}
----
-apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: argus-direct-executor-root-ca
+  name: argus-direct-executor-server
   namespace: {{ .Values.namespaces.system }}
-spec:
-  isCA: true
-  commonName: argus-direct-executor-root-ca
-  secretName: argus-direct-executor-root-ca
-  duration: 87600h
-  renewBefore: 8760h
-  privateKey:
-    algorithm: ECDSA
-    size: 256
-  issuerRef:
-    name: argus-direct-executor-selfsigned
-    kind: Issuer
----
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: argus-direct-executor-ca
-  namespace: {{ .Values.namespaces.system }}
-spec:
-  ca:
-    secretName: argus-direct-executor-root-ca
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: argus-direct-executor
-  namespace: {{ .Values.namespaces.system }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
 spec:
   secretName: argus-direct-executor-tls
   duration: 2160h
@@ -45,51 +11,67 @@ spec:
   dnsNames:
     - argus-direct-executor
     - argus-direct-executor.{{ .Values.namespaces.system }}.svc
-  usages:
-    - server auth
-  privateKey:
-    algorithm: ECDSA
-    size: 256
+  uris: [spiffe://argus.io/services/direct-executor/server]
+  usages: [server auth]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
   issuerRef:
-    name: argus-direct-executor-ca
-    kind: Issuer
+    name: {{ .Values.pki.issuerName }}
+    kind: ClusterIssuer
+    group: {{ .Values.pki.issuerGroup }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: argus-server-direct-executor-client
   namespace: {{ .Values.namespaces.system }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
 spec:
   secretName: argus-server-direct-executor-client-tls
-  duration: 2160h
-  renewBefore: 360h
-  dnsNames:
-    - argus-server
-  usages:
-    - client auth
-  privateKey:
-    algorithm: ECDSA
-    size: 256
+  duration: 24h
+  renewBefore: 8h
+  dnsNames: [argus-server]
+  uris: [spiffe://argus.io/services/server/client]
+  usages: [client auth]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
   issuerRef:
-    name: argus-direct-executor-ca
-    kind: Issuer
+    name: {{ .Values.pki.issuerName }}
+    kind: ClusterIssuer
+    group: {{ .Values.pki.issuerGroup }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: argus-connector-gateway-direct-executor-client
   namespace: {{ .Values.namespaces.system }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
 spec:
   secretName: argus-connector-gateway-direct-executor-client-tls
-  duration: 2160h
-  renewBefore: 360h
-  dnsNames:
-    - argus-connector-gateway
-  usages:
-    - client auth
-  privateKey:
-    algorithm: ECDSA
-    size: 256
+  duration: 24h
+  renewBefore: 8h
+  dnsNames: [argus-connector-gateway]
+  uris: [spiffe://argus.io/services/connector-gateway/direct-executor-client]
+  usages: [client auth]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
   issuerRef:
-    name: argus-direct-executor-ca
-    kind: Issuer
+    name: {{ .Values.pki.issuerName }}
+    kind: ClusterIssuer
+    group: {{ .Values.pki.issuerGroup }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-worker-direct-executor-client
+  namespace: {{ .Values.namespaces.system }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
+spec:
+  secretName: argus-worker-direct-executor-client-tls
+  duration: 24h
+  renewBefore: 8h
+  dnsNames: [argus-worker]
+  uris: [spiffe://argus.io/services/worker/client]
+  usages: [client auth]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
+  issuerRef:
+    name: {{ .Values.pki.issuerName }}
+    kind: ClusterIssuer
+    group: {{ .Values.pki.issuerGroup }}

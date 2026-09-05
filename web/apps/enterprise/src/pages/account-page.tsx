@@ -664,7 +664,7 @@ export function AccountPage() {
         description={t("account.mfa.recoveryDescription")}
         footer={
           <Button onClick={() => setRecoveryCodes(null)} variant="primary">
-            OK
+            {t("common.close")}
           </Button>
         }
         onOpenChange={(open) => {

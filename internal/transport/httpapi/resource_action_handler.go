@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	actionservice "github.com/kakj-go/Argus/internal/action"
 	actionapi "github.com/kakj-go/Argus/internal/gen/openapi/actionapi"
@@ -223,7 +224,11 @@ func (handler ResourceActionHandler) ConfirmPendingAction(ctx context.Context, r
 	}
 	result := actionapi.PendingActionCommandResult{PendingAction: convertPending[actionapi.PendingActionPublicSchema](confirmation.PendingAction)}
 	if confirmation.Execution != nil {
-		value := toActionExecution(*confirmation.Execution, confirmation.PendingAction)
+		view, viewErr := handler.Workflow.GetExecutionView(ctx, p.EnterpriseIDValue(), confirmation.Execution.ID)
+		if viewErr != nil {
+			return actionapi.ConfirmPendingActiondefaultJSONResponse{Body: actionError(ctx, viewErr), StatusCode: http.StatusInternalServerError}, nil
+		}
+		value := toActionExecution(view)
 		result.Execution = &value
 	}
 	if confirmation.ApprovalRequest != nil {
@@ -237,15 +242,28 @@ func (handler ResourceActionHandler) ConfirmPendingAction(ctx context.Context, r
 	return actionapi.ConfirmPendingAction200JSONResponse(result), nil
 }
 
-func toActionExecution(value db.Execution, pending db.PendingAction) actionapi.Execution {
-	available := false
-	result := actionapi.Execution{ExecutionId: value.ID.String(), ActionRef: pending.ActionRef, Status: value.Status,
-		OneTimeResultAvailable: &available, CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time}
-	if value.ResultRef.Valid {
-		result.ResultRef = &value.ResultRef.String
+func toActionExecution(value actionservice.ExecutionView) actionapi.Execution {
+	execution, pending := value.Execution, value.Action
+	result := actionapi.Execution{ExecutionId: execution.ID.String(), ActionRef: pending.ActionRef, Status: execution.Status,
+		OneTimeResultState: value.OneTimeResultState, CreatedAt: execution.CreatedAt.Time, UpdatedAt: execution.UpdatedAt.Time}
+	if pending.ResultResourceID.Valid && pending.ResultResourceType.Valid && pending.ResultResourceVersion.Valid {
+		result.ResourceRef = &struct {
+			ResourceId   string `json:"resource_id"`
+			ResourceType string `json:"resource_type"`
+			Version      int    `json:"version"`
+		}{ResourceId: pending.ResultResourceID.UUID.String(), ResourceType: pending.ResultResourceType.String, Version: int(pending.ResultResourceVersion.Int64)}
 	}
-	if value.ErrorCode.Valid {
-		result.ErrorCode = &value.ErrorCode.String
+	if execution.ConnectorInstallOperationID.Valid {
+		result.OperationRef = &struct {
+			Id   openapi_types.UUID `json:"id"`
+			Kind interface{}        `json:"kind"`
+		}{Id: execution.ConnectorInstallOperationID.UUID, Kind: "connector_install"}
+	}
+	if execution.ResultRef.Valid {
+		result.ResultRef = &execution.ResultRef.String
+	}
+	if execution.ErrorCode.Valid {
+		result.ErrorCode = &execution.ErrorCode.String
 	}
 	return result
 }

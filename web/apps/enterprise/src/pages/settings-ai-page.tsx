@@ -801,7 +801,13 @@ function GovernanceView({
           ]}
           value={modelId ?? ""}
         />
-        {canManage && <Badge>{(quotas.data ?? []).length} quotas</Badge>}
+        {canManage && (
+          <Badge>
+            {t("aiSettings.dashboard.quotaCount", {
+              count: (quotas.data ?? []).length,
+            })}
+          </Badge>
+        )}
       </div>
       <div className="argus-settings-stat-grid">
         <StatCard

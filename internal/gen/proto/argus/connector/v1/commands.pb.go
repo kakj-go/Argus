@@ -335,8 +335,11 @@ type HostConnectionProbeResult struct {
 	Platform           string                 `protobuf:"bytes,3,opt,name=platform,proto3" json:"platform,omitempty"`
 	RemoteVersion      string                 `protobuf:"bytes,4,opt,name=remote_version,json=remoteVersion,proto3" json:"remote_version,omitempty"`
 	LatencyMillis      uint64                 `protobuf:"varint,5,opt,name=latency_millis,json=latencyMillis,proto3" json:"latency_millis,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Normalized uname -m value. Linux probes must return amd64 or arm64 so
+	// signed installation artifacts can be frozen during ConnectionTest.
+	Architecture  string `protobuf:"bytes,6,opt,name=architecture,proto3" json:"architecture,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HostConnectionProbeResult) Reset() {
@@ -402,6 +405,13 @@ func (x *HostConnectionProbeResult) GetLatencyMillis() uint64 {
 		return x.LatencyMillis
 	}
 	return 0
+}
+
+func (x *HostConnectionProbeResult) GetArchitecture() string {
+	if x != nil {
+		return x.Architecture
+	}
+	return ""
 }
 
 type KubernetesConnectionProbe struct {
@@ -996,7 +1006,6 @@ type CertificateRotationGrant struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ConnectionEpoch uint64                 `protobuf:"varint,1,opt,name=connection_epoch,json=connectionEpoch,proto3" json:"connection_epoch,omitempty"`
 	CertificatePem  []byte                 `protobuf:"bytes,2,opt,name=certificate_pem,json=certificatePem,proto3" json:"certificate_pem,omitempty"`
-	CaBundlePem     []byte                 `protobuf:"bytes,3,opt,name=ca_bundle_pem,json=caBundlePem,proto3" json:"ca_bundle_pem,omitempty"`
 	NotAfter        *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -1046,16 +1055,169 @@ func (x *CertificateRotationGrant) GetCertificatePem() []byte {
 	return nil
 }
 
-func (x *CertificateRotationGrant) GetCaBundlePem() []byte {
+func (x *CertificateRotationGrant) GetNotAfter() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CaBundlePem
+		return x.NotAfter
 	}
 	return nil
 }
 
-func (x *CertificateRotationGrant) GetNotAfter() *timestamppb.Timestamp {
+type TrustBundleUpdate struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Epoch                 uint64                 `protobuf:"varint,1,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	BundlePem             []byte                 `protobuf:"bytes,2,opt,name=bundle_pem,json=bundlePem,proto3" json:"bundle_pem,omitempty"`
+	BundleSha256          string                 `protobuf:"bytes,3,opt,name=bundle_sha256,json=bundleSha256,proto3" json:"bundle_sha256,omitempty"`
+	CurrentCaFingerprints []string               `protobuf:"bytes,4,rep,name=current_ca_fingerprints,json=currentCaFingerprints,proto3" json:"current_ca_fingerprints,omitempty"`
+	NextCaFingerprints    []string               `protobuf:"bytes,5,rep,name=next_ca_fingerprints,json=nextCaFingerprints,proto3" json:"next_ca_fingerprints,omitempty"`
+	State                 string                 `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"`
+	StartedAt             *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	RetireAt              *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=retire_at,json=retireAt,proto3" json:"retire_at,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *TrustBundleUpdate) Reset() {
+	*x = TrustBundleUpdate{}
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrustBundleUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrustBundleUpdate) ProtoMessage() {}
+
+func (x *TrustBundleUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[14]
 	if x != nil {
-		return x.NotAfter
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrustBundleUpdate.ProtoReflect.Descriptor instead.
+func (*TrustBundleUpdate) Descriptor() ([]byte, []int) {
+	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *TrustBundleUpdate) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *TrustBundleUpdate) GetBundlePem() []byte {
+	if x != nil {
+		return x.BundlePem
+	}
+	return nil
+}
+
+func (x *TrustBundleUpdate) GetBundleSha256() string {
+	if x != nil {
+		return x.BundleSha256
+	}
+	return ""
+}
+
+func (x *TrustBundleUpdate) GetCurrentCaFingerprints() []string {
+	if x != nil {
+		return x.CurrentCaFingerprints
+	}
+	return nil
+}
+
+func (x *TrustBundleUpdate) GetNextCaFingerprints() []string {
+	if x != nil {
+		return x.NextCaFingerprints
+	}
+	return nil
+}
+
+func (x *TrustBundleUpdate) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *TrustBundleUpdate) GetStartedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAt
+	}
+	return nil
+}
+
+func (x *TrustBundleUpdate) GetRetireAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RetireAt
+	}
+	return nil
+}
+
+type TrustBundleAcknowledge struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Epoch          uint64                 `protobuf:"varint,1,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	BundleSha256   string                 `protobuf:"bytes,2,opt,name=bundle_sha256,json=bundleSha256,proto3" json:"bundle_sha256,omitempty"`
+	CaFingerprints []string               `protobuf:"bytes,3,rep,name=ca_fingerprints,json=caFingerprints,proto3" json:"ca_fingerprints,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *TrustBundleAcknowledge) Reset() {
+	*x = TrustBundleAcknowledge{}
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrustBundleAcknowledge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrustBundleAcknowledge) ProtoMessage() {}
+
+func (x *TrustBundleAcknowledge) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrustBundleAcknowledge.ProtoReflect.Descriptor instead.
+func (*TrustBundleAcknowledge) Descriptor() ([]byte, []int) {
+	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *TrustBundleAcknowledge) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *TrustBundleAcknowledge) GetBundleSha256() string {
+	if x != nil {
+		return x.BundleSha256
+	}
+	return ""
+}
+
+func (x *TrustBundleAcknowledge) GetCaFingerprints() []string {
+	if x != nil {
+		return x.CaFingerprints
 	}
 	return nil
 }
@@ -1072,7 +1234,7 @@ type CredentialLeaseRequest struct {
 
 func (x *CredentialLeaseRequest) Reset() {
 	*x = CredentialLeaseRequest{}
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[14]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1084,7 +1246,7 @@ func (x *CredentialLeaseRequest) String() string {
 func (*CredentialLeaseRequest) ProtoMessage() {}
 
 func (x *CredentialLeaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[14]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1097,7 +1259,7 @@ func (x *CredentialLeaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialLeaseRequest.ProtoReflect.Descriptor instead.
 func (*CredentialLeaseRequest) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{14}
+	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CredentialLeaseRequest) GetLeaseId() string {
@@ -1142,7 +1304,7 @@ type CredentialLeaseGrant struct {
 
 func (x *CredentialLeaseGrant) Reset() {
 	*x = CredentialLeaseGrant{}
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[15]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1154,7 +1316,7 @@ func (x *CredentialLeaseGrant) String() string {
 func (*CredentialLeaseGrant) ProtoMessage() {}
 
 func (x *CredentialLeaseGrant) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[15]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1167,7 +1329,7 @@ func (x *CredentialLeaseGrant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialLeaseGrant.ProtoReflect.Descriptor instead.
 func (*CredentialLeaseGrant) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{15}
+	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CredentialLeaseGrant) GetLeaseId() string {
@@ -1222,7 +1384,7 @@ type CommandReconcileRequest struct {
 
 func (x *CommandReconcileRequest) Reset() {
 	*x = CommandReconcileRequest{}
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[16]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1234,7 +1396,7 @@ func (x *CommandReconcileRequest) String() string {
 func (*CommandReconcileRequest) ProtoMessage() {}
 
 func (x *CommandReconcileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[16]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1247,7 +1409,7 @@ func (x *CommandReconcileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandReconcileRequest.ProtoReflect.Descriptor instead.
 func (*CommandReconcileRequest) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{16}
+	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CommandReconcileRequest) GetCommandIds() []string {
@@ -1274,7 +1436,7 @@ type CommandReconcileResult struct {
 
 func (x *CommandReconcileResult) Reset() {
 	*x = CommandReconcileResult{}
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[17]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1286,7 +1448,7 @@ func (x *CommandReconcileResult) String() string {
 func (*CommandReconcileResult) ProtoMessage() {}
 
 func (x *CommandReconcileResult) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[17]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1299,7 +1461,7 @@ func (x *CommandReconcileResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandReconcileResult.ProtoReflect.Descriptor instead.
 func (*CommandReconcileResult) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{17}
+	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CommandReconcileResult) GetCommands() []*ReconciledCommand {
@@ -1328,7 +1490,7 @@ type ReconciledCommand struct {
 
 func (x *ReconciledCommand) Reset() {
 	*x = ReconciledCommand{}
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[18]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1340,7 +1502,7 @@ func (x *ReconciledCommand) String() string {
 func (*ReconciledCommand) ProtoMessage() {}
 
 func (x *ReconciledCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_argus_connector_v1_commands_proto_msgTypes[18]
+	mi := &file_argus_connector_v1_commands_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1353,7 +1515,7 @@ func (x *ReconciledCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReconciledCommand.ProtoReflect.Descriptor instead.
 func (*ReconciledCommand) Descriptor() ([]byte, []int) {
-	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{18}
+	return file_argus_connector_v1_commands_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ReconciledCommand) GetCommandId() string {
@@ -1420,13 +1582,14 @@ const file_argus_connector_v1_commands_proto_rawDesc = "" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x1a\n" +
 	"\bprotocol\x18\x03 \x01(\tR\bprotocol\x12A\n" +
 	"\x1dexpected_host_key_fingerprint\x18\x04 \x01(\tR\x1aexpectedHostKeyFingerprint\x12\x1a\n" +
-	"\busername\x18\x05 \x01(\tR\busername\"\xda\x01\n" +
+	"\busername\x18\x05 \x01(\tR\busername\"\xfe\x01\n" +
 	"\x19HostConnectionProbeResult\x12!\n" +
 	"\fresolved_ips\x18\x01 \x03(\tR\vresolvedIps\x120\n" +
 	"\x14host_key_fingerprint\x18\x02 \x01(\tR\x12hostKeyFingerprint\x12\x1a\n" +
 	"\bplatform\x18\x03 \x01(\tR\bplatform\x12%\n" +
 	"\x0eremote_version\x18\x04 \x01(\tR\rremoteVersion\x12%\n" +
-	"\x0elatency_millis\x18\x05 \x01(\x04R\rlatencyMillis\"g\n" +
+	"\x0elatency_millis\x18\x05 \x01(\x04R\rlatencyMillis\x12\"\n" +
+	"\farchitecture\x18\x06 \x01(\tR\farchitecture\"g\n" +
 	"\x19KubernetesConnectionProbe\x12\x1d\n" +
 	"\n" +
 	"api_server\x18\x01 \x01(\tR\tapiServer\x12+\n" +
@@ -1475,12 +1638,26 @@ const file_argus_connector_v1_commands_proto_rawDesc = "" +
 	"\x0fservice_stopped\x18\x02 \x01(\bR\x0eserviceStopped\"`\n" +
 	"\x1aCertificateRotationRequest\x12)\n" +
 	"\x10connection_epoch\x18\x01 \x01(\x04R\x0fconnectionEpoch\x12\x17\n" +
-	"\acsr_pem\x18\x02 \x01(\fR\x06csrPem\"\xcb\x01\n" +
+	"\acsr_pem\x18\x02 \x01(\fR\x06csrPem\"\xad\x01\n" +
 	"\x18CertificateRotationGrant\x12)\n" +
 	"\x10connection_epoch\x18\x01 \x01(\x04R\x0fconnectionEpoch\x12'\n" +
-	"\x0fcertificate_pem\x18\x02 \x01(\fR\x0ecertificatePem\x12\"\n" +
-	"\rca_bundle_pem\x18\x03 \x01(\fR\vcaBundlePem\x127\n" +
-	"\tnot_after\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfter\"\xa6\x01\n" +
+	"\x0fcertificate_pem\x18\x02 \x01(\fR\x0ecertificatePem\x127\n" +
+	"\tnot_after\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfterJ\x04\b\x03\x10\x04\"\xe1\x02\n" +
+	"\x11TrustBundleUpdate\x12\x14\n" +
+	"\x05epoch\x18\x01 \x01(\x04R\x05epoch\x12\x1d\n" +
+	"\n" +
+	"bundle_pem\x18\x02 \x01(\fR\tbundlePem\x12#\n" +
+	"\rbundle_sha256\x18\x03 \x01(\tR\fbundleSha256\x126\n" +
+	"\x17current_ca_fingerprints\x18\x04 \x03(\tR\x15currentCaFingerprints\x120\n" +
+	"\x14next_ca_fingerprints\x18\x05 \x03(\tR\x12nextCaFingerprints\x12\x14\n" +
+	"\x05state\x18\x06 \x01(\tR\x05state\x129\n" +
+	"\n" +
+	"started_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x127\n" +
+	"\tretire_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bretireAt\"|\n" +
+	"\x16TrustBundleAcknowledge\x12\x14\n" +
+	"\x05epoch\x18\x01 \x01(\x04R\x05epoch\x12#\n" +
+	"\rbundle_sha256\x18\x02 \x01(\tR\fbundleSha256\x12'\n" +
+	"\x0fca_fingerprints\x18\x03 \x03(\tR\x0ecaFingerprints\"\xa6\x01\n" +
 	"\x16CredentialLeaseRequest\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12\x1d\n" +
 	"\n" +
@@ -1523,7 +1700,7 @@ func file_argus_connector_v1_commands_proto_rawDescGZIP() []byte {
 	return file_argus_connector_v1_commands_proto_rawDescData
 }
 
-var file_argus_connector_v1_commands_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_argus_connector_v1_commands_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_argus_connector_v1_commands_proto_goTypes = []any{
 	(*ConnectorCommand)(nil),                // 0: argus.connector.v1.ConnectorCommand
 	(*CommandResult)(nil),                   // 1: argus.connector.v1.CommandResult
@@ -1539,29 +1716,33 @@ var file_argus_connector_v1_commands_proto_goTypes = []any{
 	(*ConnectorUninstallResult)(nil),        // 11: argus.connector.v1.ConnectorUninstallResult
 	(*CertificateRotationRequest)(nil),      // 12: argus.connector.v1.CertificateRotationRequest
 	(*CertificateRotationGrant)(nil),        // 13: argus.connector.v1.CertificateRotationGrant
-	(*CredentialLeaseRequest)(nil),          // 14: argus.connector.v1.CredentialLeaseRequest
-	(*CredentialLeaseGrant)(nil),            // 15: argus.connector.v1.CredentialLeaseGrant
-	(*CommandReconcileRequest)(nil),         // 16: argus.connector.v1.CommandReconcileRequest
-	(*CommandReconcileResult)(nil),          // 17: argus.connector.v1.CommandReconcileResult
-	(*ReconciledCommand)(nil),               // 18: argus.connector.v1.ReconciledCommand
-	(*timestamppb.Timestamp)(nil),           // 19: google.protobuf.Timestamp
-	(*anypb.Any)(nil),                       // 20: google.protobuf.Any
-	(*v1.ErrorStatus)(nil),                  // 21: argus.common.v1.ErrorStatus
+	(*TrustBundleUpdate)(nil),               // 14: argus.connector.v1.TrustBundleUpdate
+	(*TrustBundleAcknowledge)(nil),          // 15: argus.connector.v1.TrustBundleAcknowledge
+	(*CredentialLeaseRequest)(nil),          // 16: argus.connector.v1.CredentialLeaseRequest
+	(*CredentialLeaseGrant)(nil),            // 17: argus.connector.v1.CredentialLeaseGrant
+	(*CommandReconcileRequest)(nil),         // 18: argus.connector.v1.CommandReconcileRequest
+	(*CommandReconcileResult)(nil),          // 19: argus.connector.v1.CommandReconcileResult
+	(*ReconciledCommand)(nil),               // 20: argus.connector.v1.ReconciledCommand
+	(*timestamppb.Timestamp)(nil),           // 21: google.protobuf.Timestamp
+	(*anypb.Any)(nil),                       // 22: google.protobuf.Any
+	(*v1.ErrorStatus)(nil),                  // 23: argus.common.v1.ErrorStatus
 }
 var file_argus_connector_v1_commands_proto_depIdxs = []int32{
-	19, // 0: argus.connector.v1.ConnectorCommand.expires_at:type_name -> google.protobuf.Timestamp
-	20, // 1: argus.connector.v1.ConnectorCommand.typed_payload:type_name -> google.protobuf.Any
-	21, // 2: argus.connector.v1.CommandResult.error:type_name -> argus.common.v1.ErrorStatus
-	20, // 3: argus.connector.v1.CommandResult.typed_result:type_name -> google.protobuf.Any
-	19, // 4: argus.connector.v1.CertificateRotationGrant.not_after:type_name -> google.protobuf.Timestamp
-	19, // 5: argus.connector.v1.CredentialLeaseGrant.expires_at:type_name -> google.protobuf.Timestamp
-	18, // 6: argus.connector.v1.CommandReconcileResult.commands:type_name -> argus.connector.v1.ReconciledCommand
-	21, // 7: argus.connector.v1.ReconciledCommand.error:type_name -> argus.common.v1.ErrorStatus
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	21, // 0: argus.connector.v1.ConnectorCommand.expires_at:type_name -> google.protobuf.Timestamp
+	22, // 1: argus.connector.v1.ConnectorCommand.typed_payload:type_name -> google.protobuf.Any
+	23, // 2: argus.connector.v1.CommandResult.error:type_name -> argus.common.v1.ErrorStatus
+	22, // 3: argus.connector.v1.CommandResult.typed_result:type_name -> google.protobuf.Any
+	21, // 4: argus.connector.v1.CertificateRotationGrant.not_after:type_name -> google.protobuf.Timestamp
+	21, // 5: argus.connector.v1.TrustBundleUpdate.started_at:type_name -> google.protobuf.Timestamp
+	21, // 6: argus.connector.v1.TrustBundleUpdate.retire_at:type_name -> google.protobuf.Timestamp
+	21, // 7: argus.connector.v1.CredentialLeaseGrant.expires_at:type_name -> google.protobuf.Timestamp
+	20, // 8: argus.connector.v1.CommandReconcileResult.commands:type_name -> argus.connector.v1.ReconciledCommand
+	23, // 9: argus.connector.v1.ReconciledCommand.error:type_name -> argus.common.v1.ErrorStatus
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_argus_connector_v1_commands_proto_init() }
@@ -1575,7 +1756,7 @@ func file_argus_connector_v1_commands_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_argus_connector_v1_commands_proto_rawDesc), len(file_argus_connector_v1_commands_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

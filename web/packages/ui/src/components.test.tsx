@@ -197,10 +197,47 @@ describe("FormDrawer", () => {
 });
 
 describe("ResourceAuthorizationDualList", () => {
+  const labels = {
+    host: "Host",
+    kubernetes: "Kubernetes",
+    searchPlaceholder: "搜索资源",
+    available: "未授权",
+    authorized: "已授权",
+    inherited: "继承授权",
+    moveSelected: "批量移动",
+    moveAll: "全部移动",
+    removeSelected: "批量移除",
+    removeAll: "全部移除",
+    previousPage: "上一页",
+    nextPage: "下一页",
+  };
+
   it("moves multiple selected resources and protects inherited grants", () => {
     function Harness() {
-      const [value, setValue] = useState({ host: ["h2"], kubernetes_cluster: [] as string[] });
-      return <><ResourceAuthorizationDualList hosts={[{ id: "h1", label: "Host 1" }, { id: "h2", label: "Host 2", inherited: true, source: "部门：平台" }]} clusters={[]} value={value} onChange={setValue} /><output>{value.host.join(",")}</output></>;
+      const [value, setValue] = useState({
+        host: ["h2"],
+        kubernetes_cluster: [] as string[],
+      });
+      return (
+        <>
+          <ResourceAuthorizationDualList
+            hosts={[
+              { id: "h1", label: "Host 1" },
+              {
+                id: "h2",
+                label: "Host 2",
+                inherited: true,
+                source: "部门：平台",
+              },
+            ]}
+            clusters={[]}
+            labels={labels}
+            value={value}
+            onChange={setValue}
+          />
+          <output>{value.host.join(",")}</output>
+        </>
+      );
     }
     render(<Harness />, { wrapper: Wrapper });
     const checks = screen.getAllByRole("checkbox");
@@ -211,8 +248,20 @@ describe("ResourceAuthorizationDualList", () => {
   });
 
   it("paginates each side with a stable page size", () => {
-    const hosts = Array.from({ length: 21 }, (_, index) => ({ id: `h${index}`, label: `Host ${index}` }));
-    render(<ResourceAuthorizationDualList hosts={hosts} clusters={[]} value={{ host: [], kubernetes_cluster: [] }} onChange={() => {}} />, { wrapper: Wrapper });
+    const hosts = Array.from({ length: 21 }, (_, index) => ({
+      id: `h${index}`,
+      label: `Host ${index}`,
+    }));
+    render(
+      <ResourceAuthorizationDualList
+        hosts={hosts}
+        clusters={[]}
+        labels={labels}
+        value={{ host: [], kubernetes_cluster: [] }}
+        onChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "下一页" })[0]!);
     expect(screen.getByText("Host 20")).toBeInTheDocument();

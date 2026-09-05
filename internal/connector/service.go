@@ -11,6 +11,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,15 +20,19 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/encoding/protojson"
+	"k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/kakj-go/Argus/internal/artifactcheck"
 	"github.com/kakj-go/Argus/internal/audit"
 	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
+	"github.com/kakj-go/Argus/internal/installinstruction"
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
 	"github.com/kakj-go/Argus/internal/telemetrybinding"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 var (
@@ -50,34 +56,41 @@ type CertificateIssuer interface {
 }
 
 type Service struct {
-	Store           *postgres.Store
-	Redis           *redisstore.Client
-	Issuer          CertificateIssuer
-	EnrollmentURL   string
-	GatewayEndpoint string
-	GatewayInstance string
-	CertificateTTL  time.Duration
-	RegistryTTL     time.Duration
-	Credentials     secret.Service
+	Store            *postgres.Store
+	Redis            *redisstore.Client
+	Issuer           CertificateIssuer
+	EnrollmentURL    string
+	GatewayEndpoint  string
+	GatewayInstance  string
+	CertificateTTL   time.Duration
+	RegistryTTL      time.Duration
+	Credentials      secret.Service
+	Artifacts        artifactcheck.Checker
+	TrustBundlePath  string
+	TrustBundleEpoch int64
+	BootstrapTLSMode installinstruction.DownloadTLSMode
+	KubernetesImage  string
+	TrustBundles     trustbundle.Service
 }
 
 type EnrollInput struct {
-	Token, CSRPem, DeviceFingerprint, InstanceID, Name, SoftwareVersion string
-	Capabilities                                                        []string
+	Token, CSRPem, DeviceFingerprint, InstanceID, Architecture, Name, SoftwareVersion string
+	Capabilities                                                                      []string
 }
 
 type EnrollmentResult struct {
 	Connector       db.Connector
 	CertificatePEM  string
-	CABundlePEM     string
+	TrustBundle     trustbundle.Bundle
 	GatewayEndpoint string
 	Result          string
 }
 
 type CreatedEnrollment struct {
-	Record         db.ConnectorEnrollmentToken
-	ConnectorID    uuid.UUID
-	InstallCommand string
+	Record          db.ConnectorEnrollmentToken
+	ConnectorID     uuid.UUID
+	InstructionSets []installinstruction.Set
+	Token           string
 }
 
 type CreateEnrollmentInput struct {
@@ -85,13 +98,19 @@ type CreateEnrollmentInput struct {
 	BastionScopeID uuid.NullUUID
 	ClusterID      uuid.NullUUID
 	HostID         uuid.NullUUID
-	Policy         json.RawMessage
-	TTL            time.Duration
+	// ManualInstall is the only flow that returns a browser-visible curl
+	// command. Its exact release is frozen in the Pending Action.
+	ManualInstall    bool
+	ReleaseVersionID uuid.NullUUID
+	Policy           json.RawMessage
+	TTL              time.Duration
+	ImagePullSecrets []string
 }
 
 func (service Service) CreateEnrollment(ctx context.Context, q *db.Queries, actorID string, enterpriseID uuid.UUID, input CreateEnrollmentInput) (CreatedEnrollment, error) {
-	if (input.Role == "bastion" && (!input.BastionScopeID.Valid || !input.HostID.Valid || input.ClusterID.Valid)) ||
-		(input.Role == "kubernetes" && (!input.ClusterID.Valid || input.BastionScopeID.Valid || input.HostID.Valid)) {
+	if (input.Role == "bastion" && (!input.BastionScopeID.Valid || !input.HostID.Valid || input.ClusterID.Valid || input.ManualInstall != input.ReleaseVersionID.Valid)) ||
+		(input.Role == "kubernetes" && (!input.ClusterID.Valid || input.BastionScopeID.Valid || input.HostID.Valid || input.ManualInstall || input.ReleaseVersionID.Valid)) ||
+		(input.Role != "kubernetes" && len(input.ImagePullSecrets) != 0) || !validImagePullSecrets(input.ImagePullSecrets) {
 		return CreatedEnrollment{}, ErrEnrollmentInvalid
 	}
 	ttl := input.TTL
@@ -110,24 +129,198 @@ func (service Service) CreateEnrollment(ctx context.Context, q *db.Queries, acto
 	record, err := q.CreateConnectorEnrollmentToken(ctx, db.CreateConnectorEnrollmentTokenParams{ID: newID(), PreallocatedConnectorID: connectorID,
 		EnterpriseID: enterpriseID, Role: input.Role, Purpose: input.Purpose, BastionScopeID: input.BastionScopeID,
 		KubernetesClusterID: input.ClusterID, PreallocatedHostID: input.HostID, TokenHash: tokenHash[:], Policy: input.Policy,
-		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true}, CreatedBy: uuid.MustParse(actorID)})
+		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true}, CreatedBy: uuid.MustParse(actorID), ReleaseVersionID: input.ReleaseVersionID})
 	if err != nil {
 		return CreatedEnrollment{}, err
 	}
 	if service.EnrollmentURL == "" || service.GatewayEndpoint == "" {
 		return CreatedEnrollment{}, ErrEnrollmentInvalid
 	}
-	command := fmt.Sprintf("argus-connector enroll --connector-id %s --token %s --server %s --role %s", connectorID, token, service.EnrollmentURL, input.Role)
-	return CreatedEnrollment{Record: record, ConnectorID: connectorID, InstallCommand: command}, nil
+	var instructionSets []installinstruction.Set
+	if (input.Role == "bastion" && input.ManualInstall) || input.Role == "kubernetes" {
+		releaseVersionID := input.ReleaseVersionID
+		if input.Role == "kubernetes" {
+			release, releaseErr := q.GetActiveConnectorReleaseVersion(ctx)
+			if releaseErr != nil {
+				return CreatedEnrollment{}, ErrConnectorArtifactUnavailable
+			}
+			releaseVersionID = uuid.NullUUID{UUID: release.ID, Valid: true}
+		}
+		release, releaseErr := q.GetConnectorReleaseVersion(ctx, releaseVersionID.UUID)
+		if releaseErr != nil {
+			return CreatedEnrollment{}, ErrConnectorArtifactUnavailable
+		}
+		manifest, manifestErr := connectorManualInstallRelease(release.Manifest)
+		if manifestErr != nil {
+			return CreatedEnrollment{}, manifestErr
+		}
+		if service.Artifacts != nil {
+			urls := []string{manifest.ManifestURI, manifest.InstallScriptURI}
+			for _, artifact := range manifest.Artifacts {
+				urls = append(urls, artifact.URI)
+			}
+			if checkErr := service.Artifacts.Check(ctx, urls...); checkErr != nil {
+				return CreatedEnrollment{}, fmt.Errorf("%w: %v", ErrConnectorArtifactUnavailable, checkErr)
+			}
+		}
+		bundle, bundleErr := service.installationTrustBundle(ctx)
+		if bundleErr != nil {
+			return CreatedEnrollment{}, bundleErr
+		}
+		arguments := []string{"--manifest", manifest.ManifestURI, "--key-id", manifest.SigningKeyID,
+			"--public-key", manifest.SigningPublicKey, "--connector-id", connectorID.String(),
+			"--server", service.EnrollmentURL, "--role", input.Role}
+		if input.Purpose == "connector_replacement" {
+			arguments = append(arguments, "--replace")
+		}
+		scopes := []installinstruction.Scope{installinstruction.ScopeLinuxSystem, installinstruction.ScopeLinuxUser}
+		if input.Role == "kubernetes" {
+			if strings.TrimSpace(service.KubernetesImage) == "" {
+				return CreatedEnrollment{}, ErrEnrollmentInvalid
+			}
+			arguments = append(arguments, "--connector-image", service.KubernetesImage)
+			if len(input.ImagePullSecrets) != 0 {
+				arguments = append(arguments, "--image-pull-secrets", strings.Join(input.ImagePullSecrets, ","))
+			}
+			scopes = []installinstruction.Scope{installinstruction.ScopeKubernetes}
+		}
+		for _, scope := range scopes {
+			warnings := []string{}
+			bootstrapScriptURL := ""
+			bootstrapTLSMode := installinstruction.DownloadTLSMode("")
+			if input.Role == "bastion" {
+				bootstrapScriptURL = connectorBootstrapScriptURL(service.EnrollmentURL)
+				bootstrapTLSMode = service.BootstrapTLSMode
+			}
+			if scope == installinstruction.ScopeLinuxUser {
+				warnings = append(warnings, "User services require an active login session unless systemd linger is enabled.",
+					"Profiles requiring host capabilities, kernel data, or system directories are unavailable in user mode.")
+			}
+			instruction, buildErr := installinstruction.BuildPOSIX(installinstruction.POSIXOptions{Scope: scope,
+				InstallerURL: manifest.InstallScriptURI, InstallerSHA256: manifest.InstallScriptSHA256,
+				BootstrapScriptURL: bootstrapScriptURL, DownloadTLSMode: bootstrapTLSMode,
+				TrustBundlePEM: bundle.Material.PEM, TrustBundleEpoch: bundle.Epoch, Token: token,
+				ExpiresAt: record.ExpiresAt.Time, InstallerArguments: arguments, CapabilityWarnings: warnings})
+			if buildErr != nil {
+				return CreatedEnrollment{}, buildErr
+			}
+			instructionSets = append(instructionSets, instruction)
+		}
+	}
+	return CreatedEnrollment{Record: record, ConnectorID: connectorID, InstructionSets: instructionSets, Token: token}, nil
 }
 
-func (service Service) CreateKubernetesEnrollment(ctx context.Context, q *db.Queries, actorID string, enterpriseID, clusterID uuid.UUID) (resource.EnrollmentResult, error) {
+func (service Service) installationTrustBundle(ctx context.Context) (trustbundle.Bundle, error) {
+	if service.TrustBundles.Store != nil {
+		return service.TrustBundles.Current(ctx)
+	}
+	value, err := os.ReadFile(service.TrustBundlePath)
+	if err != nil {
+		return trustbundle.Bundle{}, fmt.Errorf("read installation Trust Bundle: %w", err)
+	}
+	material, err := trustbundle.Parse(value, time.Now().UTC())
+	if err != nil {
+		return trustbundle.Bundle{}, err
+	}
+	epoch := service.TrustBundleEpoch
+	if epoch < 1 {
+		return trustbundle.Bundle{}, errors.New("installation Trust Bundle epoch is invalid")
+	}
+	return trustbundle.Bundle{Epoch: epoch, State: trustbundle.StateStable, Material: material,
+		CurrentCAFingerprints: material.Fingerprints, StartedAt: time.Now().UTC()}, nil
+}
+
+func connectorBootstrapScriptURL(enrollmentURL string) string {
+	return strings.TrimRight(enrollmentURL, "/") + "/api/v1/connectors/bootstrap-script"
+}
+
+// BootstrapScript rebuilds the strict self-contained installer behind the
+// short download command. Reading the script does not consume enrollment; the
+// installer still performs the existing one-time enrollment transaction.
+func (service Service) BootstrapScript(ctx context.Context, token string, scope installinstruction.Scope) (string, error) {
+	if service.Store == nil || strings.TrimSpace(token) == "" ||
+		(scope != installinstruction.ScopeLinuxSystem && scope != installinstruction.ScopeLinuxUser) {
+		return "", ErrEnrollmentInvalid
+	}
+	tokenHash := sha256.Sum256([]byte(token))
+	record, err := service.Store.Queries.GetEnrollmentTokenByHash(ctx, tokenHash[:])
+	if err != nil || record.Status != "active" || !record.ExpiresAt.Valid || !time.Now().UTC().Before(record.ExpiresAt.Time) ||
+		record.Role != "bastion" || !record.ReleaseVersionID.Valid ||
+		(record.Purpose != "initial_registration" && record.Purpose != "connector_replacement") {
+		return "", ErrEnrollmentInvalid
+	}
+	release, err := service.Store.Queries.GetConnectorReleaseVersion(ctx, record.ReleaseVersionID.UUID)
+	if err != nil {
+		return "", ErrConnectorArtifactUnavailable
+	}
+	manifest, err := connectorManualInstallRelease(release.Manifest)
+	if err != nil {
+		return "", ErrConnectorArtifactUnavailable
+	}
+	if service.Artifacts != nil {
+		urls := []string{manifest.ManifestURI, manifest.InstallScriptURI}
+		for _, artifact := range manifest.Artifacts {
+			urls = append(urls, artifact.URI)
+		}
+		if err = service.Artifacts.Check(ctx, urls...); err != nil {
+			return "", fmt.Errorf("%w: %v", ErrConnectorArtifactUnavailable, err)
+		}
+	}
+	bundle, err := service.installationTrustBundle(ctx)
+	if err != nil {
+		return "", err
+	}
+	arguments := []string{"--manifest", manifest.ManifestURI, "--key-id", manifest.SigningKeyID,
+		"--public-key", manifest.SigningPublicKey, "--connector-id", record.PreallocatedConnectorID.String(),
+		"--server", service.EnrollmentURL, "--role", record.Role}
+	if record.Purpose == "connector_replacement" {
+		arguments = append(arguments, "--replace")
+	}
+	warnings := []string{}
+	if scope == installinstruction.ScopeLinuxUser {
+		warnings = append(warnings, "User services require an active login session unless systemd linger is enabled.",
+			"Profiles requiring host capabilities, kernel data, or system directories are unavailable in user mode.")
+	}
+	instruction, err := installinstruction.BuildPOSIX(installinstruction.POSIXOptions{Scope: scope,
+		InstallerURL: manifest.InstallScriptURI, InstallerSHA256: manifest.InstallScriptSHA256,
+		BootstrapScriptURL: connectorBootstrapScriptURL(service.EnrollmentURL), DownloadTLSMode: service.BootstrapTLSMode,
+		TrustBundlePEM: bundle.Material.PEM, TrustBundleEpoch: bundle.Epoch, Token: token,
+		ExpiresAt: record.ExpiresAt.Time, InstallerArguments: arguments, CapabilityWarnings: warnings})
+	if err != nil {
+		return "", err
+	}
+	_, _ = audit.Append(ctx, service.Store.Queries, audit.Entry{Domain: "enterprise",
+		EnterpriseID: uuid.NullUUID{UUID: record.EnterpriseID, Valid: true}, ActorType: "system", ActorID: "connector-bootstrap",
+		Action: "connector.bootstrap_script.download", ResourceType: "connector", ResourceID: record.PreallocatedConnectorID.String(),
+		Result: "success", Details: map[string]any{"scope": scope, "tls_mode": service.BootstrapTLSMode}})
+	return instruction.BootstrapScript + "\n", nil
+}
+
+func (service Service) CreateKubernetesEnrollment(ctx context.Context, q *db.Queries, actorID string, enterpriseID, clusterID uuid.UUID, imagePullSecrets []string) (resource.EnrollmentResult, error) {
 	created, err := service.CreateEnrollment(ctx, q, actorID, enterpriseID, CreateEnrollmentInput{Role: "kubernetes", Purpose: "kubernetes_registration",
-		ClusterID: uuid.NullUUID{UUID: clusterID, Valid: true}, Policy: json.RawMessage(`{"capabilities":["kubernetes.connection_probe","kubernetes.query","credential.lease","connector.uninstall"]}`)})
+		ClusterID: uuid.NullUUID{UUID: clusterID, Valid: true}, ImagePullSecrets: imagePullSecrets,
+		Policy: json.RawMessage(`{"capabilities":["kubernetes.connection_probe","kubernetes.query","credential.lease","connector.uninstall"]}`)})
 	if err != nil {
 		return resource.EnrollmentResult{}, err
 	}
-	return resource.EnrollmentResult{EnrollmentID: created.Record.ID, InstallCommand: created.InstallCommand, ExpiresAt: created.Record.ExpiresAt.Time}, nil
+	return resource.EnrollmentResult{EnrollmentID: created.Record.ID, InstructionSets: created.InstructionSets, ExpiresAt: created.Record.ExpiresAt.Time}, nil
+}
+
+func validImagePullSecrets(values []string) bool {
+	if len(values) > 16 {
+		return false
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if len(validation.IsDNS1123Subdomain(value)) != 0 {
+			return false
+		}
+		if _, exists := seen[value]; exists {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
 }
 
 type TrustedIdentity struct {
@@ -137,7 +330,8 @@ type TrustedIdentity struct {
 }
 
 func (service Service) Enroll(ctx context.Context, input EnrollInput) (EnrollmentResult, error) {
-	if service.Issuer == nil || input.Token == "" || input.DeviceFingerprint == "" || input.InstanceID == "" || service.GatewayEndpoint == "" {
+	if service.Issuer == nil || input.Token == "" || input.DeviceFingerprint == "" || input.InstanceID == "" ||
+		(input.Architecture != "amd64" && input.Architecture != "arm64") || service.GatewayEndpoint == "" {
 		return EnrollmentResult{}, ErrEnrollmentInvalid
 	}
 	csr, publicKeyHash, err := parseCSR(input.CSRPem)
@@ -164,7 +358,11 @@ func (service Service) Enroll(ctx context.Context, input EnrollInput) (Enrollmen
 			if err != nil {
 				return err
 			}
-			result = EnrollmentResult{Connector: connector, CertificatePEM: certificate.CertificatePem, CABundlePEM: certificate.CaBundlePem,
+			bundle, bundleErr := service.enrollmentTrustBundle(ctx, certificate.CaBundlePem)
+			if bundleErr != nil {
+				return bundleErr
+			}
+			result = EnrollmentResult{Connector: connector, CertificatePEM: certificate.CertificatePem, TrustBundle: bundle,
 				GatewayEndpoint: service.GatewayEndpoint, Result: "idempotent_retry"}
 			return nil
 		}
@@ -175,23 +373,50 @@ func (service Service) Enroll(ctx context.Context, input EnrollInput) (Enrollmen
 		if len(csr.URIs) != 1 || csr.URIs[0].String() != CertificateURI(connectorID) {
 			return ErrEnrollmentInvalid
 		}
+		repair := token.Purpose == "pki_repair"
+		var connector db.Connector
+		if repair {
+			connector, err = q.GetConnector(ctx, db.GetConnectorParams{ID: connectorID, EnterpriseID: token.EnterpriseID})
+			if err != nil || connector.Role != token.Role || connector.InstanceID != input.InstanceID || connector.Name != input.Name ||
+				!slices.Equal(connector.Capabilities, input.Capabilities) || connector.Status == "uninstalled" || connector.Status == "revoked" {
+				return ErrEnrollmentConflict
+			}
+		}
 		certificate, err := service.Issuer.Issue(ctx, connectorID, csr, service.certificateTTL())
 		if err != nil {
 			return err
 		}
-		if err := validateCertificate(certificate, connectorID, publicKeyHash); err != nil {
+		parsedCertificate, err := validateCertificate(certificate, connectorID, publicKeyHash)
+		if err != nil {
 			return err
 		}
-		connector, err := q.CreateConnector(ctx, db.CreateConnectorParams{ID: connectorID, EnterpriseID: token.EnterpriseID, Role: token.Role, Name: input.Name,
-			HostID: token.PreallocatedHostID, BastionScopeID: token.BastionScopeID, KubernetesClusterID: token.KubernetesClusterID,
-			InstanceID: input.InstanceID, DeviceFingerprintHash: deviceHash[:], PublicKeyHash: publicKeyHash,
-			SoftwareVersion: input.SoftwareVersion, Capabilities: input.Capabilities,
-			CertificateExpiresAt: pgtype.Timestamptz{Time: certificate.NotAfter.UTC(), Valid: true}})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrEnrollmentConflict
+		if repair {
+			if _, err = q.DeleteConnectorSessionsForReplacement(ctx, db.DeleteConnectorSessionsForReplacementParams{
+				ConnectorID: connector.ID, EnterpriseID: connector.EnterpriseID,
+			}); err != nil {
+				return err
 			}
-			return err
+			if err = q.RevokeConnectorCertificates(ctx, db.RevokeConnectorCertificatesParams{
+				ConnectorID: connector.ID, EnterpriseID: connector.EnterpriseID,
+			}); err != nil {
+				return err
+			}
+			if err = q.RevokePKISubjectCertificates(ctx, db.RevokePKISubjectCertificatesParams{SubjectKind: "connector",
+				SubjectID: connector.ID.String(), RevocationReason: "pki_repair"}); err != nil {
+				return err
+			}
+		} else {
+			connector, err = q.CreateConnector(ctx, db.CreateConnectorParams{ID: connectorID, EnterpriseID: token.EnterpriseID, Role: token.Role, Name: input.Name,
+				HostID: token.PreallocatedHostID, BastionScopeID: token.BastionScopeID, KubernetesClusterID: token.KubernetesClusterID,
+				InstanceID: input.InstanceID, DeviceFingerprintHash: deviceHash[:], PublicKeyHash: publicKeyHash,
+				SoftwareVersion: input.SoftwareVersion, Capabilities: input.Capabilities,
+				CertificateExpiresAt: pgtype.Timestamptz{Time: certificate.NotAfter.UTC(), Valid: true}})
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return ErrEnrollmentConflict
+				}
+				return err
+			}
 		}
 		if _, err := q.CreateConnectorCertificate(ctx, db.CreateConnectorCertificateParams{ID: newID(), ConnectorID: connector.ID, EnterpriseID: connector.EnterpriseID,
 			SerialNumber: certificate.SerialNumber, IssuerGeneration: certificate.IssuerGeneration, CertificateRequestName: certificate.CertificateRequestName,
@@ -199,30 +424,77 @@ func (service Service) Enroll(ctx context.Context, input EnrollInput) (Enrollmen
 			NotAfter: pgtype.Timestamptz{Time: certificate.NotAfter.UTC(), Valid: true}}); err != nil {
 			return err
 		}
+		if err := trustbundle.RegisterCertificateIdentity(ctx, q, parsedCertificate, trustbundle.CertificateIdentity{Kind: "connector",
+			SubjectID: connector.ID.String(), EnterpriseID: uuid.NullUUID{UUID: connector.EnterpriseID, Valid: true},
+			Usage: x509.ExtKeyUsageClientAuth, IssuerGeneration: certificate.IssuerGeneration}); err != nil {
+			return err
+		}
+		if repair {
+			connector, err = q.CompleteConnectorCertificateRotation(ctx, db.CompleteConnectorCertificateRotationParams{ID: connector.ID,
+				EnterpriseID: connector.EnterpriseID, PublicKeyHash: publicKeyHash,
+				CertificateExpiresAt: pgtype.Timestamptz{Time: certificate.NotAfter.UTC(), Valid: true}})
+			if err != nil {
+				return err
+			}
+		}
 		if _, err := q.ConsumeEnrollmentToken(ctx, db.ConsumeEnrollmentTokenParams{ID: token.ID, ConsumedDeviceHash: deviceHash[:], RegisteredConnectorID: uuid.NullUUID{UUID: connector.ID, Valid: true}}); err != nil {
 			return ErrEnrollmentConflict
 		}
-		if token.Role == "bastion" {
+		if !repair && token.Role == "bastion" {
+			rows, updateErr := q.SetBastionRootHostArchitecture(ctx, db.SetBastionRootHostArchitectureParams{
+				ID: token.PreallocatedHostID.UUID, EnterpriseID: token.EnterpriseID, Architecture: pgtype.Text{String: input.Architecture, Valid: true},
+			})
+			if updateErr != nil || rows != 1 {
+				return ErrEnrollmentConflict
+			}
 			if _, err := q.ActivateBastionConnector(ctx, db.ActivateBastionConnectorParams{ID: token.BastionScopeID.UUID, EnterpriseID: token.EnterpriseID,
 				ConnectorHostID: token.PreallocatedHostID, ActiveConnectorID: uuid.NullUUID{UUID: connector.ID, Valid: true}}); err != nil {
 				return err
 			}
-		} else {
+		} else if !repair {
 			if _, err := q.ActivateKubernetesConnector(ctx, db.ActivateKubernetesConnectorParams{ID: token.KubernetesClusterID.UUID, EnterpriseID: token.EnterpriseID,
 				ConnectorID: uuid.NullUUID{UUID: connector.ID, Valid: true}}); err != nil {
 				return err
 			}
 		}
+		action, summary := "connector.enroll", "connector enrolled"
+		if repair {
+			action, summary = "connector.pki_repair", "connector identity repaired"
+		}
 		if _, err := audit.Append(ctx, q, audit.Entry{Domain: "enterprise", EnterpriseID: uuid.NullUUID{UUID: token.EnterpriseID, Valid: true},
-			ActorType: "connector", ActorID: connector.ID.String(), Action: "connector.enroll", ResourceType: "connector", ResourceID: connector.ID.String(),
-			Result: "success", Details: map[string]any{"summary": "connector enrolled", "status": "pending"}}); err != nil {
+			ActorType: "connector", ActorID: connector.ID.String(), Action: action, ResourceType: "connector", ResourceID: connector.ID.String(),
+			Result: "success", Details: map[string]any{"summary": summary, "status": connector.Status}}); err != nil {
 			return err
 		}
-		result = EnrollmentResult{Connector: connector, CertificatePEM: certificate.PEM, CABundlePEM: certificate.CABundlePEM,
-			GatewayEndpoint: service.GatewayEndpoint, Result: "registered"}
+		bundle, bundleErr := service.enrollmentTrustBundle(ctx, certificate.CABundlePEM)
+		if bundleErr != nil {
+			return bundleErr
+		}
+		resultName := "registered"
+		if repair {
+			resultName = "identity_repaired"
+		}
+		result = EnrollmentResult{Connector: connector, CertificatePEM: certificate.PEM, TrustBundle: bundle,
+			GatewayEndpoint: service.GatewayEndpoint, Result: resultName}
 		return nil
 	})
 	return result, err
+}
+
+func (service Service) enrollmentTrustBundle(ctx context.Context, issuerBundle string) (trustbundle.Bundle, error) {
+	if service.TrustBundles.Store != nil {
+		return service.TrustBundles.Current(ctx)
+	}
+	material, err := trustbundle.Parse([]byte(issuerBundle), time.Now().UTC())
+	if err != nil {
+		return trustbundle.Bundle{}, err
+	}
+	epoch := service.TrustBundleEpoch
+	if epoch < 1 {
+		epoch = 1
+	}
+	return trustbundle.Bundle{Epoch: epoch, State: trustbundle.StateStable, Material: material,
+		CurrentCAFingerprints: material.Fingerprints, StartedAt: time.Now().UTC()}, nil
 }
 
 func (service Service) OpenSession(ctx context.Context, identity TrustedIdentity, capabilities []string) (db.Connector, error) {
@@ -296,7 +568,8 @@ func (service Service) RotateCertificate(ctx context.Context, identity TrustedId
 	if err != nil {
 		return Certificate{}, err
 	}
-	if err := validateCertificate(certificate, identity.ConnectorID, publicKeyHash); err != nil {
+	parsedCertificate, err := validateCertificate(certificate, identity.ConnectorID, publicKeyHash)
+	if err != nil {
 		return Certificate{}, err
 	}
 	err = service.Store.InTx(ctx, func(q *db.Queries) error {
@@ -312,10 +585,18 @@ func (service Service) RotateCertificate(ctx context.Context, identity TrustedId
 			EnterpriseID: identity.EnterpriseID}); err != nil {
 			return err
 		}
+		if err := q.MarkPKISubjectCertificatesOverlap(ctx, db.MarkPKISubjectCertificatesOverlapParams{SubjectKind: "connector", SubjectID: identity.ConnectorID.String()}); err != nil {
+			return err
+		}
 		if _, err := q.CreateConnectorCertificate(ctx, db.CreateConnectorCertificateParams{ID: newID(), ConnectorID: identity.ConnectorID,
 			EnterpriseID: identity.EnterpriseID, SerialNumber: certificate.SerialNumber, IssuerGeneration: certificate.IssuerGeneration,
 			CertificateRequestName: certificate.CertificateRequestName, CertificatePem: certificate.PEM, CaBundlePem: certificate.CABundlePEM,
 			NotBefore: pgtype.Timestamptz{Time: certificate.NotBefore.UTC(), Valid: true}, NotAfter: pgtype.Timestamptz{Time: certificate.NotAfter.UTC(), Valid: true}}); err != nil {
+			return err
+		}
+		if err := trustbundle.RegisterCertificateIdentity(ctx, q, parsedCertificate, trustbundle.CertificateIdentity{Kind: "connector",
+			SubjectID: identity.ConnectorID.String(), EnterpriseID: uuid.NullUUID{UUID: identity.EnterpriseID, Valid: true},
+			Usage: x509.ExtKeyUsageClientAuth, IssuerGeneration: certificate.IssuerGeneration}); err != nil {
 			return err
 		}
 		_, err = q.CompleteConnectorCertificateRotation(ctx, db.CompleteConnectorCertificateRotationParams{ID: identity.ConnectorID,
@@ -465,6 +746,9 @@ type collectorManagementRequest struct {
 	ResourceType    string `json:"resource_type"`
 	DesiredRevision uint64 `json:"desired_revision"`
 	ConfigSHA256    string `json:"config_sha256"`
+	// Transport 为 protojson(UseProtoNames) 渲染的 route transport 字段;
+	// 隧道形态的成员隧道状态随命令结果收敛(PlanV4)。
+	Transport string `json:"transport"`
 }
 
 type collectorManagementResult struct {
@@ -492,6 +776,14 @@ func finalizeCollectorManagement(ctx context.Context, q *db.Queries, command db.
 		if _, err = q.ApplyCollectorOperationSuccess(ctx, db.ApplyCollectorOperationSuccessParams{ID: collectorID, EnterpriseID: command.EnterpriseID, Column3: request.Operation}); err != nil {
 			return err
 		}
+		// Tunnel health is reported by the long-lived supervisor heartbeat. A
+		// successful Collector install must not fabricate an established tunnel.
+		if request.Transport == "bastion_tunnel" || request.Transport == "executor_tunnel" {
+			if request.Operation == "uninstall" {
+				_, _ = q.MarkTelemetryTunnelRemoved(ctx, db.MarkTelemetryTunnelRemovedParams{
+					CollectorID: collectorID, EnterpriseID: command.EnterpriseID, Column3: "", LastDropReason: "collector_uninstall"})
+			}
+		}
 		if request.Operation != "uninstall" {
 			if request.ResourceType == "kubernetes_cluster" {
 				clusterID, parseErr := uuid.Parse(request.ResourceID)
@@ -502,10 +794,16 @@ func finalizeCollectorManagement(ctx context.Context, q *db.Queries, command db.
 			if _, err = q.MarkCollectorConfigEffective(ctx, db.MarkCollectorConfigEffectiveParams{CollectorID: collectorID, Revision: int64(request.DesiredRevision)}); err != nil {
 				return err
 			}
-			if _, err = q.MarkTelemetryRouteActive(ctx, db.MarkTelemetryRouteActiveParams{CollectorID: collectorID, EnterpriseID: command.EnterpriseID}); err != nil {
-				return err
+			ready, readyErr := collectorTelemetryTunnelReady(ctx, q, command.EnterpriseID, collectorID, request.Transport)
+			if readyErr != nil {
+				return readyErr
 			}
-			_, err = q.FinalizeCollectorClaimMigrations(ctx, db.FinalizeCollectorClaimMigrationsParams{EnterpriseID: command.EnterpriseID, CollectorID: collectorID})
+			if ready {
+				if _, err = q.MarkTelemetryRouteActive(ctx, db.MarkTelemetryRouteActiveParams{CollectorID: collectorID, EnterpriseID: command.EnterpriseID}); err != nil {
+					return err
+				}
+				_, err = q.FinalizeCollectorClaimMigrations(ctx, db.FinalizeCollectorClaimMigrationsParams{EnterpriseID: command.EnterpriseID, CollectorID: collectorID})
+			}
 		}
 		return err
 	}
@@ -523,6 +821,17 @@ func finalizeCollectorManagement(ctx context.Context, q *db.Queries, command db.
 	return err
 }
 
+func collectorTelemetryTunnelReady(ctx context.Context, q *db.Queries, enterpriseID, collectorID uuid.UUID, transport string) (bool, error) {
+	if transport != "executor_tunnel" && transport != "bastion_tunnel" {
+		return true, nil
+	}
+	tunnel, err := q.GetTelemetryTunnelByCollector(ctx, collectorID)
+	if err != nil || tunnel.EnterpriseID != enterpriseID || tunnel.Transport != transport || tunnel.Status == "removed" {
+		return false, ErrCommandState
+	}
+	return tunnel.Status == "established", nil
+}
+
 func validateCollectorManagementOutcome(payload json.RawMessage, status string, raw json.RawMessage) (collectorManagementRequest, collectorManagementResult, error) {
 	var requestMessage connectorv1.CollectorManagementCommand
 	if protojson.Unmarshal(payload, &requestMessage) != nil {
@@ -530,7 +839,8 @@ func validateCollectorManagementOutcome(payload json.RawMessage, status string, 
 	}
 	request := collectorManagementRequest{CollectorID: requestMessage.GetCollectorId(), Operation: requestMessage.GetOperation(),
 		ResourceID: requestMessage.GetResourceId(), ResourceType: requestMessage.GetResourceType(),
-		DesiredRevision: requestMessage.GetDesiredRevision(), ConfigSHA256: requestMessage.GetConfigSha256()}
+		DesiredRevision: requestMessage.GetDesiredRevision(), ConfigSHA256: requestMessage.GetConfigSha256(),
+		Transport: requestMessage.GetTransport()}
 	var result collectorManagementResult
 	if request.CollectorID == "" {
 		return request, result, ErrCommandState
@@ -572,6 +882,14 @@ func finalizeConnectorUninstall(ctx context.Context, q *db.Queries, identity Tru
 	if err := q.RevokeConnectorCertificates(ctx, db.RevokeConnectorCertificatesParams{ConnectorID: connector.ID, EnterpriseID: connector.EnterpriseID}); err != nil {
 		return err
 	}
+	if err := q.RevokePKISubjectCertificates(ctx, db.RevokePKISubjectCertificatesParams{SubjectKind: "connector",
+		SubjectID: connector.ID.String(), RevocationReason: "connector_uninstalled"}); err != nil {
+		return err
+	}
+	_, _ = q.RevokeConnectorControlTunnelLeases(ctx, db.RevokeConnectorControlTunnelLeasesParams{
+		ConnectorID: connector.ID, EnterpriseID: connector.EnterpriseID})
+	_, _ = q.MarkConnectorControlTunnelRemoved(ctx, db.MarkConnectorControlTunnelRemovedParams{
+		ConnectorID: connector.ID, EnterpriseID: connector.EnterpriseID, LastDropReason: "connector_uninstalled"})
 	_, _ = q.CloseConnectorSession(ctx, db.CloseConnectorSessionParams{ConnectorID: connector.ID, EnterpriseID: connector.EnterpriseID, ConnectionEpoch: epoch})
 	if connector.Role == "bastion" {
 		rows, err := q.FinalizeBastionConnectorUninstall(ctx, db.FinalizeBastionConnectorUninstallParams{EnterpriseID: connector.EnterpriseID,
@@ -670,24 +988,36 @@ func parseCSR(value string) (*x509.CertificateRequest, []byte, error) {
 	return csr, hash[:], nil
 }
 
-func validateCertificate(value Certificate, connectorID uuid.UUID, publicKeyHash []byte) error {
-	block, _ := pem.Decode([]byte(value.PEM))
+func validateCertificate(value Certificate, connectorID uuid.UUID, publicKeyHash []byte) (*x509.Certificate, error) {
+	block, rest := pem.Decode([]byte(value.PEM))
 	if block == nil || block.Type != "CERTIFICATE" || value.NotAfter.Sub(value.NotBefore) > 24*time.Hour+time.Minute {
-		return ErrEnrollmentInvalid
+		return nil, ErrEnrollmentInvalid
+	}
+	if len(strings.TrimSpace(string(rest))) != 0 {
+		return nil, ErrEnrollmentInvalid
 	}
 	certificate, err := x509.ParseCertificate(block.Bytes)
-	if err != nil || len(certificate.URIs) != 1 || certificate.URIs[0].String() != "spiffe://argus.io/connector/"+connectorID.String() {
-		return ErrEnrollmentInvalid
+	if err != nil || len(certificate.URIs) != 1 || certificate.URIs[0].String() != "spiffe://argus.io/connector/"+connectorID.String() ||
+		len(certificate.DNSNames) != 0 || len(certificate.IPAddresses) != 0 || len(certificate.ExtKeyUsage) != 1 ||
+		certificate.ExtKeyUsage[0] != x509.ExtKeyUsageClientAuth {
+		return nil, ErrEnrollmentInvalid
 	}
 	publicKey, err := x509.MarshalPKIXPublicKey(certificate.PublicKey)
 	if err != nil {
-		return ErrEnrollmentInvalid
+		return nil, ErrEnrollmentInvalid
 	}
 	hash := sha256.Sum256(publicKey)
 	if !subtleEqual(hash[:], publicKeyHash) || certificate.SerialNumber.String() != value.SerialNumber {
-		return ErrEnrollmentInvalid
+		return nil, ErrEnrollmentInvalid
 	}
-	return nil
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM([]byte(value.CABundlePEM)) {
+		return nil, ErrEnrollmentInvalid
+	}
+	if _, err = certificate.Verify(x509.VerifyOptions{Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
+		return nil, ErrEnrollmentInvalid
+	}
+	return certificate, nil
 }
 
 func capabilitiesAllowed(role string, values []string) bool {

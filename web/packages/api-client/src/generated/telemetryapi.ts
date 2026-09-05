@@ -419,13 +419,15 @@ export interface components {
         CollectorEnrollmentRequest: {
             /** Format: uuid */
             collector_id: string;
-            csr_pem: string;
+            client_csr_pem: string;
+            server_csr_pem: string;
         };
         CollectorCertificateResult: {
             /** Format: uuid */
             collector_id: string;
-            certificate_pem: string;
-            ca_bundle_pem: string;
+            client_certificate_pem: string;
+            server_certificate_pem: string;
+            trust_bundle: components["schemas"]["TrustBundleSnapshot"];
             /** Format: uri */
             readonly ingest_grpc_endpoint: string;
             /** Format: uri */
@@ -457,6 +459,17 @@ export interface components {
             /** Format: uuid */
             collector_id: string;
             kind: components["schemas"]["TelemetryRouteKind"];
+            transport: components["schemas"]["TelemetryRouteTransport"];
+            /** @description 隧道形态下 Collector OTLP 出口的本机回环端口;相邻端口保留给身份注册与轮换;direct 形态为空 */
+            loopback_port?: number;
+            /**
+             * @description 隧道运行状态;direct 形态为空。隧道断开不等于 Collector 故障
+             * @enum {string}
+             */
+            readonly tunnel_status?: "desired" | "establishing" | "established" | "degraded" | "down" | "removed";
+            /** Format: date-time */
+            readonly tunnel_last_established_at?: string;
+            readonly tunnel_last_drop_reason?: string;
             /** Format: uuid */
             gateway_collector_id?: string;
             /** @enum {string} */
@@ -527,12 +540,17 @@ export interface components {
             distribution_version_id: string;
             profile_ids: string[];
             route_kind: components["schemas"]["TelemetryRouteKind"];
+            transport: components["schemas"]["TelemetryRouteTransport"];
+            /** @description 隧道形态的 OTLP 回环端口;缺省 4317,相邻端口保留给身份注册与轮换 */
+            loopback_port?: number;
             /** Format: uuid */
             gateway_collector_id?: string;
             /** Format: int64 */
             expected_version?: number;
             /** @description 集群内网镜像全量地址(含 tag/digest);仅 kubernetes_cluster 资源可填,留空使用服务端默认镜像 */
             kubernetes_image?: string;
+            /** @description 目标集群中已存在的 imagePullSecret 名称;Argus 不创建或读取仓库凭据 */
+            image_pull_secrets?: string[];
         };
         TelemetryRetentionPolicy: {
             metrics_days: number;
@@ -689,6 +707,7 @@ export interface components {
             /** Format: uuid */
             collector_id: string;
             route_kind: components["schemas"]["TelemetryRouteKind"];
+            transport: components["schemas"]["TelemetryRouteTransport"];
             /** Format: uuid */
             gateway_collector_id?: string;
         };
@@ -718,6 +737,20 @@ export interface components {
             /** @default false */
             retryable: boolean;
         };
+        TrustBundleSnapshot: {
+            /** Format: int64 */
+            epoch: number;
+            /** @enum {string} */
+            state: "stable" | "preparing" | "overlapping" | "retiring" | "failed";
+            bundle_pem: string;
+            bundle_sha256: string;
+            current_ca_fingerprints: string[];
+            next_ca_fingerprints: string[];
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            retire_at?: string;
+        };
         /** @enum {string} */
         CollectorSupportStatus: "supported" | "validation_pending" | "retired";
         /** @enum {string} */
@@ -740,6 +773,11 @@ export interface components {
         CollectorStatus: "pending_install" | "installing" | "converged" | "degraded" | "backlog" | "result_unknown" | "uninstalling" | "uninstalled";
         /** @enum {string} */
         TelemetryRouteKind: "direct_argus" | "bastion_gateway";
+        /**
+         * @description 遥测字节的物理路径,与路由 kind 正交;隧道形态见 PlanV4
+         * @enum {string}
+         */
+        TelemetryRouteTransport: "direct" | "executor_tunnel" | "bastion_tunnel";
         PartialMetadata: {
             partial: boolean;
             reasons: ("authorization_filtered" | "budget_truncated" | "source_timeout" | "source_unavailable")[];
@@ -757,6 +795,7 @@ export interface components {
             /** @constant */
             schema_version: "argus.pending_action/v1";
             action_ref: string;
+            action_type: string;
             title: string;
             summary: string;
             /** @enum {unknown} */

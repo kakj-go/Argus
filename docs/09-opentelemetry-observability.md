@@ -28,7 +28,7 @@ Argus 根据主机已有连接路径一键安装并管理 OpenTelemetry Collecto
 
 截至 2026-08-22，M7 已完成 Linux arm64 Host 与 Kubernetes Evaluation 闭环。M10 已完成单进程 Query、同步租户 Schema lifecycle、PromQL/KQL/SkyWalking GraphQL、真实 ClickHouse 差分、Schema 漂移门禁和最终 Kubernetes E2E；三种独立 wire format、固定 SDL 和 `MaxSeries` 收口后的成功运行号为 `20260822063330-17805`，结束后三个临时 Namespace、相关 PVC 和 E2E Lease 零残留。完整 SkyWalking OAP 和完整 KQL 兼容不在本次范围。
 
-Collector 产物自 2026-08-30 起支持 Linux 双架构：连接测试经 SSH `uname -m` 探测目标架构（归一化为 amd64/arm64）并存入主机记录，安装计划按"主机 OS + 架构"从分发目录选择 `linux_amd64` / `linux_arm64` 产物（未探测到的存量主机按 amd64 处理）；Linux amd64 产物在安装配置中按需注册（`spec.telemetry.linuxAmd64*`），Kubernetes 各 Profile 的支持平台矩阵同步包含两种 Linux 架构。平台自身（Argus 集群）的架构与被管理目标的架构完全解耦。
+Collector 产物自 2026-08-30 起支持 Linux 双架构：连接测试经 SSH `uname -m` 探测目标架构（归一化为 amd64/arm64）并冻结到测试和安装计划，随后从分发目录选择 `linux_amd64` / `linux_arm64` 产物。架构缺失、未知或与冻结测试不一致时 fail closed 并要求重新测试，不按平台架构或历史默认值猜测。Linux amd64 产物在安装配置中显式注册（`spec.telemetry.linuxAmd64*`），Kubernetes 各 Profile 的支持平台矩阵同步包含两种 Linux 架构。平台自身（Argus 集群）的架构与被管理目标的架构完全解耦。
 
 Kubernetes 节点无法拉取镜像时，第一版只检测 Runtime 并提供离线导入提示，不实现镜像分发。
 
@@ -97,6 +97,22 @@ flowchart LR
 ```
 
 DaemonSet 采集节点指标和容器日志，Gateway Deployment 采集集群级资源并统一推送。应用 SDK 也可以直接向集群内部 Gateway Service 发送 OTLP。
+
+### 3.5 PlanV4 Route kind × transport
+
+Telemetry Route 的 `kind` 决定逻辑上游、身份关系和凭证，`transport` 只决定 OTLP 字节的物理路径。两者必须分别存储、校验和展示，不能新增 `direct_argus_over_ssh` 一类组合枚举。
+
+| Route kind | Transport | 适用网络事实 | 物理路径 |
+| --- | --- | --- | --- |
+| `direct_argus` | `direct` | 源 Collector 可出站访问 Ingest | Collector → Ingest |
+| `direct_argus` | `executor_tunnel` | Argus 可 SSH 到主机，主机不能出站访问 Ingest | Collector → 目标回环端口 → SSH remote forward → Direct Executor → Ingest |
+| `bastion_gateway` | `direct` | 成员可访问所属堡垒机 Gateway 4317/4318 | Leaf → Bastion Edge Gateway |
+| `bastion_gateway` | `bastion_tunnel` | 堡垒机可 SSH 成员，但成员不能访问 Gateway 端口 | Leaf → 成员回环端口 → SSH remote forward → Connector → Bastion Edge Gateway |
+| `kubernetes_gateway` | `direct` | 集群内 Agent 可访问 Gateway Service | DaemonSet/Application → K8s Gateway |
+
+非 direct transport 把 Collector 出口渲染为目标机器上的回环端口，同时保留原 CA、客户端证书和真实上游 `server_name_override`。Direct Executor/Connector 只桥接 TLS 密文；回环监听不降低 mTLS，也不能被当作任意端口转发能力。隧道必须持久化 desired/status、epoch、fence、lease、最后建连和断开原因，Redis 只用于唤醒。
+
+堡垒机安装模式 C 的控制隧道不属于 Telemetry Route：它使用 `127.0.0.1:8443` 完成 enrollment Web/API、使用 `127.0.0.1:9443` 承载 Connector Gateway 长连接。Connector 激活后，堡垒机本机及成员 Collector 仍按上表独立选择 route kind × transport；模式 C 不能自动宣称遥测已经可用。
 
 ## 4. Bastion Scope 与 Telemetry Group
 
@@ -246,10 +262,14 @@ OTLP 收集器详情使用：
 服务端强制执行矩阵，UI 只展示合格候选。第一版不允许用户手工填写任意 OTLP 地址：
 
 - Bastion Scope 成员选择 `direct_argus`，或选择所属堡垒机上已经启用 Gateway Profile 的 Collector。
+- PlanV4 的 route kind × transport 合法组合、回环 TLS 和隧道前件见 §3.5。隧道路由要求隧道进入 `established` 后安装才执行；隧道断开不等于 Collector 故障。
+- `self_enrolled`（只出不进）主机经一次性安装命令自注册，路由固定 `direct_argus` + `direct`；bootstrap 交换端点由 ingest 公开承载（`/host-install/{token}`），激活回填自报地址，在线状态由 Collector enrollment/心跳投影。
 - 堡垒机本机选择 `direct_argus`，或选择同企业内另一个已激活堡垒机作为上报代理；不得选择自身，保存前必须通过路由测试。
 - 堡垒机上的普通 Collector 默认只采集本机；启用 OTLP Listener、持久队列、Leaf mTLS 和 Gateway Pipeline 后才成为成员候选。
 - 独立主机只能选择同一企业、不属于任何 Bastion Scope、已经显式加入 Telemetry Group、启用 Gateway Profile 且路由测试成功的独立 Collector。
 - 连接路径可选不代表实际可达；保存前必须从源 Collector 所在主机执行路由测试。
+
+主机详情分别呈现 Collector 与 Tunnel：Collector 展示 desired/effective revision、last_seen 和发送状态；Tunnel 展示 desired/status、epoch、最后建连、最后断开原因和当前监督者。界面不得用一个“离线”徽章掩盖 Collector 正常但隧道中断，或隧道已建立但 Collector 配置失败。
 
 ### 5.3 Edge Gateway 详情
 
@@ -312,7 +332,8 @@ Preview 阶段探测：
 - 已安装版本、配置和服务状态。
 - 目标版本支持的组件。
 - 磁盘、内存、端口和权限。
-- Direct/Leaf/Gateway 路由可达性。
+- Route kind × transport 合法性、Direct/Leaf/Gateway 逻辑上游与实际物理路径可达性。
+- 非 direct transport 的 SSH 身份、Credential Lease、pinned Host Key、回环端口占用、forward 目标和现有隧道 epoch/fence。
 - 直接下载或 Connector Artifact Tunnel。
 - Host 的 `connection_mode`、完整安装执行路径和 Direct Executor/Connector 前置状态。
 - 将要创建/修改的文件、服务和防火墙规则。
@@ -353,7 +374,7 @@ Preview 阶段探测：
 }
 ```
 
-Commit 使用服务端保存的计划执行，不能让 AI 在确认后更改版本、Artifact、远程路径和脚本。
+Commit 使用服务端保存的计划执行，不能让 AI 在确认后更改版本、Artifact、远程路径、transport 和脚本。非 direct transport 的执行顺序固定为：创建/认领 Tunnel → 建立 SSH remote forward → 安装或配置 Collector → 经隧道完成健康检查与首条数据验证 → Route 转为 active。失败时保留可诊断 operation/tunnel 状态；卸载或切换 route 时先停止/降级 Collector 并处理持久队列，再拆除隧道。
 
 Telemetry Group/Gateway 变更采用分阶段执行计划，不能一次性同时覆盖所有 Leaf：
 
@@ -387,7 +408,7 @@ SHA256
 
 第一版清单随 Argus 版本发布，企业管理员只能选择受支持版本，不提供任意上传二进制入口。
 
-Artifact Store 的落地实现为平台自带 MinIO：`argus-collector-artifacts` 桶经 ingress 以 HTTPS 暴露（默认域名 `artifacts.<平台父域名>`），桶开启匿名只读下载——产物完整性由 ed25519 签名 + SHA-256 校验保证，不依赖传输层认证。执行者侧信任该 HTTPS 源的证书（cert-manager 自签模式下挂载平台多 SAN 证书作为 `ARGUS_OTELCOL_ARTIFACT_CA_PATH` 信任锚）；本地自签环境可配置 `spec.telemetry.artifactTLSMode: insecure` 仅跳过传输层证书校验——产物完整性的信任根是计划内 pin 的 sha256 与 ed25519 签名（恒定执行，无开关），传输层默认 verify，evaluation/local-formal profile 默认 insecure。发布工具 `make otelcol-artifacts-publish`（`argus-dev collector publish-artifacts`）完成构建、签名、上传并打印可直接粘贴进安装配置 `spec.telemetry` 的值块；签名密钥持久化在 `deploy/.keys/otelcol-signing-key.json`。目标主机全程不需要外网出站能力。
+Artifact Store 的落地实现为平台自带 MinIO：`argus-collector-artifacts` 桶经 Ingress 以 HTTPS 暴露（默认域名 `artifacts.<平台父域名>`），桶开启匿名只读下载。匿名只表示对象授权，不降低传输安全：执行者必须使用当前版本化 Argus Trust Bundle 校验证书链、主机名和 SNI，且继续验证计划内固定的 SHA-256、大小和 Ed25519 签名。所有 Profile 均无 Artifact TLS 跳过模式。发布工具 `make otelcol-artifacts-publish`（`argus-dev collector publish-artifacts`）完成构建、签名、上传并打印可直接粘贴进安装配置 `spec.telemetry` 的值块；签名密钥持久化在 `deploy/.keys/otelcol-signing-key.json`。目标主机不要求公网，但必须能直连私有 Argus，或通过受管 SSH/Connector 隧道取得冻结产物。
 
 Kubernetes 侧的产物是容器镜像而非二进制：`argus-otelcol` 定制镜像（含 argusidentity/argusgatewayidentity 私有组件，不能用上游官方镜像替代）默认发布到 `docker.io/kakj-go/argus-otelcol:<version>`（`make otelcol-image-publish`，推送时合成 linux/arm64+amd64 多架构 manifest）。集群安装向导支持按次填写内网镜像全量地址（含 tag/digest，`CollectorPreview.kubernetes_image`），留空使用服务端默认镜像（安装配置 `spec.telemetry.kubernetesImage`，未配置时回退平台镜像 registry 派生值）。镜像引用进入不可变 plan，不落库；升级/修复时需重新指定或使用默认值。完全离线的集群通过交付流程把镜像灌入客户 registry 后在向导中填写地址即可。
 
@@ -531,7 +552,9 @@ MVP 根据 Host 连接模式使用 Connector 或 Direct Executor：
 6. 检查健康端点和发送状态。
 7. 失败自动回滚。
 
-`connector_local` 和 `via_bastion` 经 Connector 执行；`direct_ssh/direct_winrm` 经受控 Direct Executor 执行。两条路径复用相同 Config Revision、Preview/Commit、健康检查和审计协议，不能各自拼接 YAML。
+`connector_local` 和 `via_bastion` 经 Connector 执行；`direct_ssh/direct_winrm` 经受控 Direct Executor 执行；`self_enrolled` 不进入执行器派发路径，只能通过用户在目标执行新的冻结 bootstrap 命令收敛配置。执行器路径复用相同 Config Revision、Preview/Commit、健康检查和审计协议，不能各自拼接 YAML。
+
+当 route transport 为 `executor_tunnel` 或 `bastion_tunnel` 时，版本化模板把出口渲染为已冻结的回环端口并强制真实上游 server name。配置渲染必须拒绝 transport、loopback port、Tunnel 行或 forward 目标不一致，以及任何 `tls.insecure=true` 组合。Tunnel 监督与 Collector 配置是两个状态机，但 Route 只有在两者都验证成功后才能 active。
 
 不能用 AI 临时 Shell 对 YAML 做文本拼接。
 
@@ -970,6 +993,14 @@ Leaf 和 Edge Gateway 都启用持久发送队列：
 - Argus 不可用时由 Edge Gateway 暂存。
 - 队列配置磁盘上限、保留时间和告警阈值，避免填满系统盘。
 
+PlanV4 隧道路径还必须满足：
+
+- Direct Executor 与 Connector 监督者使用 PostgreSQL lease/fence 认领，keepalive 失败后写入 `degraded/down` 和稳定错误码，租约过期可由其他副本 epoch+1 接管。
+- Executor/Connector Pod 重启后从 PostgreSQL desired Tunnel 和成功的模式 C install operation 重建，不依赖进程内 map 或 Redis 保存唯一事实。
+- 每个监督者设置并发隧道数、连接建立速率和字节速率上限；超限返回 `TUNNEL_QUOTA_EXCEEDED`，不能无限占用文件描述符、SSH 连接和带宽。
+- 模式 C 控制隧道分别展示 enrollment/control forward 与 Connector online 状态；Telemetry Tunnel、Collector 和 Connector 故障不能合并成一个状态。
+- Production NetworkPolicy 只允许 Direct Executor 到冻结的内部 Ingest/Enrollment/Connector Gateway forward 目标，并保留对用户目标 SSH 的受控出口；evaluation 的宽 egress 不能作为生产验证证据。
+
 单 Edge Gateway 是单点。第一版允许但必须显示风险；后续支持双 Gateway、内网 DNS/LB 或基于支持组件的负载分发。
 
 Gateway 容量预览至少估算：
@@ -1024,6 +1055,7 @@ CRI-O：使用对应 Registry Mirror 或 Runtime 导入方式
 - Signal、explicit resource authorization/Resource 授权范围、字段投影与脱敏、时间范围、扫描预算、Live Tail 或 Export 行为。
 - Action Binding、Token 和用户确认。
 - 执行步骤、Connector、回滚和最终状态。
+- Tunnel desired/status、transport、loopback/forward 目标摘要、epoch/fence/lease owner、建立/断开/接管、配额拒绝和拆除顺序；不得记录 Credential、token、私钥或安装命令明文。
 
 ## 23. MVP 实施顺序
 
@@ -1040,6 +1072,8 @@ CRI-O：使用对应 Registry Mirror 或 Runtime 导入方式
 11. 带 explicit resource authorization/Resource、Signal、字段脱敏和查询预算授权的 Metrics/Logs 查询 Tool、交互卡片、告警和综合可观测性页面。
 
 OpenTelemetry Profiles 信号、Trace 高级查询、双 Gateway、OpAMP、尾部采样、企业自定义 Distribution 和弱网 K8s 镜像分发在后续阶段实现。
+
+PlanV4 在既有 M7 基线上按以下顺序扩展：先固化 route × transport 与 Tunnel/operation 契约，再完成 `self_enrolled` 和堡垒机 A/B/C 的动作边界，随后收口 Executor/Connector 监督恢复、统一向导和状态投影，最后以受限网络 Kubernetes E2E 验证三信号、重启接管、撤权、配额、审计与零残留。详细任务见 [PlanV4](./planv4/README.md)。
 
 ## 24. 参考
 

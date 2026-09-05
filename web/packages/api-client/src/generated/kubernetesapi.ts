@@ -201,6 +201,8 @@ export interface components {
             labels: components["schemas"]["UserLabels"];
             /** Format: uuid */
             connection_test_id?: string;
+            /** @description 仅 in_cluster：目标集群中已存在的 Connector 镜像拉取 Secret */
+            connector_image_pull_secrets?: string[];
         };
         KubernetesPreviewUpdate: {
             name?: string;
@@ -319,6 +321,7 @@ export interface components {
             /** @constant */
             schema_version: "argus.pending_action/v1";
             action_ref: string;
+            action_type: string;
             title: string;
             summary: string;
             /** @enum {unknown} */

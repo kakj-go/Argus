@@ -199,6 +199,27 @@ func (k *E2EKube) CollectDiagnostics(ctx context.Context, env *E2EEnvironment, d
 					diagnosticErrors = append(diagnosticErrors, fmt.Errorf("write logs for %s/%s/%s: %w", namespace, pod.Name, container, err))
 				}
 			}
+			if pod.Labels["app.kubernetes.io/name"] == "argus-p4-target" {
+				// The P4 target runs systemd as PID 1, so the container log only
+				// contains its bootstrap output. Capture the managed Collector's
+				// journal and queue/exporter state before the target Namespace is
+				// removed. The fixed command deliberately avoids reading the
+				// enrollment-token and private-key files.
+				output, execErr := k.execPod(ctx, namespace, pod.Name, "systemd", "/bin/bash", "-lc", strings.Join([]string{
+					"systemctl show argus-otelcol.service --property=ActiveState,SubState,ExecMainStatus,NRestarts --no-pager 2>&1 || true",
+					"journalctl -u argus-otelcol.service --no-pager --output=short-iso -n 2000 2>&1 || true",
+					"find /var/lib/argus-otelcol/identity/queue -maxdepth 2 -type f -printf 'queue_file=%f size=%s\\n' 2>/dev/null || true",
+					"curl -fsS --max-time 2 http://127.0.0.1:8888/metrics 2>/dev/null | grep -E '^otelcol_exporter_(queue|enqueue|send|sent|failed)' || true",
+				}, "; "))
+				if execErr != nil {
+					diagnosticErrors = append(diagnosticErrors, fmt.Errorf("collect systemd diagnostics for %s/%s: %w", namespace, pod.Name, execErr))
+				} else {
+					filename := kubernetesNameForDev(namespace+"-"+pod.Name+"-argus-otelcol") + ".journal.log"
+					if err := writePrivate(filepath.Join(directory, filename), redactDiagnostic([]byte(output))); err != nil {
+						diagnosticErrors = append(diagnosticErrors, fmt.Errorf("write systemd diagnostics for %s/%s: %w", namespace, pod.Name, err))
+					}
+				}
+			}
 		}
 	}
 	return errors.Join(diagnosticErrors...)

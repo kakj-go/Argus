@@ -84,10 +84,7 @@ function handleAuthenticationInvalidated() {
 }
 
 async function bootstrap() {
-  setupCredentialStore.consumeFromFragment(
-    window.location,
-    window.history,
-  );
+  setupCredentialStore.consumeFromFragment(window.location, window.history);
   listenForSetupTokenFragments(window, setupCredentialStore);
   const apiClient = await createApi();
   createRoot(document.getElementById("root")!).render(
@@ -110,11 +107,11 @@ async function bootstrap() {
 }
 
 void bootstrap().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
+  console.error(error);
   createRoot(document.getElementById("root")!).render(
     <main className="argus-auth-state" role="alert">
-      <h1>Client unavailable</h1>
-      <p>{message}</p>
+      <h1>{i18n.t("common.clientUnavailable")}</h1>
+      <p>{i18n.t("common.clientUnavailableDescription")}</p>
     </main>,
   );
 });

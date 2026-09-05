@@ -1,10 +1,11 @@
 {
   "schema_version": "argus.pending_action/v1",
   "action_ref": "pa_01",
+  "action_type": "host.create",
   "title": "创建主机",
   "summary": "invalid private payload",
   "risk": "write",
-  "preview": {"connection": {"token_hash": "must-not-pass"}},
+  "preview": { "connection": { "token_hash": "must-not-pass" } },
   "diff": [],
   "status": "ready",
   "available_actions": ["confirm"],

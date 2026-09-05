@@ -33,6 +33,7 @@ const AuditPage = lazyRouteComponent(
   () => import("./pages/audit-page"),
   "AuditPage",
 );
+const PKIPage = lazyRouteComponent(() => import("./pages/pki-page"), "PKIPage");
 const AccountPage = lazyRouteComponent(
   () => import("./pages/account-page"),
   "AccountPage",
@@ -101,6 +102,11 @@ const auditRoute = createRoute({
   path: "/audit",
   component: AuditPage,
 });
+const pkiRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: "/pki",
+  component: PKIPage,
+});
 const accountRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: "/account",
@@ -116,6 +122,7 @@ const routeTree = rootRoute.addChildren([
     adminsRoute,
     sandboxRoute,
     auditRoute,
+    pkiRoute,
     accountRoute,
   ]),
 ]);

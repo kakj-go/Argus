@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,6 +53,12 @@ func (store PostgresIngestControl) ResolveCollectorIdentity(ctx context.Context,
 	if err != nil {
 		return TrustedIdentity{}, "", err
 	}
+	pkiIdentity, err := store.Queries.GetActivePKICertificateIdentity(ctx, serial)
+	if err != nil || pkiIdentity.SubjectKind != "collector" || pkiIdentity.SubjectID != row.ID.String() ||
+		!pkiIdentity.EnterpriseID.Valid || pkiIdentity.EnterpriseID.UUID != row.EnterpriseID || pkiIdentity.ExtendedKeyUsage != "clientAuth" ||
+		pkiIdentity.UriSan != row.UriSan {
+		return TrustedIdentity{}, "", errors.New("telemetry PKI identity is fenced")
+	}
 	return TrustedIdentity{EnterpriseID: row.EnterpriseID, ResourceID: row.ResourceID, CollectorID: row.ID,
 		ResourceType: row.ResourceType, Role: row.Role, CertificateSerial: row.SerialNumber,
 		AuthorizationVersion: row.AuthorizationVersion}, row.UriSan, nil
@@ -61,6 +68,7 @@ func (store PostgresIngestControl) ResolveDownstreamIdentity(ctx context.Context
 	_, certificateErr := store.Queries.GetValidTelemetryCertificateBySerial(ctx, db.GetValidTelemetryCertificateBySerialParams{
 		CollectorID: collectorID, SerialNumber: serial,
 	})
+	pkiIdentity, pkiErr := store.Queries.GetActivePKICertificateIdentity(ctx, serial)
 	downstream, downstreamErr := store.Queries.GetCollectorInstanceByID(ctx, collectorID)
 	if downstreamErr != nil {
 		return TrustedIdentity{}, downstreamErr
@@ -71,8 +79,10 @@ func (store PostgresIngestControl) ResolveDownstreamIdentity(ctx context.Context
 	if routeErr != nil {
 		return TrustedIdentity{}, routeErr
 	}
+	pkiValid := pkiErr == nil && pkiIdentity.SubjectKind == "collector" && pkiIdentity.SubjectID == collectorID.String() &&
+		pkiIdentity.EnterpriseID.Valid && pkiIdentity.EnterpriseID.UUID == downstream.EnterpriseID && pkiIdentity.ExtendedKeyUsage == "clientAuth"
 	return validateDownstreamFacts(gateway, downstreamReference{collectorID: collectorID, serial: serial, found: true},
-		certificateErr == nil, downstream, route)
+		certificateErr == nil && pkiValid, downstream, route)
 }
 
 type PostgresWriterControl struct{ Queries *db.Queries }

@@ -6,11 +6,41 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	telemetryapi "github.com/kakj-go/Argus/internal/gen/openapi/telemetryapi"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 	"github.com/kakj-go/Argus/internal/telemetry/queryengine"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+func TestCollectorPreviewInputPreservesRouteTransportAndLoopbackPort(t *testing.T) {
+	distributionID := uuid.Must(uuid.NewV7())
+	profileID := uuid.Must(uuid.NewV7())
+	port := 14317
+	input, err := collectorPreviewInputFromAPI(telemetryapi.CollectorPreview{
+		DistributionVersionId: openapi_types.UUID(distributionID), ProfileIds: []openapi_types.UUID{openapi_types.UUID(profileID)},
+		RouteKind: telemetryapi.DirectArgus, Transport: telemetryapi.TelemetryRouteTransportExecutorTunnel, LoopbackPort: &port,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if input.Transport != "executor_tunnel" || input.LoopbackPort != 14317 || input.RouteKind != "direct_argus" {
+		t.Fatalf("route transport fields were dropped: %#v", input)
+	}
+}
+
+func TestCollectorPreviewInputRejectsInvalidLoopbackPort(t *testing.T) {
+	port := 65536
+	_, err := collectorPreviewInputFromAPI(telemetryapi.CollectorPreview{
+		DistributionVersionId: openapi_types.UUID(uuid.Must(uuid.NewV7())),
+		ProfileIds:            []openapi_types.UUID{openapi_types.UUID(uuid.Must(uuid.NewV7()))}, RouteKind: telemetryapi.DirectArgus,
+		Transport: telemetryapi.TelemetryRouteTransportDirect, LoopbackPort: &port,
+	})
+	if err == nil {
+		t.Fatal("invalid tunnel loopback port accepted")
+	}
+}
 
 func TestTelemetryAuthStatusPreservesAuthorizationVersionConflict(t *testing.T) {
 	t.Parallel()

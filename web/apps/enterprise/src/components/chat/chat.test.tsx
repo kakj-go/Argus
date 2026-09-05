@@ -212,16 +212,17 @@ describe("PendingActionCard", () => {
       { wrapper: createWrapper(client) },
     );
 
-    // 预览加载完成：标题、Diff、计划哈希可见
-    await screen.findByText("新增主机");
-    expect(screen.getByText(/resource\.host host-test-x/)).toBeInTheDocument();
+    // 预览加载完成：结构化动作按当前语言展示，且保留资源名称与地址。
+    await screen.findByText("新增主机 host-test-x");
+    expect(screen.getByText("创建主机 host-test-x")).toBeInTheDocument();
+    expect(screen.getByText("10.0.0.99")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "确认执行" }));
     await waitFor(() =>
       expect(confirmSpy).toHaveBeenCalledWith(action.action_ref),
     );
     // mock 任务步骤按 stepDelay 推进，轮询后进入成功终态
-    await screen.findByText(/已创建主机 host-test-x/, undefined, {
+    await screen.findByText(/主机 host-test-x 已创建/, undefined, {
       timeout: 4_000,
     });
     expect(screen.getByText("查看任务")).toBeInTheDocument();
@@ -250,7 +251,7 @@ describe("PendingActionCard", () => {
       { wrapper: createWrapper(client) },
     );
 
-    await screen.findByText("新增主机");
+    await screen.findByText("新增主机 host-test-y");
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     await waitFor(() =>
       expect(cancelSpy).toHaveBeenCalledWith(action.action_ref),

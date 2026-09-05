@@ -76,6 +76,9 @@ func (handler KubernetesHandler) PreviewCreateKubernetesCluster(ctx context.Cont
 	input := resource.KubernetesInput{Name: request.Body.Name, APIServer: request.Body.ApiServer, ConnectionMode: string(request.Body.ConnectionMode),
 		Environment: string(request.Body.Environment), Labels: stringMap(request.Body.Labels), BastionScopeID: optionalUUID(request.Body.BastionScopeId),
 		CredentialID: optionalUUID(request.Body.CredentialId), ConnectionTestID: optionalUUID(request.Body.ConnectionTestId)}
+	if request.Body.ConnectorImagePullSecrets != nil {
+		input.ConnectorImagePullSecrets = append([]string(nil), (*request.Body.ConnectorImagePullSecrets)...)
+	}
 	if request.Body.DefaultNamespace != nil {
 		input.DefaultNamespace = *request.Body.DefaultNamespace
 	}

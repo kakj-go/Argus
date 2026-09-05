@@ -208,6 +208,7 @@ type BastionScope struct {
 	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	OnboardingMode    string             `json:"onboarding_mode"`
 }
 
 type BreakGlassSession struct {
@@ -511,6 +512,37 @@ type ConnectorCommand struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ConnectorControlTunnel struct {
+	ID                   uuid.UUID          `json:"id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	ConnectorID          uuid.UUID          `json:"connector_id"`
+	BastionScopeID       uuid.UUID          `json:"bastion_scope_id"`
+	HostID               uuid.UUID          `json:"host_id"`
+	CredentialID         uuid.UUID          `json:"credential_id"`
+	CredentialVersion    int64              `json:"credential_version"`
+	TargetAddress        string             `json:"target_address"`
+	TargetPort           int32              `json:"target_port"`
+	TargetUsername       string             `json:"target_username"`
+	PinnedHostKey        string             `json:"pinned_host_key"`
+	EnrollForwardTarget  string             `json:"enroll_forward_target"`
+	GatewayForwardTarget string             `json:"gateway_forward_target"`
+	Status               string             `json:"status"`
+	Epoch                int64              `json:"epoch"`
+	Fence                int64              `json:"fence"`
+	LeaseOwner           string             `json:"lease_owner"`
+	LeaseExpiresAt       pgtype.Timestamptz `json:"lease_expires_at"`
+	LastClaimAt          pgtype.Timestamptz `json:"last_claim_at"`
+	LastEstablishedAt    pgtype.Timestamptz `json:"last_established_at"`
+	LastHeartbeatAt      pgtype.Timestamptz `json:"last_heartbeat_at"`
+	LastDropReason       string             `json:"last_drop_reason"`
+	ReconnectAttempt     int32              `json:"reconnect_attempt"`
+	NextClaimAt          pgtype.Timestamptz `json:"next_claim_at"`
+	BytesRelayed         int64              `json:"bytes_relayed"`
+	ThrottledEvents      int64              `json:"throttled_events"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ConnectorEnrollmentToken struct {
 	ID                      uuid.UUID          `json:"id"`
 	PreallocatedConnectorID uuid.UUID          `json:"preallocated_connector_id"`
@@ -529,6 +561,66 @@ type ConnectorEnrollmentToken struct {
 	RegisteredConnectorID   uuid.NullUUID      `json:"registered_connector_id"`
 	CreatedBy               uuid.UUID          `json:"created_by"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	ReleaseVersionID        uuid.NullUUID      `json:"release_version_id"`
+}
+
+type ConnectorInstallOperation struct {
+	ID                uuid.UUID          `json:"id"`
+	EnterpriseID      uuid.UUID          `json:"enterprise_id"`
+	ConnectorID       uuid.UUID          `json:"connector_id"`
+	BastionScopeID    uuid.UUID          `json:"bastion_scope_id"`
+	HostID            uuid.UUID          `json:"host_id"`
+	PendingActionID   uuid.UUID          `json:"pending_action_id"`
+	RetryOf           uuid.NullUUID      `json:"retry_of"`
+	ReleaseVersionID  uuid.UUID          `json:"release_version_id"`
+	ConnectionTestID  uuid.UUID          `json:"connection_test_id"`
+	InstallMode       string             `json:"install_mode"`
+	Status            string             `json:"status"`
+	Stage             string             `json:"stage"`
+	Plan              []byte             `json:"plan"`
+	PlanHash          []byte             `json:"plan_hash"`
+	Attempts          int32              `json:"attempts"`
+	LeaseOwner        string             `json:"lease_owner"`
+	Fence             int64              `json:"fence"`
+	LeaseExpiresAt    pgtype.Timestamptz `json:"lease_expires_at"`
+	ErrorCode         pgtype.Text        `json:"error_code"`
+	ConnectorOnlineAt pgtype.Timestamptz `json:"connector_online_at"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ConnectorInstallOperationEvent struct {
+	ID           uuid.UUID          `json:"id"`
+	OperationID  uuid.UUID          `json:"operation_id"`
+	EnterpriseID uuid.UUID          `json:"enterprise_id"`
+	Sequence     int64              `json:"sequence"`
+	Stage        string             `json:"stage"`
+	Status       string             `json:"status"`
+	ErrorCode    pgtype.Text        `json:"error_code"`
+	OccurredAt   pgtype.Timestamptz `json:"occurred_at"`
+}
+
+type ConnectorInstallOperationSecret struct {
+	OperationID  uuid.UUID          `json:"operation_id"`
+	EnterpriseID uuid.UUID          `json:"enterprise_id"`
+	KeyVersion   int32              `json:"key_version"`
+	Nonce        []byte             `json:"nonce"`
+	Ciphertext   []byte             `json:"ciphertext"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt   pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ConnectorReleaseVersion struct {
+	ID           uuid.UUID          `json:"id"`
+	Version      string             `json:"version"`
+	Status       string             `json:"status"`
+	Manifest     []byte             `json:"manifest"`
+	ManifestHash []byte             `json:"manifest_hash"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ConnectorSession struct {
@@ -704,6 +796,7 @@ type Execution struct {
 	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
 	TelemetryCollectorOperationID uuid.NullUUID      `json:"telemetry_collector_operation_id"`
+	ConnectorInstallOperationID   uuid.NullUUID      `json:"connector_install_operation_id"`
 }
 
 type ExecutionOneTimeResult struct {
@@ -748,6 +841,31 @@ type Host struct {
 	LastProbeClaimAt pgtype.Timestamptz `json:"last_probe_claim_at"`
 }
 
+type HostEnrollmentToken struct {
+	ID                   uuid.UUID          `json:"id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	PreallocatedHostID   uuid.UUID          `json:"preallocated_host_id"`
+	CollectorID          uuid.UUID          `json:"collector_id"`
+	TokenHash            []byte             `json:"token_hash"`
+	FrozenPlan           []byte             `json:"frozen_plan"`
+	FrozenPlanHash       []byte             `json:"frozen_plan_hash"`
+	Status               string             `json:"status"`
+	RemainingUses        int32              `json:"remaining_uses"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt           pgtype.Timestamptz `json:"consumed_at"`
+	ConsumedDeviceHash   []byte             `json:"consumed_device_hash"`
+	ReportedHostname     string             `json:"reported_hostname"`
+	ReportedAddress      string             `json:"reported_address"`
+	ReportedArchitecture string             `json:"reported_architecture"`
+	ExchangeKeyVersion   pgtype.Int4        `json:"exchange_key_version"`
+	ExchangeNonce        []byte             `json:"exchange_nonce"`
+	ExchangeCiphertext   []byte             `json:"exchange_ciphertext"`
+	ExchangeExpiresAt    pgtype.Timestamptz `json:"exchange_expires_at"`
+	CreatedBy            uuid.UUID          `json:"created_by"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type HostProbeState struct {
 	HostID              uuid.UUID          `json:"host_id"`
 	EnterpriseID        uuid.UUID          `json:"enterprise_id"`
@@ -757,6 +875,25 @@ type HostProbeState struct {
 	Fingerprint         string             `json:"fingerprint"`
 	ConsecutiveFailures int32              `json:"consecutive_failures"`
 	Error               string             `json:"error"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type HostUninstallToken struct {
+	ID                  uuid.UUID          `json:"id"`
+	EnterpriseID        uuid.UUID          `json:"enterprise_id"`
+	HostID              uuid.UUID          `json:"host_id"`
+	CollectorID         uuid.UUID          `json:"collector_id"`
+	TokenHash           []byte             `json:"token_hash"`
+	CompletionTokenHash []byte             `json:"completion_token_hash"`
+	FrozenPlan          []byte             `json:"frozen_plan"`
+	FrozenPlanHash      []byte             `json:"frozen_plan_hash"`
+	Status              string             `json:"status"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt          pgtype.Timestamptz `json:"consumed_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	ConsumedDeviceHash  []byte             `json:"consumed_device_hash"`
+	CreatedBy           uuid.UUID          `json:"created_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
@@ -1037,6 +1174,55 @@ type Permission struct {
 	Description     string             `json:"description"`
 	RegistryVersion int32              `json:"registry_version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type PkiCertificateIdentity struct {
+	SerialNumber      string             `json:"serial_number"`
+	SubjectKind       string             `json:"subject_kind"`
+	SubjectID         string             `json:"subject_id"`
+	EnterpriseID      uuid.NullUUID      `json:"enterprise_id"`
+	UriSan            string             `json:"uri_san"`
+	DnsSans           []string           `json:"dns_sans"`
+	ExtendedKeyUsage  string             `json:"extended_key_usage"`
+	IssuerGeneration  int32              `json:"issuer_generation"`
+	CertificateSha256 string             `json:"certificate_sha256"`
+	Status            string             `json:"status"`
+	NotBefore         pgtype.Timestamptz `json:"not_before"`
+	NotAfter          pgtype.Timestamptz `json:"not_after"`
+	RevokedAt         pgtype.Timestamptz `json:"revoked_at"`
+	RevocationReason  string             `json:"revocation_reason"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PkiNodeTrustAck struct {
+	NodeKind           string             `json:"node_kind"`
+	NodeID             string             `json:"node_id"`
+	EnterpriseID       uuid.NullUUID      `json:"enterprise_id"`
+	Epoch              int64              `json:"epoch"`
+	BundleSha256       string             `json:"bundle_sha256"`
+	CaFingerprints     []string           `json:"ca_fingerprints"`
+	Status             string             `json:"status"`
+	RequiredForCutover bool               `json:"required_for_cutover"`
+	Error              string             `json:"error"`
+	FirstSeenAt        pgtype.Timestamptz `json:"first_seen_at"`
+	AcknowledgedAt     pgtype.Timestamptz `json:"acknowledged_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PkiTrustBundle struct {
+	Epoch                 int64              `json:"epoch"`
+	State                 string             `json:"state"`
+	Direction             string             `json:"direction"`
+	BundlePem             string             `json:"bundle_pem"`
+	BundleSha256          string             `json:"bundle_sha256"`
+	CurrentCaFingerprints []string           `json:"current_ca_fingerprints"`
+	NextCaFingerprints    []string           `json:"next_ca_fingerprints"`
+	StartedAt             pgtype.Timestamptz `json:"started_at"`
+	RetireAt              pgtype.Timestamptz `json:"retire_at"`
+	LastError             string             `json:"last_error"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PlatformSetting struct {
@@ -1579,6 +1765,7 @@ type TelemetryCertificate struct {
 	RevokedAt              pgtype.Timestamptz `json:"revoked_at"`
 	RevokeReason           pgtype.Text        `json:"revoke_reason"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	CertificateUsage       string             `json:"certificate_usage"`
 }
 
 type TelemetryCollectorOperation struct {
@@ -1620,12 +1807,13 @@ type TelemetryDlqRecord struct {
 }
 
 type TelemetryEnrollmentToken struct {
-	ID          uuid.UUID          `json:"id"`
-	CollectorID uuid.UUID          `json:"collector_id"`
-	TokenHash   []byte             `json:"token_hash"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
-	ConsumedAt  pgtype.Timestamptz `json:"consumed_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID                    uuid.UUID          `json:"id"`
+	CollectorID           uuid.UUID          `json:"collector_id"`
+	TokenHash             []byte             `json:"token_hash"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt            pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	HostEnrollmentTokenID uuid.NullUUID      `json:"host_enrollment_token_id"`
 }
 
 type TelemetryRetentionPolicy struct {
@@ -1651,6 +1839,8 @@ type TelemetryRoute struct {
 	LastTestedAt       pgtype.Timestamptz `json:"last_tested_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	Transport          string             `json:"transport"`
+	LoopbackPort       pgtype.Int4        `json:"loopback_port"`
 }
 
 type TelemetryRouteTest struct {
@@ -1663,6 +1853,40 @@ type TelemetryRouteTest struct {
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	CompletedAt  pgtype.Timestamptz `json:"completed_at"`
+}
+
+type TelemetryTunnel struct {
+	ID                   uuid.UUID          `json:"id"`
+	EnterpriseID         uuid.UUID          `json:"enterprise_id"`
+	HostID               uuid.UUID          `json:"host_id"`
+	CollectorID          uuid.UUID          `json:"collector_id"`
+	ConnectorID          uuid.NullUUID      `json:"connector_id"`
+	CredentialID         uuid.UUID          `json:"credential_id"`
+	CredentialVersion    int64              `json:"credential_version"`
+	TargetAddress        string             `json:"target_address"`
+	TargetPort           int32              `json:"target_port"`
+	TargetUsername       string             `json:"target_username"`
+	PinnedHostKey        string             `json:"pinned_host_key"`
+	Initiator            string             `json:"initiator"`
+	Transport            string             `json:"transport"`
+	LoopbackPort         int32              `json:"loopback_port"`
+	ForwardTarget        string             `json:"forward_target"`
+	Status               string             `json:"status"`
+	Epoch                int64              `json:"epoch"`
+	LeaseOwner           string             `json:"lease_owner"`
+	OwnerConnectionEpoch int64              `json:"owner_connection_epoch"`
+	Fence                int64              `json:"fence"`
+	LeaseExpiresAt       pgtype.Timestamptz `json:"lease_expires_at"`
+	LastClaimAt          pgtype.Timestamptz `json:"last_claim_at"`
+	LastEstablishedAt    pgtype.Timestamptz `json:"last_established_at"`
+	LastHeartbeatAt      pgtype.Timestamptz `json:"last_heartbeat_at"`
+	LastDropReason       string             `json:"last_drop_reason"`
+	ReconnectAttempt     int32              `json:"reconnect_attempt"`
+	NextClaimAt          pgtype.Timestamptz `json:"next_claim_at"`
+	BytesRelayed         int64              `json:"bytes_relayed"`
+	ThrottledEvents      int64              `json:"throttled_events"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type TelemetryUsageDaily struct {

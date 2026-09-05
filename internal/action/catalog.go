@@ -31,9 +31,9 @@ type ApprovalView struct {
 }
 
 type ExecutionView struct {
-	Execution              db.Execution
-	Action                 db.PendingAction
-	OneTimeResultAvailable bool
+	Execution          db.Execution
+	Action             db.PendingAction
+	OneTimeResultState string
 }
 
 func (service Service) ListPolicies(ctx context.Context, enterpriseID uuid.UUID) ([]db.ApprovalPolicy, error) {
@@ -111,11 +111,11 @@ func (service Service) ListExecutionViews(ctx context.Context, enterpriseID uuid
 		if err != nil {
 			return nil, err
 		}
-		available, err := service.Store.Queries.HasExecutionOneTimeResult(ctx, db.HasExecutionOneTimeResultParams{ExecutionID: execution.ID, EnterpriseID: enterpriseID})
+		state, err := service.Store.Queries.GetExecutionOneTimeResultState(ctx, db.GetExecutionOneTimeResultStateParams{ExecutionID: execution.ID, EnterpriseID: enterpriseID})
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, ExecutionView{Execution: execution, Action: action, OneTimeResultAvailable: available})
+		result = append(result, ExecutionView{Execution: execution, Action: action, OneTimeResultState: state})
 	}
 	return result, nil
 }
@@ -129,8 +129,8 @@ func (service Service) GetExecutionView(ctx context.Context, enterpriseID, execu
 	if err != nil {
 		return ExecutionView{}, err
 	}
-	available, err := service.Store.Queries.HasExecutionOneTimeResult(ctx, db.HasExecutionOneTimeResultParams{ExecutionID: execution.ID, EnterpriseID: enterpriseID})
-	return ExecutionView{Execution: execution, Action: action, OneTimeResultAvailable: available}, err
+	state, err := service.Store.Queries.GetExecutionOneTimeResultState(ctx, db.GetExecutionOneTimeResultStateParams{ExecutionID: execution.ID, EnterpriseID: enterpriseID})
+	return ExecutionView{Execution: execution, Action: action, OneTimeResultState: state}, err
 }
 
 func postgresExecute[T any](ctx context.Context, service Service, actorID, operation, key string, input any, fn func(*db.Queries) (T, error)) (T, error) {

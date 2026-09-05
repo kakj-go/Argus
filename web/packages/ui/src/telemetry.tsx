@@ -9,7 +9,7 @@ import {
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { cx } from "./lib";
-import { useUiText } from "./locale";
+import { useLocale, useUiText } from "./locale";
 
 echarts.use([
   AriaComponent,
@@ -39,6 +39,7 @@ export function TelemetryTimeSeries({
 }) {
   const root = useRef<HTMLDivElement>(null);
   const text = useUiText();
+  const { locale } = useLocale();
 
   useEffect(() => {
     if (!root.current) return;
@@ -49,7 +50,13 @@ export function TelemetryTimeSeries({
       animationDuration: 180,
       aria: { enabled: true, description: ariaLabel },
       grid: { left: 52, right: 18, top: 28, bottom: 42 },
-      color: [color("--accent"), color("--info"), color("--success"), color("--warning"), color("--danger")],
+      color: [
+        color("--accent"),
+        color("--info"),
+        color("--success"),
+        color("--warning"),
+        color("--danger"),
+      ],
       legend: { top: 0, textStyle: { color: color("--text-tertiary") } },
       tooltip: { trigger: "axis" },
       xAxis: { type: "time", axisLabel: { hideOverlap: true } },
@@ -73,7 +80,11 @@ export function TelemetryTimeSeries({
   const rows = useMemo(
     () =>
       series.flatMap((item) =>
-        item.points.map((point) => ({ ...point, name: item.name, unit: item.unit })),
+        item.points.map((point) => ({
+          ...point,
+          name: item.name,
+          unit: item.unit,
+        })),
       ),
     [series],
   );
@@ -96,8 +107,11 @@ export function TelemetryTimeSeries({
               {rows.map((row, index) => (
                 <tr key={`${row.name}:${row.timestamp}:${index}`}>
                   <td>{row.name}</td>
-                  <td>{new Date(row.timestamp).toLocaleString()}</td>
-                  <td>{row.value}{row.unit ? ` ${row.unit}` : ""}</td>
+                  <td>{new Date(row.timestamp).toLocaleString(locale)}</td>
+                  <td>
+                    {row.value}
+                    {row.unit ? ` ${row.unit}` : ""}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -119,6 +133,7 @@ export type TelemetryLogRow = {
 
 export function TelemetryLogTable({ rows }: { rows: TelemetryLogRow[] }) {
   const text = useUiText();
+  const { locale } = useLocale();
   return (
     <div
       aria-label={text(`${rows.length} 条日志`, `${rows.length} log records`)}
@@ -138,7 +153,9 @@ export function TelemetryLogTable({ rows }: { rows: TelemetryLogRow[] }) {
         <tbody>
           {rows.map((row, index) => (
             <tr key={`${row.resource_id}:${row.timestamp}:${index}`}>
-              <td className="argus-mono">{new Date(row.timestamp).toLocaleString()}</td>
+              <td className="argus-mono">
+                {new Date(row.timestamp).toLocaleString(locale)}
+              </td>
               <td>{row.severity}</td>
               <td>{row.service_name ?? "-"}</td>
               <td className="argus-telemetry-log-body">{row.body}</td>
@@ -160,9 +177,28 @@ export type TelemetryTraceRow = {
   status: string;
 };
 
-export function TelemetryTraceTimeline({ rows }: { rows: TelemetryTraceRow[] }) {
+export function TelemetryTraceTimeline({
+  rows,
+}: {
+  rows: TelemetryTraceRow[];
+}) {
   const text = useUiText();
+  const { locale } = useLocale();
   const maxDuration = Math.max(1, ...rows.map((row) => row.duration_ms));
+  const statusLabel = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "ok":
+      case "success":
+        return text("正常", "OK");
+      case "error":
+      case "failed":
+        return text("错误", "Error");
+      case "unset":
+        return text("未设置", "Unset");
+      default:
+        return text("未知", "Unknown");
+    }
+  };
   return (
     <ol
       aria-label={text(`${rows.length} 条 Trace`, `${rows.length} traces`)}
@@ -171,16 +207,22 @@ export function TelemetryTraceTimeline({ rows }: { rows: TelemetryTraceRow[] }) 
       {rows.map((row) => (
         <li className="argus-telemetry-trace" key={row.trace_id} tabIndex={0}>
           <div className="argus-telemetry-trace__head">
-            <b>{row.service_name} / {row.root_span_name}</b>
+            <b>
+              {row.service_name} / {row.root_span_name}
+            </b>
             <span>{Math.round(row.duration_ms)} ms</span>
           </div>
           <div
             aria-hidden
             className="argus-telemetry-trace__bar"
-            style={{ width: `${Math.max(3, (row.duration_ms / maxDuration) * 100)}%` }}
+            style={{
+              width: `${Math.max(3, (row.duration_ms / maxDuration) * 100)}%`,
+            }}
           />
           <small>
-            {new Date(row.started_at).toLocaleString()} · {row.span_count} spans · {row.status}
+            {new Date(row.started_at).toLocaleString(locale)} ·{" "}
+            {text(`${row.span_count} 个 Span`, `${row.span_count} spans`)} ·{" "}
+            {statusLabel(row.status)}
           </small>
         </li>
       ))}

@@ -53,7 +53,7 @@ func (a *App) runRepo(ctx context.Context, args []string) error {
 
 func (a *App) runCollector(ctx context.Context, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("%w: usage: argus-dev collector build linux-arm64|windows-amd64|all|publish-image|publish-artifacts", errUsage)
+		return fmt.Errorf("%w: usage: argus-dev collector build linux-arm64|linux-amd64|windows-amd64|all|publish-image|publish-artifacts", errUsage)
 	}
 	switch args[0] {
 	case "build":

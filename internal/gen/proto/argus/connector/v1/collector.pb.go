@@ -138,8 +138,21 @@ type CollectorManagementCommand struct {
 	IngestGrpcEndpoint string                 `protobuf:"bytes,21,opt,name=ingest_grpc_endpoint,json=ingestGrpcEndpoint,proto3" json:"ingest_grpc_endpoint,omitempty"`
 	IngestHttpEndpoint string                 `protobuf:"bytes,22,opt,name=ingest_http_endpoint,json=ingestHttpEndpoint,proto3" json:"ingest_http_endpoint,omitempty"`
 	KubernetesImage    string                 `protobuf:"bytes,23,opt,name=kubernetes_image,json=kubernetesImage,proto3" json:"kubernetes_image,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// PlanV4: telemetry physical transport (direct|executor_tunnel|bastion_tunnel),
+	// orthogonal to route_kind. Tunnel transports export to a loopback endpoint.
+	Transport    string `protobuf:"bytes,24,opt,name=transport,proto3" json:"transport,omitempty"`
+	LoopbackPort uint32 `protobuf:"varint,25,opt,name=loopback_port,json=loopbackPort,proto3" json:"loopback_port,omitempty"`
+	// Versioned public trust material is attached when the operation is queued,
+	// rather than frozen into the reusable Collector configuration revision.
+	TrustBundlePem            []byte   `protobuf:"bytes,26,opt,name=trust_bundle_pem,json=trustBundlePem,proto3" json:"trust_bundle_pem,omitempty"`
+	TrustBundleEpoch          uint64   `protobuf:"varint,27,opt,name=trust_bundle_epoch,json=trustBundleEpoch,proto3" json:"trust_bundle_epoch,omitempty"`
+	TrustBundleSha256         string   `protobuf:"bytes,28,opt,name=trust_bundle_sha256,json=trustBundleSha256,proto3" json:"trust_bundle_sha256,omitempty"`
+	TrustBundleCaFingerprints []string `protobuf:"bytes,29,rep,name=trust_bundle_ca_fingerprints,json=trustBundleCaFingerprints,proto3" json:"trust_bundle_ca_fingerprints,omitempty"`
+	// Names only. Registry credentials and registry CA configuration remain
+	// owned by the target cluster administrator.
+	ImagePullSecrets []string `protobuf:"bytes,30,rep,name=image_pull_secrets,json=imagePullSecrets,proto3" json:"image_pull_secrets,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CollectorManagementCommand) Reset() {
@@ -333,6 +346,55 @@ func (x *CollectorManagementCommand) GetKubernetesImage() string {
 	return ""
 }
 
+func (x *CollectorManagementCommand) GetTransport() string {
+	if x != nil {
+		return x.Transport
+	}
+	return ""
+}
+
+func (x *CollectorManagementCommand) GetLoopbackPort() uint32 {
+	if x != nil {
+		return x.LoopbackPort
+	}
+	return 0
+}
+
+func (x *CollectorManagementCommand) GetTrustBundlePem() []byte {
+	if x != nil {
+		return x.TrustBundlePem
+	}
+	return nil
+}
+
+func (x *CollectorManagementCommand) GetTrustBundleEpoch() uint64 {
+	if x != nil {
+		return x.TrustBundleEpoch
+	}
+	return 0
+}
+
+func (x *CollectorManagementCommand) GetTrustBundleSha256() string {
+	if x != nil {
+		return x.TrustBundleSha256
+	}
+	return ""
+}
+
+func (x *CollectorManagementCommand) GetTrustBundleCaFingerprints() []string {
+	if x != nil {
+		return x.TrustBundleCaFingerprints
+	}
+	return nil
+}
+
+func (x *CollectorManagementCommand) GetImagePullSecrets() []string {
+	if x != nil {
+		return x.ImagePullSecrets
+	}
+	return nil
+}
+
 type CollectorManagementResult struct {
 	state               protoimpl.MessageState    `protogen:"open.v1"`
 	CollectorId         string                    `protobuf:"bytes,1,opt,name=collector_id,json=collectorId,proto3" json:"collector_id,omitempty"`
@@ -509,6 +571,229 @@ func (x *KubernetesNodeEvidence) GetInternalIps() []string {
 	return nil
 }
 
+// PlanV4 Task 06: 堡垒机平台代安装命令(模式B/C)。enroll 命令内含一次性令牌,
+// 仅经 SSH 交付到目标机,不得进入浏览器/模型上下文。
+type ConnectorInstallCommand struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConnectorId    string                 `protobuf:"bytes,1,opt,name=connector_id,json=connectorId,proto3" json:"connector_id,omitempty"`
+	BastionScopeId string                 `protobuf:"bytes,2,opt,name=bastion_scope_id,json=bastionScopeId,proto3" json:"bastion_scope_id,omitempty"`
+	HostId         string                 `protobuf:"bytes,3,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
+	Operation      string                 `protobuf:"bytes,4,opt,name=operation,proto3" json:"operation,omitempty"`
+	// direct_install(双向可达) | direct_install_tunnel(堡垒机无出站,经控制隧道)
+	InstallMode string `protobuf:"bytes,5,opt,name=install_mode,json=installMode,proto3" json:"install_mode,omitempty"`
+	// 注册端点是公开配置；一次性 enrollment token 只存在于独立加密的
+	// operation secret envelope，不得进入 protobuf plan、审计或日志。
+	EnrollmentEndpoint string `protobuf:"bytes,6,opt,name=enrollment_endpoint,json=enrollmentEndpoint,proto3" json:"enrollment_endpoint,omitempty"`
+	// 模式C:隧道拨号地址覆写(enroll 与长连接各一)。
+	EnrollDialAddress  string `protobuf:"bytes,7,opt,name=enroll_dial_address,json=enrollDialAddress,proto3" json:"enroll_dial_address,omitempty"`
+	GatewayDialAddress string `protobuf:"bytes,8,opt,name=gateway_dial_address,json=gatewayDialAddress,proto3" json:"gateway_dial_address,omitempty"`
+	// SSH 目标(与 CollectorManagementCommand 同源语义)。
+	TargetAddress     string             `protobuf:"bytes,10,opt,name=target_address,json=targetAddress,proto3" json:"target_address,omitempty"`
+	TargetPort        uint32             `protobuf:"varint,11,opt,name=target_port,json=targetPort,proto3" json:"target_port,omitempty"`
+	TargetUsername    string             `protobuf:"bytes,12,opt,name=target_username,json=targetUsername,proto3" json:"target_username,omitempty"`
+	PinnedHostKey     string             `protobuf:"bytes,13,opt,name=pinned_host_key,json=pinnedHostKey,proto3" json:"pinned_host_key,omitempty"`
+	CredentialId      string             `protobuf:"bytes,14,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	CredentialVersion uint64             `protobuf:"varint,15,opt,name=credential_version,json=credentialVersion,proto3" json:"credential_version,omitempty"`
+	Platform          string             `protobuf:"bytes,16,opt,name=platform,proto3" json:"platform,omitempty"`
+	Artifact          *CollectorArtifact `protobuf:"bytes,17,opt,name=artifact,proto3" json:"artifact,omitempty"`
+	ReleaseVersionId  string             `protobuf:"bytes,18,opt,name=release_version_id,json=releaseVersionId,proto3" json:"release_version_id,omitempty"`
+	// 安装后持久化到 Connector 的本地只读信任文件，供后续 Collector
+	// 产物下载做 Ed25519 验签。该值属于冻结的 Connector release manifest。
+	ArtifactSigningPublicKey string `protobuf:"bytes,19,opt,name=artifact_signing_public_key,json=artifactSigningPublicKey,proto3" json:"artifact_signing_public_key,omitempty"`
+	// Public Argus Trust Bundle frozen with the install plan. Direct Executor
+	// writes it to the target before enrollment; it never mutates system trust.
+	TrustBundlePem            []byte   `protobuf:"bytes,20,opt,name=trust_bundle_pem,json=trustBundlePem,proto3" json:"trust_bundle_pem,omitempty"`
+	TrustBundleEpoch          uint64   `protobuf:"varint,21,opt,name=trust_bundle_epoch,json=trustBundleEpoch,proto3" json:"trust_bundle_epoch,omitempty"`
+	TrustBundleSha256         string   `protobuf:"bytes,22,opt,name=trust_bundle_sha256,json=trustBundleSha256,proto3" json:"trust_bundle_sha256,omitempty"`
+	TrustBundleCaFingerprints []string `protobuf:"bytes,23,rep,name=trust_bundle_ca_fingerprints,json=trustBundleCaFingerprints,proto3" json:"trust_bundle_ca_fingerprints,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *ConnectorInstallCommand) Reset() {
+	*x = ConnectorInstallCommand{}
+	mi := &file_argus_connector_v1_collector_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectorInstallCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectorInstallCommand) ProtoMessage() {}
+
+func (x *ConnectorInstallCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_argus_connector_v1_collector_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectorInstallCommand.ProtoReflect.Descriptor instead.
+func (*ConnectorInstallCommand) Descriptor() ([]byte, []int) {
+	return file_argus_connector_v1_collector_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ConnectorInstallCommand) GetConnectorId() string {
+	if x != nil {
+		return x.ConnectorId
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetBastionScopeId() string {
+	if x != nil {
+		return x.BastionScopeId
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetHostId() string {
+	if x != nil {
+		return x.HostId
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetInstallMode() string {
+	if x != nil {
+		return x.InstallMode
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetEnrollmentEndpoint() string {
+	if x != nil {
+		return x.EnrollmentEndpoint
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetEnrollDialAddress() string {
+	if x != nil {
+		return x.EnrollDialAddress
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetGatewayDialAddress() string {
+	if x != nil {
+		return x.GatewayDialAddress
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetTargetAddress() string {
+	if x != nil {
+		return x.TargetAddress
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetTargetPort() uint32 {
+	if x != nil {
+		return x.TargetPort
+	}
+	return 0
+}
+
+func (x *ConnectorInstallCommand) GetTargetUsername() string {
+	if x != nil {
+		return x.TargetUsername
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetPinnedHostKey() string {
+	if x != nil {
+		return x.PinnedHostKey
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetCredentialId() string {
+	if x != nil {
+		return x.CredentialId
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetCredentialVersion() uint64 {
+	if x != nil {
+		return x.CredentialVersion
+	}
+	return 0
+}
+
+func (x *ConnectorInstallCommand) GetPlatform() string {
+	if x != nil {
+		return x.Platform
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetArtifact() *CollectorArtifact {
+	if x != nil {
+		return x.Artifact
+	}
+	return nil
+}
+
+func (x *ConnectorInstallCommand) GetReleaseVersionId() string {
+	if x != nil {
+		return x.ReleaseVersionId
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetArtifactSigningPublicKey() string {
+	if x != nil {
+		return x.ArtifactSigningPublicKey
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetTrustBundlePem() []byte {
+	if x != nil {
+		return x.TrustBundlePem
+	}
+	return nil
+}
+
+func (x *ConnectorInstallCommand) GetTrustBundleEpoch() uint64 {
+	if x != nil {
+		return x.TrustBundleEpoch
+	}
+	return 0
+}
+
+func (x *ConnectorInstallCommand) GetTrustBundleSha256() string {
+	if x != nil {
+		return x.TrustBundleSha256
+	}
+	return ""
+}
+
+func (x *ConnectorInstallCommand) GetTrustBundleCaFingerprints() []string {
+	if x != nil {
+		return x.TrustBundleCaFingerprints
+	}
+	return nil
+}
+
 var File_argus_connector_v1_collector_proto protoreflect.FileDescriptor
 
 const file_argus_connector_v1_collector_proto_rawDesc = "" +
@@ -521,7 +806,8 @@ const file_argus_connector_v1_collector_proto_rawDesc = "" +
 	"\x06sha256\x18\x04 \x01(\tR\x06sha256\x12\x1c\n" +
 	"\tsignature\x18\x05 \x01(\tR\tsignature\x12$\n" +
 	"\x0esigning_key_id\x18\x06 \x01(\tR\fsigningKeyId\x12\x1b\n" +
-	"\tbyte_size\x18\a \x01(\x04R\bbyteSize\"\xe7\a\n" +
+	"\tbyte_size\x18\a \x01(\x04R\bbyteSize\"\xa1\n" +
+	"\n" +
 	"\x1aCollectorManagementCommand\x12!\n" +
 	"\fcollector_id\x18\x01 \x01(\tR\vcollectorId\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1f\n" +
@@ -549,7 +835,14 @@ const file_argus_connector_v1_collector_proto_rawDesc = "" +
 	"\x13enrollment_endpoint\x18\x14 \x01(\tR\x12enrollmentEndpoint\x120\n" +
 	"\x14ingest_grpc_endpoint\x18\x15 \x01(\tR\x12ingestGrpcEndpoint\x120\n" +
 	"\x14ingest_http_endpoint\x18\x16 \x01(\tR\x12ingestHttpEndpoint\x12)\n" +
-	"\x10kubernetes_image\x18\x17 \x01(\tR\x0fkubernetesImage\"\xe8\x02\n" +
+	"\x10kubernetes_image\x18\x17 \x01(\tR\x0fkubernetesImage\x12\x1c\n" +
+	"\ttransport\x18\x18 \x01(\tR\ttransport\x12#\n" +
+	"\rloopback_port\x18\x19 \x01(\rR\floopbackPort\x12(\n" +
+	"\x10trust_bundle_pem\x18\x1a \x01(\fR\x0etrustBundlePem\x12,\n" +
+	"\x12trust_bundle_epoch\x18\x1b \x01(\x04R\x10trustBundleEpoch\x12.\n" +
+	"\x13trust_bundle_sha256\x18\x1c \x01(\tR\x11trustBundleSha256\x12?\n" +
+	"\x1ctrust_bundle_ca_fingerprints\x18\x1d \x03(\tR\x19trustBundleCaFingerprints\x12,\n" +
+	"\x12image_pull_secrets\x18\x1e \x03(\tR\x10imagePullSecrets\"\xe8\x02\n" +
 	"\x19CollectorManagementResult\x12!\n" +
 	"\fcollector_id\x18\x01 \x01(\tR\vcollectorId\x12-\n" +
 	"\x12effective_revision\x18\x02 \x01(\x04R\x11effectiveRevision\x122\n" +
@@ -567,7 +860,32 @@ const file_argus_connector_v1_collector_proto_rawDesc = "" +
 	"machine_id\x18\x04 \x01(\tR\tmachineId\x12\x1f\n" +
 	"\vsystem_uuid\x18\x05 \x01(\tR\n" +
 	"systemUuid\x12!\n" +
-	"\finternal_ips\x18\x06 \x03(\tR\vinternalIpsBLZJgithub.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1;connectorv1b\x06proto3"
+	"\finternal_ips\x18\x06 \x03(\tR\vinternalIps\"\xd5\a\n" +
+	"\x17ConnectorInstallCommand\x12!\n" +
+	"\fconnector_id\x18\x01 \x01(\tR\vconnectorId\x12(\n" +
+	"\x10bastion_scope_id\x18\x02 \x01(\tR\x0ebastionScopeId\x12\x17\n" +
+	"\ahost_id\x18\x03 \x01(\tR\x06hostId\x12\x1c\n" +
+	"\toperation\x18\x04 \x01(\tR\toperation\x12!\n" +
+	"\finstall_mode\x18\x05 \x01(\tR\vinstallMode\x12/\n" +
+	"\x13enrollment_endpoint\x18\x06 \x01(\tR\x12enrollmentEndpoint\x12.\n" +
+	"\x13enroll_dial_address\x18\a \x01(\tR\x11enrollDialAddress\x120\n" +
+	"\x14gateway_dial_address\x18\b \x01(\tR\x12gatewayDialAddress\x12%\n" +
+	"\x0etarget_address\x18\n" +
+	" \x01(\tR\rtargetAddress\x12\x1f\n" +
+	"\vtarget_port\x18\v \x01(\rR\n" +
+	"targetPort\x12'\n" +
+	"\x0ftarget_username\x18\f \x01(\tR\x0etargetUsername\x12&\n" +
+	"\x0fpinned_host_key\x18\r \x01(\tR\rpinnedHostKey\x12#\n" +
+	"\rcredential_id\x18\x0e \x01(\tR\fcredentialId\x12-\n" +
+	"\x12credential_version\x18\x0f \x01(\x04R\x11credentialVersion\x12\x1a\n" +
+	"\bplatform\x18\x10 \x01(\tR\bplatform\x12A\n" +
+	"\bartifact\x18\x11 \x01(\v2%.argus.connector.v1.CollectorArtifactR\bartifact\x12,\n" +
+	"\x12release_version_id\x18\x12 \x01(\tR\x10releaseVersionId\x12=\n" +
+	"\x1bartifact_signing_public_key\x18\x13 \x01(\tR\x18artifactSigningPublicKey\x12(\n" +
+	"\x10trust_bundle_pem\x18\x14 \x01(\fR\x0etrustBundlePem\x12,\n" +
+	"\x12trust_bundle_epoch\x18\x15 \x01(\x04R\x10trustBundleEpoch\x12.\n" +
+	"\x13trust_bundle_sha256\x18\x16 \x01(\tR\x11trustBundleSha256\x12?\n" +
+	"\x1ctrust_bundle_ca_fingerprints\x18\x17 \x03(\tR\x19trustBundleCaFingerprintsBLZJgithub.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1;connectorv1b\x06proto3"
 
 var (
 	file_argus_connector_v1_collector_proto_rawDescOnce sync.Once
@@ -581,21 +899,23 @@ func file_argus_connector_v1_collector_proto_rawDescGZIP() []byte {
 	return file_argus_connector_v1_collector_proto_rawDescData
 }
 
-var file_argus_connector_v1_collector_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_argus_connector_v1_collector_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_argus_connector_v1_collector_proto_goTypes = []any{
 	(*CollectorArtifact)(nil),          // 0: argus.connector.v1.CollectorArtifact
 	(*CollectorManagementCommand)(nil), // 1: argus.connector.v1.CollectorManagementCommand
 	(*CollectorManagementResult)(nil),  // 2: argus.connector.v1.CollectorManagementResult
 	(*KubernetesNodeEvidence)(nil),     // 3: argus.connector.v1.KubernetesNodeEvidence
+	(*ConnectorInstallCommand)(nil),    // 4: argus.connector.v1.ConnectorInstallCommand
 }
 var file_argus_connector_v1_collector_proto_depIdxs = []int32{
 	0, // 0: argus.connector.v1.CollectorManagementCommand.artifact:type_name -> argus.connector.v1.CollectorArtifact
 	3, // 1: argus.connector.v1.CollectorManagementResult.kubernetes_nodes:type_name -> argus.connector.v1.KubernetesNodeEvidence
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0, // 2: argus.connector.v1.ConnectorInstallCommand.artifact:type_name -> argus.connector.v1.CollectorArtifact
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_argus_connector_v1_collector_proto_init() }
@@ -609,7 +929,7 @@ func file_argus_connector_v1_collector_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_argus_connector_v1_collector_proto_rawDesc), len(file_argus_connector_v1_collector_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

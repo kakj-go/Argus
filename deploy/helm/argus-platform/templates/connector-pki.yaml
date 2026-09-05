@@ -1,43 +1,9 @@
 apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: argus-connector-selfsigned
-  namespace: {{ .Values.namespaces.system }}
-spec:
-  selfSigned: {}
----
-apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: argus-connector-root-ca
+  name: argus-connector-gateway-server
   namespace: {{ .Values.namespaces.system }}
-spec:
-  isCA: true
-  commonName: argus-connector-root-ca
-  secretName: argus-connector-root-ca
-  duration: 87600h
-  renewBefore: 8760h
-  privateKey:
-    algorithm: ECDSA
-    size: 256
-  issuerRef:
-    name: argus-connector-selfsigned
-    kind: Issuer
----
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: {{ .Values.runtime.connectorIssuerName }}
-  namespace: {{ .Values.namespaces.system }}
-spec:
-  ca:
-    secretName: argus-connector-root-ca
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: argus-connector-gateway
-  namespace: {{ .Values.namespaces.system }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
 spec:
   secretName: argus-connector-gateway-tls
   duration: 2160h
@@ -48,39 +14,50 @@ spec:
     - argus-connector-gateway-headless
     - argus-connector-gateway-headless.{{ .Values.namespaces.system }}.svc
     - {{ .Values.hosts.connector }}
-  privateKey:
-    algorithm: ECDSA
-    size: 256
-  usages:
-    - server auth
-    - client auth
+  uris: [spiffe://argus.io/services/connector-gateway/server]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
+  usages: [server auth]
   issuerRef:
-    name: {{ .Values.runtime.connectorIssuerName }}
-    kind: Issuer
+    name: {{ .Values.pki.issuerName }}
+    kind: ClusterIssuer
+    group: {{ .Values.pki.issuerGroup }}
+---
+# Gateway replicas authenticate to one another with a client-only leaf. The
+# server leaf above is never exposed as a client credential.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-connector-gateway-peer-client
+  namespace: {{ .Values.namespaces.system }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
+spec:
+  secretName: argus-connector-gateway-peer-client-tls
+  duration: 24h
+  renewBefore: 8h
+  dnsNames: [argus-connector-gateway]
+  uris: [spiffe://argus.io/services/connector-gateway/peer-client]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
+  usages: [client auth]
+  issuerRef:
+    name: {{ .Values.pki.issuerName }}
+    kind: ClusterIssuer
+    group: {{ .Values.pki.issuerGroup }}
 ---
 apiVersion: v1
 kind: ServiceAccount
-metadata:
-  name: argus-server
-  namespace: {{ .Values.namespaces.system }}
+metadata: {name: argus-server, namespace: {{ .Values.namespaces.system }}}
 ---
 apiVersion: v1
 kind: ServiceAccount
-metadata:
-  name: argus-worker
-  namespace: {{ .Values.namespaces.system }}
+metadata: {name: argus-worker, namespace: {{ .Values.namespaces.system }}}
 ---
 apiVersion: v1
 kind: ServiceAccount
-metadata:
-  name: argus-connector-gateway
-  namespace: {{ .Values.namespaces.system }}
+metadata: {name: argus-connector-gateway, namespace: {{ .Values.namespaces.system }}}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
-metadata:
-  name: argus-connector-certificate-issuer
-  namespace: {{ .Values.namespaces.system }}
+metadata: {name: argus-connector-certificate-issuer, namespace: {{ .Values.namespaces.system }}}
 rules:
   - apiGroups: ["cert-manager.io"]
     resources: ["certificaterequests"]
@@ -91,29 +68,16 @@ rules:
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
-metadata:
-  name: argus-connector-certificate-issuer
-  namespace: {{ .Values.namespaces.system }}
+metadata: {name: argus-connector-certificate-issuer, namespace: {{ .Values.namespaces.system }}}
 subjects:
-  - kind: ServiceAccount
-    name: argus-server
-    namespace: {{ .Values.namespaces.system }}
-  - kind: ServiceAccount
-    name: argus-worker
-    namespace: {{ .Values.namespaces.system }}
-  - kind: ServiceAccount
-    name: argus-connector-gateway
-    namespace: {{ .Values.namespaces.system }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: argus-connector-certificate-issuer
+  - {kind: ServiceAccount, name: argus-server, namespace: {{ .Values.namespaces.system }}}
+  - {kind: ServiceAccount, name: argus-worker, namespace: {{ .Values.namespaces.system }}}
+  - {kind: ServiceAccount, name: argus-connector-gateway, namespace: {{ .Values.namespaces.system }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: argus-connector-certificate-issuer}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
-metadata:
-  name: argus-connector-gateway-peer-resolver
-  namespace: {{ .Values.namespaces.system }}
+metadata: {name: argus-connector-gateway-peer-resolver, namespace: {{ .Values.namespaces.system }}}
 rules:
   - apiGroups: [""]
     resources: ["pods"]
@@ -121,14 +85,7 @@ rules:
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
-metadata:
-  name: argus-connector-gateway-peer-resolver
-  namespace: {{ .Values.namespaces.system }}
+metadata: {name: argus-connector-gateway-peer-resolver, namespace: {{ .Values.namespaces.system }}}
 subjects:
-  - kind: ServiceAccount
-    name: argus-connector-gateway
-    namespace: {{ .Values.namespaces.system }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: argus-connector-gateway-peer-resolver
+  - {kind: ServiceAccount, name: argus-connector-gateway, namespace: {{ .Values.namespaces.system }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: argus-connector-gateway-peer-resolver}

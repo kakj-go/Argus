@@ -30,10 +30,14 @@ import "../styles/hosts.css";
 import { AddHostWizard } from "../components/hosts/add-host-wizard";
 import { CollectorInstallWizard } from "../components/hosts/components-tab";
 import {
-  AddBastionDrawer,
   EditBastionDrawer,
   EditHostDrawer,
 } from "../components/hosts/host-drawers";
+import { AddBastionDialog } from "../components/hosts/add-bastion-dialog";
+import {
+  PendingScopeActions,
+  SelfEnrollHostActions,
+} from "../components/hosts/pending-resource-actions";
 import { PendingActionConfirm } from "../components/hosts/pending-action-confirm";
 import {
   ARGUS_EGRESS_ADDRESSES,
@@ -56,6 +60,67 @@ const STATUSES: Host["connection_status"][] = [
   "degraded",
   "unknown",
 ];
+
+function pendingScopePresentation(state: BastionScope["onboarding"]["state"]) {
+  switch (state) {
+    case "command_available":
+      return {
+        label: "hosts.scope.onboarding.commandAvailable",
+        description: "hosts.scope.onboarding.commandAvailableDesc",
+        tone: "info" as const,
+        pulse: true,
+      };
+    case "command_consumed":
+      return {
+        label: "hosts.scope.onboarding.commandConsumed",
+        description: "hosts.scope.onboarding.commandConsumedDesc",
+        tone: "warning" as const,
+        pulse: false,
+      };
+    case "command_expired":
+      return {
+        label: "hosts.scope.onboarding.commandExpired",
+        description: "hosts.scope.onboarding.commandExpiredDesc",
+        tone: "warning" as const,
+        pulse: false,
+      };
+    case "awaiting_approval":
+      return {
+        label: "hosts.scope.onboarding.awaitingApproval",
+        description: "hosts.scope.onboarding.awaitingApprovalDesc",
+        tone: "warning" as const,
+        pulse: true,
+      };
+    case "installing":
+      return {
+        label: "hosts.scope.onboarding.installing",
+        description: "hosts.scope.onboarding.installingDesc",
+        tone: "info" as const,
+        pulse: true,
+      };
+    case "install_failed":
+      return {
+        label: "hosts.scope.onboarding.installFailed",
+        description: "hosts.scope.onboarding.installFailedDesc",
+        tone: "danger" as const,
+        pulse: false,
+      };
+    case "registered":
+      return {
+        label: "hosts.scope.onboarding.registered",
+        description: "hosts.scope.onboarding.registeredDesc",
+        tone: "success" as const,
+        pulse: false,
+      };
+  }
+}
+
+function scopeRefreshInterval(scopes: BastionScope[] | undefined) {
+  if (scopes?.some((scope) => scope.onboarding.state === "installing")) {
+    return 2_000;
+  }
+  return false;
+}
 
 /** 成员主机紧凑卡片：名称/IP/连接路径/状态/环境标签 + 行操作。 */
 function HostTile({
@@ -85,6 +150,12 @@ function HostTile({
           <Link params={{ hostId: host.id }} to="/hosts/$hostId">
             {host.name}
           </Link>
+          {host.connection_mode === "self_enrolled" &&
+            host.connection_status === "onboarding" && (
+              <StatusBadge pulse tone="info">
+                {t("hosts.standalone.selfEnrollWaiting")}
+              </StatusBadge>
+            )}
           {host.live_status ? (
             <StatusBadge
               pulse={host.live_status === "online"}
@@ -158,6 +229,7 @@ function HostTile({
           </Button>
         </span>
       </div>
+      <SelfEnrollHostActions host={host} />
     </div>
   );
 }
@@ -204,10 +276,19 @@ export function HostsPage() {
   const scopesQuery = useQuery({
     queryKey: ["bastion-scopes"],
     queryFn: () => api.connectors.listBastionScopes(),
+    // Only non-terminal onboarding states need background convergence. Mode A
+    // never triggers high-frequency Connector list monitoring.
+    refetchInterval: (query) => scopeRefreshInterval(query.state.data?.items),
   });
   const connectorsQuery = useQuery({
     queryKey: ["connectors"],
     queryFn: () => api.connectors.list(),
+    refetchInterval: () =>
+      scopesQuery.data?.items.some(
+        (scope) => scope.onboarding.state === "installing",
+      )
+        ? 2_000
+        : false,
   });
   const activeSessionsQuery = useQuery({
     queryKey: ["remote-access", "sessions", "active"],
@@ -240,11 +321,12 @@ export function HostsPage() {
     void queryClient.invalidateQueries({ queryKey: ["hosts"] });
     void queryClient.invalidateQueries({ queryKey: ["bastion-scopes"] });
     void queryClient.invalidateQueries({ queryKey: ["connectors"] });
-    void queryClient.invalidateQueries({ queryKey: ["remote-access", "sessions"] });
+    void queryClient.invalidateQueries({
+      queryKey: ["remote-access", "sessions"],
+    });
   };
 
   const onHostCreated = () => {
-    setAddHostOpen(false);
     invalidateAll();
   };
 
@@ -311,6 +393,17 @@ export function HostsPage() {
         host.id !== scope.connector_host_id,
     );
   const standaloneHosts = hosts.filter((host) => !host.bastion_scope_id);
+  const standaloneHasSelfEnrolled = standaloneHosts.some(
+    (host) => host.connection_mode === "self_enrolled",
+  );
+  const standaloneHasDirect = standaloneHosts.some(
+    (host) => host.connection_mode !== "self_enrolled",
+  );
+  const standaloneModeKey = standaloneHasSelfEnrolled
+    ? standaloneHasDirect
+      ? "hosts.standalone.mixedModes"
+      : "hosts.standalone.selfEnrolled"
+    : "hosts.standalone.directExecutor";
   const activeScopes = scopes.filter(
     (scope) =>
       scope.status === "active" && connectorOf(scope)?.status === "online",
@@ -406,6 +499,9 @@ export function HostsPage() {
           const members = membersOf(scope);
           const bastionHost = bastionHostOf(scope);
           const connector = connectorOf(scope);
+          const pendingPresentation = pendingScopePresentation(
+            scope.onboarding.state,
+          );
           const sessionCount = activeSessions.filter((session) =>
             members.some((host) => host.id === session.host_id),
           ).length;
@@ -422,13 +518,19 @@ export function HostsPage() {
                     <Badge tone={environmentTone(scope.environment)}>
                       {t(`hosts.env.${scope.environment}`)}
                     </Badge>
-                    <StatusBadge pulse tone="info">
-                      {t("hosts.scope.waiting")}
+                    <StatusBadge
+                      pulse={pendingPresentation.pulse}
+                      tone={pendingPresentation.tone}
+                    >
+                      {t(pendingPresentation.label)}
                     </StatusBadge>
                   </span>
                 </div>
                 <div className="argus-scope-card__body">
-                  <p className="argus-muted">{t("hosts.scope.waitingDesc")}</p>
+                  <p className="argus-muted">
+                    {t(pendingPresentation.description)}
+                  </p>
+                  <PendingScopeActions scope={scope} />
                   <div className="argus-scope-card__actions">
                     {simulate && (
                       <Button
@@ -476,6 +578,29 @@ export function HostsPage() {
                         : connector.status === "uninstalled"
                           ? t("hosts.scope.connectorUninstalled")
                           : t("hosts.scope.connectorOffline")}
+                    </StatusBadge>
+                  )}
+                  {scope.control_tunnel_status && (
+                    <StatusBadge
+                      pulse={
+                        scope.control_tunnel_status === "establishing" ||
+                        scope.control_tunnel_status === "established"
+                      }
+                      tone={
+                        scope.control_tunnel_status === "established"
+                          ? "success"
+                          : scope.control_tunnel_status === "degraded"
+                            ? "warning"
+                            : scope.control_tunnel_status === "down" ||
+                                scope.control_tunnel_status === "removed"
+                              ? "danger"
+                              : "info"
+                      }
+                    >
+                      {t("hosts.scope.controlTunnel")} ·{" "}
+                      {t(
+                        `hosts.components.installed.tunnelStatus.${scope.control_tunnel_status}`,
+                      )}
                     </StatusBadge>
                   )}
                   {scope.status === "uninstalled" && (
@@ -587,12 +712,12 @@ export function HostsPage() {
             <div className="argus-scope-card__head">
               <span className="argus-scope-card__title">
                 {t("hosts.standalone.title")}
-                <Badge tone="accent">
-                  {t("hosts.standalone.directExecutor")}
-                </Badge>
+                <Badge tone="accent">{t(standaloneModeKey)}</Badge>
               </span>
               <span className="argus-standalone__hint">
-                {t("hosts.standalone.egressHint", { ip: egressDisplay })}
+                {!standaloneHasDirect
+                  ? t("hosts.standalone.selfEnrolledHint")
+                  : t("hosts.standalone.egressHint", { ip: egressDisplay })}
               </span>
             </div>
             <div className="argus-scope-card__body">
@@ -620,7 +745,7 @@ export function HostsPage() {
         )}
       </div>
 
-      <AddBastionDrawer
+      <AddBastionDialog
         onCreated={invalidateAll}
         onOpenChange={setAddBastionOpen}
         open={addBastionOpen}
@@ -632,9 +757,6 @@ export function HostsPage() {
         scopes={activeScopes}
       />
       <EditBastionDrawer
-        connectorStatus={
-          editBastion ? connectorOf(editBastion)?.status : undefined
-        }
         onOpenChange={(open) => {
           if (!open) setEditBastion(null);
         }}

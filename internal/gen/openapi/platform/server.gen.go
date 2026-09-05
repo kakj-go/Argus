@@ -44,6 +44,9 @@ type ServerInterface interface {
 	// ChangeEnterpriseState changeEnterpriseState.
 	// (POST /platform/enterprises/{id}/{state_action})
 	ChangeEnterpriseState(w http.ResponseWriter, r *http.Request, id ResourceId, stateAction string, params ChangeEnterpriseStateParams)
+	// GetPlatformPKIStatus Read versioned Argus Trust Bundle rotation and node acknowledgement status.
+	// (GET /platform/pki)
+	GetPlatformPKIStatus(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -101,6 +104,12 @@ func (_ Unimplemented) UpdateEnterprise(w http.ResponseWriter, r *http.Request, 
 // ChangeEnterpriseState changeEnterpriseState.
 // (POST /platform/enterprises/{id}/{state_action})
 func (_ Unimplemented) ChangeEnterpriseState(w http.ResponseWriter, r *http.Request, id ResourceId, stateAction string, params ChangeEnterpriseStateParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetPlatformPKIStatus Read versioned Argus Trust Bundle rotation and node acknowledgement status.
+// (GET /platform/pki)
+func (_ Unimplemented) GetPlatformPKIStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -654,6 +663,20 @@ func (siw *ServerInterfaceWrapper) ChangeEnterpriseState(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// GetPlatformPKIStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetPlatformPKIStatus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlatformPKIStatus(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -793,6 +816,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/platform/enterprise-admins/{id}/disable", wrapper.DisableEnterpriseAdmin)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/platform/pki", wrapper.GetPlatformPKIStatus)
 	})
 
 	return r
@@ -1159,6 +1185,44 @@ func (response ChangeEnterpriseStatedefaultJSONResponse) VisitChangeEnterpriseSt
 	return err
 }
 
+type GetPlatformPKIStatusRequestObject struct {
+}
+
+type GetPlatformPKIStatusResponseObject interface {
+	VisitGetPlatformPKIStatusResponse(w http.ResponseWriter) error
+}
+
+type GetPlatformPKIStatus200JSONResponse PKIStatus
+
+func (response GetPlatformPKIStatus200JSONResponse) VisitGetPlatformPKIStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlatformPKIStatusdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response GetPlatformPKIStatusdefaultJSONResponse) VisitGetPlatformPKIStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// ListEnterpriseAdmins listEnterpriseAdmins.
@@ -1188,6 +1252,9 @@ type StrictServerInterface interface {
 	// ChangeEnterpriseState changeEnterpriseState.
 	// (POST /platform/enterprises/{id}/{state_action})
 	ChangeEnterpriseState(ctx context.Context, request ChangeEnterpriseStateRequestObject) (ChangeEnterpriseStateResponseObject, error)
+	// GetPlatformPKIStatus Read versioned Argus Trust Bundle rotation and node acknowledgement status.
+	// (GET /platform/pki)
+	GetPlatformPKIStatus(ctx context.Context, request GetPlatformPKIStatusRequestObject) (GetPlatformPKIStatusResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1482,6 +1549,30 @@ func (sh *strictHandler) ChangeEnterpriseState(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ChangeEnterpriseStateResponseObject); ok {
 		if err := validResponse.VisitChangeEnterpriseStateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlatformPKIStatus operation middleware
+func (sh *strictHandler) GetPlatformPKIStatus(w http.ResponseWriter, r *http.Request) {
+	var request GetPlatformPKIStatusRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlatformPKIStatus(ctx, request.(GetPlatformPKIStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlatformPKIStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlatformPKIStatusResponseObject); ok {
+		if err := validResponse.VisitGetPlatformPKIStatusResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

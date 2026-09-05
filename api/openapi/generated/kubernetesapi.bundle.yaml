@@ -361,6 +361,16 @@ components:
         connection_test_id:
           type: string
           format: uuid
+        connector_image_pull_secrets:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 253
+            pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+          description: 仅 in_cluster：目标集群中已存在的 Connector 镜像拉取 Secret
     KubernetesPreviewUpdate:
       type: object
       additionalProperties: false
@@ -717,6 +727,7 @@ components:
       required:
         - schema_version
         - action_ref
+        - action_type
         - title
         - summary
         - risk
@@ -733,6 +744,10 @@ components:
         action_ref:
           type: string
           minLength: 1
+        action_type:
+          type: string
+          minLength: 3
+          maxLength: 128
         title:
           type: string
           minLength: 1

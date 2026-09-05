@@ -113,6 +113,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/platform/pki": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read versioned Argus Trust Bundle rotation and node acknowledgement status. */
+        get: operations["getPlatformPKIStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -153,6 +170,14 @@ export interface components {
         EnterpriseUserPage: {
             items: components["schemas"]["EnterpriseUser"][];
             page: components["schemas"]["CursorPage"];
+        };
+        PKIStatus: {
+            bundles: components["schemas"]["PKIBundleStatus"][];
+            nodes: components["schemas"]["PKINodeStatus"][];
+            acknowledged_nodes: number;
+            pending_nodes: number;
+            failed_nodes: number;
+            trust_expired_nodes: number;
         };
         RequestId: string;
         ApiError: {
@@ -216,6 +241,42 @@ export interface components {
             last_login_at?: string;
             /** Format: date-time */
             created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        PKIBundleStatus: {
+            /** Format: int64 */
+            epoch: number;
+            /** @enum {string} */
+            state: "stable" | "preparing" | "overlapping" | "retiring" | "failed";
+            /** @enum {string} */
+            direction: "forward" | "rollback";
+            bundle_sha256: string;
+            current_ca_fingerprints: string[];
+            next_ca_fingerprints: string[];
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            retire_at?: string;
+            last_error?: string;
+        };
+        PKINodeStatus: {
+            /** @enum {string} */
+            kind: "connector" | "kubernetes_connector" | "collector" | "control_plane";
+            id: string;
+            /** Format: uuid */
+            enterprise_id?: string;
+            /** Format: int64 */
+            epoch: number;
+            bundle_sha256?: string;
+            ca_fingerprints?: string[];
+            /** @enum {string} */
+            status: "pending" | "acked" | "failed" | "trust_expired";
+            /** @description True only for a currently active node whose missing ACK blocks entry into overlap. */
+            blocks_cutover: boolean;
+            error?: string;
+            /** Format: date-time */
+            acknowledged_at?: string;
             /** Format: date-time */
             updated_at: string;
         };
@@ -478,6 +539,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EnterpriseUser"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getPlatformPKIStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current PKI state and acknowledgement inventory. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PKIStatus"];
                 };
             };
             default: components["responses"]["Error"];

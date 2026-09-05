@@ -133,6 +133,86 @@ kubernetes_collector_preview:
     parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/CsrfToken'}]
     requestBody: {required: true, content: {application/json: {schema: {$ref: '../components/m7.yaml#/components/schemas/CollectorPreview'}}}}
     responses: {'201': {description: Pending action., content: {application/json: {schema: {$ref: '../../schemas/action/pending-action-public.schema.json'}}}}, default: {$ref: '#/components/responses/Error'}}
+host_install_bootstrap:
+  parameters:
+    - name: token
+      in: path
+      required: true
+      schema: {type: string, minLength: 16, maxLength: 256}
+  get:
+    operationId: getHostInstallBootstrap
+    summary: Exchange a one-time self-enroll host token for the frozen install plan.
+    description: 公开端点,由 argus-telemetry ingest 承载(与 /telemetry/collectors/enroll 同域);路径中的令牌即凭证。目标自报的架构与地址仅作回填展示,不参与信任判定。
+    security: []
+    parameters:
+      - name: arch
+        in: query
+        required: false
+        schema: {type: string, enum: [amd64, arm64]}
+      - name: hostname
+        in: query
+        required: false
+        schema: {type: string, minLength: 1, maxLength: 253}
+      - name: address
+        in: query
+        required: false
+        schema: {type: string, minLength: 1, maxLength: 512}
+    responses:
+      "200": {description: Frozen install plan., content: {application/json: {schema: {$ref: "../components/m7.yaml#/components/schemas/HostInstallBootstrap"}}}}
+      default: {$ref: "#/components/responses/Error"}
+host_bootstrap_script:
+  get:
+    operationId: getHostBootstrapScript
+    summary: Download a strict Host bootstrap script using an install or uninstall token.
+    description: 公开目标机端点；短命令可仅对本次脚本下载放宽 TLS，返回脚本内嵌版本化 Trust Bundle，后续请求保持严格校验。读取脚本不消费 token。
+    security: []
+    parameters:
+      - name: X-Argus-Enrollment-Token
+        in: header
+        required: true
+        schema: {type: string, minLength: 16, maxLength: 256, writeOnly: true}
+      - name: scope
+        in: query
+        required: true
+        schema: {type: string, enum: [linux-system, linux-user]}
+    responses:
+      "200":
+        description: Generated strict bootstrap script.
+        headers:
+          Cache-Control: {schema: {type: string}}
+          Content-Disposition: {schema: {type: string}}
+          X-Content-Type-Options: {schema: {type: string}}
+        content: {text/x-shellscript: {schema: {type: string, minLength: 1, maxLength: 131072}}}
+      default: {$ref: "#/components/responses/Error"}
+host_uninstall_bootstrap:
+  parameters:
+    - name: token
+      in: path
+      required: true
+      schema: {type: string, minLength: 16, maxLength: 256}
+  get:
+    operationId: getHostUninstallBootstrap
+    summary: Atomically exchange an independent Host uninstall authorization.
+    security: []
+    parameters:
+      - {name: arch, in: query, required: false, schema: {type: string, enum: [amd64, arm64]}}
+      - {name: hostname, in: query, required: false, schema: {type: string, minLength: 1, maxLength: 253}}
+      - {name: address, in: query, required: false, schema: {type: string, minLength: 1, maxLength: 512}}
+    responses:
+      "200": {description: One-time uninstall completion material., content: {application/json: {schema: {$ref: "../components/m7.yaml#/components/schemas/HostUninstallBootstrap"}}}}
+      default: {$ref: "#/components/responses/Error"}
+host_uninstall_complete:
+  parameters:
+    - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+  post:
+    operationId: completeHostUninstall
+    summary: Confirm local Collector cleanup before marking the Host Collector uninstalled.
+    security: []
+    parameters:
+      - {name: X-Argus-Uninstall-Completion-Token, in: header, required: true, schema: {type: string, minLength: 32, maxLength: 256}}
+    responses:
+      "204": {description: Uninstall completed or already completed.}
+      default: {$ref: "#/components/responses/Error"}
 components:
   parameters:
     IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {$ref: '../components/common.yaml#/components/schemas/IdempotencyKey'}}

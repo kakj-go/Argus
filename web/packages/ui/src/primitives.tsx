@@ -112,6 +112,8 @@ export function Dialog({
   open,
   onOpenChange,
   size = "md",
+  width,
+  className,
 }: {
   trigger?: ReactNode;
   title: string;
@@ -122,6 +124,9 @@ export function Dialog({
   onOpenChange?: (open: boolean) => void;
   /** md keeps the default 520px; lg widens for detail/read-only layouts. */
   size?: "md" | "lg";
+  /** 显式像素宽度(与 viewport 边距取小),优先于 size。 */
+  width?: number;
+  className?: string;
 }) {
   const text = useUiText();
   return (
@@ -132,7 +137,8 @@ export function Dialog({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="argus-dialog__overlay" />
         <DialogPrimitive.Content
-          className={cx("argus-dialog", size !== "md" && `argus-dialog--${size}`)}
+          className={cx("argus-dialog", size !== "md" && `argus-dialog--${size}`, className)}
+          style={width ? { width: `min(${width}px, calc(100vw - 40px))` } : undefined}
         >
           <div className="argus-dialog__top">
             <div>

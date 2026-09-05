@@ -1,15 +1,17 @@
 package configbundle
 
 import (
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
-const SchemaVersion = "argus.otelcol/v1"
+const SchemaVersion = "argus.otelcol/v2"
 
 type Bundle struct {
 	SchemaVersion     string          `json:"schema_version"`
@@ -17,35 +19,37 @@ type Bundle struct {
 	Host              json.RawMessage `json:"host"`
 	KubernetesAgent   json.RawMessage `json:"kubernetes_agent"`
 	KubernetesGateway json.RawMessage `json:"kubernetes_gateway"`
-	ServerCAPEM       string          `json:"server_ca_pem"`
 }
 
 type RenderInput struct {
-	CollectorID        string
-	ResourceID         string
-	ResourceType       string
-	Role               string
-	RouteKind          string
-	GatewayEndpoint    string
-	GatewayServerName  string
-	ProfileKeys        []string
-	EnrollmentEndpoint string
-	IngestGRPCEndpoint string
-	IngestHTTPEndpoint string
-	ServerCAPEM        string
+	CollectorID  string
+	ResourceID   string
+	ResourceType string
+	Role         string
+	RouteKind    string
+	// Transport 是遥测物理路径(direct|executor_tunnel|bastion_tunnel,PlanV4);
+	// 隧道形态下出口端点渲染为本机回环,TLS 仍按真实上游域名校验。
+	Transport             string
+	TunnelLoopbackPort    int
+	GatewayEndpoint       string
+	GatewayServerName     string
+	ProfileKeys           []string
+	EnrollmentEndpoint    string
+	EnrollmentDialAddress string
+	IngestGRPCEndpoint    string
+	IngestHTTPEndpoint    string
 }
 
 func Render(input RenderInput) ([]byte, error) {
 	if input.CollectorID == "" || input.ResourceID == "" || (input.ResourceType != "host" && input.ResourceType != "kubernetes_cluster") {
 		return nil, errors.New("Collector and resource identity are required")
 	}
-	pool := x509.NewCertPool()
-	if input.ServerCAPEM == "" || !pool.AppendCertsFromPEM([]byte(input.ServerCAPEM)) {
-		return nil, errors.New("telemetry server CA bundle is required")
-	}
 	enrollment, err := requireHTTPS(input.EnrollmentEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("enrollment endpoint: %w", err)
+	}
+	if input.EnrollmentDialAddress != "" && !validLoopbackDialAddress(input.EnrollmentDialAddress) {
+		return nil, errors.New("enrollment dial address must be a loopback endpoint")
 	}
 	ingestHTTP, err := requireHTTPS(input.IngestHTTPEndpoint)
 	if err != nil {
@@ -56,17 +60,44 @@ func Render(input RenderInput) ([]byte, error) {
 		return nil, fmt.Errorf("OTLP gRPC endpoint: %w", err)
 	}
 	rotation := strings.TrimRight(ingestHTTP.String(), "/") + "/v1/identity/rotate"
+	trustBundle := strings.TrimRight(ingestHTTP.String(), "/") + "/v1/identity/trust-bundle"
 	exportEndpoint := ingestGRPC
-	if input.RouteKind == "bastion_gateway" {
-		exportEndpoint, err = normalizeGRPCEndpoint(input.GatewayEndpoint)
-		if err != nil {
-			return nil, fmt.Errorf("Gateway OTLP endpoint: %w", err)
+	exportServerName := exporterServerName(input, exportEndpoint)
+	switch input.Transport {
+	case "direct":
+	case "executor_tunnel":
+		if input.RouteKind != "direct_argus" {
+			return nil, errors.New("executor tunnel requires direct_argus route")
 		}
+	case "bastion_tunnel":
+		if input.RouteKind != "bastion_gateway" {
+			return nil, errors.New("bastion tunnel requires bastion_gateway route")
+		}
+	default:
+		return nil, errors.New("Collector route transport is invalid")
+	}
+	if input.RouteKind == "bastion_gateway" {
 		if !validServerName(input.GatewayServerName) {
 			return nil, errors.New("Gateway TLS server name is required")
 		}
+		exportServerName = input.GatewayServerName
+		// bastion_tunnel 的物理上游是 Connector 本机 Gateway listener；
+		// Collector 只需要冻结 Gateway TLS 身份，不能把 connector:// 资源地址
+		// 误当成网络端点。direct 才要求一个可拨号的 Gateway OTLP endpoint。
+		if input.Transport == "direct" {
+			exportEndpoint, err = normalizeGRPCEndpoint(input.GatewayEndpoint)
+			if err != nil {
+				return nil, fmt.Errorf("Gateway OTLP endpoint: %w", err)
+			}
+		}
 	} else if input.RouteKind != "direct_argus" {
 		return nil, errors.New("Collector route kind is invalid")
+	}
+	if input.Transport == "executor_tunnel" || input.Transport == "bastion_tunnel" {
+		if input.TunnelLoopbackPort < 1 || input.TunnelLoopbackPort >= 65535 {
+			return nil, errors.New("tunnel loopback port is required")
+		}
+		exportEndpoint = fmt.Sprintf("127.0.0.1:%d", input.TunnelLoopbackPort)
 	}
 	profiles, err := normalizeProfiles(input.ResourceType, input.ProfileKeys)
 	if err != nil {
@@ -74,20 +105,20 @@ func Render(input RenderInput) ([]byte, error) {
 	}
 	identity := resourceIdentity(input.CollectorID, input.ResourceID, input.ResourceType)
 
-	host, err := json.Marshal(hostConfig(input, profiles, identity, enrollment.String(), rotation, exportEndpoint))
+	host, err := json.Marshal(hostConfig(input, profiles, identity, enrollment.String(), rotation, trustBundle, exportEndpoint, exportServerName))
 	if err != nil {
 		return nil, err
 	}
-	agent, err := json.Marshal(kubernetesAgentConfig(input, profiles, identity, enrollment.String(), rotation))
+	agent, err := json.Marshal(kubernetesAgentConfig(input, profiles, identity, enrollment.String(), rotation, trustBundle))
 	if err != nil {
 		return nil, err
 	}
-	gateway, err := json.Marshal(kubernetesGatewayConfig(input, profiles, identity, enrollment.String(), rotation, exportEndpoint))
+	gateway, err := json.Marshal(kubernetesGatewayConfig(input, profiles, identity, enrollment.String(), rotation, trustBundle, exportEndpoint, exportServerName))
 	if err != nil {
 		return nil, err
 	}
 	return json.Marshal(Bundle{SchemaVersion: SchemaVersion, CollectorID: input.CollectorID, Host: host,
-		KubernetesAgent: agent, KubernetesGateway: gateway, ServerCAPEM: input.ServerCAPEM})
+		KubernetesAgent: agent, KubernetesGateway: gateway})
 }
 
 func Extract(value []byte, target string) ([]byte, error) {
@@ -121,23 +152,11 @@ func CollectorID(value []byte) (string, error) {
 	return bundle.CollectorID, nil
 }
 
-func ServerCA(value []byte) ([]byte, error) {
-	var bundle Bundle
-	if json.Unmarshal(value, &bundle) != nil || bundle.SchemaVersion != SchemaVersion {
-		return nil, errors.New("Collector configuration bundle is invalid")
-	}
-	pool := x509.NewCertPool()
-	if bundle.ServerCAPEM == "" || !pool.AppendCertsFromPEM([]byte(bundle.ServerCAPEM)) {
-		return nil, errors.New("Collector server CA bundle is invalid")
-	}
-	return []byte(bundle.ServerCAPEM), nil
-}
-
-func outboundConfig(collectorID, enrollmentEndpoint, rotationEndpoint, ingestEndpoint, serverName, tokenFile, identityDirectory, serverCAFile string,
-	receivers map[string]any, processors map[string]any, pipelines map[string]any) map[string]any {
+func outboundConfig(collectorID, enrollmentEndpoint, rotationEndpoint, trustBundleEndpoint, ingestEndpoint, serverName, dialAddress, tokenFile, identityDirectory, serverCAFile string,
+	receivers map[string]any, processors map[string]any, pipelines map[string]any, bootstrapDirectory ...string) map[string]any {
 	return map[string]any{
 		"extensions": map[string]any{
-			"argus_identity": identityConfig(collectorID, enrollmentEndpoint, rotationEndpoint, tokenFile, identityDirectory, serverCAFile),
+			"argus_identity": identityConfig(collectorID, enrollmentEndpoint, rotationEndpoint, trustBundleEndpoint, dialAddress, tokenFile, identityDirectory, serverCAFile, bootstrapDirectory...),
 			"file_storage":   map[string]any{"directory": identityDirectory + "/queue", "create_directory": true},
 			"health_check":   map[string]any{"endpoint": "0.0.0.0:13133"},
 		},
@@ -162,11 +181,15 @@ func outboundConfig(collectorID, enrollmentEndpoint, rotationEndpoint, ingestEnd
 	}
 }
 
-func hostConfig(input RenderInput, profiles map[string]bool, identity map[string]string, enrollment, rotation, endpoint string) map[string]any {
+func hostConfig(input RenderInput, profiles map[string]bool, identity map[string]string, enrollment, rotation, trustBundle, endpoint, serverName string) map[string]any {
 	receivers := hostReceivers(profiles)
 	processors := map[string]any{"resource/argus": resourceProcessor(identity)}
 	baseReceivers := receivers
 	if input.Role == "edge_gateway" {
+		// Edge Gateway 的 4317/4318 必须只有受 mTLS 保护的成员入口。
+		// otlp-receiver profile 在普通主机上表示本机明文接收器；若在这里
+		// 同时保留会与 downstream 监听器抢占端口并绕过成员身份校验。
+		delete(receivers, "otlp")
 		receivers["otlp/downstream"] = secureOTLPReceiver("0.0.0.0", "/var/lib/argus-otelcol/identity")
 		// Keep the authenticated downstream receiver out of the ordinary
 		// self-collection pipelines. Sharing one receiver across both paths can
@@ -188,7 +211,7 @@ func hostConfig(input RenderInput, profiles map[string]bool, identity map[string
 			}
 		}
 	}
-	return outboundConfig(input.CollectorID, enrollment, rotation, endpoint, exporterServerName(input, endpoint), "/etc/argus-otelcol/enrollment-token",
+	return outboundConfig(input.CollectorID, enrollment, rotation, trustBundle, endpoint, serverName, input.EnrollmentDialAddress, "/etc/argus-otelcol/enrollment-token",
 		"/var/lib/argus-otelcol/identity", "/etc/argus-otelcol/server-ca.pem", receivers, processors, pipelines)
 }
 
@@ -216,7 +239,7 @@ func hostReceivers(profiles map[string]bool) map[string]any {
 	return receivers
 }
 
-func kubernetesAgentConfig(input RenderInput, profiles map[string]bool, identity map[string]string, enrollment, rotation string) map[string]any {
+func kubernetesAgentConfig(input RenderInput, profiles map[string]bool, identity map[string]string, enrollment, rotation, trustBundle string) map[string]any {
 	receivers := map[string]any{}
 	if profiles["k8s-node-container"] {
 		receivers["kubeletstats"] = map[string]any{"collection_interval": "30s", "auth_type": "serviceAccount", "endpoint": "https://${env:K8S_NODE_NAME}:10250",
@@ -231,8 +254,9 @@ func kubernetesAgentConfig(input RenderInput, profiles map[string]bool, identity
 	}
 	identityDirectory := "/var/lib/argus-otelcol/identity"
 	return map[string]any{
-		"extensions": map[string]any{"argus_identity": identityConfig(input.CollectorID, enrollment, rotation, "/var/run/argus-bootstrap/enrollment-token", identityDirectory, "/etc/argus-otelcol/server-ca.pem")},
-		"receivers":  receivers,
+		"extensions": map[string]any{"argus_identity": identityConfig(input.CollectorID, enrollment, rotation, trustBundle, input.EnrollmentDialAddress,
+			identityDirectory+"/enrollment-token", identityDirectory, "/etc/argus-otelcol/server-ca.pem", "/var/run/argus-bootstrap/identity")},
+		"receivers": receivers,
 		"processors": map[string]any{
 			"memory_limiter": map[string]any{"check_interval": "1s", "limit_mib": 192, "spike_limit_mib": 48},
 			"resource/argus": resourceProcessor(identity),
@@ -246,7 +270,7 @@ func kubernetesAgentConfig(input RenderInput, profiles map[string]bool, identity
 	}
 }
 
-func kubernetesGatewayConfig(input RenderInput, profiles map[string]bool, identity map[string]string, enrollment, rotation, endpoint string) map[string]any {
+func kubernetesGatewayConfig(input RenderInput, profiles map[string]bool, identity map[string]string, enrollment, rotation, trustBundle, endpoint, serverName string) map[string]any {
 	receivers := map[string]any{"otlp/downstream": secureOTLPReceiver("0.0.0.0", "/var/lib/argus-otelcol/identity")}
 	if profiles["k8s-cluster"] {
 		receivers["k8s_cluster"] = map[string]any{"auth_type": "serviceAccount", "collection_interval": "30s"}
@@ -261,17 +285,29 @@ func kubernetesGatewayConfig(input RenderInput, profiles map[string]bool, identi
 		pipelines[signal+"/downstream"] = map[string]any{"receivers": []string{"otlp/downstream"},
 			"processors": []string{"memory_limiter", "argus_gateway_identity", "resource/argus"}, "exporters": []string{"otlp/argus"}}
 	}
-	return outboundConfig(input.CollectorID, enrollment, rotation, endpoint, exporterServerName(input, endpoint), "/var/run/argus-bootstrap/enrollment-token",
-		"/var/lib/argus-otelcol/identity", "/etc/argus-otelcol/server-ca.pem", receivers, processors, pipelines)
+	return outboundConfig(input.CollectorID, enrollment, rotation, trustBundle, endpoint, exporterServerName(input, endpoint), input.EnrollmentDialAddress,
+		"/var/lib/argus-otelcol/identity/enrollment-token", "/var/lib/argus-otelcol/identity", "/etc/argus-otelcol/server-ca.pem",
+		receivers, processors, pipelines, "/var/run/argus-bootstrap/identity")
 }
 
-func identityConfig(collectorID, enrollmentEndpoint, rotationEndpoint, tokenFile, identityDirectory, serverCAFile string) map[string]any {
-	return map[string]any{
+func identityConfig(collectorID, enrollmentEndpoint, rotationEndpoint, trustBundleEndpoint, dialAddress, tokenFile, identityDirectory, serverCAFile string,
+	bootstrapDirectory ...string) map[string]any {
+	result := map[string]any{
 		"collector_id": collectorID, "enrollment_endpoint": enrollmentEndpoint, "rotation_endpoint": rotationEndpoint,
+		"trust_bundle_endpoint": trustBundleEndpoint,
 		"enrollment_token_file": tokenFile, "certificate_file": identityDirectory + "/client.pem",
 		"private_key_file": identityDirectory + "/client-key.pem", "ca_bundle_file": identityDirectory + "/ca.pem",
-		"server_ca_file": serverCAFile, "rotate_before": "8h", "check_interval": "5m",
+		"server_certificate_file": identityDirectory + "/server.pem", "server_private_key_file": identityDirectory + "/server-key.pem",
+		"trust_bundle_state_file": identityDirectory + "/trust-bundle.json",
+		"server_ca_file":          serverCAFile, "rotate_before": "8h", "check_interval": "5m",
 	}
+	if dialAddress != "" {
+		result["dial_address"] = dialAddress
+	}
+	if len(bootstrapDirectory) > 0 && bootstrapDirectory[0] != "" {
+		result["bootstrap_identity_directory"] = bootstrapDirectory[0]
+	}
+	return result
 }
 
 func otlpReceiver(host string) map[string]any {
@@ -281,7 +317,7 @@ func otlpReceiver(host string) map[string]any {
 }
 
 func secureOTLPReceiver(host, identityDirectory string) map[string]any {
-	tlsConfig := map[string]any{"cert_file": identityDirectory + "/client.pem", "key_file": identityDirectory + "/client-key.pem", "client_ca_file": identityDirectory + "/ca.pem"}
+	tlsConfig := map[string]any{"cert_file": identityDirectory + "/server.pem", "key_file": identityDirectory + "/server-key.pem", "client_ca_file": identityDirectory + "/ca.pem"}
 	return map[string]any{"protocols": map[string]any{
 		"grpc": map[string]any{"endpoint": host + ":4317", "tls": tlsConfig, "auth": map[string]any{"authenticator": "argus_identity"}},
 		"http": map[string]any{"endpoint": host + ":4318", "tls": tlsConfig, "auth": map[string]any{"authenticator": "argus_identity"}},
@@ -390,4 +426,17 @@ func exporterServerName(input RenderInput, endpoint string) string {
 func validServerName(value string) bool {
 	parsed, err := url.Parse("https://" + strings.TrimSpace(value))
 	return err == nil && parsed.Hostname() == value && parsed.Port() == "" && parsed.User == nil && parsed.Path == "" && parsed.RawQuery == "" && parsed.Fragment == ""
+}
+
+func validLoopbackDialAddress(value string) bool {
+	host, portValue, err := net.SplitHostPort(strings.TrimSpace(value))
+	if err != nil {
+		return false
+	}
+	address, err := netip.ParseAddr(host)
+	if err != nil || !address.IsLoopback() {
+		return false
+	}
+	port, err := strconv.Atoi(portValue)
+	return err == nil && port >= 1 && port <= 65535
 }

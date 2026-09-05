@@ -14,7 +14,7 @@ import (
 
 const activateBastionConnector = `-- name: ActivateBastionConnector :one
 UPDATE bastion_scopes SET connector_host_id = $3, active_connector_id = $4, status = 'active', resource_version = resource_version + 1, updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at
+WHERE id = $1 AND enterprise_id = $2 RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at, onboarding_mode
 `
 
 type ActivateBastionConnectorParams struct {
@@ -47,6 +47,7 @@ func (q *Queries) ActivateBastionConnector(ctx context.Context, arg ActivateBast
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardingMode,
 	)
 	return i, err
 }
@@ -131,6 +132,69 @@ func (q *Queries) AdvanceConnectorEpoch(ctx context.Context, arg AdvanceConnecto
 	return i, err
 }
 
+const attachBastionRootHost = `-- name: AttachBastionRootHost :one
+UPDATE bastion_scopes SET connector_host_id = $3, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND status = 'pending' AND connector_host_id IS NULL
+RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at, onboarding_mode
+`
+
+type AttachBastionRootHostParams struct {
+	ID              uuid.UUID     `json:"id"`
+	EnterpriseID    uuid.UUID     `json:"enterprise_id"`
+	ConnectorHostID uuid.NullUUID `json:"connector_host_id"`
+}
+
+// Creation is one transaction: link the preallocated root Host before the
+// newly created Scope can become externally visible.
+func (q *Queries) AttachBastionRootHost(ctx context.Context, arg AttachBastionRootHostParams) (BastionScope, error) {
+	row := q.db.QueryRow(ctx, attachBastionRootHost, arg.ID, arg.EnterpriseID, arg.ConnectorHostID)
+	var i BastionScope
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Environment,
+		&i.Labels,
+		&i.LabelsHash,
+		&i.Status,
+		&i.ConnectorHostID,
+		&i.ActiveConnectorID,
+		&i.FencingGeneration,
+		&i.ResourceVersion,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OnboardingMode,
+	)
+	return i, err
+}
+
+const bastionNameAvailable = `-- name: BastionNameAvailable :one
+SELECT NOT EXISTS (
+  SELECT 1 FROM bastion_scopes AS scope
+  WHERE scope.enterprise_id = $1
+    AND lower(scope.name) = lower($2) AND scope.status <> 'deleted'
+) AND NOT EXISTS (
+  SELECT 1 FROM hosts AS host
+  WHERE host.enterprise_id = $1
+    AND lower(host.name) = lower($2) AND host.status <> 'deleted'
+) AS available
+`
+
+type BastionNameAvailableParams struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	Name         string    `json:"name"`
+}
+
+// A Bastion Scope and its connector_local root Host share the user-visible
+// name. Both live-name namespaces must therefore be free before preview.
+func (q *Queries) BastionNameAvailable(ctx context.Context, arg BastionNameAvailableParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, bastionNameAvailable, arg.EnterpriseID, arg.Name)
+	var available pgtype.Bool
+	err := row.Scan(&available)
+	return available, err
+}
+
 const closeConnectorSession = `-- name: CloseConnectorSession :execrows
 DELETE FROM connector_sessions WHERE connector_id = $1 AND enterprise_id = $2 AND connection_epoch = $3
 `
@@ -198,7 +262,7 @@ func (q *Queries) CompleteConnectorCertificateRotation(ctx context.Context, arg 
 
 const consumeEnrollmentToken = `-- name: ConsumeEnrollmentToken :one
 UPDATE connector_enrollment_tokens SET status = 'consumed', consumed_at = now(), consumed_device_hash = $2, registered_connector_id = $3
-WHERE id = $1 AND status = 'active' AND expires_at > now() RETURNING id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, status, expires_at, consumed_at, consumed_device_hash, registered_connector_id, created_by, created_at
+WHERE id = $1 AND status = 'active' AND expires_at > now() RETURNING id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, status, expires_at, consumed_at, consumed_device_hash, registered_connector_id, created_by, created_at, release_version_id
 `
 
 type ConsumeEnrollmentTokenParams struct {
@@ -228,22 +292,24 @@ func (q *Queries) ConsumeEnrollmentToken(ctx context.Context, arg ConsumeEnrollm
 		&i.RegisteredConnectorID,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ReleaseVersionID,
 	)
 	return i, err
 }
 
 const createBastionScope = `-- name: CreateBastionScope :one
-INSERT INTO bastion_scopes (id, enterprise_id, name, environment, labels, labels_hash)
-VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at
+INSERT INTO bastion_scopes (id, enterprise_id, name, environment, labels, labels_hash, onboarding_mode)
+VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at, onboarding_mode
 `
 
 type CreateBastionScopeParams struct {
-	ID           uuid.UUID `json:"id"`
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-	Name         string    `json:"name"`
-	Environment  string    `json:"environment"`
-	Labels       []byte    `json:"labels"`
-	LabelsHash   []byte    `json:"labels_hash"`
+	ID             uuid.UUID `json:"id"`
+	EnterpriseID   uuid.UUID `json:"enterprise_id"`
+	Name           string    `json:"name"`
+	Environment    string    `json:"environment"`
+	Labels         []byte    `json:"labels"`
+	LabelsHash     []byte    `json:"labels_hash"`
+	OnboardingMode string    `json:"onboarding_mode"`
 }
 
 func (q *Queries) CreateBastionScope(ctx context.Context, arg CreateBastionScopeParams) (BastionScope, error) {
@@ -254,6 +320,7 @@ func (q *Queries) CreateBastionScope(ctx context.Context, arg CreateBastionScope
 		arg.Environment,
 		arg.Labels,
 		arg.LabelsHash,
+		arg.OnboardingMode,
 	)
 	var i BastionScope
 	err := row.Scan(
@@ -271,6 +338,7 @@ func (q *Queries) CreateBastionScope(ctx context.Context, arg CreateBastionScope
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardingMode,
 	)
 	return i, err
 }
@@ -455,8 +523,8 @@ func (q *Queries) CreateConnectorCommand(ctx context.Context, arg CreateConnecto
 }
 
 const createConnectorEnrollmentToken = `-- name: CreateConnectorEnrollmentToken :one
-INSERT INTO connector_enrollment_tokens (id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, expires_at, created_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, status, expires_at, consumed_at, consumed_device_hash, registered_connector_id, created_by, created_at
+INSERT INTO connector_enrollment_tokens (id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, expires_at, created_by, release_version_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, status, expires_at, consumed_at, consumed_device_hash, registered_connector_id, created_by, created_at, release_version_id
 `
 
 type CreateConnectorEnrollmentTokenParams struct {
@@ -472,6 +540,7 @@ type CreateConnectorEnrollmentTokenParams struct {
 	Policy                  []byte             `json:"policy"`
 	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
 	CreatedBy               uuid.UUID          `json:"created_by"`
+	ReleaseVersionID        uuid.NullUUID      `json:"release_version_id"`
 }
 
 func (q *Queries) CreateConnectorEnrollmentToken(ctx context.Context, arg CreateConnectorEnrollmentTokenParams) (ConnectorEnrollmentToken, error) {
@@ -488,6 +557,7 @@ func (q *Queries) CreateConnectorEnrollmentToken(ctx context.Context, arg Create
 		arg.Policy,
 		arg.ExpiresAt,
 		arg.CreatedBy,
+		arg.ReleaseVersionID,
 	)
 	var i ConnectorEnrollmentToken
 	err := row.Scan(
@@ -508,6 +578,7 @@ func (q *Queries) CreateConnectorEnrollmentToken(ctx context.Context, arg Create
 		&i.RegisteredConnectorID,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ReleaseVersionID,
 	)
 	return i, err
 }
@@ -515,15 +586,16 @@ func (q *Queries) CreateConnectorEnrollmentToken(ctx context.Context, arg Create
 const deleteBastionScope = `-- name: DeleteBastionScope :one
 UPDATE bastion_scopes AS scope SET status = 'deleted', deleted_at = now(), resource_version = scope.resource_version + 1, updated_at = now()
 WHERE scope.id = $1 AND scope.enterprise_id = $2 AND scope.resource_version = $3
-AND (scope.status = 'uninstalled' OR (scope.status = 'offline' AND scope.active_connector_id IS NULL))
+AND (scope.status = 'uninstalled' OR scope.status = 'pending' OR (scope.status = 'offline' AND scope.active_connector_id IS NULL))
 AND NOT EXISTS (SELECT 1 FROM hosts AS host WHERE host.bastion_scope_id = scope.id AND host.connection_mode = 'via_bastion' AND host.status <> 'deleted')
+AND NOT EXISTS (SELECT 1 FROM hosts AS host WHERE host.bastion_scope_id = scope.id AND host.connection_mode = 'connector_local' AND host.status <> 'deleted')
 AND NOT EXISTS (
   SELECT 1 FROM connector_commands AS command
   JOIN connectors AS connector ON connector.id = command.connector_id AND connector.enterprise_id = command.enterprise_id
   WHERE connector.bastion_scope_id = scope.id
     AND command.status IN ('queued','dispatched','acknowledged','running','delivery_unknown','result_unknown')
 )
-RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at
+RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at, onboarding_mode
 `
 
 type DeleteBastionScopeParams struct {
@@ -550,8 +622,26 @@ func (q *Queries) DeleteBastionScope(ctx context.Context, arg DeleteBastionScope
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardingMode,
 	)
 	return i, err
+}
+
+const deleteConnectorSessionsForReplacement = `-- name: DeleteConnectorSessionsForReplacement :execrows
+DELETE FROM connector_sessions WHERE connector_id = $1 AND enterprise_id = $2
+`
+
+type DeleteConnectorSessionsForReplacementParams struct {
+	ConnectorID  uuid.UUID `json:"connector_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) DeleteConnectorSessionsForReplacement(ctx context.Context, arg DeleteConnectorSessionsForReplacementParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteConnectorSessionsForReplacement, arg.ConnectorID, arg.EnterpriseID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const expireQueuedConnectorCommands = `-- name: ExpireQueuedConnectorCommands :many
@@ -604,7 +694,7 @@ func (q *Queries) ExpireQueuedConnectorCommands(ctx context.Context) ([]Connecto
 
 const fenceBastionScope = `-- name: FenceBastionScope :one
 UPDATE bastion_scopes SET fencing_generation = fencing_generation + 1, active_connector_id = NULL, status = 'offline', resource_version = resource_version + 1, updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND resource_version = $3 AND status IN ('offline','uninstalled','suspected_offline') RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at
+WHERE id = $1 AND enterprise_id = $2 AND resource_version = $3 AND status IN ('active','offline','uninstalled','suspected_offline') RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at, onboarding_mode
 `
 
 type FenceBastionScopeParams struct {
@@ -631,8 +721,28 @@ func (q *Queries) FenceBastionScope(ctx context.Context, arg FenceBastionScopePa
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardingMode,
 	)
 	return i, err
+}
+
+const fenceConnectorForReplacement = `-- name: FenceConnectorForReplacement :execrows
+UPDATE connectors SET status = 'revoked', connection_epoch = connection_epoch + 1,
+ version = version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND status <> 'revoked'
+`
+
+type FenceConnectorForReplacementParams struct {
+	ID           uuid.UUID `json:"id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) FenceConnectorForReplacement(ctx context.Context, arg FenceConnectorForReplacementParams) (int64, error) {
+	result, err := q.db.Exec(ctx, fenceConnectorForReplacement, arg.ID, arg.EnterpriseID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const finalizeBastionConnectorUninstall = `-- name: FinalizeBastionConnectorUninstall :execrows
@@ -745,7 +855,11 @@ func (q *Queries) GetActiveConnectorCertificate(ctx context.Context, arg GetActi
 }
 
 const getBastionScope = `-- name: GetBastionScope :one
-SELECT s.id, s.enterprise_id, s.name, s.environment, s.labels, s.labels_hash, s.status, s.connector_host_id, s.active_connector_id, s.fencing_generation, s.resource_version, s.deleted_at, s.created_at, s.updated_at, (SELECT count(*) FROM hosts h WHERE h.bastion_scope_id = s.id AND h.connection_mode = 'via_bastion' AND h.status <> 'deleted')::bigint AS member_count
+SELECT s.id, s.enterprise_id, s.name, s.environment, s.labels, s.labels_hash, s.status, s.connector_host_id, s.active_connector_id, s.fencing_generation, s.resource_version, s.deleted_at, s.created_at, s.updated_at, s.onboarding_mode,
+  COALESCE((SELECT tunnel.status::text FROM connector_control_tunnels AS tunnel
+   WHERE tunnel.bastion_scope_id = s.id
+   ORDER BY tunnel.epoch DESC, tunnel.updated_at DESC LIMIT 1), ''::text)::text AS control_tunnel_status,
+  (SELECT count(*) FROM hosts h WHERE h.bastion_scope_id = s.id AND h.connection_mode = 'via_bastion' AND h.status <> 'deleted')::bigint AS member_count
 FROM bastion_scopes s WHERE s.id = $1 AND s.enterprise_id = $2 AND s.status <> 'deleted'
 `
 
@@ -755,21 +869,23 @@ type GetBastionScopeParams struct {
 }
 
 type GetBastionScopeRow struct {
-	ID                uuid.UUID          `json:"id"`
-	EnterpriseID      uuid.UUID          `json:"enterprise_id"`
-	Name              string             `json:"name"`
-	Environment       string             `json:"environment"`
-	Labels            []byte             `json:"labels"`
-	LabelsHash        []byte             `json:"labels_hash"`
-	Status            string             `json:"status"`
-	ConnectorHostID   uuid.NullUUID      `json:"connector_host_id"`
-	ActiveConnectorID uuid.NullUUID      `json:"active_connector_id"`
-	FencingGeneration int64              `json:"fencing_generation"`
-	ResourceVersion   int64              `json:"resource_version"`
-	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	MemberCount       int64              `json:"member_count"`
+	ID                  uuid.UUID          `json:"id"`
+	EnterpriseID        uuid.UUID          `json:"enterprise_id"`
+	Name                string             `json:"name"`
+	Environment         string             `json:"environment"`
+	Labels              []byte             `json:"labels"`
+	LabelsHash          []byte             `json:"labels_hash"`
+	Status              string             `json:"status"`
+	ConnectorHostID     uuid.NullUUID      `json:"connector_host_id"`
+	ActiveConnectorID   uuid.NullUUID      `json:"active_connector_id"`
+	FencingGeneration   int64              `json:"fencing_generation"`
+	ResourceVersion     int64              `json:"resource_version"`
+	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	OnboardingMode      string             `json:"onboarding_mode"`
+	ControlTunnelStatus string             `json:"control_tunnel_status"`
+	MemberCount         int64              `json:"member_count"`
 }
 
 func (q *Queries) GetBastionScope(ctx context.Context, arg GetBastionScopeParams) (GetBastionScopeRow, error) {
@@ -790,6 +906,8 @@ func (q *Queries) GetBastionScope(ctx context.Context, arg GetBastionScopeParams
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardingMode,
+		&i.ControlTunnelStatus,
 		&i.MemberCount,
 	)
 	return i, err
@@ -1005,8 +1123,38 @@ func (q *Queries) GetConnectorSession(ctx context.Context, arg GetConnectorSessi
 	return i, err
 }
 
+const getEnrollmentTokenByHash = `-- name: GetEnrollmentTokenByHash :one
+SELECT id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, status, expires_at, consumed_at, consumed_device_hash, registered_connector_id, created_by, created_at, release_version_id FROM connector_enrollment_tokens WHERE token_hash = $1
+`
+
+func (q *Queries) GetEnrollmentTokenByHash(ctx context.Context, tokenHash []byte) (ConnectorEnrollmentToken, error) {
+	row := q.db.QueryRow(ctx, getEnrollmentTokenByHash, tokenHash)
+	var i ConnectorEnrollmentToken
+	err := row.Scan(
+		&i.ID,
+		&i.PreallocatedConnectorID,
+		&i.EnterpriseID,
+		&i.Role,
+		&i.Purpose,
+		&i.BastionScopeID,
+		&i.KubernetesClusterID,
+		&i.PreallocatedHostID,
+		&i.TokenHash,
+		&i.Policy,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.ConsumedDeviceHash,
+		&i.RegisteredConnectorID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.ReleaseVersionID,
+	)
+	return i, err
+}
+
 const getEnrollmentTokenForUpdate = `-- name: GetEnrollmentTokenForUpdate :one
-SELECT id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, status, expires_at, consumed_at, consumed_device_hash, registered_connector_id, created_by, created_at FROM connector_enrollment_tokens WHERE token_hash = $1 FOR UPDATE
+SELECT id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, status, expires_at, consumed_at, consumed_device_hash, registered_connector_id, created_by, created_at, release_version_id FROM connector_enrollment_tokens WHERE token_hash = $1 FOR UPDATE
 `
 
 func (q *Queries) GetEnrollmentTokenForUpdate(ctx context.Context, tokenHash []byte) (ConnectorEnrollmentToken, error) {
@@ -1030,6 +1178,7 @@ func (q *Queries) GetEnrollmentTokenForUpdate(ctx context.Context, tokenHash []b
 		&i.RegisteredConnectorID,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ReleaseVersionID,
 	)
 	return i, err
 }
@@ -1087,26 +1236,32 @@ func (q *Queries) HeartbeatConnectorSession(ctx context.Context, arg HeartbeatCo
 }
 
 const listBastionScopes = `-- name: ListBastionScopes :many
-SELECT s.id, s.enterprise_id, s.name, s.environment, s.labels, s.labels_hash, s.status, s.connector_host_id, s.active_connector_id, s.fencing_generation, s.resource_version, s.deleted_at, s.created_at, s.updated_at, (SELECT count(*) FROM hosts h WHERE h.bastion_scope_id = s.id AND h.connection_mode = 'via_bastion' AND h.status <> 'deleted')::bigint AS member_count
+SELECT s.id, s.enterprise_id, s.name, s.environment, s.labels, s.labels_hash, s.status, s.connector_host_id, s.active_connector_id, s.fencing_generation, s.resource_version, s.deleted_at, s.created_at, s.updated_at, s.onboarding_mode,
+  COALESCE((SELECT tunnel.status::text FROM connector_control_tunnels AS tunnel
+   WHERE tunnel.bastion_scope_id = s.id
+   ORDER BY tunnel.epoch DESC, tunnel.updated_at DESC LIMIT 1), ''::text)::text AS control_tunnel_status,
+  (SELECT count(*) FROM hosts h WHERE h.bastion_scope_id = s.id AND h.connection_mode = 'via_bastion' AND h.status <> 'deleted')::bigint AS member_count
 FROM bastion_scopes s WHERE s.enterprise_id = $1 AND s.status <> 'deleted' ORDER BY s.created_at, s.id
 `
 
 type ListBastionScopesRow struct {
-	ID                uuid.UUID          `json:"id"`
-	EnterpriseID      uuid.UUID          `json:"enterprise_id"`
-	Name              string             `json:"name"`
-	Environment       string             `json:"environment"`
-	Labels            []byte             `json:"labels"`
-	LabelsHash        []byte             `json:"labels_hash"`
-	Status            string             `json:"status"`
-	ConnectorHostID   uuid.NullUUID      `json:"connector_host_id"`
-	ActiveConnectorID uuid.NullUUID      `json:"active_connector_id"`
-	FencingGeneration int64              `json:"fencing_generation"`
-	ResourceVersion   int64              `json:"resource_version"`
-	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	MemberCount       int64              `json:"member_count"`
+	ID                  uuid.UUID          `json:"id"`
+	EnterpriseID        uuid.UUID          `json:"enterprise_id"`
+	Name                string             `json:"name"`
+	Environment         string             `json:"environment"`
+	Labels              []byte             `json:"labels"`
+	LabelsHash          []byte             `json:"labels_hash"`
+	Status              string             `json:"status"`
+	ConnectorHostID     uuid.NullUUID      `json:"connector_host_id"`
+	ActiveConnectorID   uuid.NullUUID      `json:"active_connector_id"`
+	FencingGeneration   int64              `json:"fencing_generation"`
+	ResourceVersion     int64              `json:"resource_version"`
+	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	OnboardingMode      string             `json:"onboarding_mode"`
+	ControlTunnelStatus string             `json:"control_tunnel_status"`
+	MemberCount         int64              `json:"member_count"`
 }
 
 func (q *Queries) ListBastionScopes(ctx context.Context, enterpriseID uuid.UUID) ([]ListBastionScopesRow, error) {
@@ -1133,6 +1288,8 @@ func (q *Queries) ListBastionScopes(ctx context.Context, enterpriseID uuid.UUID)
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OnboardingMode,
+			&i.ControlTunnelStatus,
 			&i.MemberCount,
 		); err != nil {
 			return nil, err
@@ -1618,6 +1775,41 @@ func (q *Queries) TimeoutActiveConnectorCommands(ctx context.Context) ([]Connect
 	return items, nil
 }
 
+const touchPendingBastionScope = `-- name: TouchPendingBastionScope :one
+UPDATE bastion_scopes SET resource_version = resource_version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND resource_version = $3 AND status = 'pending' RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at, onboarding_mode
+`
+
+type TouchPendingBastionScopeParams struct {
+	ID              uuid.UUID `json:"id"`
+	EnterpriseID    uuid.UUID `json:"enterprise_id"`
+	ResourceVersion int64     `json:"resource_version"`
+}
+
+// pending(尚未注册)作用域的替换:撤销旧令牌并递增版本,不发生 fencing。
+func (q *Queries) TouchPendingBastionScope(ctx context.Context, arg TouchPendingBastionScopeParams) (BastionScope, error) {
+	row := q.db.QueryRow(ctx, touchPendingBastionScope, arg.ID, arg.EnterpriseID, arg.ResourceVersion)
+	var i BastionScope
+	err := row.Scan(
+		&i.ID,
+		&i.EnterpriseID,
+		&i.Name,
+		&i.Environment,
+		&i.Labels,
+		&i.LabelsHash,
+		&i.Status,
+		&i.ConnectorHostID,
+		&i.ActiveConnectorID,
+		&i.FencingGeneration,
+		&i.ResourceVersion,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OnboardingMode,
+	)
+	return i, err
+}
+
 const transitionConnectorCommand = `-- name: TransitionConnectorCommand :one
 UPDATE connector_commands SET status = $4, result = COALESCE($5, result), result_hash = COALESCE($6, result_hash),
  error_code = COALESCE($7, error_code), updated_at = now(),
@@ -1679,7 +1871,7 @@ const updateBastionScope = `-- name: UpdateBastionScope :one
 UPDATE bastion_scopes SET name = COALESCE($4, name), environment = COALESCE($5, environment),
  labels = COALESCE($6, labels), labels_hash = COALESCE($7, labels_hash),
  resource_version = resource_version + 1, updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND resource_version = $3 AND status <> 'deleted' RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at
+WHERE id = $1 AND enterprise_id = $2 AND resource_version = $3 AND status <> 'deleted' RETURNING id, enterprise_id, name, environment, labels, labels_hash, status, connector_host_id, active_connector_id, fencing_generation, resource_version, deleted_at, created_at, updated_at, onboarding_mode
 `
 
 type UpdateBastionScopeParams struct {
@@ -1718,6 +1910,7 @@ func (q *Queries) UpdateBastionScope(ctx context.Context, arg UpdateBastionScope
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardingMode,
 	)
 	return i, err
 }

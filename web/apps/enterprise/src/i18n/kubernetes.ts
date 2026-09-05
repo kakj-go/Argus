@@ -101,6 +101,12 @@ export const kubernetesZh = {
         "kubeconfig 将作为密钥加密存储，集群仅保存引用（credentialRef），不会回显。",
       kubeconfigRotateHint:
         "留空则不轮换凭据；粘贴新 kubeconfig 将创建新密钥。",
+      imagePullSecrets: "Connector 镜像拉取 Secret",
+      imagePullSecretsHint:
+        "填写目标集群中已存在的 Secret 名称，多个名称用英文逗号分隔。私有仓库 CA 和凭据由客户维护。",
+      imagePullSecretsPlaceholder: "registry-credentials, mirror-credentials",
+      imagePullSecretsInvalid:
+        "Secret 名称无效、重复或超过 16 个；名称必须符合 Kubernetes DNS 子域格式。",
       submit: "生成预览",
       save: "保存",
       required: "请填写名称、API Server 与 kubeconfig",
@@ -215,6 +221,12 @@ export const kubernetesZh = {
           "集群可拉取的完整镜像地址（含 tag/digest），留空使用默认镜像",
         imageInvalid:
           "镜像地址无效：不能包含空白，且需含 tag 或 digest（如 registry.example.com/argus-otelcol:0.1.0）",
+        imagePullSecrets: "镜像拉取 Secret",
+        imagePullSecretsDesc:
+          "填写目标集群中已存在的 Secret 名称，多个名称用英文逗号分隔；Argus 不创建仓库凭据或仓库 CA。",
+        imagePullSecretsPlaceholder: "registry-credentials, mirror-credentials",
+        imagePullSecretsInvalid:
+          "Secret 名称无效、重复或超过 16 个；名称必须符合 Kubernetes DNS 子域格式。",
         rbac: "RBAC",
         rbacValue: "专用 ServiceAccount，仅授予 Node / Pod / 日志只读权限",
         profile: "采集 Profile",
@@ -353,6 +365,12 @@ export const kubernetesEn = {
         "The kubeconfig is stored as an encrypted Secret; the cluster only keeps a reference (credentialRef) and it is never shown again.",
       kubeconfigRotateHint:
         "Leave empty to keep the current credential; pasting a new kubeconfig creates a new Secret.",
+      imagePullSecrets: "Connector image pull Secrets",
+      imagePullSecretsHint:
+        "Comma-separated Secret names that already exist in the target cluster. Registry CAs and credentials remain customer-managed.",
+      imagePullSecretsPlaceholder: "registry-credentials, mirror-credentials",
+      imagePullSecretsInvalid:
+        "Secret names are invalid, duplicated, or exceed 16 entries; each name must be a Kubernetes DNS subdomain.",
       submit: "Generate preview",
       save: "Save",
       required: "Name, API Server and kubeconfig are required",
@@ -463,12 +481,19 @@ export const kubernetesEn = {
         gatewaySummary:
           "Gateway Deployment: aggregates cluster-level data and pushes to Argus",
         imageDigest: "Image (effective)",
-        imageUnavailable: "No default image configured; enter an internal image",
+        imageUnavailable:
+          "No default image configured; enter an internal image",
         imageAddress: "Internal image address",
         imageAddressDesc:
           "Full image reference (with tag/digest) reachable by the cluster; leave empty to use the default",
         imageInvalid:
           "Invalid image reference: no whitespace allowed and a tag or digest is required (e.g. registry.example.com/argus-otelcol:0.1.0)",
+        imagePullSecrets: "Image pull Secrets",
+        imagePullSecretsDesc:
+          "Comma-separated Secret names that already exist in the target cluster. Argus does not create registry credentials or registry CAs.",
+        imagePullSecretsPlaceholder: "registry-credentials, mirror-credentials",
+        imagePullSecretsInvalid:
+          "Secret names are invalid, duplicated, or exceed 16 entries; each name must be a Kubernetes DNS subdomain.",
         rbac: "RBAC",
         rbacValue:
           "Dedicated ServiceAccount with read-only access to Nodes / Pods / logs",

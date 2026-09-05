@@ -8,9 +8,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/kakj-go/Argus/internal/conversation"
+	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/runtime"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
@@ -79,6 +82,12 @@ func (executor Executor) Handle(ctx context.Context, task runtime.Task) error {
 			if errors.Is(err, resource.ErrActionInvalidated) || errors.Is(err, resource.ErrActionUnavailable) {
 				return runtime.Error{ErrorCode: "ACTION_INVALIDATED", Cause: err}
 			}
+			if resourceNameConflict(err) {
+				// A preview check gives an early user-facing error; the unique index
+				// remains the race-proof authority. A uniqueness conflict is permanent
+				// for this immutable action plan and must not spend the retry budget.
+				return runtime.Error{ErrorCode: "RESOURCE_NAME_CONFLICT", Cause: err, Permanent: true}
+			}
 			return err
 		}
 		if result.ConnectorCommandID.Valid {
@@ -93,7 +102,14 @@ func (executor Executor) Handle(ctx context.Context, task runtime.Task) error {
 			})
 			return err
 		}
-		if result.Enrollment != nil {
+		if result.ConnectorInstallOperationID.Valid {
+			_, err = q.MarkExecutionConnectorInstallResultUnknown(ctx, db.MarkExecutionConnectorInstallResultUnknownParams{
+				ID: execution.ID, EnterpriseID: execution.EnterpriseID,
+				ConnectorInstallOperationID: result.ConnectorInstallOperationID,
+			})
+			return err
+		}
+		if result.OneTimeCommand != nil {
 			if action.CreatorSubjectType != "user" {
 				return runtime.Error{ErrorCode: "ACTION_INVALIDATED", Cause: ErrInvalidated}
 			}
@@ -103,7 +119,8 @@ func (executor Executor) Handle(ctx context.Context, task runtime.Task) error {
 			if err != nil || creator.Status != "active" {
 				return runtime.Error{ErrorCode: "ACTION_INVALIDATED", Cause: ErrInvalidated}
 			}
-			if err := storeOneTimeResult(ctx, q, executor.OneTimeResultKey, execution, creator.AuthorizationVersion, *result.Enrollment); err != nil {
+			if err := storeOneTimeResult(ctx, q, executor.OneTimeResultKey, execution, creator.AuthorizationVersion,
+				*result.OneTimeCommand, result.OneTimeResultKind); err != nil {
 				return err
 			}
 		}
@@ -131,7 +148,121 @@ func (executor Executor) Handle(ctx context.Context, task runtime.Task) error {
 	})
 }
 
+// HandleExhausted converges the public action state after the runtime queue has
+// spent its retry budget. A failed deterministic commit is rolled back, so the
+// execution normally remains pending and the action remains ready here. The
+// transition below is a new transaction and prevents clients from waiting on a
+// state that no worker will process again.
+func (executor Executor) HandleExhausted(ctx context.Context, task runtime.Task, cause error) error {
+	if executor.Store == nil {
+		return nil
+	}
+	var payload ExecutionTask
+	if err := json.Unmarshal(task.Payload, &payload); err != nil || payload.ExecutionID == uuid.Nil || payload.EnterpriseID == uuid.Nil {
+		return nil
+	}
+	errorCode := executionFailureCode(cause)
+	return executor.Store.InTx(ctx, func(q *db.Queries) error {
+		execution, err := q.GetExecution(ctx, db.GetExecutionParams{ID: payload.ExecutionID, EnterpriseID: payload.EnterpriseID})
+		if err != nil {
+			return err
+		}
+		if execution.Status == "succeeded" || execution.Status == "failed" || execution.Status == "cancelled" {
+			return nil
+		}
+		action, err := q.GetPendingActionByIDForUpdate(ctx, db.GetPendingActionByIDForUpdateParams{
+			ID: execution.PendingActionID, EnterpriseID: execution.EnterpriseID,
+		})
+		if err != nil {
+			return err
+		}
+		code := pgtype.Text{String: errorCode, Valid: true}
+		if errorCode == "ACTION_INVALIDATED" && action.Status == "ready" {
+			action, err = q.InvalidatePendingActionM4(ctx, db.InvalidatePendingActionM4Params{
+				ID: action.ID, EnterpriseID: action.EnterpriseID, ErrorCode: code,
+			})
+			if err != nil {
+				return err
+			}
+		} else {
+			if action.Status == "ready" {
+				action, err = q.MarkPendingActionExecutingM4(ctx, db.MarkPendingActionExecutingM4Params{
+					ID: action.ID, EnterpriseID: action.EnterpriseID,
+				})
+				if err != nil {
+					return err
+				}
+			}
+			if action.Status == "executing" {
+				action, err = q.FinishPendingAction(ctx, db.FinishPendingActionParams{
+					ID: action.ID, EnterpriseID: action.EnterpriseID, Status: "failed",
+					ResultSummary: "Action execution attempts exhausted", ErrorCode: code,
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+		if action.ErrorCode.Valid {
+			code = action.ErrorCode
+		}
+		execution, err = q.FinishExecution(ctx, db.FinishExecutionParams{
+			ID: execution.ID, EnterpriseID: execution.EnterpriseID, Status: "failed", ErrorCode: code,
+		})
+		if err != nil {
+			return err
+		}
+		if execution.RunID.Valid {
+			return enqueueVerify(ctx, q, execution, action)
+		}
+		return nil
+	})
+}
+
+func executionFailureCode(cause error) string {
+	type coded interface{ Code() string }
+	var value coded
+	if errors.As(cause, &value) {
+		switch value.Code() {
+		case "ACTION_INVALIDATED", "RESOURCE_NAME_CONFLICT":
+			return value.Code()
+		}
+	}
+	return "ACTION_EXECUTION_FAILED"
+}
+
+func resourceNameConflict(cause error) bool {
+	var postgresError *pgconn.PgError
+	if !errors.As(cause, &postgresError) || postgresError.Code != "23505" {
+		return false
+	}
+	switch postgresError.ConstraintName {
+	case "bastion_scopes_name_unique", "hosts_name_unique":
+		return true
+	default:
+		return false
+	}
+}
+
 func (executor Executor) reconcileExecution(ctx context.Context, q *db.Queries, execution db.Execution) error {
+	if execution.ConnectorInstallOperationID.Valid {
+		operation, err := q.GetConnectorInstallOperation(ctx, db.GetConnectorInstallOperationParams{
+			ID: execution.ConnectorInstallOperationID.UUID, EnterpriseID: execution.EnterpriseID,
+		})
+		if err != nil {
+			return err
+		}
+		status, errorCode, terminal, err := reconciledConnectorInstallOutcome(ctx, q, operation)
+		if err != nil || !terminal {
+			return err
+		}
+		scope, err := q.GetBastionScope(ctx, db.GetBastionScopeParams{ID: operation.BastionScopeID, EnterpriseID: operation.EnterpriseID})
+		if err != nil {
+			return err
+		}
+		return executor.finishReconciledExecution(ctx, q, execution, status, errorCode,
+			"Connector install operation "+operation.ID.String()+" reconciled", "bastion_scope", scope.ID, scope.ResourceVersion)
+	}
 	if execution.TelemetryCollectorOperationID.Valid {
 		operation, err := q.GetTelemetryCollectorOperation(ctx, db.GetTelemetryCollectorOperationParams{
 			ID: execution.TelemetryCollectorOperationID.UUID, EnterpriseID: execution.EnterpriseID,
@@ -144,7 +275,7 @@ func (executor Executor) reconcileExecution(ctx context.Context, q *db.Queries, 
 			return nil
 		}
 		return executor.finishReconciledExecution(ctx, q, execution, status, errorCode,
-			"Collector operation "+operation.ID.String()+" reconciled")
+			"Collector operation "+operation.ID.String()+" reconciled", "", uuid.Nil, 0)
 	}
 	if !execution.ConnectorCommandID.Valid {
 		return nil
@@ -153,15 +284,87 @@ func (executor Executor) reconcileExecution(ctx context.Context, q *db.Queries, 
 	if err != nil {
 		return err
 	}
-	status, errorCode, terminal := reconciledCommandOutcome(command)
+	status, errorCode, terminal, err := reconciledConnectorCommandOutcome(ctx, q, command)
+	if err != nil {
+		return err
+	}
 	if !terminal {
 		return nil
 	}
 	return executor.finishReconciledExecution(ctx, q, execution, status, errorCode,
-		"Connector command "+command.CommandID+" reconciled")
+		"Connector command "+command.CommandID+" reconciled", "", uuid.Nil, 0)
 }
 
-func (executor Executor) finishReconciledExecution(ctx context.Context, q *db.Queries, execution db.Execution, status string, errorCode pgtype.Text, summary string) error {
+func reconciledConnectorCommandOutcome(ctx context.Context, q *db.Queries, command db.ConnectorCommand) (string, pgtype.Text, bool, error) {
+	status, errorCode, terminal := reconciledCommandOutcome(command)
+	if !terminal || status != "succeeded" || command.CommandType != "collector_management" {
+		return status, errorCode, terminal, nil
+	}
+	var request connectorv1.CollectorManagementCommand
+	if protojson.Unmarshal(command.Payload, &request) != nil {
+		return "failed", pgtype.Text{String: "COLLECTOR_COMMAND_INVALID", Valid: true}, true, nil
+	}
+	transport := request.GetTransport()
+	if request.GetOperation() == "uninstall" || (transport != "executor_tunnel" && transport != "bastion_tunnel") {
+		return status, errorCode, terminal, nil
+	}
+	collectorID, parseErr := uuid.Parse(request.GetCollectorId())
+	if parseErr != nil {
+		return "failed", pgtype.Text{String: "COLLECTOR_COMMAND_INVALID", Valid: true}, true, nil
+	}
+	tunnel, err := q.GetTelemetryTunnelByCollector(ctx, collectorID)
+	if err != nil {
+		return "", pgtype.Text{}, false, err
+	}
+	if tunnel.EnterpriseID != command.EnterpriseID || tunnel.Transport != transport {
+		return "failed", pgtype.Text{String: "COLLECTOR_ROUTE_INVALID", Valid: true}, true, nil
+	}
+	if tunnel.Status == "established" {
+		if _, err = q.MarkTelemetryRouteActive(ctx, db.MarkTelemetryRouteActiveParams{
+			CollectorID: collectorID, EnterpriseID: command.EnterpriseID}); err != nil {
+			return "", pgtype.Text{}, false, err
+		}
+		if _, err = q.FinalizeCollectorClaimMigrations(ctx, db.FinalizeCollectorClaimMigrationsParams{
+			EnterpriseID: command.EnterpriseID, CollectorID: collectorID}); err != nil {
+			return "", pgtype.Text{}, false, err
+		}
+		return "succeeded", pgtype.Text{}, true, nil
+	}
+	if code, failed := terminalTelemetryTunnelFailure(tunnel); failed {
+		_, _ = q.ApplyCollectorOperationFailure(ctx, db.ApplyCollectorOperationFailureParams{
+			ID: collectorID, EnterpriseID: command.EnterpriseID, Status: "degraded"})
+		_, _ = q.RollbackCollectorClaimMigrations(ctx, db.RollbackCollectorClaimMigrationsParams{
+			EnterpriseID: command.EnterpriseID, CollectorID: collectorID})
+		_, _ = q.MarkTelemetryRouteDegraded(ctx, db.MarkTelemetryRouteDegradedParams{
+			CollectorID: collectorID, EnterpriseID: command.EnterpriseID})
+		return "failed", pgtype.Text{String: code, Valid: true}, true, nil
+	}
+	return "", pgtype.Text{}, false, nil
+}
+
+func terminalTelemetryTunnelFailure(tunnel db.TelemetryTunnel) (string, bool) {
+	switch tunnel.LastDropReason {
+	case "loopback_port_conflict":
+		return "COLLECTOR_LOOPBACK_PORT_CONFLICT", true
+	case "tunnel_forward_target_unconfigured":
+		return "TUNNEL_FORWARD_TARGET_UNCONFIGURED", true
+	case "tunnel_quota_exceeded":
+		return "TUNNEL_QUOTA_EXCEEDED", true
+	case "credential_revoked", "credential_unavailable":
+		return "CREDENTIAL_UNAVAILABLE", true
+	case "host_key_changed":
+		return "COLLECTOR_TARGET_HOST_KEY_CHANGED", true
+	}
+	// down/degraded 是长期 desired 隧道的可恢复状态。监督器会持续按上限
+	// 30 秒退避重建，因此不能用任意重试次数把动作提前终结；动作自身的
+	// expires_at 负责界定结果未知。removed 才是明确的终态事实。
+	if tunnel.Status == "removed" {
+		return "COLLECTOR_MANAGEMENT_FAILED", true
+	}
+	return "", false
+}
+
+func (executor Executor) finishReconciledExecution(ctx context.Context, q *db.Queries, execution db.Execution, status string, errorCode pgtype.Text, summary, resourceType string, resourceID uuid.UUID, resourceVersion int64) error {
 	action, err := q.GetPendingActionByIDForUpdate(ctx, db.GetPendingActionByIDForUpdateParams{
 		ID: execution.PendingActionID, EnterpriseID: execution.EnterpriseID,
 	})
@@ -171,6 +374,9 @@ func (executor Executor) finishReconciledExecution(ctx context.Context, q *db.Qu
 	finished, err := q.FinishPendingAction(ctx, db.FinishPendingActionParams{
 		ID: action.ID, EnterpriseID: action.EnterpriseID, Status: status,
 		ResultSummary: summary, ErrorCode: errorCode,
+		ResultResourceType:    pgtype.Text{String: resourceType, Valid: resourceType != ""},
+		ResultResourceID:      uuid.NullUUID{UUID: resourceID, Valid: resourceID != uuid.Nil},
+		ResultResourceVersion: pgtype.Int8{Int64: resourceVersion, Valid: resourceVersion > 0},
 	})
 	if err != nil {
 		return err
@@ -185,6 +391,42 @@ func (executor Executor) finishReconciledExecution(ctx context.Context, q *db.Qu
 		return enqueueVerify(ctx, q, execution, finished)
 	}
 	return nil
+}
+
+func reconciledConnectorInstallOutcome(ctx context.Context, q *db.Queries, operation db.ConnectorInstallOperation) (string, pgtype.Text, bool, error) {
+	switch operation.Status {
+	case "succeeded":
+		if operation.Stage != "completed" || !operation.ConnectorOnlineAt.Valid {
+			return "", pgtype.Text{}, false, nil
+		}
+		connector, err := q.GetConnector(ctx, db.GetConnectorParams{ID: operation.ConnectorID, EnterpriseID: operation.EnterpriseID})
+		if err != nil {
+			return "", pgtype.Text{}, false, err
+		}
+		if connector.Status != "online" {
+			return "", pgtype.Text{}, false, nil
+		}
+		if operation.InstallMode == "direct_install_tunnel" {
+			tunnel, err := q.GetConnectorControlTunnelByConnector(ctx, db.GetConnectorControlTunnelByConnectorParams{
+				ConnectorID: operation.ConnectorID, EnterpriseID: operation.EnterpriseID,
+			})
+			if err != nil {
+				return "", pgtype.Text{}, false, err
+			}
+			if tunnel.Status != "established" || tunnel.Epoch < 1 {
+				return "", pgtype.Text{}, false, nil
+			}
+		}
+		return "succeeded", pgtype.Text{}, true, nil
+	case "failed", "expired", "cancelled":
+		code := operation.ErrorCode
+		if !code.Valid {
+			code = pgtype.Text{String: "CONNECTOR_INSTALL_RESULT_UNKNOWN", Valid: true}
+		}
+		return "failed", code, true, nil
+	default:
+		return "", pgtype.Text{}, false, nil
+	}
 }
 
 func reconciledTelemetryOutcome(operation db.TelemetryCollectorOperation) (string, pgtype.Text, bool) {

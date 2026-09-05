@@ -18,7 +18,6 @@ import {
   Alert,
   Badge,
   Button,
-  CodeBlock,
   DataTable,
   EmptyState,
   FilterBar,
@@ -32,6 +31,8 @@ import {
 } from "@argus/ui";
 import "../styles/governance.css";
 import { TaskDetailDrawer } from "../components/governance/task-detail-drawer";
+import { taskDisplayTitle } from "../components/governance/task-presentation";
+import { InstallInstructionPanel } from "../components/hosts/install-instruction-panel";
 import {
   formatDateTime,
   formatDuration,
@@ -217,17 +218,14 @@ function ExecutionsPage() {
           tone="danger"
         />
       )}
-      {oneTimeResult?.enrollment.install_command && (
+      {oneTimeResult && (
         <section className="argus-gov-one-time-result">
           <Alert
             description={t("governance.tasks.oneTimeResultWarning")}
             title={t("governance.tasks.oneTimeResultTitle")}
             tone="warning"
           />
-          <CodeBlock
-            code={oneTimeResult.enrollment.install_command}
-            language="bash"
-          />
+          <InstallInstructionPanel result={oneTimeResult} />
           <Button onClick={() => setOneTimeResult(null)} variant="secondary">
             {t("governance.tasks.dismissOneTimeResult")}
           </Button>
@@ -396,7 +394,7 @@ function LegacyTasksPage() {
                   onClick={() => setSelectedTaskId(row.task.id)}
                   type="button"
                 >
-                  <span>{row.task.title}</span>
+                  <span>{taskDisplayTitle(row.task, t)}</span>
                   <span className="argus-task-name__type">
                     {t(`governance.tasks.type.${row.task.type}`)}
                   </span>

@@ -24,6 +24,10 @@ import {
 } from "@argus/ui";
 import { Table } from "./data-table";
 import { formatDateTime } from "./host-utils";
+import {
+  taskDisplayTitle,
+  taskStepDisplayTitle,
+} from "../governance/task-presentation";
 
 const LIVE_STATUSES: TaskStatus[] = [
   "pending",
@@ -79,12 +83,12 @@ function TaskCard({ task }: { task: TaskViewModel }) {
             )}
           </Button>
         }
-        description={`${task.type} · ${task.createdByName ?? task.createdBy} · ${formatDateTime(task.createdAt)}`}
+        description={`${t(`governance.tasks.type.${task.type}`)} · ${task.createdByName ?? task.createdBy} · ${formatDateTime(task.createdAt)}`}
         title={
           <>
-            {task.title}{" "}
+            {taskDisplayTitle(task, t)}{" "}
             <StatusBadge pulse={running} tone={taskTone(task.status)}>
-              {task.status}
+              {t(`governance.tasks.status.${task.status}`)}
             </StatusBadge>{" "}
             <Badge tone="neutral">{task.progress}%</Badge>
           </>
@@ -98,9 +102,9 @@ function TaskCard({ task }: { task: TaskViewModel }) {
                 {t("hosts.tasks.steps")}
               </h3>
               <Timeline
-                items={task.steps.map((step) => ({
-                  title: step.name,
-                  meta: step.detail ?? step.status,
+                items={task.steps.map((step, index) => ({
+                  title: taskStepDisplayTitle(index, t),
+                  meta: t(`governance.tasks.step.${step.status}`),
                   status:
                     step.status === "done"
                       ? "done"
@@ -129,7 +133,9 @@ function TaskCard({ task }: { task: TaskViewModel }) {
               />
             </section>
           )}
-          {task.error && <p className="argus-muted">{task.error}</p>}
+          {task.error && (
+            <p className="argus-muted">{t("governance.tasks.actionFailed")}</p>
+          )}
         </CardContent>
       )}
     </Card>

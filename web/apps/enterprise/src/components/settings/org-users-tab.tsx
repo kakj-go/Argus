@@ -121,10 +121,12 @@ export function CheckList({
   options,
   value,
   onChange,
+  disabled = false,
 }: {
   options: Array<{ id: string; label: string }>;
   value: string[];
   onChange: (next: string[]) => void;
+  disabled?: boolean;
 }) {
   const selected = new Set(value);
   return (
@@ -132,6 +134,7 @@ export function CheckList({
       {options.map((option) => (
         <button
           className="argus-settings-check-option"
+          disabled={disabled}
           key={option.id}
           onClick={() => {
             const next = new Set(selected);
@@ -210,9 +213,12 @@ export function OrgUsersTab() {
         department_id: input.department_id,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Keep the editor in its loading state until the composed user rows have
+      // been rebuilt. Closing first leaves a short window where the raw user
+      // directory cache can render stale role badges.
+      await invalidate();
       setEditing(null);
-      void invalidate();
     },
   });
 
@@ -304,7 +310,7 @@ export function OrgUsersTab() {
                     {t("settings.common.edit")}
                   </RowAction>
                   <RowAction onClick={() => setAuthorizationTarget(row)}>
-                    数据授权
+                    {t("settings.org.dataAuthorization.action")}
                   </RowAction>
                   <RowAction onClick={() => setStatusTarget(row)}>
                     {row.status === "disabled"
@@ -602,6 +608,7 @@ function EnterpriseUserDrawer({
               name="role_ids"
               render={({ field }) => (
                 <CheckList
+                  disabled={loading}
                   onChange={field.onChange}
                   options={roles.map((role) => ({
                     id: role.id,

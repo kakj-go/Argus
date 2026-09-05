@@ -6,7 +6,7 @@
 DEV_CONFIG ?= deploy/.cache/argus-install-dev.yaml
 DEV_SYSTEM_NAMESPACE ?= argus-system
 DEV_OBSERVABILITY_NAMESPACE ?= argus-observability
-DEV_PLATFORM_DEPLOYMENTS ?= argus-web argus-server argus-worker argus-direct-executor argus-connector-gateway
+DEV_PLATFORM_DEPLOYMENTS ?= argus-web argus-server argus-worker argus-direct-executor argus-connector-gateway argus-pki-controller
 DEV_TELEMETRY_DEPLOYMENTS ?= argus-telemetry-ingest argus-telemetry-writer argus-telemetry-query
 KUBECTL ?= kubectl
 

@@ -184,3 +184,48 @@ export interface SandboxSessionMeta {
 
 /** Platform audit is kept separate from enterprise audit (docs/07 §11). */
 export type PlatformAuditEvent = AuditEvent;
+
+export type PKIBundleState =
+  "stable" | "preparing" | "overlapping" | "retiring" | "failed";
+export type PKIRotationDirection = "forward" | "rollback";
+
+export type PKIBundleStatus = {
+  epoch: number;
+  state: PKIBundleState;
+  direction: PKIRotationDirection;
+  bundleSha256: string;
+  currentCaFingerprints: string[];
+  nextCaFingerprints: string[];
+  startedAt: Iso;
+  retireAt?: Iso;
+  lastError?: string;
+};
+
+export type PKINodeKind =
+  "connector" | "collector" | "kubernetes_connector" | "control_plane";
+
+export type PKINodeTrustStatus =
+  "pending" | "acked" | "failed" | "trust_expired";
+
+export type PKINodeStatus = {
+  id: string;
+  kind: PKINodeKind;
+  enterpriseId?: string;
+  epoch: number;
+  bundleSha256?: string;
+  caFingerprints?: string[];
+  status: PKINodeTrustStatus;
+  blocksCutover: boolean;
+  error?: string;
+  acknowledgedAt?: Iso;
+  updatedAt: Iso;
+};
+
+export interface PlatformPKIStatus {
+  bundles: PKIBundleStatus[];
+  nodes: PKINodeStatus[];
+  acknowledgedNodes: number;
+  pendingNodes: number;
+  failedNodes: number;
+  trustExpiredNodes: number;
+}

@@ -2,7 +2,9 @@ package collectormanager
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,13 +61,14 @@ func (manager Manager) ApplyKubernetes(ctx context.Context, command *connectorv1
 	if err != nil {
 		return Result{}, err
 	}
-	serverCA, err := configbundle.ServerCA(command.GetRenderedConfig())
+	trust, err := commandTrustBundle(command)
 	if err != nil {
 		return Result{}, err
 	}
 	configName := "argus-otelcol-config"
 	if err := applyConfigMap(ctx, options.Client, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configName, Namespace: KubernetesNamespace, Labels: labels},
-		Data: map[string]string{"agent.yaml": string(agentConfig), "gateway.yaml": string(gatewayConfig), "server-ca.pem": string(serverCA)}}); err != nil {
+		Data: map[string]string{"agent.yaml": string(agentConfig), "gateway.yaml": string(gatewayConfig), "server-ca.pem": string(trust.PEM),
+			"trust-bundle-epoch": strconv.FormatUint(command.GetTrustBundleEpoch(), 10), "trust-bundle-sha256": trust.SHA256}}); err != nil {
 		return Result{}, err
 	}
 	if command.GetOperation() == "install" {
@@ -82,8 +85,13 @@ func (manager Manager) ApplyKubernetes(ctx context.Context, command *connectorv1
 				return Result{}, enrollErr
 			}
 		}
+		state, _ := json.Marshal(map[string]any{"epoch": material.TrustBundleEpoch, "bundle_sha256": material.TrustBundleSHA256,
+			"ca_fingerprints": material.TrustBundleCAFingerprints})
 		if err := applySecret(ctx, options.Client, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: collectorIdentitySecret, Namespace: KubernetesNamespace, Labels: labels},
-			Data: map[string][]byte{"client.pem": material.CertificatePEM, "client-key.pem": material.PrivateKeyPEM, "ca.pem": material.CABundlePEM}}); err != nil {
+			Data: map[string][]byte{"client.pem": material.ClientCertificatePEM, "client-key.pem": material.ClientPrivateKeyPEM,
+				"server.pem": material.ServerCertificatePEM, "server-key.pem": material.ServerPrivateKeyPEM, "ca.pem": material.CABundlePEM,
+				"trust-bundle.json": state, "trust-bundle-epoch": []byte(strconv.FormatUint(material.TrustBundleEpoch, 10)),
+				"trust-bundle-sha256": []byte(material.TrustBundleSHA256)}}); err != nil {
 			return Result{}, err
 		}
 	} else if _, err := options.Client.CoreV1().Secrets(KubernetesNamespace).Get(ctx, collectorIdentitySecret, metav1.GetOptions{}); err != nil {
@@ -93,15 +101,18 @@ func (manager Manager) ApplyKubernetes(ctx context.Context, command *connectorv1
 	if err := applyServiceAccount(ctx, options.Client, serviceAccount); err != nil {
 		return Result{}, err
 	}
-	roleName := "argus-otelcol-" + strings.ReplaceAll(command.GetCollectorId(), "-", "")[:12]
-	role := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: roleName, Labels: labels}, Rules: fixedCollectorRules()}
-	if err := applyClusterRole(ctx, options.Client, role); err != nil {
+	stateRole := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "argus-otelcol-identity", Namespace: KubernetesNamespace, Labels: labels},
+		Rules: []rbacv1.PolicyRule{
+			{APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: []string{collectorIdentitySecret}, Verbs: []string{"get", "update", "patch"}},
+			{APIGroups: []string{""}, Resources: []string{"configmaps"}, ResourceNames: []string{configName}, Verbs: []string{"get", "update", "patch"}},
+		}}
+	if err := applyRole(ctx, options.Client, stateRole); err != nil {
 		return Result{}, err
 	}
-	binding := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: roleName, Labels: labels},
-		RoleRef:  rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: roleName},
+	stateBinding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: stateRole.Name, Namespace: KubernetesNamespace, Labels: labels},
+		RoleRef:  rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: stateRole.Name},
 		Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: serviceAccount.Name, Namespace: KubernetesNamespace}}}
-	if err := applyClusterRoleBinding(ctx, options.Client, binding); err != nil {
+	if err := applyRoleBinding(ctx, options.Client, stateBinding); err != nil {
 		return Result{}, err
 	}
 	if err := applyService(ctx, options.Client, collectorGatewayService(labels)); err != nil {
@@ -140,28 +151,18 @@ func (manager Manager) uninstallKubernetes(ctx context.Context, command *connect
 		func() error {
 			return ignoreMissing(client.CoreV1().Secrets(KubernetesNamespace).Delete(ctx, collectorIdentitySecret, options))
 		},
+		func() error {
+			return ignoreMissing(client.RbacV1().RoleBindings(KubernetesNamespace).Delete(ctx, "argus-otelcol-identity", options))
+		},
+		func() error {
+			return ignoreMissing(client.RbacV1().Roles(KubernetesNamespace).Delete(ctx, "argus-otelcol-identity", options))
+		},
 	} {
 		if err := remove(); err != nil {
 			return Result{}, err
 		}
 	}
-	roleName := "argus-otelcol-" + strings.ReplaceAll(command.GetCollectorId(), "-", "")[:12]
-	if err := ignoreMissing(client.RbacV1().ClusterRoleBindings().Delete(ctx, roleName, options)); err != nil {
-		return Result{}, err
-	}
-	if err := ignoreMissing(client.RbacV1().ClusterRoles().Delete(ctx, roleName, options)); err != nil {
-		return Result{}, err
-	}
 	return buildResult(command, "uninstalled"), nil
-}
-
-func fixedCollectorRules() []rbacv1.PolicyRule {
-	return []rbacv1.PolicyRule{
-		{APIGroups: []string{""}, Resources: []string{"nodes", "nodes/proxy", "nodes/stats", "namespaces", "pods", "services", "endpoints", "replicationcontrollers", "resourcequotas"}, Verbs: []string{"get", "list", "watch"}},
-		{APIGroups: []string{"apps"}, Resources: []string{"deployments", "statefulsets", "daemonsets", "replicasets"}, Verbs: []string{"get", "list", "watch"}},
-		{APIGroups: []string{"batch"}, Resources: []string{"jobs", "cronjobs"}, Verbs: []string{"get", "list", "watch"}},
-		{APIGroups: []string{"autoscaling"}, Resources: []string{"horizontalpodautoscalers"}, Verbs: []string{"get", "list", "watch"}},
-	}
 }
 
 func collectorDaemonSet(command *connectorv1.CollectorManagementCommand, image, configName string, labels map[string]string) *appsv1.DaemonSet {
@@ -196,18 +197,25 @@ func collectorPodTemplate(command *connectorv1.CollectorManagementCommand, image
 		configKey = "gateway.yaml"
 	}
 	container := corev1.Container{Name: "collector", Image: image, Args: []string{"--config=/etc/argus-otelcol/" + configKey},
-		Env:          []corev1.EnvVar{{Name: "ARGUS_COLLECTOR_ID", Value: command.GetCollectorId()}, {Name: "ARGUS_RESOURCE_ID", Value: command.GetResourceId()}},
-		Ports:        []corev1.ContainerPort{{Name: "otlp-grpc", ContainerPort: 4317}, {Name: "otlp-http", ContainerPort: 4318}},
-		VolumeMounts: []corev1.VolumeMount{{Name: "config", MountPath: "/etc/argus-otelcol", ReadOnly: true}, {Name: "identity", MountPath: "/var/lib/argus-otelcol/identity"}},
-		Resources:    corev1.ResourceRequirements{}}
-	// 身份材料直接以只读 Secret 挂载(defaultMode 0440 + Pod fsGroup 提供组读),
-	// 不再引入额外的 busybox init 容器——严格离线集群无法拉取外部镜像。
+		Env:   []corev1.EnvVar{{Name: "ARGUS_COLLECTOR_ID", Value: command.GetCollectorId()}, {Name: "ARGUS_RESOURCE_ID", Value: command.GetResourceId()}},
+		Ports: []corev1.ContainerPort{{Name: "otlp-grpc", ContainerPort: 4317}, {Name: "otlp-http", ContainerPort: 4318}},
+		VolumeMounts: []corev1.VolumeMount{{Name: "config", MountPath: "/etc/argus-otelcol", ReadOnly: true},
+			{Name: "identity-bootstrap", MountPath: "/var/run/argus-bootstrap/identity", ReadOnly: true},
+			{Name: "identity-state", MountPath: "/var/lib/argus-otelcol/identity"}},
+		Resources: corev1.ResourceRequirements{}}
+	// Secret is bootstrap-only. The identity extension copies it into the
+	// writable emptyDir and atomically persists Gateway rotations back through
+	// the fixed-name Role above.
 	identityMode := int32(0o440)
 	volumes := []corev1.Volume{
 		{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: configName}}}},
-		{Name: "identity", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: collectorIdentitySecret, DefaultMode: &identityMode}}},
+		{Name: "identity-bootstrap", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: collectorIdentitySecret, DefaultMode: &identityMode}}},
+		{Name: "identity-state", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 	}
 	if isGateway {
+		container.Env = append(container.Env,
+			corev1.EnvVar{Name: "ARGUS_TELEMETRY_KUBERNETES_MIRROR", Value: "1"},
+			corev1.EnvVar{Name: "ARGUS_TELEMETRY_KUBERNETES_NAMESPACE", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}})
 		container.Ports = append(container.Ports, corev1.ContainerPort{Name: "health", ContainerPort: 13133})
 		container.StartupProbe = collectorHealthProbe(60, 2)
 		container.ReadinessProbe = collectorHealthProbe(3, 2)
@@ -225,9 +233,13 @@ func collectorPodTemplate(command *connectorv1.CollectorManagementCommand, image
 			corev1.Volume{Name: "podlogs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/pods"}}},
 			corev1.Volume{Name: "kubelet-pki", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/kubelet/pki"}}})
 	}
+	imagePullSecrets := make([]corev1.LocalObjectReference, 0, len(command.GetImagePullSecrets()))
+	for _, name := range command.GetImagePullSecrets() {
+		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: name})
+	}
 	return corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: map[string]string{"argus.io/config-sha256": command.GetConfigSha256()}},
 		Spec: corev1.PodSpec{ServiceAccountName: "argus-otelcol", SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: &nonRoot, RunAsUser: &runAsUser, FSGroup: &fsGroup},
-			Containers: []corev1.Container{container}, Volumes: volumes}}
+			ImagePullSecrets: imagePullSecrets, Containers: []corev1.Container{container}, Volumes: volumes}}
 }
 
 func collectorHealthProbe(failureThreshold int32, periodSeconds int32) *corev1.Probe {
@@ -277,15 +289,15 @@ func ignoreMissing(err error) error {
 func applyNamespace(ctx context.Context, client kubernetes.Interface, desired *corev1.Namespace) error {
 	current, err := client.CoreV1().Namespaces().Get(ctx, desired.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		_, err = client.CoreV1().Namespaces().Create(ctx, desired, metav1.CreateOptions{})
-		return err
+		return errors.New("Argus telemetry namespace is missing; rerun the verified Kubernetes Connector installer")
 	}
 	if err != nil {
 		return err
 	}
-	current.Labels = desired.Labels
-	_, err = client.CoreV1().Namespaces().Update(ctx, current, metav1.UpdateOptions{})
-	return err
+	if current.Labels["app.kubernetes.io/part-of"] != "argus" {
+		return errors.New("Argus telemetry namespace ownership label is missing")
+	}
+	return nil
 }
 
 func applyConfigMap(ctx context.Context, client kubernetes.Interface, desired *corev1.ConfigMap) error {
@@ -330,34 +342,34 @@ func applyServiceAccount(ctx context.Context, client kubernetes.Interface, desir
 	return err
 }
 
-func applyClusterRole(ctx context.Context, client kubernetes.Interface, desired *rbacv1.ClusterRole) error {
-	current, err := client.RbacV1().ClusterRoles().Get(ctx, desired.Name, metav1.GetOptions{})
+func applyRole(ctx context.Context, client kubernetes.Interface, desired *rbacv1.Role) error {
+	current, err := client.RbacV1().Roles(desired.Namespace).Get(ctx, desired.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		_, err = client.RbacV1().ClusterRoles().Create(ctx, desired, metav1.CreateOptions{})
+		_, err = client.RbacV1().Roles(desired.Namespace).Create(ctx, desired, metav1.CreateOptions{})
 		return err
 	}
 	if err != nil {
 		return err
 	}
 	current.Labels, current.Rules = desired.Labels, desired.Rules
-	_, err = client.RbacV1().ClusterRoles().Update(ctx, current, metav1.UpdateOptions{})
+	_, err = client.RbacV1().Roles(desired.Namespace).Update(ctx, current, metav1.UpdateOptions{})
 	return err
 }
 
-func applyClusterRoleBinding(ctx context.Context, client kubernetes.Interface, desired *rbacv1.ClusterRoleBinding) error {
-	current, err := client.RbacV1().ClusterRoleBindings().Get(ctx, desired.Name, metav1.GetOptions{})
+func applyRoleBinding(ctx context.Context, client kubernetes.Interface, desired *rbacv1.RoleBinding) error {
+	current, err := client.RbacV1().RoleBindings(desired.Namespace).Get(ctx, desired.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		_, err = client.RbacV1().ClusterRoleBindings().Create(ctx, desired, metav1.CreateOptions{})
+		_, err = client.RbacV1().RoleBindings(desired.Namespace).Create(ctx, desired, metav1.CreateOptions{})
 		return err
 	}
 	if err != nil {
 		return err
 	}
 	if current.RoleRef != desired.RoleRef {
-		return errors.New("Collector ClusterRoleBinding role is immutable")
+		return errors.New("Collector RoleBinding role is immutable")
 	}
 	current.Labels, current.Subjects = desired.Labels, desired.Subjects
-	_, err = client.RbacV1().ClusterRoleBindings().Update(ctx, current, metav1.UpdateOptions{})
+	_, err = client.RbacV1().RoleBindings(desired.Namespace).Update(ctx, current, metav1.UpdateOptions{})
 	return err
 }
 

@@ -27,6 +27,12 @@ type StrictServerInterface interface {
 	// PreviewDeleteHost Freeze a Host logical deletion plan.
 	// (POST /enterprise/hosts/{id}/actions/preview-delete)
 	PreviewDeleteHost(ctx context.Context, request PreviewDeleteHostRequestObject) (PreviewDeleteHostResponseObject, error)
+	// PreviewHostEnrollmentRotate Freeze a new self-enrolled Host installation command.
+	// (POST /enterprise/hosts/{id}/actions/preview-enrollment-rotate)
+	PreviewHostEnrollmentRotate(ctx context.Context, request PreviewHostEnrollmentRotateRequestObject) (PreviewHostEnrollmentRotateResponseObject, error)
+	// PreviewHostUninstallCommand Freeze a self-enrolled Host uninstall command.
+	// (POST /enterprise/hosts/{id}/actions/preview-uninstall-command)
+	PreviewHostUninstallCommand(ctx context.Context, request PreviewHostUninstallCommandRequestObject) (PreviewHostUninstallCommandResponseObject, error)
 	// PreviewUpdateHost Freeze a Host metadata, labels, or path update.
 	// (POST /enterprise/hosts/{id}/actions/preview-update)
 	PreviewUpdateHost(ctx context.Context, request PreviewUpdateHostRequestObject) (PreviewUpdateHostResponseObject, error)
@@ -216,6 +222,74 @@ func (sh *strictHandler) PreviewDeleteHost(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PreviewDeleteHostResponseObject); ok {
 		if err := validResponse.VisitPreviewDeleteHostResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PreviewHostEnrollmentRotate operation middleware
+func (sh *strictHandler) PreviewHostEnrollmentRotate(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewHostEnrollmentRotateParams) {
+	var request PreviewHostEnrollmentRotateRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body PreviewHostEnrollmentRotateJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PreviewHostEnrollmentRotate(ctx, request.(PreviewHostEnrollmentRotateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PreviewHostEnrollmentRotate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PreviewHostEnrollmentRotateResponseObject); ok {
+		if err := validResponse.VisitPreviewHostEnrollmentRotateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PreviewHostUninstallCommand operation middleware
+func (sh *strictHandler) PreviewHostUninstallCommand(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewHostUninstallCommandParams) {
+	var request PreviewHostUninstallCommandRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body PreviewHostUninstallCommandJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PreviewHostUninstallCommand(ctx, request.(PreviewHostUninstallCommandRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PreviewHostUninstallCommand")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PreviewHostUninstallCommandResponseObject); ok {
+		if err := validResponse.VisitPreviewHostUninstallCommandResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

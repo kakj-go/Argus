@@ -97,3 +97,25 @@ func TestAuditTraceIDAlwaysExists(t *testing.T) {
 		t.Fatalf("trace id length = %d, want 32", len(value))
 	}
 }
+
+func TestSanitizeDetailsKeepsTunnelRuntimeTraceWithoutCredentials(t *testing.T) {
+	input := map[string]any{
+		"tunnel_id": uuid.New(), "collector_id": uuid.New(), "connector_id": uuid.New(),
+		"bastion_scope_id": uuid.New(), "epoch": int64(4), "fence": int64(7),
+		"lease_owner": "executor-1", "initiator": "direct_executor", "drop_reason": "keepalive_failed",
+		"bytes_relayed": int64(1024), "throttled_events": int64(2), "connection_epoch": int64(9),
+		"credential_id": uuid.New(), "credential_secret": "must-not-survive",
+	}
+	encoded, err := json.Marshal(sanitizeDetails(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"tunnel_id", "collector_id", "connector_id", "bastion_scope_id", "epoch", "fence", "lease_owner", "initiator", "drop_reason", "bytes_relayed", "throttled_events", "connection_epoch"} {
+		if !bytes.Contains(encoded, []byte(`"`+key+`"`)) {
+			t.Fatalf("tunnel audit field %s was removed: %s", key, encoded)
+		}
+	}
+	if bytes.Contains(encoded, []byte("credential")) || bytes.Contains(encoded, []byte("must-not-survive")) {
+		t.Fatalf("tunnel audit retained credential material: %s", encoded)
+	}
+}

@@ -73,7 +73,10 @@ export function PendingActionCard({
         const execution = await api.executions.get(executionId);
         result = { ...result, execution };
         if (execution.status === "succeeded") {
-          if (execution.one_time_result_available) {
+          if (
+            claimOneTimeResult &&
+            execution.one_time_result_state === "available"
+          ) {
             return {
               ...result,
               one_time_result: await api.executions.claimOneTimeResult(
@@ -81,6 +84,9 @@ export function PendingActionCard({
               ),
             };
           }
+          return result;
+        }
+        if (execution.status === "result_unknown" && execution.operation_ref) {
           return result;
         }
         if (execution.status === "failed" || execution.status === "cancelled") {

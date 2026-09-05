@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
@@ -14,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -28,6 +28,8 @@ import (
 	connectorcore "github.com/kakj-go/Argus/internal/connector"
 	commonv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/common/v1"
 	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
+	"github.com/kakj-go/Argus/internal/tlsmaterial"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 var errIdentityRotated = errors.New("Connector identity rotated")
@@ -54,6 +56,11 @@ type completedCommand struct {
 
 type pendingLease struct {
 	command *connectorv1.ConnectorCommand
+	nonce   []byte
+}
+
+type pendingTunnelLease struct {
+	desired *connectorv1.TelemetryTunnelDesired
 	nonce   []byte
 }
 
@@ -110,7 +117,8 @@ func (client connectorClient) runSession(ctx context.Context) error {
 	}
 	if err := stream.Send(&connectorv1.ConnectRequest{Sequence: 1, Frame: &connectorv1.ConnectRequest_Hello{Hello: &connectorv1.ConnectorHello{
 		ProtocolVersion: connectorcore.ProtocolVersion, InstanceId: identity.InstanceID, SoftwareVersion: softwareVersion,
-		Capabilities: identity.Capabilities, ClientNonce: clientNonce}}}); err != nil {
+		Capabilities: identity.Capabilities, ClientNonce: clientNonce, TrustBundleEpoch: uint64(identity.TrustBundleEpoch),
+		TrustBundleSha256: identity.TrustBundleSHA256, TrustBundleCaFingerprints: identity.TrustCAFingerprints}}}); err != nil {
 		return err
 	}
 	first, err := stream.Recv()
@@ -130,11 +138,13 @@ func (client connectorClient) runSession(ctx context.Context) error {
 		return errors.New("Connector heartbeat interval is invalid")
 	}
 	client.logger.Info("Connector session established", "connector_id", identity.ConnectorID, "connection_epoch", welcome.GetConnectionEpoch())
-	return client.sessionLoop(ctx, stream, identity, welcome, heartbeat)
+	tunnels := newMemberTunnelSupervisor(connectorTelemetryTunnelLimit, connectorTunnelBytesPerSecond())
+	defer tunnels.CloseAll()
+	return client.sessionLoop(ctx, stream, identity, welcome, heartbeat, tunnels)
 }
 
 func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv1.ConnectorControlService_ConnectClient,
-	identity identityState, welcome *connectorv1.ConnectorWelcome, heartbeat time.Duration) error {
+	identity identityState, welcome *connectorv1.ConnectorWelcome, heartbeat time.Duration, tunnels *memberTunnelSupervisor) error {
 	received := make(chan receivedFrame, 1)
 	go receiveServerFrames(stream, received)
 	outgoing := make(chan outboundFrame, 64)
@@ -148,6 +158,7 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 	clientSequence, serverSequence := uint64(1), uint64(1)
 	epoch := welcome.GetConnectionEpoch()
 	pending := map[string]pendingLease{}
+	pendingTunnels := map[string]pendingTunnelLease{}
 	remoteSessions := map[string]*localRemoteSession{}
 	remotePending := map[string]*localRemoteSession{}
 	remoteDone := make(chan string, 16)
@@ -183,8 +194,21 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 		case <-ctx.Done():
 			return nil
 		case <-heartbeatChannel:
+			// A Connector control stream can remain open longer than the 24-hour
+			// client certificate lifetime. Re-evaluate rotation on every heartbeat
+			// so a long-lived stream moves to the next issuer during CA overlap
+			// instead of waiting for a reconnect that may happen after retirement.
+			if len(rotationKey) == 0 && certificateNeedsRotation(client.store) {
+				rotationKey, err = client.requestRotation(identity, epoch, outgoing)
+				if err != nil {
+					return err
+				}
+			}
 			if err := send(outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_Heartbeat{Heartbeat: &connectorv1.ConnectorHeartbeat{
-				ConnectionEpoch: epoch, SentAt: timestamppb.Now(), ActiveCommands: uint32(active.Load()), ActiveRemoteAccessStreams: uint32(activeRemote.Load())}}}}); err != nil {
+				ConnectionEpoch: epoch, SentAt: timestamppb.Now(), ActiveCommands: uint32(active.Load()),
+				ActiveRemoteAccessStreams: uint32(activeRemote.Load()), TelemetryTunnels: tunnels.Snapshot(),
+				TrustBundleEpoch: uint64(identity.TrustBundleEpoch), TrustBundleSha256: identity.TrustBundleSHA256,
+				TrustBundleCaFingerprints: identity.TrustCAFingerprints}}}}); err != nil {
 				return err
 			}
 		case item := <-outgoingChannel:
@@ -231,6 +255,25 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 				outgoing <- outboundFrame{value: reconcileFrame(message.GetCommandReconcileRequest(), epoch, results)}
 			case message.GetCredentialLeaseGrant() != nil:
 				grant := message.GetCredentialLeaseGrant()
+				if value, ok := pendingTunnels[grant.GetCommandId()]; ok {
+					if grant.GetConnectionEpoch() != epoch || grant.GetLeaseId() != value.desired.GetCredentialLeaseId() ||
+						!strings.EqualFold(hex.EncodeToString(grant.GetRecipientNonce()), hex.EncodeToString(value.nonce)) ||
+						grant.GetExpiresAt() == nil || time.Now().After(grant.GetExpiresAt().AsTime()) {
+						return errors.New("Connector tunnel credential lease grant is invalid")
+					}
+					delete(pendingTunnels, grant.GetCommandId())
+					credential := append([]byte(nil), grant.GetCredentialPayload()...)
+					applyErr := tunnels.Apply(ctx, value.desired, credential)
+					clear(credential)
+					if applyErr != nil {
+						outgoing <- outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_TelemetryTunnelStatusSet{
+							TelemetryTunnelStatusSet: &connectorv1.TelemetryTunnelStatusSet{Tunnels: []*connectorv1.TelemetryTunnelStatus{{
+								TunnelId: value.desired.GetTunnelId(), Epoch: value.desired.GetEpoch(), Fence: value.desired.GetFence(),
+								Status: "down", DropReason: "tunnel_quota_exceeded",
+							}}}}}}
+					}
+					continue
+				}
 				if value, ok := pending[grant.GetCommandId()]; ok {
 					if grant.GetConnectionEpoch() != epoch || grant.GetLeaseId() != value.command.GetCredentialLeaseId() ||
 						!strings.EqualFold(hex.EncodeToString(grant.GetRecipientNonce()), hex.EncodeToString(value.nonce)) || grant.GetExpiresAt() == nil || time.Now().After(grant.GetExpiresAt().AsTime()) {
@@ -257,6 +300,14 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 					return err
 				}
 				return errIdentityRotated
+			case message.GetTrustBundleUpdate() != nil:
+				updated, acknowledgement, err := client.acceptTrustBundle(identity, message.GetTrustBundleUpdate())
+				if err != nil {
+					return err
+				}
+				identity = updated
+				outgoing <- outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_TrustBundleAcknowledge{
+					TrustBundleAcknowledge: acknowledgement}}}
 			case message.GetCommand() != nil:
 				command := message.GetCommand()
 				if command.GetConnectionEpoch() != epoch || command.GetCommandId() == "" || command.GetTypedPayload() == nil {
@@ -286,6 +337,42 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 					active.Add(1)
 					go executeConnectorCommand(ctx, command, nil, completed)
 				}
+			case message.GetTelemetryTunnelDesiredSet() != nil:
+				desiredSet := message.GetTelemetryTunnelDesiredSet()
+				if !desiredSet.GetFullSnapshot() || len(desiredSet.GetTunnels()) > connectorTelemetryTunnelLimit {
+					return errors.New("Connector telemetry tunnel snapshot is invalid")
+				}
+				tunnels.ReconcileSnapshot(desiredSet.GetTunnels())
+				desiredIDs := make(map[string]struct{}, len(desiredSet.GetTunnels()))
+				for _, desired := range desiredSet.GetTunnels() {
+					if err := validateTunnelDesired(desired); err != nil {
+						return err
+					}
+					desiredIDs[desired.GetTunnelId()] = struct{}{}
+					if tunnels.Has(desired.GetTunnelId(), desired.GetEpoch(), desired.GetFence()) {
+						continue
+					}
+					operationRef := connectorTunnelOperationRef(desired)
+					if pendingValue, ok := pendingTunnels[operationRef]; ok &&
+						pendingValue.desired.GetCredentialLeaseId() == desired.GetCredentialLeaseId() {
+						continue
+					}
+					nonce := make([]byte, 32)
+					if _, err := rand.Read(nonce); err != nil {
+						return err
+					}
+					pendingTunnels[operationRef] = pendingTunnelLease{desired: proto.Clone(desired).(*connectorv1.TelemetryTunnelDesired), nonce: nonce}
+					outgoing <- outboundFrame{value: &connectorv1.ConnectRequest{Frame: &connectorv1.ConnectRequest_CredentialLeaseRequest{
+						CredentialLeaseRequest: &connectorv1.CredentialLeaseRequest{LeaseId: desired.GetCredentialLeaseId(),
+							CommandId: operationRef, ConnectionEpoch: epoch, RecipientNonce: nonce}}}}
+				}
+				for operationRef, value := range pendingTunnels {
+					if _, ok := desiredIDs[value.desired.GetTunnelId()]; ok {
+						continue
+					}
+					clear(value.nonce)
+					delete(pendingTunnels, operationRef)
+				}
 			case message.GetRemoteAccessOpen() != nil:
 				open := message.GetRemoteAccessOpen()
 				if open.GetConnectionEpoch() != epoch || open.GetStreamId() == "" || open.GetSessionId() == "" || open.GetCredentialLeaseId() == "" ||
@@ -312,6 +399,19 @@ func (client connectorClient) sessionLoop(ctx context.Context, stream connectorv
 	}
 }
 
+func connectorTunnelOperationRef(desired *connectorv1.TelemetryTunnelDesired) string {
+	return fmt.Sprintf("telemetry_tunnel:%s:%d:%d", desired.GetTunnelId(), desired.GetEpoch(), desired.GetFence())
+}
+
+func connectorTunnelBytesPerSecond() int64 {
+	const defaultBytesPerSecond = 64 * 1024 * 1024
+	value, err := strconv.ParseInt(os.Getenv("ARGUS_CONNECTOR_TUNNEL_BYTES_PER_SECOND"), 10, 64)
+	if err != nil || value <= 0 {
+		return defaultBytesPerSecond
+	}
+	return value
+}
+
 func stopSequenceAcknowledged(stopSequence, acknowledged uint64) bool {
 	return stopSequence != 0 && acknowledged >= stopSequence
 }
@@ -336,28 +436,20 @@ func executeConnectorCommand(ctx context.Context, command *connectorv1.Connector
 }
 
 func (client connectorClient) transportCredentials(endpoint string) (credentials.TransportCredentials, string, error) {
-	certificatePEM, keyPEM, caPEM, err := client.store.identityMaterial()
-	if err != nil {
-		return nil, "", err
-	}
-	certificate, err := tls.X509KeyPair(certificatePEM, keyPEM)
-	if err != nil {
-		return nil, "", err
-	}
-	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, "", errors.New("Connector CA bundle is invalid")
-	}
 	parsed, err := parseGatewayEndpoint(endpoint)
 	if err != nil {
 		return nil, "", err
 	}
-	configuration := &tls.Config{MinVersion: tls.VersionTLS13, ServerName: parsed.Hostname(), RootCAs: roots, Certificates: []tls.Certificate{certificate}}
-	if caFile := os.Getenv("ARGUS_CONNECTOR_CA_FILE"); caFile != "" {
-		caPEM, readErr := os.ReadFile(caFile)
-		if readErr != nil || !roots.AppendCertsFromPEM(caPEM) {
-			return nil, "", errors.New("ARGUS_CONNECTOR_CA_FILE does not contain a valid CA bundle")
-		}
+	material, err := tlsmaterial.Load(tlsmaterial.Options{
+		CertificatePath: filepath.Join(client.store.directory, certFile), PrivateKeyPath: filepath.Join(client.store.directory, keyFile),
+		CABundlePath: filepath.Join(client.store.directory, caFile), Usage: x509.ExtKeyUsageClientAuth,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	tlsCredentials, err := tlsmaterial.ClientCredentials(material, parsed.Hostname())
+	if err != nil {
+		return nil, "", err
 	}
 	address := parsed.Host
 	// E2E/debug override: dial a pinned address (for example the public
@@ -365,7 +457,7 @@ func (client connectorClient) transportCredentials(endpoint string) (credentials
 	if override := os.Getenv("ARGUS_CONNECTOR_DIAL_ADDRESS"); override != "" {
 		address = override
 	}
-	return credentials.NewTLS(configuration), address, nil
+	return tlsCredentials, address, nil
 }
 
 func parseGatewayEndpoint(value string) (*url.URL, error) {
@@ -503,18 +595,55 @@ func (client connectorClient) requestRotation(identity identityState, epoch uint
 }
 
 func (client connectorClient) acceptRotation(identity identityState, grant *connectorv1.CertificateRotationGrant, keyPEM []byte) error {
-	if grant.GetConnectionEpoch() == 0 || len(grant.GetCertificatePem()) == 0 || len(grant.GetCaBundlePem()) == 0 || grant.GetNotAfter() == nil {
+	if grant.GetConnectionEpoch() == 0 || len(grant.GetCertificatePem()) == 0 || grant.GetNotAfter() == nil {
 		return errors.New("Connector certificate rotation grant is invalid")
 	}
 	id, err := uuid.Parse(identity.ConnectorID)
 	if err != nil {
 		return err
 	}
-	if err := validateIssuedIdentity(id, keyPEM, grant.GetCertificatePem(), grant.GetCaBundlePem()); err != nil {
+	_, _, caBundle, err := client.store.identityMaterial()
+	if err != nil {
+		return err
+	}
+	if err := validateIssuedIdentity(id, keyPEM, grant.GetCertificatePem(), caBundle); err != nil {
 		return err
 	}
 	identity.CertificateExpiresAt = grant.GetNotAfter().AsTime()
-	return client.store.saveIdentity(identity, keyPEM, grant.GetCertificatePem(), grant.GetCaBundlePem())
+	return client.store.saveIdentity(identity, keyPEM, grant.GetCertificatePem(), caBundle)
+}
+
+func (client connectorClient) acceptTrustBundle(identity identityState, update *connectorv1.TrustBundleUpdate) (identityState, *connectorv1.TrustBundleAcknowledge, error) {
+	if update == nil || update.GetEpoch() < uint64(identity.TrustBundleEpoch) || update.GetEpoch() == 0 ||
+		update.GetStartedAt() == nil || !update.GetStartedAt().IsValid() {
+		return identity, nil, errors.New("Connector Trust Bundle update metadata is invalid")
+	}
+	if update.GetState() != trustbundle.StateStable && update.GetState() != trustbundle.StatePreparing &&
+		update.GetState() != trustbundle.StateOverlapping && update.GetState() != trustbundle.StateRetiring {
+		return identity, nil, errors.New("Connector Trust Bundle update state is invalid")
+	}
+	if (update.GetState() == trustbundle.StateOverlapping || update.GetState() == trustbundle.StateRetiring) &&
+		(update.GetRetireAt() == nil || !update.GetRetireAt().IsValid()) {
+		return identity, nil, errors.New("Connector Trust Bundle retirement deadline is invalid")
+	}
+	material, err := trustbundle.Parse(update.GetBundlePem(), time.Now().UTC())
+	if err != nil {
+		return identity, nil, err
+	}
+	expectedFingerprints := append(append([]string{}, update.GetCurrentCaFingerprints()...), update.GetNextCaFingerprints()...)
+	expected := trustbundle.Bundle{Epoch: int64(update.GetEpoch()), Material: material}
+	if !expected.Matches(trustbundle.Acknowledgement{Epoch: int64(update.GetEpoch()), SHA256: update.GetBundleSha256(), Fingerprints: expectedFingerprints}) ||
+		len(update.GetCurrentCaFingerprints()) == 0 {
+		return identity, nil, errors.New("Connector Trust Bundle update digest or fingerprints are invalid")
+	}
+	identity.TrustBundleEpoch = int64(update.GetEpoch())
+	identity.TrustBundleSHA256 = material.SHA256
+	identity.TrustCAFingerprints = material.Fingerprints
+	if err := client.store.saveTrustBundle(identity, material.PEM); err != nil {
+		return identity, nil, err
+	}
+	return identity, &connectorv1.TrustBundleAcknowledge{Epoch: update.GetEpoch(), BundleSha256: material.SHA256,
+		CaFingerprints: material.Fingerprints}, nil
 }
 
 func (client connectorClient) removeIdentity() {

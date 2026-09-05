@@ -33,6 +33,8 @@ func (a *App) runE2EScenarios(ctx context.Context, env *E2EEnvironment) error {
 			err = a.runM7Scenario(ctx, env)
 		case "m10-query":
 			err = a.runM10QueryScenario(ctx, env)
+		case "p4":
+			err = a.runP4Scenario(ctx, env)
 		default:
 			err = fmt.Errorf("unsupported E2E dependency %q", phase)
 		}

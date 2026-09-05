@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,9 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// GetConnectorBootstrapScript Download a strict Connector bootstrap script using a pending enrollment token.
+	// (GET /connectors/bootstrap-script)
+	GetConnectorBootstrapScript(w http.ResponseWriter, r *http.Request, params GetConnectorBootstrapScriptParams)
 	// EnrollConnector Consume a one-time enrollment token and sign a Connector CSR.
 	// (POST /connectors/enroll)
 	EnrollConnector(w http.ResponseWriter, r *http.Request, params EnrollConnectorParams)
@@ -28,15 +32,24 @@ type ServerInterface interface {
 	// GetBastionScope Get a Bastion Scope.
 	// (GET /enterprise/bastion-scopes/{id})
 	GetBastionScope(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// PreviewBastionConnectorReplacement Fence the active Connector through a confirmed replacement action.
+	// (POST /enterprise/bastion-scopes/{id}/actions/preview-connector-replacement)
+	PreviewBastionConnectorReplacement(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewBastionConnectorReplacementParams)
 	// PreviewDeleteBastionScope Freeze a Bastion Scope deletion.
 	// (POST /enterprise/bastion-scopes/{id}/actions/preview-delete)
 	PreviewDeleteBastionScope(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewDeleteBastionScopeParams)
-	// PreviewReplaceBastionConnector Fence the active Connector through a confirmed replacement action.
-	// (POST /enterprise/bastion-scopes/{id}/actions/preview-replacement)
-	PreviewReplaceBastionConnector(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewReplaceBastionConnectorParams)
+	// PreviewBastionEnrollmentRotate Freeze a new mode A Connector installation command.
+	// (POST /enterprise/bastion-scopes/{id}/actions/preview-enrollment-rotate)
+	PreviewBastionEnrollmentRotate(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewBastionEnrollmentRotateParams)
 	// PreviewUpdateBastionScope Freeze a Bastion Scope update or migration.
 	// (POST /enterprise/bastion-scopes/{id}/actions/preview-update)
 	PreviewUpdateBastionScope(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewUpdateBastionScopeParams)
+	// GetConnectorInstallOperation Get the durable Connector installation progress and public event timeline.
+	// (GET /enterprise/connector-install-operations/{id})
+	GetConnectorInstallOperation(w http.ResponseWriter, r *http.Request, id ResourceId)
+	// PreviewRetryConnectorInstallOperation Freeze a retry of a terminal failed Connector installation operation.
+	// (POST /enterprise/connector-install-operations/{id}/actions/preview-retry)
+	PreviewRetryConnectorInstallOperation(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewRetryConnectorInstallOperationParams)
 	// ListConnectors List Connector diagnostics.
 	// (GET /enterprise/connectors)
 	ListConnectors(w http.ResponseWriter, r *http.Request, params ListConnectorsParams)
@@ -54,6 +67,12 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// GetConnectorBootstrapScript Download a strict Connector bootstrap script using a pending enrollment token.
+// (GET /connectors/bootstrap-script)
+func (_ Unimplemented) GetConnectorBootstrapScript(w http.ResponseWriter, r *http.Request, params GetConnectorBootstrapScriptParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // EnrollConnector Consume a one-time enrollment token and sign a Connector CSR.
 // (POST /connectors/enroll)
@@ -79,21 +98,39 @@ func (_ Unimplemented) GetBastionScope(w http.ResponseWriter, r *http.Request, i
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// PreviewBastionConnectorReplacement Fence the active Connector through a confirmed replacement action.
+// (POST /enterprise/bastion-scopes/{id}/actions/preview-connector-replacement)
+func (_ Unimplemented) PreviewBastionConnectorReplacement(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewBastionConnectorReplacementParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // PreviewDeleteBastionScope Freeze a Bastion Scope deletion.
 // (POST /enterprise/bastion-scopes/{id}/actions/preview-delete)
 func (_ Unimplemented) PreviewDeleteBastionScope(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewDeleteBastionScopeParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// PreviewReplaceBastionConnector Fence the active Connector through a confirmed replacement action.
-// (POST /enterprise/bastion-scopes/{id}/actions/preview-replacement)
-func (_ Unimplemented) PreviewReplaceBastionConnector(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewReplaceBastionConnectorParams) {
+// PreviewBastionEnrollmentRotate Freeze a new mode A Connector installation command.
+// (POST /enterprise/bastion-scopes/{id}/actions/preview-enrollment-rotate)
+func (_ Unimplemented) PreviewBastionEnrollmentRotate(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewBastionEnrollmentRotateParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // PreviewUpdateBastionScope Freeze a Bastion Scope update or migration.
 // (POST /enterprise/bastion-scopes/{id}/actions/preview-update)
 func (_ Unimplemented) PreviewUpdateBastionScope(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewUpdateBastionScopeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetConnectorInstallOperation Get the durable Connector installation progress and public event timeline.
+// (GET /enterprise/connector-install-operations/{id})
+func (_ Unimplemented) GetConnectorInstallOperation(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PreviewRetryConnectorInstallOperation Freeze a retry of a terminal failed Connector installation operation.
+// (POST /enterprise/connector-install-operations/{id}/actions/preview-retry)
+func (_ Unimplemented) PreviewRetryConnectorInstallOperation(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewRetryConnectorInstallOperationParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -129,6 +166,39 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetConnectorBootstrapScript operation middleware
+func (siw *ServerInterfaceWrapper) GetConnectorBootstrapScript(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetConnectorBootstrapScriptParams
+
+	// ------------- Required query parameter "scope" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "scope", r.URL.Query(), &params.Scope, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scope"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConnectorBootstrapScript(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // EnrollConnector operation middleware
 func (siw *ServerInterfaceWrapper) EnrollConnector(w http.ResponseWriter, r *http.Request) {
@@ -315,6 +385,83 @@ func (siw *ServerInterfaceWrapper) GetBastionScope(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// PreviewBastionConnectorReplacement operation middleware
+func (siw *ServerInterfaceWrapper) PreviewBastionConnectorReplacement(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PreviewBastionConnectorReplacementParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewBastionConnectorReplacement(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PreviewDeleteBastionScope operation middleware
 func (siw *ServerInterfaceWrapper) PreviewDeleteBastionScope(w http.ResponseWriter, r *http.Request) {
 
@@ -392,8 +539,8 @@ func (siw *ServerInterfaceWrapper) PreviewDeleteBastionScope(w http.ResponseWrit
 	handler.ServeHTTP(w, r)
 }
 
-// PreviewReplaceBastionConnector operation middleware
-func (siw *ServerInterfaceWrapper) PreviewReplaceBastionConnector(w http.ResponseWriter, r *http.Request) {
+// PreviewBastionEnrollmentRotate operation middleware
+func (siw *ServerInterfaceWrapper) PreviewBastionEnrollmentRotate(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -408,7 +555,7 @@ func (siw *ServerInterfaceWrapper) PreviewReplaceBastionConnector(w http.Respons
 	}
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params PreviewReplaceBastionConnectorParams
+	var params PreviewBastionEnrollmentRotateParams
 
 	headers := r.Header
 
@@ -459,7 +606,7 @@ func (siw *ServerInterfaceWrapper) PreviewReplaceBastionConnector(w http.Respons
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PreviewReplaceBastionConnector(w, r, id, params)
+		siw.Handler.PreviewBastionEnrollmentRotate(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -537,6 +684,109 @@ func (siw *ServerInterfaceWrapper) PreviewUpdateBastionScope(w http.ResponseWrit
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PreviewUpdateBastionScope(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConnectorInstallOperation operation middleware
+func (siw *ServerInterfaceWrapper) GetConnectorInstallOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConnectorInstallOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreviewRetryConnectorInstallOperation operation middleware
+func (siw *ServerInterfaceWrapper) PreviewRetryConnectorInstallOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PreviewRetryConnectorInstallOperationParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewRetryConnectorInstallOperation(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -914,7 +1164,16 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/enterprise/bastion-scopes/{id}/actions/preview-delete", wrapper.PreviewDeleteBastionScope)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/enterprise/bastion-scopes/{id}/actions/preview-replacement", wrapper.PreviewReplaceBastionConnector)
+		r.Post(options.BaseURL+"/enterprise/bastion-scopes/{id}/actions/preview-enrollment-rotate", wrapper.PreviewBastionEnrollmentRotate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/enterprise/bastion-scopes/{id}/actions/preview-connector-replacement", wrapper.PreviewBastionConnectorReplacement)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/enterprise/connector-install-operations/{id}", wrapper.GetConnectorInstallOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/enterprise/connector-install-operations/{id}/actions/preview-retry", wrapper.PreviewRetryConnectorInstallOperation)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/enterprise/connectors", wrapper.ListConnectors)
@@ -931,11 +1190,75 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/connectors/enroll", wrapper.EnrollConnector)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/connectors/bootstrap-script", wrapper.GetConnectorBootstrapScript)
+	})
 
 	return r
 }
 
 type ErrorJSONResponse ApiError
+
+type GetConnectorBootstrapScriptRequestObject struct {
+	Params GetConnectorBootstrapScriptParams
+}
+
+type GetConnectorBootstrapScriptResponseObject interface {
+	VisitGetConnectorBootstrapScriptResponse(w http.ResponseWriter) error
+}
+
+type GetConnectorBootstrapScript200ResponseHeaders struct {
+	CacheControl        *string
+	ContentDisposition  *string
+	XContentTypeOptions *string
+}
+
+type GetConnectorBootstrapScript200TextxShellscriptResponse struct {
+	Body          io.Reader
+	Headers       GetConnectorBootstrapScript200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetConnectorBootstrapScript200TextxShellscriptResponse) VisitGetConnectorBootstrapScriptResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/x-shellscript")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ContentDisposition != nil {
+		w.Header().Set("Content-Disposition", fmt.Sprint(*response.Headers.ContentDisposition))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetConnectorBootstrapScriptdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response GetConnectorBootstrapScriptdefaultJSONResponse) VisitGetConnectorBootstrapScriptResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type EnrollConnectorRequestObject struct {
 	Params EnrollConnectorParams
@@ -1095,6 +1418,47 @@ func (response GetBastionScopedefaultJSONResponse) VisitGetBastionScopeResponse(
 	return err
 }
 
+type PreviewBastionConnectorReplacementRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params PreviewBastionConnectorReplacementParams
+	Body   *PreviewBastionConnectorReplacementJSONRequestBody
+}
+
+type PreviewBastionConnectorReplacementResponseObject interface {
+	VisitPreviewBastionConnectorReplacementResponse(w http.ResponseWriter) error
+}
+
+type PreviewBastionConnectorReplacement201JSONResponse PendingActionPublicSchema
+
+func (response PreviewBastionConnectorReplacement201JSONResponse) VisitPreviewBastionConnectorReplacementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewBastionConnectorReplacementdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response PreviewBastionConnectorReplacementdefaultJSONResponse) VisitPreviewBastionConnectorReplacementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PreviewDeleteBastionScopeRequestObject struct {
 	Id     ResourceId `json:"id"`
 	Params PreviewDeleteBastionScopeParams
@@ -1136,19 +1500,19 @@ func (response PreviewDeleteBastionScopedefaultJSONResponse) VisitPreviewDeleteB
 	return err
 }
 
-type PreviewReplaceBastionConnectorRequestObject struct {
+type PreviewBastionEnrollmentRotateRequestObject struct {
 	Id     ResourceId `json:"id"`
-	Params PreviewReplaceBastionConnectorParams
-	Body   *PreviewReplaceBastionConnectorJSONRequestBody
+	Params PreviewBastionEnrollmentRotateParams
+	Body   *PreviewBastionEnrollmentRotateJSONRequestBody
 }
 
-type PreviewReplaceBastionConnectorResponseObject interface {
-	VisitPreviewReplaceBastionConnectorResponse(w http.ResponseWriter) error
+type PreviewBastionEnrollmentRotateResponseObject interface {
+	VisitPreviewBastionEnrollmentRotateResponse(w http.ResponseWriter) error
 }
 
-type PreviewReplaceBastionConnector201JSONResponse PendingActionPublicSchema
+type PreviewBastionEnrollmentRotate201JSONResponse PendingActionPublicSchema
 
-func (response PreviewReplaceBastionConnector201JSONResponse) VisitPreviewReplaceBastionConnectorResponse(w http.ResponseWriter) error {
+func (response PreviewBastionEnrollmentRotate201JSONResponse) VisitPreviewBastionEnrollmentRotateResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1160,12 +1524,12 @@ func (response PreviewReplaceBastionConnector201JSONResponse) VisitPreviewReplac
 	return err
 }
 
-type PreviewReplaceBastionConnectordefaultJSONResponse struct {
+type PreviewBastionEnrollmentRotatedefaultJSONResponse struct {
 	Body       ApiError
 	StatusCode int
 }
 
-func (response PreviewReplaceBastionConnectordefaultJSONResponse) VisitPreviewReplaceBastionConnectorResponse(w http.ResponseWriter) error {
+func (response PreviewBastionEnrollmentRotatedefaultJSONResponse) VisitPreviewBastionEnrollmentRotateResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -1207,6 +1571,85 @@ type PreviewUpdateBastionScopedefaultJSONResponse struct {
 }
 
 func (response PreviewUpdateBastionScopedefaultJSONResponse) VisitPreviewUpdateBastionScopeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConnectorInstallOperationRequestObject struct {
+	Id ResourceId `json:"id"`
+}
+
+type GetConnectorInstallOperationResponseObject interface {
+	VisitGetConnectorInstallOperationResponse(w http.ResponseWriter) error
+}
+
+type GetConnectorInstallOperation200JSONResponse ConnectorInstallOperation
+
+func (response GetConnectorInstallOperation200JSONResponse) VisitGetConnectorInstallOperationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConnectorInstallOperationdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response GetConnectorInstallOperationdefaultJSONResponse) VisitGetConnectorInstallOperationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewRetryConnectorInstallOperationRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params PreviewRetryConnectorInstallOperationParams
+}
+
+type PreviewRetryConnectorInstallOperationResponseObject interface {
+	VisitPreviewRetryConnectorInstallOperationResponse(w http.ResponseWriter) error
+}
+
+type PreviewRetryConnectorInstallOperation201JSONResponse PendingActionPublicSchema
+
+func (response PreviewRetryConnectorInstallOperation201JSONResponse) VisitPreviewRetryConnectorInstallOperationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewRetryConnectorInstallOperationdefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response PreviewRetryConnectorInstallOperationdefaultJSONResponse) VisitPreviewRetryConnectorInstallOperationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {

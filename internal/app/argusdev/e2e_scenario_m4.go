@@ -307,7 +307,7 @@ func (a *App) verifyM4OneTimeResult(ctx context.Context, env *E2EEnvironment) er
 		return err
 	}
 	encoded, _ = json.Marshal(execution)
-	if execution["status"] != "succeeded" || execution["one_time_result_available"] != true || bytesContainFold(encoded, []byte("install_command")) {
+	if execution["status"] != "succeeded" || execution["one_time_result_state"] != "available" || bytesContainFold(encoded, []byte("install_command")) {
 		return fmt.Errorf("M4 execution exposed or lost one-time result metadata")
 	}
 	claimHeaders := enterpriseHeaders(env, "m4-enrollment-claim")
@@ -315,15 +315,15 @@ func (a *App) verifyM4OneTimeResult(ctx context.Context, env *E2EEnvironment) er
 	if err != nil {
 		return err
 	}
-	command, err := stringField(claimed, "enrollment", "install_command")
-	if err != nil || claimed["schema_version"] != "argus.action_one_time_result/v1" || claimed["result_kind"] != "connector_enrollment" {
+	command, err := stringField(claimed, "command")
+	if err != nil || claimed["schema_version"] != "argus.action_one_time_result/v2" || claimed["result_kind"] != "connector_install_command" {
 		return fmt.Errorf("M4 one-time result did not match the Connector enrollment contract")
 	}
 	replayed, err := client.JSON(ctx, "m4-enrollment-claim-retry", "enterprise", http.MethodPost, "/enterprise/executions/"+executionID+"/one-time-result", http.StatusOK, nil, claimHeaders)
 	if err != nil {
 		return err
 	}
-	replayedCommand, _ := stringField(replayed, "enrollment", "install_command")
+	replayedCommand, _ := stringField(replayed, "command")
 	if replayedCommand != command {
 		return fmt.Errorf("M4 one-time result idempotency replay changed the command")
 	}

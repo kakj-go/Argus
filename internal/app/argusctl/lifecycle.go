@@ -34,7 +34,15 @@ func (a *App) uninstall(ctx context.Context, cfg *InstallConfig, deleteCRDs bool
 	}
 	clients, clientErr := clientsFor(cfg.Spec.KubeContext)
 	if clientErr == nil {
-		if err := deleteTelemetryRootCASecret(ctx, clients.typed, cfg.Spec.ReleaseID); err != nil {
+		if cfg.Spec.PKI.Mode == PKIModeManaged {
+			if err := deleteManagedRootCASecret(ctx, clients.typed, cfg.Spec.ReleaseID); err != nil {
+				return err
+			}
+		}
+		if err := deletePKITrustSource(ctx, clients.typed, cfg); err != nil {
+			return err
+		}
+		if err := deletePKICleanupRBAC(ctx, clients.typed, cfg.Spec.ReleaseID); err != nil {
 			return err
 		}
 		for _, namespace := range []string{cfg.Spec.Namespaces.System, cfg.Spec.Namespaces.Sandbox, cfg.Spec.Namespaces.Observability} {
@@ -58,21 +66,70 @@ func (a *App) uninstall(ctx context.Context, cfg *InstallConfig, deleteCRDs bool
 	return nil
 }
 
-func deleteTelemetryRootCASecret(ctx context.Context, client kubernetes.Interface, releaseID string) error {
+func deletePKICleanupRBAC(ctx context.Context, client kubernetes.Interface, releaseID string) error {
 	const namespace = "cert-manager"
-	name := releaseID + "-telemetry-root-ca"
-	secret, err := client.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+	name := releaseID + "-pki-root-cleanup"
+	if binding, err := client.RbacV1().RoleBindings(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		if binding.Labels["argus.io/release-id"] != releaseID {
+			return fmt.Errorf("refusing to delete PKI cleanup RoleBinding not owned by release %q", releaseID)
+		}
+		if err = client.RbacV1().RoleBindings(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return err
+	}
+	if role, err := client.RbacV1().Roles(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		if role.Labels["argus.io/release-id"] != releaseID {
+			return fmt.Errorf("refusing to delete PKI cleanup Role not owned by release %q", releaseID)
+		}
+		if err = client.RbacV1().Roles(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func deleteManagedRootCASecret(ctx context.Context, client kubernetes.Interface, releaseID string) error {
+	const namespace = "cert-manager"
+	baseName := releaseID + "-root-ca"
+	base, err := client.CoreV1().Secrets(namespace).Get(ctx, baseName, metav1.GetOptions{})
+	if err == nil && (base.Labels["argus.io/release-id"] != releaseID || base.Labels["argus.io/pki-role"] != "managed-root") {
+		return fmt.Errorf("refusing to delete managed root CA Secret %s/%s not owned by release %q", namespace, baseName, releaseID)
+	}
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("inspect managed root CA Secret %s/%s: %w", namespace, baseName, err)
+	}
+	secrets, err := client.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "argus.io/release-id=" + releaseID + ",argus.io/pki-role=managed-root",
+	})
+	if err != nil {
+		return fmt.Errorf("list managed root CA Secrets for release %s: %w", releaseID, err)
+	}
+	for _, secret := range secrets.Items {
+		if err := client.CoreV1().Secrets(namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete managed root CA Secret %s/%s: %w", namespace, secret.Name, err)
+		}
+	}
+	return nil
+}
+
+func deletePKITrustSource(ctx context.Context, client kubernetes.Interface, cfg *InstallConfig) error {
+	configMaps := client.CoreV1().ConfigMaps("cert-manager")
+	current, err := configMaps.Get(ctx, cfg.trustSourceName(), metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("inspect telemetry root CA Secret %s/%s: %w", namespace, name, err)
+		return fmt.Errorf("inspect PKI trust source: %w", err)
 	}
-	if owner := secret.Labels["argus.io/release-id"]; owner != "" && owner != releaseID {
-		return fmt.Errorf("refusing to delete telemetry root CA Secret %s/%s owned by release %q", namespace, name, owner)
+	if current.Labels["argus.io/release-id"] != cfg.Spec.ReleaseID {
+		return fmt.Errorf("refusing to delete PKI trust source not owned by release %q", cfg.Spec.ReleaseID)
 	}
-	if err := client.CoreV1().Secrets(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("delete telemetry root CA Secret %s/%s: %w", namespace, name, err)
+	if err := configMaps.Delete(ctx, current.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete PKI trust source: %w", err)
 	}
 	return nil
 }

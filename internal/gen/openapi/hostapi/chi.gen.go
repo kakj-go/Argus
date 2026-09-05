@@ -31,6 +31,12 @@ type ServerInterface interface {
 	// PreviewDeleteHost Freeze a Host logical deletion plan.
 	// (POST /enterprise/hosts/{id}/actions/preview-delete)
 	PreviewDeleteHost(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewDeleteHostParams)
+	// PreviewHostEnrollmentRotate Freeze a new self-enrolled Host installation command.
+	// (POST /enterprise/hosts/{id}/actions/preview-enrollment-rotate)
+	PreviewHostEnrollmentRotate(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewHostEnrollmentRotateParams)
+	// PreviewHostUninstallCommand Freeze a self-enrolled Host uninstall command.
+	// (POST /enterprise/hosts/{id}/actions/preview-uninstall-command)
+	PreviewHostUninstallCommand(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewHostUninstallCommandParams)
 	// PreviewUpdateHost Freeze a Host metadata, labels, or path update.
 	// (POST /enterprise/hosts/{id}/actions/preview-update)
 	PreviewUpdateHost(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewUpdateHostParams)
@@ -67,6 +73,18 @@ func (_ Unimplemented) GetHost(w http.ResponseWriter, r *http.Request, id Resour
 // PreviewDeleteHost Freeze a Host logical deletion plan.
 // (POST /enterprise/hosts/{id}/actions/preview-delete)
 func (_ Unimplemented) PreviewDeleteHost(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewDeleteHostParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PreviewHostEnrollmentRotate Freeze a new self-enrolled Host installation command.
+// (POST /enterprise/hosts/{id}/actions/preview-enrollment-rotate)
+func (_ Unimplemented) PreviewHostEnrollmentRotate(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewHostEnrollmentRotateParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PreviewHostUninstallCommand Freeze a self-enrolled Host uninstall command.
+// (POST /enterprise/hosts/{id}/actions/preview-uninstall-command)
+func (_ Unimplemented) PreviewHostUninstallCommand(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewHostUninstallCommandParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -422,6 +440,160 @@ func (siw *ServerInterfaceWrapper) PreviewDeleteHost(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// PreviewHostEnrollmentRotate operation middleware
+func (siw *ServerInterfaceWrapper) PreviewHostEnrollmentRotate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PreviewHostEnrollmentRotateParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewHostEnrollmentRotate(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreviewHostUninstallCommand operation middleware
+func (siw *ServerInterfaceWrapper) PreviewHostUninstallCommand(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PreviewHostUninstallCommandParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewHostUninstallCommand(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PreviewUpdateHost operation middleware
 func (siw *ServerInterfaceWrapper) PreviewUpdateHost(w http.ResponseWriter, r *http.Request) {
 
@@ -630,6 +802,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/enterprise/hosts/connection-tests", wrapper.CreateHostConnectionTest)
 	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/enterprise/hosts/{id}/actions/preview-enrollment-rotate", wrapper.PreviewHostEnrollmentRotate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/enterprise/hosts/{id}/actions/preview-uninstall-command", wrapper.PreviewHostUninstallCommand)
+	})
 
 	return r
 }
@@ -824,6 +1002,88 @@ type PreviewDeleteHostdefaultJSONResponse struct {
 }
 
 func (response PreviewDeleteHostdefaultJSONResponse) VisitPreviewDeleteHostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewHostEnrollmentRotateRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params PreviewHostEnrollmentRotateParams
+	Body   *PreviewHostEnrollmentRotateJSONRequestBody
+}
+
+type PreviewHostEnrollmentRotateResponseObject interface {
+	VisitPreviewHostEnrollmentRotateResponse(w http.ResponseWriter) error
+}
+
+type PreviewHostEnrollmentRotate201JSONResponse PendingActionPublicSchema
+
+func (response PreviewHostEnrollmentRotate201JSONResponse) VisitPreviewHostEnrollmentRotateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewHostEnrollmentRotatedefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response PreviewHostEnrollmentRotatedefaultJSONResponse) VisitPreviewHostEnrollmentRotateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewHostUninstallCommandRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params PreviewHostUninstallCommandParams
+	Body   *PreviewHostUninstallCommandJSONRequestBody
+}
+
+type PreviewHostUninstallCommandResponseObject interface {
+	VisitPreviewHostUninstallCommandResponse(w http.ResponseWriter) error
+}
+
+type PreviewHostUninstallCommand201JSONResponse PendingActionPublicSchema
+
+func (response PreviewHostUninstallCommand201JSONResponse) VisitPreviewHostUninstallCommandResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewHostUninstallCommanddefaultJSONResponse struct {
+	Body       ApiError
+	StatusCode int
+}
+
+func (response PreviewHostUninstallCommanddefaultJSONResponse) VisitPreviewHostUninstallCommandResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {

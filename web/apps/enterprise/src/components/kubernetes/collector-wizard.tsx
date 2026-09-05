@@ -73,6 +73,7 @@ export function CollectorWizard({
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
   const [customImage, setCustomImage] = useState("");
+  const [imagePullSecretInput, setImagePullSecretInput] = useState("");
   const [settling, setSettling] = useState(false);
 
   const bindingsQuery = useQuery({
@@ -93,7 +94,11 @@ export function CollectorWizard({
   });
 
   const verify = useMutation({
-    mutationFn: (input: { bindingId: string; hostId: string; version: number }) =>
+    mutationFn: (input: {
+      bindingId: string;
+      hostId: string;
+      version: number;
+    }) =>
       api.kubernetes.verifyNodeBinding(input.bindingId, {
         host_id: input.hostId,
         expected_version: input.version,
@@ -106,7 +111,9 @@ export function CollectorWizard({
       const distribution = distributionsQuery.data?.find(
         (item) =>
           item.support_status === "supported" &&
-          item.artifacts.some((artifact) => artifact.platform === "linux_arm64"),
+          item.artifacts.some(
+            (artifact) => artifact.platform === "linux_arm64",
+          ),
       );
       const profileIds = (profilesQuery.data ?? [])
         .filter((item) =>
@@ -119,11 +126,16 @@ export function CollectorWizard({
         throw new Error("supported collector catalog is unavailable");
       }
       const kubernetesImage = customImage.trim();
+      const imagePullSecrets = parseImagePullSecrets(imagePullSecretInput);
       return api.kubernetes.previewCollectorInstall(cluster.id, {
         distribution_version_id: distribution.id,
         profile_ids: profileIds,
         route_kind: "direct_argus",
+        transport: "direct",
         ...(kubernetesImage ? { kubernetes_image: kubernetesImage } : {}),
+        ...(imagePullSecrets.length
+          ? { image_pull_secrets: imagePullSecrets }
+          : {}),
       });
     },
     onSuccess: setPendingAction,
@@ -190,8 +202,15 @@ export function CollectorWizard({
         item.artifacts.some((artifact) => artifact.platform === "linux_arm64"),
     )?.kubernetes_image ?? "";
   const trimmedImage = customImage.trim();
-  const imageInvalid =
-    trimmedImage !== "" && !/^\S+:\S+$/.test(trimmedImage);
+  const imageInvalid = trimmedImage !== "" && !/^\S+:\S+$/.test(trimmedImage);
+  const imagePullSecrets = parseImagePullSecrets(imagePullSecretInput);
+  const imagePullSecretsInvalid =
+    imagePullSecrets.length > 16 ||
+    new Set(imagePullSecrets).size !== imagePullSecrets.length ||
+    imagePullSecrets.some(
+      (name) =>
+        name.length > 253 || !/^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/.test(name),
+    );
   const effectiveImage = trimmedImage || defaultImage;
 
   const bindingColumns: Column<BindingRow>[] = [
@@ -281,7 +300,7 @@ export function CollectorWizard({
 
   return (
     <Wizard
-      canNext={!imageInvalid}
+      canNext={!imageInvalid && !imagePullSecretsInvalid}
       current={step}
       onBack={() => setStep((value) => Math.max(0, value - 1))}
       onNext={() => setStep((value) => value + 1)}
@@ -376,8 +395,29 @@ export function CollectorWizard({
             <Input
               className="argus-mono"
               onChange={(event) => setCustomImage(event.target.value)}
-              placeholder={defaultImage || "registry.example.com/argus-otelcol:0.1.0-m7"}
+              placeholder={
+                defaultImage || "registry.example.com/argus-otelcol:0.1.0-m7"
+              }
               value={customImage}
+            />
+          </Field>
+          <Field
+            label={t("kubernetes.collector.wizard.imagePullSecrets")}
+            hint={t("kubernetes.collector.wizard.imagePullSecretsDesc")}
+            requirement="optional"
+            error={
+              imagePullSecretsInvalid
+                ? t("kubernetes.collector.wizard.imagePullSecretsInvalid")
+                : undefined
+            }
+          >
+            <Input
+              className="argus-mono"
+              onChange={(event) => setImagePullSecretInput(event.target.value)}
+              placeholder={t(
+                "kubernetes.collector.wizard.imagePullSecretsPlaceholder",
+              )}
+              value={imagePullSecretInput}
             />
           </Field>
           <KeyValueGrid
@@ -414,4 +454,11 @@ export function CollectorWizard({
       )}
     </Wizard>
   );
+}
+
+function parseImagePullSecrets(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

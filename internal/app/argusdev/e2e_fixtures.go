@@ -15,7 +15,7 @@ import (
 )
 
 type fixtureFeatures struct {
-	SSH, Replay, WinRS, Artifact bool
+	SSH, Replay, WinRS, Artifact, Systemd, SystemdSidecar, P4Targets bool
 }
 
 func suiteFixtureFeatures(suite string) fixtureFeatures {
@@ -24,8 +24,10 @@ func suiteFixtureFeatures(suite string) fixtureFeatures {
 		switch dependency {
 		case "m3":
 			features.SSH = true
+			features.Artifact = true
 		case "m4":
 			features.Replay = true
+			features.Artifact = true
 		case "m6":
 			features.SSH = true
 			features.WinRS = true
@@ -33,6 +35,13 @@ func suiteFixtureFeatures(suite string) fixtureFeatures {
 			features.SSH = true
 			features.Replay = true
 			features.Artifact = true
+			features.Systemd = true
+			features.SystemdSidecar = true
+		case "p4":
+			features.SSH = true
+			features.Artifact = true
+			features.Systemd = true
+			features.P4Targets = true
 		}
 	}
 	return features
@@ -68,10 +77,7 @@ func (a *App) installE2EFixtures(ctx context.Context, env *E2EEnvironment) error
 	if err != nil {
 		return err
 	}
-	artifactTLS := fixtureCertificate{}
-	if env.CollectorArtifacts != nil {
-		artifactTLS = env.CollectorArtifacts.TLS
-	}
+	artifactTLS := env.ArtifactTLS
 	winrsTLS, err := generateFixtureCertificate("8.8.8.8", nil, []net.IP{net.ParseIP("8.8.8.8")})
 	if err != nil {
 		return err
@@ -81,9 +87,10 @@ func (a *App) installE2EFixtures(ctx context.Context, env *E2EEnvironment) error
 		"namespaces": map[string]any{"system": env.SystemNS, "sandbox": env.SandboxNS, "observability": env.ObservNS},
 		"images": map[string]any{
 			"pullPolicy": "Never", "sshTarget": images["ssh"], "replayModel": images["replay"],
-			"winrsTarget": images["winrs"], "artifactServer": images["artifact"],
+			"winrsTarget": images["winrs"], "artifactServer": images["artifact"], "systemdTarget": images["systemd"],
 		},
-		"features": map[string]any{"sshTarget": features.SSH, "replayModel": features.Replay, "winrsTarget": features.WinRS, "artifactServer": features.Artifact},
+		"features": map[string]any{"sshTarget": features.SSH, "replayModel": features.Replay, "winrsTarget": features.WinRS,
+			"artifactServer": features.Artifact, "p4Targets": features.P4Targets, "p4StaticTargets": false},
 		"tls": map[string]any{
 			"replay":   map[string]any{"ca": replayTLS.CA, "certificate": replayTLS.Certificate, "privateKey": replayTLS.PrivateKey},
 			"winrs":    map[string]any{"ca": winrsTLS.CA, "certificate": winrsTLS.Certificate, "privateKey": winrsTLS.PrivateKey},
@@ -160,7 +167,7 @@ func (a *App) patchDirectExecutorFixtures(ctx context.Context, env *E2EEnvironme
 			})
 		volumes = append(volumes, map[string]any{"name": "e2e-winrs-tls", "secret": map[string]any{"secretName": "argus-e2e-winrs-tls"}})
 	}
-	if features.Artifact {
+	if features.SystemdSidecar {
 		containers = append(containers, map[string]any{
 			"name": "argus-e2e-systemd-host", "image": env.State.FixtureImages["systemd"], "imagePullPolicy": "Never",
 			"securityContext": map[string]any{"privileged": true, "runAsNonRoot": false, "runAsUser": 0},

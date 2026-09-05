@@ -226,14 +226,29 @@ export interface components {
         };
         ActionOneTimeResult: {
             /** @constant */
-            schema_version: "argus.action_one_time_result/v1";
+            schema_version: "argus.action_one_time_result/v3";
             /** Format: uuid */
             execution_id: string;
             /** @enum {string} */
-            result_kind: "connector_enrollment";
-            enrollment: components["schemas"]["EnrollmentResult"];
+            result_kind: "host_install_command" | "host_uninstall_command" | "connector_install_command";
+            instruction_sets: components["schemas"]["InstallInstructionSet"][];
             /** Format: date-time */
             expires_at: string;
+        };
+        InstallInstructionSet: {
+            /** @enum {string} */
+            scope: "linux-system" | "linux-user" | "kubernetes";
+            /** @description 唯一面向用户展示的一键安装命令。Host 与手工 Connector 下载动态引导脚本；Kubernetes 使用等价的单命令临时脚本执行。 */
+            command: string;
+            /** @enum {string} */
+            download_tls_mode?: "strict" | "insecure-first-fetch";
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: int64 */
+            trust_bundle_epoch: number;
+            trust_bundle_sha256: string;
+            installer_sha256: string;
+            capability_warnings: string[];
         };
         RequestId: string;
         ApiError: {
@@ -264,7 +279,19 @@ export interface components {
             /** @enum {unknown} */
             status: "pending" | "running" | "succeeded" | "failed" | "result_unknown" | "cancelled";
             result_ref?: string;
-            readonly one_time_result_available?: boolean;
+            /** @enum {unknown} */
+            readonly one_time_result_state: "unavailable" | "available" | "consumed" | "expired";
+            resource_ref?: {
+                resource_type: string;
+                resource_id: string;
+                version: number;
+            };
+            operation_ref?: {
+                /** @constant */
+                kind: "connector_install";
+                /** Format: uuid */
+                id: string;
+            };
             error_code?: string;
             /** Format: date-time */
             created_at: string;
@@ -280,13 +307,6 @@ export interface components {
             has_more: boolean;
             partial: components["schemas"]["PartialMetadata"];
         };
-        EnrollmentResult: {
-            /** Format: uuid */
-            enrollment_id: string;
-            install_command: string;
-            /** Format: date-time */
-            expires_at: string;
-        };
         PublicJsonValue: unknown;
         PublicJsonObject: unknown;
         /** PendingActionPublic */
@@ -294,6 +314,7 @@ export interface components {
             /** @constant */
             schema_version: "argus.pending_action/v1";
             action_ref: string;
+            action_type: string;
             title: string;
             summary: string;
             /** @enum {unknown} */

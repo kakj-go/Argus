@@ -57,6 +57,63 @@ export const hostsZh = {
       viaBastion: "Argus → {{scope}} → {{address}}",
       connectorLocal: "Argus → {{scope}}（堡垒机本机）",
       direct: "Argus 直连执行器 → {{address}}",
+      selfEnrolled: "目标自助注册（只出不进）",
+    },
+    scenario: {
+      refCase1: "场景 ①",
+      refCase2: "场景 ②",
+      refCase5: "场景 ⑤",
+      refCase3: "场景 ③ / ⑤复杂",
+      refStandard: "标准模式",
+      titleOf: {
+        direct_both: "双向可达",
+        direct_in: "只进不出",
+        self_enrolled: "只出不进 · 自助安装",
+        bastion_member: "成员可达堡垒机",
+        bastion_tunnel_member: "成员连不上堡垒机端口",
+      },
+      summaryOf: {
+        direct_both: "最简单：填地址和账号密码即可，指标直推平台。",
+        direct_in:
+          "填写方式与①完全一致；差异在安装后的数据通路（经反向隧道回传）。",
+        self_enrolled: "不需要填地址账号——生成安装命令，拿到目标机器上执行。",
+        bastion_member: "选择所属堡垒机，填内网地址与账号密码。",
+        bastion_tunnel_member:
+          "填写方式与标准成员一致；差异由平台在堡垒机侧建立反向隧道。",
+      },
+      statusSupported: "已支持",
+      statusPlanned: "规划中",
+      directBoth: "双向可达",
+      directBothDesc:
+        "Argus 可以 SSH 到这台主机，这台主机也可以出站访问 Argus。",
+      directIn: "只进不出",
+      directInDesc:
+        "Argus 可以 SSH 到这台主机，但它被禁止出站访问 Argus（严格防火墙机房）。",
+      selfEnrolled: "只出不进 · 自助安装",
+      selfEnrolledDesc:
+        "Argus 无法直达这台主机（NAT / 办公网），但它可以访问 Argus；拿安装命令去机器上执行。",
+      bastionMember: "堡垒机成员 · 可达堡垒机",
+      bastionMemberDesc:
+        "堡垒机已接入 Argus，成员主机能把指标推到堡垒机（网络互通）。",
+      bastionTunnelMember: "堡垒机成员 · 连不上堡垒机端口",
+      bastionTunnelMemberDesc:
+        "堡垒机能 SSH 到成员（终端可用），但成员连堡垒机的 OTLP 端口不通。",
+    },
+    topology: {
+      host: "目标主机",
+      member: "成员主机",
+      bastion: "堡垒机",
+      argus: "Argus 平台",
+      sshOk: "Argus → SSH 可达",
+      pushOk: "主机可出站推送",
+      noEgress: "主机无出站",
+      tunnelBack: "遥测经反向隧道回传",
+      noDirect: "Argus 不可直达",
+      selfPush: "主机可出站 · 主动注册",
+      sshManage: "SSH 安装管理",
+      otlpPush: "OTLP 推送",
+      egress: "堡垒机出站",
+      tunnelOtlp: "OTLP 经反向隧道",
     },
     scope: {
       members: "成员 {{count}}",
@@ -66,10 +123,32 @@ export const hostsZh = {
       connectorOnline: "堡垒机在线",
       connectorOffline: "堡垒机离线",
       connectorUninstalling: "堡垒机卸载中",
+      controlTunnel: "控制隧道",
       connectorUninstalled: "堡垒机已卸载",
       waiting: "等待堡垒机注册",
       waitingDesc:
-        "在目标堡垒机上执行下面的安装命令完成注册；令牌一次性有效，过期可重新生成。",
+        "请根据下方服务端接入状态继续领取命令、查看安装进度或处理失败；页面不自行推断令牌和安装结果。",
+      onboarding: {
+        commandAvailable: "安装命令待领取",
+        commandAvailableDesc:
+          "安装命令已经生成，可领取现有的一次性结果。领取不会生成新令牌。",
+        commandConsumed: "安装命令已领取",
+        commandConsumedDesc:
+          "上一次安装命令已经领取。如需重新安装，请生成一条新的安装命令。",
+        commandExpired: "安装命令已过期",
+        commandExpiredDesc:
+          "上一次安装命令已经过期。如需继续，请生成一条新的安装命令。",
+        awaitingApproval: "等待审批",
+        awaitingApprovalDesc: "接入动作正在等待审批，通过后才能继续安装。",
+        installing: "Connector 安装中",
+        installingDesc:
+          "后台安装仍在运行，关闭弹窗不会取消。可随时重新打开查看阶段时间线。",
+        installFailed: "Connector 安装失败",
+        installFailedDesc:
+          "后台安装未完成。可查看稳定错误码并重试；连接测试失效时需返回重新测试。",
+        registered: "接入完成",
+        registeredDesc: "Connector 已注册并满足所选模式的上线条件。",
+      },
       installCommand: "安装命令",
       tokenExpires: "令牌有效期至 {{time}}",
       regenerateToken: "重新生成令牌",
@@ -80,10 +159,15 @@ export const hostsZh = {
     },
     standalone: {
       title: "独立主机",
-      description: "不经过堡垒机、由 Argus 直连执行器从其部署网络连接的主机。",
+      description:
+        "不经过堡垒机的主机；可由 Argus 直连，也可由主机自助注册并主动出站。",
       egressHint: "请确认目标网络已放行直连执行器出口地址：{{ip}}",
       egressNotConfigured: "尚未配置",
       directExecutor: "直连执行器",
+      selfEnrolled: "主机主动连接",
+      mixedModes: "直连 / 主动连接",
+      selfEnrollWaiting: "等待主机注册",
+      selfEnrolledHint: "主机主动访问 Argus，无需放行 Argus 到主机的入站连接。",
     },
     row: {
       name: "主机名",
@@ -117,7 +201,57 @@ export const hostsZh = {
     },
     bastionForm: {
       title: "添加堡垒机",
-      description: "创建待注册的堡垒机范围，并生成一次性注册令牌。",
+      description: "按网络环境选择接入方式，再完成注册或平台安装。",
+      prereqTitle: "网络前置条件",
+      dialogDesc:
+        "第一步只选择网络接入方式，第二步填写对应信息，第三步确认命令或平台安装预览。",
+      footerCommandHint:
+        "模式 A 的命令仅在确认结果中展示一次，关闭后需重新生成。",
+      footerInstallHint:
+        "模式 B/C 确认后转入持久化后台安装进度，关闭窗口不会取消任务。",
+      backgroundInstallHint: "安装在后台继续运行，关闭窗口不会取消任务。",
+      groupMode: "堡垒机本机接入方式",
+      standardTitle: "堡垒机可出站访问 Argus",
+      standardDesc:
+        "堡垒机可以主动访问 Argus（只需出站，不需要对公网开放任何入站端口）。这是绝大多数环境的标准形态。",
+      standardLink: "出站 mTLS 长连接 · 无需入站端口",
+      standardSummary: "生成一次性安装命令，在堡垒机上执行即完成注册。",
+      commandRef: "模式 A",
+      sshInTitle: "堡垒机无出站，仅可被 Argus SSH 进入",
+      sshInDesc:
+        "堡垒机被完全禁止出站，但 Argus 执行器网络可以 SSH 登录它。需要双层隧道承载控制与遥测。",
+      sshInRef: "场景 ④",
+      sshInStatus: "暂缓 · 罕见",
+      sshInNote:
+        "该拓扑需要把 Connector 控制通道也搬进隧道，成本远超收益；此类环境建议先申请放行出站 9443/4317。",
+      titleOf: {
+        command: "堡垒机可出站访问 Argus",
+        direct_install: "平台代装（双向可达）",
+        direct_install_tunnel: "平台代装 + 控制隧道（堡垒机无出站）",
+      },
+      summaryOf: {
+        command: "生成一次性安装命令，在堡垒机上执行即完成注册。",
+        direct_install:
+          "填写 SSH 地址与凭据，平台远程安装 Connector；装完自动注册上线。",
+        direct_install_tunnel:
+          "平台远程安装并维持控制通道反向隧道；堡垒机全程无需出站。",
+      },
+      directTitle: "平台代装（双向可达）",
+      directDesc:
+        "Argus 可以 SSH 到堡垒机，堡垒机也可以出站访问 Argus；由平台代装，无需手工执行命令。",
+      directRef: "模式 B",
+      tunnelTitle: "平台代装 + 控制隧道（堡垒机无出站）",
+      tunnelDesc:
+        "Argus 可以 SSH 到堡垒机，但堡垒机被禁止出站；平台代装并经反向隧道承载控制通道。",
+      tunnelRef: "模式 C",
+      installAndEnroll: "测试并安装",
+      testing: "测试中…",
+      testFailed: "连接测试未通过，请核对地址与凭据",
+      prereqTunnel:
+        "堡垒机无需任何出站放行；平台执行器将维持 SSH 反向隧道（127.0.0.1:8443/9443）承载注册与长连接，TLS 端到端不变。",
+      generateCommand: "生成一次性安装命令",
+      prereq:
+        "堡垒机需要能出站访问平台控制域名(9443)与遥测域名(4317/4318)；若出站只能放行控制域名，遥测可在安装收集器时选择代理到另一台已激活堡垒机。",
       editTitle: "编辑堡垒机 · {{name}}",
       editDescription:
         "编辑堡垒机范围信息；机器地址和 Connector 身份由实际注册结果维护。",
@@ -140,6 +274,25 @@ export const hostsZh = {
       commandUnavailable:
         "在线状态不能生成安装或替换命令。请先使用标题栏中的卸载操作，或者等待服务端将长期失联的堡垒机标记为离线。",
       commandGenerateFailed: "命令生成失败",
+      replacementTitle: "Connector 替换",
+      replacementCommandDescription:
+        "为模式 A 生成新的安装命令；新 Connector 注册时会隔离并撤销当前 Connector。",
+      replacementOperationDescription:
+        "平台将创建新的后台安装 operation，并在切换身份前隔离当前 Connector。",
+      replacementConnectionRequired:
+        "请填写新的 SSH 地址、端口、账号和凭据后再执行连接测试。",
+      replaceConnector: "替换 Connector",
+      replacementWarningTitle: "替换会执行 fencing",
+      replacementWarning:
+        "确认后当前 Connector 的凭据和控制隧道会被撤销，成员访问可能短暂中断。",
+      installCompleted: "堡垒机安装完成",
+      installCompletedDesc: "Connector 已上线，服务端已完成资源状态收敛。",
+      installProgress: "Connector 安装进度",
+      installProgressHint:
+        "进度由服务端 operation 持久化；关闭窗口后仍可从待注册卡片继续查看。",
+      controlTunnelStatus: "控制隧道状态",
+      retryInstall: "重试安装",
+      returnToTest: "返回重新测试",
     },
     bastionUninstall: {
       action: "卸载堡垒机",
@@ -186,8 +339,8 @@ export const hostsZh = {
       portInvalid: "端口必须为 1-65535 之间的整数",
       scopeRequired: "请选择 Bastion Scope",
       previewFailed: "主机预览创建失败，请检查标记字段后重试",
-      step1: "连接方式",
-      step1Desc: "经堡垒机或直连",
+      step1: "网络环境",
+      step1Desc: "按示例图选择场景",
       step2: "主机信息",
       step2Desc: "地址、协议与凭证",
       step3: "连接测试",
@@ -216,14 +369,97 @@ export const hostsZh = {
       environment: "环境",
       labels: "标签",
       labelsHint: "每行一个，格式 key=value",
+      scenarioHint:
+        "先选择这台主机所在的网络环境（对照示例图判断）；提交前平台会实际测试连接，选错会在测试阶段被纠正。",
+      dialogDesc:
+        "第一步选择网络环境示例，第二步按对应方式填写；提交前平台会实际测试连接并生成预览。",
+      selectedMode: "已选择模式",
+      changeMode: "更改",
+      modeSwitchTitle: "更改接入模式？",
+      modeSwitchWarning: "当前模式的专属字段将被清除，名称、环境和标签会保留。",
+      back: "上一步",
+      next: "下一步",
+      scope: "所属堡垒机",
+      legendOk: "直连可达",
+      legendBad: "网络阻断",
+      legendTun: "经 SSH 隧道承载",
+      groupStandalone: "独立主机（不经过堡垒机）",
+      groupMember: "堡垒机成员（内网主机，经堡垒机接入）",
+      footerHint: "提交前仍以服务端连接测试为准，选错场景会在测试阶段被纠正。",
+      footerSelfHint: "命令仅在确认结果中一次性展示，关闭后需重新生成。",
+      architecture: "CPU 架构",
+      selfEnrolledPrereqTitle: "前置条件",
+      selfEnrolledPrereq:
+        "目标主机需要能出站访问平台下载域名（采集器安装包）与遥测域名（推送指标）。创建后将生成一次性安装命令，请在目标机器上执行。",
+      selfEnrolledNextTitle: "无需连接测试",
+      selfEnrolledNext:
+        "该主机由目标侧主动注册，不存在入站连接路径；点击「生成预览」直接创建，确认后会显示一次性安装命令。",
+      commandTitle: "安装命令已生成",
+      commandOnce:
+        "命令仅本次展示，关闭后需在主机详情重新生成；同一命令只能在一台机器上使用一次。",
+      commandExpires: "有效期至 {{time}}",
+      commandSaved: "我已保存，关闭",
+      installInstructions: {
+        downloadRiskTitle: "一行命令包含令牌",
+        downloadRisk:
+          "该命令通过可信证书链下载引导脚本，但命令本身包含一次性令牌；请勿保存到共享 Shell 历史、终端录屏或流水线日志。",
+        insecureFirstFetchTitle: "自签名证书快速接入",
+        insecureFirstFetch:
+          "该命令包含一次性令牌，并且仅在下载首个引导脚本时跳过服务端证书校验。引导脚本会使用内嵌 CA 和 SHA-256 校验后续下载；请勿保存到共享 Shell 历史。",
+        bundle: "Trust Bundle epoch {{epoch}} · SHA-256 {{sha}}",
+        installer: "安装器 SHA-256 {{sha}}",
+        capabilityWarning: "用户模式能力限制",
+        missing: "安装指令不可用",
+        missingDescription:
+          "服务端没有返回可执行的结构化安装指令，请重新生成。",
+        scope: {
+          "linux-system": "Linux 系统级",
+          "linux-user": "Linux 用户级",
+          kubernetes: "Kubernetes",
+        },
+      },
       egressNote: "请确认目标网络已放行直连执行器出口地址：{{ip}}",
       egressNotConfigured: "尚未配置",
       runTest: "开始测试",
       testing: "测试中…",
       testPassed: "测试通过，可生成预览",
       testFailed: "测试未通过",
+      connectionTestSummary: "连接测试结果",
+      networkPrerequisite: "网络前置条件",
       needTest: "请先完成连接测试",
+      scenarioFallback:
+        "测试未通过时请核对场景选择：若目标是「只出不进」的自助注册主机，请返回第一步改选对应场景；若目标在内网，请改选堡垒机成员场景。",
       preview: "生成预览",
+      testAndPreview: "测试连接并预览",
+      generateCommand: "生成一次性安装命令",
+      completed: "主机创建完成",
+      completedDesc: "连接测试和资源创建均已完成。",
+      modeGrid: {
+        mode: "接入方式",
+        modeDirect: "direct_ssh（Argus 直连执行器）",
+        modeBastion: "via_bastion（经堡垒机 Connector）",
+        modeSelf: "self_enrolled（自助注册）",
+        install: "安装与配置",
+        installExecutor: "Direct Executor 经 SSH 安装/升级/修复",
+        installConnector: "堡垒机 Connector 经 SSH 安装/升级/修复",
+        installSelf: "安装时冻结配置，变更需重新生成命令",
+        telemetry: "指标回传",
+        telemetryDirect: "直推 Argus（direct_argus）",
+        telemetryExecutorTunnel: "经执行器反向隧道回传",
+        telemetryGateway: "成员 → 堡垒机网关 → Argus",
+        telemetryBastionTunnel: "堡垒机反向隧道 → 网关 → Argus",
+        terminal: "远程终端",
+        terminalYes: "支持",
+        terminalNo: "第一版不支持",
+        liveness: "在线检测",
+        livenessProbe: "周期探活 + 最后成功发送",
+        livenessSeen: "最后成功发送时间",
+        egress: "网络前提",
+        egressBoth: "双向可达",
+        egressInOnly: "仅 Argus → 主机可达",
+        egressSelf: "主机出站访问平台两个域名",
+        egressBastion: "堡垒机可出站",
+      },
     },
     preview: {
       createTitle: "新增主机 {{name}}",
@@ -235,6 +471,69 @@ export const hostsZh = {
         "操作已按审批策略进入双人审批，批准后才会真正执行；可稍后在「审批中心」查看进度，本列表将在批准后自动更新。",
       close: "关闭",
       submitted: "已确认，执行任务已创建",
+      executionFailed: "执行失败，请检查错误原因后重试",
+      executionTimeout: "等待执行结果超时，请稍后刷新页面查看最终状态",
+    },
+    bastionGrid: {
+      access: "接入方式",
+      accessValue: "一次性安装命令注册 Connector",
+      prereq: "前置条件",
+      prereqValue: "出站访问 gateway:9443 与 telemetry:4317/4318",
+      members: "管理成员",
+      membersValue: "Connector 经 SSH/WinRM 管理内网成员",
+      telemetry: "遥测角色",
+      telemetryValue: "可启用 Edge Gateway：接收成员 OTLP 并统一出站",
+      terminal: "远程终端",
+      terminalValue: "支持 · 堡垒机本机 PTY + 成员会话流",
+      egress: "网络前提",
+      egressValue: "堡垒机可出站",
+    },
+    selfEnrollPanel: {
+      title: "自助安装命令",
+      desc: "该主机无入站路径，需在目标机器执行一次性命令完成安装或卸载；每次生成的命令只能使用一次。",
+      install: "生成安装命令",
+      uninstall: "生成卸载命令",
+      failed: "生成命令失败，请稍后重试",
+      dismiss: "关闭",
+      uninstallResult: "卸载命令已生成",
+    },
+    pendingActions: {
+      failed: "操作失败",
+      delete: "删除",
+      claimCommand: "领取安装命令",
+      rotateCommand: "重新生成安装命令",
+      viewApproval: "查看审批",
+      viewProgress: "查看安装进度",
+      viewFailure: "查看失败详情",
+      resultMissing: "服务端未返回可领取结果，请刷新后重试。",
+      operationMissing: "服务端未返回安装 operation 引用。",
+      operationLoadFailed: "安装进度加载失败，请稍后重试。",
+    },
+    bastionOperation: {
+      queued: "等待执行",
+      ssh_connecting: "连接 SSH",
+      artifact_verifying: "校验安装产物",
+      artifact_transferring: "传输安装产物",
+      service_installing: "安装并收敛服务",
+      control_tunnel_establishing: "建立控制隧道",
+      enrolling: "注册 Connector",
+      waiting_connector_online: "等待 Connector 上线",
+      completed: "安装完成",
+    },
+    bastionOperationStatus: {
+      queued: "等待执行",
+      running: "执行中",
+      succeeded: "执行成功",
+      failed: "执行失败",
+      result_unknown: "结果待对账",
+      expired: "已过期",
+      cancelled: "已取消",
+    },
+    bastionOperationEventStatus: {
+      started: "已开始",
+      succeeded: "已成功",
+      failed: "已失败",
+      retrying: "正在重试",
     },
     detail: {
       backToList: "主机",
@@ -285,6 +584,7 @@ export const hostsZh = {
       start: "建立会话",
       starting: "建立中…",
       end: "结束会话",
+      closeSession: "关闭会话",
       activeSessions: "活动会话",
       historySessions: "历史会话",
       noActiveSessions: "当前没有活动会话",
@@ -322,6 +622,10 @@ export const hostsZh = {
       dockPositionBottom: "停靠到底部",
       dockPositionLeft: "停靠到左侧",
       dockPositionRight: "停靠到右侧",
+      positionBottom: "底部",
+      positionLeft: "左侧",
+      positionRight: "右侧",
+      positionWindow: "独立窗口",
       resetSize: "拖拽调整尺寸，双击恢复默认",
       connectionState: {
         connecting: "连接中",
@@ -355,6 +659,12 @@ export const hostsZh = {
         profileLogs: "host-basic + 系统日志",
         profileFull: "host-full（指标 + 日志 + 进程）",
         routeDirect: "直推 Argus",
+        transportTunnel: "经反向隧道回传",
+        transportTunnelDesc:
+          "目标无法出站直推(或连不上堡垒机 OTLP 端口)时,由平台侧建立 SSH 隧道承载回传",
+        loopbackPort: "回环端口",
+        loopbackPortInvalid: "回环端口必须是 1 到 65534 之间的整数",
+        transportDirectBack: "改回直连推送",
         routeDirectDesc: "由本机直接上报 Argus 摄入入口",
         routeGateway: "经所属堡垒机 Gateway",
         routeGatewayDesc: "上报到 {{scope}} 的 Edge Gateway",
@@ -372,6 +682,18 @@ export const hostsZh = {
         revisionValue: "R{{effective}} / 目标 R{{desired}}",
         route: "数据推送路由",
         routeDirect: "直推 Argus",
+        transport: {
+          executor_tunnel: "执行器隧道",
+          bastion_tunnel: "堡垒机隧道",
+        },
+        tunnelStatus: {
+          desired: "隧道待建立",
+          establishing: "隧道建立中",
+          established: "隧道已建立",
+          degraded: "隧道降级",
+          down: "隧道断开",
+          removed: "隧道已移除",
+        },
         routeViaGateway: "经 {{route}}",
         capabilities: "采集能力",
         capabilitiesDesc:
@@ -477,6 +799,66 @@ export const hostsEn = {
       viaBastion: "Argus → {{scope}} → {{address}}",
       connectorLocal: "Argus → {{scope}} (Bastion host)",
       direct: "Argus Direct Executor → {{address}}",
+      selfEnrolled: "Self-enrolled (outbound only)",
+    },
+    scenario: {
+      refCase1: "Case ①",
+      refCase2: "Case ②",
+      refCase5: "Case ⑤",
+      refCase3: "Case ③ / ⑤-complex",
+      refStandard: "Standard",
+      titleOf: {
+        direct_both: "Bidirectional",
+        direct_in: "Inbound only",
+        self_enrolled: "Outbound only · self-install",
+        bastion_member: "Member reaches bastion",
+        bastion_tunnel_member: "Member cannot reach bastion ports",
+      },
+      summaryOf: {
+        direct_both:
+          "Simplest: fill address and credentials; telemetry pushes straight to the platform.",
+        direct_in:
+          "Same form as ①; the difference is the data path after install (via reverse tunnel).",
+        self_enrolled:
+          "No address or credentials — generate the install command and run it on the machine.",
+        bastion_member:
+          "Pick the bastion scope, then the intranet address and credentials.",
+        bastion_tunnel_member:
+          "Same form as the standard member; the platform adds a reverse tunnel on the bastion side.",
+      },
+      statusSupported: "Supported",
+      statusPlanned: "Planned",
+      directBoth: "Bidirectional",
+      directBothDesc:
+        "Argus can SSH to this host and the host can reach Argus.",
+      directIn: "Inbound only",
+      directInDesc:
+        "Argus can SSH to this host, but its egress to Argus is blocked.",
+      selfEnrolled: "Outbound only · self-install",
+      selfEnrolledDesc:
+        "Argus cannot reach this host (NAT/office network) but it can reach Argus; run the install command on the machine.",
+      bastionMember: "Bastion member · reachable",
+      bastionMemberDesc:
+        "The bastion is connected and the member can push telemetry to it.",
+      bastionTunnelMember: "Bastion member · ports blocked",
+      bastionTunnelMemberDesc:
+        "The bastion can SSH to the member, but the member cannot reach the bastion OTLP port.",
+    },
+    topology: {
+      host: "Target host",
+      member: "Member host",
+      bastion: "Bastion",
+      argus: "Argus platform",
+      sshOk: "Argus → SSH reachable",
+      pushOk: "Host can push out",
+      noEgress: "No egress",
+      tunnelBack: "Telemetry via reverse tunnel",
+      noDirect: "Argus unreachable",
+      selfPush: "Outbound · self-register",
+      sshManage: "SSH install/manage",
+      otlpPush: "OTLP push",
+      egress: "Bastion egress",
+      tunnelOtlp: "OTLP via reverse tunnel",
     },
     scope: {
       members: "{{count}} members",
@@ -486,10 +868,34 @@ export const hostsEn = {
       connectorOnline: "Bastion online",
       connectorOffline: "Bastion offline",
       connectorUninstalling: "Bastion uninstalling",
+      controlTunnel: "Control tunnel",
       connectorUninstalled: "Bastion uninstalled",
       waiting: "Waiting for Bastion registration",
       waitingDesc:
-        "Run the install command below on the bastion machine to register. The token is single-use; regenerate it once expired.",
+        "Continue from the server-projected state below to claim a command, inspect installation progress, or resolve a failure. The page does not infer token or operation state.",
+      onboarding: {
+        commandAvailable: "Install command ready",
+        commandAvailableDesc:
+          "The existing one-time result is ready to claim. Claiming it does not mint another token.",
+        commandConsumed: "Install command claimed",
+        commandConsumedDesc:
+          "The previous command was claimed. Generate a new install command only when another installation is needed.",
+        commandExpired: "Install command expired",
+        commandExpiredDesc:
+          "The previous command expired. Generate a new install command to continue.",
+        awaitingApproval: "Awaiting approval",
+        awaitingApprovalDesc:
+          "The onboarding action must be approved before installation can continue.",
+        installing: "Installing Connector",
+        installingDesc:
+          "Installation continues in the background when this dialog closes. Reopen it to inspect the stage timeline.",
+        installFailed: "Connector installation failed",
+        installFailedDesc:
+          "Installation did not complete. Inspect the stable error code and retry, or rerun the connection test when required.",
+        registered: "Onboarding completed",
+        registeredDesc:
+          "The Connector is enrolled and satisfies the selected mode's online conditions.",
+      },
       installCommand: "Install command",
       tokenExpires: "Token valid until {{time}}",
       regenerateToken: "Regenerate token",
@@ -501,11 +907,16 @@ export const hostsEn = {
     standalone: {
       title: "Standalone Hosts",
       description:
-        "Hosts reached without a bastion by the Argus Direct Executor from its deployment network.",
+        "Hosts outside a Bastion Scope, reached either by Argus or through outbound self-enrollment.",
       egressHint:
         "Allow the Direct Executor egress address on the target network: {{ip}}",
       egressNotConfigured: "not configured",
       directExecutor: "Direct Executor",
+      selfEnrolled: "Host-initiated",
+      mixedModes: "Direct / host-initiated",
+      selfEnrollWaiting: "Waiting for host enrollment",
+      selfEnrolledHint:
+        "The host connects outbound to Argus; no inbound path from Argus to the host is required.",
     },
     row: {
       name: "Name",
@@ -540,7 +951,60 @@ export const hostsEn = {
     bastionForm: {
       title: "Add Bastion",
       description:
-        "Create a pending Bastion Scope with a one-time Connector enrollment token.",
+        "Choose an access mode for the network, then complete enrollment or platform installation.",
+      prereqTitle: "Network prerequisites",
+      dialogDesc:
+        "Choose only the network access mode first, enter its details second, then confirm a command or platform installation preview.",
+      footerCommandHint:
+        "The Mode A command appears once in the confirmation result; regenerate it if lost.",
+      footerInstallHint:
+        "Mode B/C continues as a durable background installation; closing the dialog does not cancel it.",
+      backgroundInstallHint:
+        "Installation continues in the background; closing this dialog does not cancel it.",
+      groupMode: "Bastion host access mode",
+      standardTitle: "Bastion can reach Argus outbound",
+      standardDesc:
+        "The bastion reaches Argus outbound only (no inbound ports needed). The standard shape for almost every environment.",
+      standardLink: "Outbound mTLS long connection",
+      standardSummary:
+        "Generate the one-time install command and run it on the bastion.",
+      commandRef: "Mode A",
+      sshInTitle: "Bastion has no egress, SSH-in only",
+      sshInDesc:
+        "Fully blocked egress while Argus can SSH in; requires stacked tunnels for control and telemetry.",
+      sshInRef: "Case ④",
+      sshInStatus: "Deferred · rare",
+      sshInNote:
+        "Moving the Connector control channel into tunnels costs far more than it returns; request outbound 9443/4317 instead.",
+      titleOf: {
+        command: "Bastion can reach Argus outbound",
+        direct_install: "Platform install (bidirectional)",
+        direct_install_tunnel: "Platform install + control tunnel (no egress)",
+      },
+      summaryOf: {
+        command:
+          "Generate the one-time install command and run it on the bastion.",
+        direct_install:
+          "Provide SSH address and credentials; the platform installs the Connector remotely and it registers automatically.",
+        direct_install_tunnel:
+          "The platform installs remotely and maintains a reverse control tunnel; the bastion needs no egress at all.",
+      },
+      directTitle: "Platform install (bidirectional)",
+      directDesc:
+        "Argus can SSH to the bastion and the bastion reaches Argus outbound; installed by the platform, no manual command.",
+      directRef: "Mode B",
+      tunnelTitle: "Platform install + control tunnel (no egress)",
+      tunnelDesc:
+        "Argus can SSH to the bastion but its egress is blocked; the platform installs and carries the control channel over a reverse tunnel.",
+      tunnelRef: "Mode C",
+      installAndEnroll: "Test & install",
+      testing: "Testing…",
+      testFailed: "Connection test failed; check the address and credentials",
+      prereqTunnel:
+        "The bastion needs no outbound access; the platform executor maintains an SSH reverse tunnel (127.0.0.1:8443/9443) for enrollment and the long connection, with end-to-end TLS.",
+      generateCommand: "Generate one-time install command",
+      prereq:
+        "The bastion needs outbound access to the platform control domain (9443) and the telemetry domain (4317/4318). If only the control domain is allowed, telemetry can proxy through another activated bastion when installing the collector.",
       editTitle: "Edit Bastion · {{name}}",
       editDescription:
         "Edit Bastion Scope metadata. The machine address and Connector identity come from registration.",
@@ -563,6 +1027,26 @@ export const hostsEn = {
       commandUnavailable:
         "An install or replacement command cannot be generated while the Bastion is online. Uninstall it from the header first, or wait until the service marks a long-disconnected Bastion offline.",
       commandGenerateFailed: "Command generation failed",
+      replacementTitle: "Connector replacement",
+      replacementCommandDescription:
+        "Generate a new Mode A install command. Registering the new Connector fences and revokes the current one.",
+      replacementOperationDescription:
+        "The platform starts a new background installation operation and fences the current Connector before identity cutover.",
+      replacementConnectionRequired:
+        "Enter the new SSH address, port, account, and credential before running the connection test.",
+      replaceConnector: "Replace Connector",
+      replacementWarningTitle: "Replacement performs fencing",
+      replacementWarning:
+        "Confirmation revokes the current Connector credentials and control tunnels. Member access may be interrupted briefly.",
+      installCompleted: "Bastion installation completed",
+      installCompletedDesc:
+        "The Connector is online and the server has converged the resource state.",
+      installProgress: "Connector installation progress",
+      installProgressHint:
+        "The server persists this operation. Close the dialog and reopen it from the pending card at any time.",
+      controlTunnelStatus: "Control tunnel status",
+      retryInstall: "Retry installation",
+      returnToTest: "Return to connection test",
     },
     bastionUninstall: {
       action: "Uninstall Bastion",
@@ -611,8 +1095,8 @@ export const hostsEn = {
       scopeRequired: "Select a Bastion Scope",
       previewFailed:
         "The host preview failed. Check the indicated fields and try again.",
-      step1: "Connection",
-      step1Desc: "Via bastion or direct",
+      step1: "Network scenario",
+      step1Desc: "Pick the matching example",
       step2: "Host info",
       step2Desc: "Address, protocol, credential",
       step3: "Connection test",
@@ -641,6 +1125,59 @@ export const hostsEn = {
       environment: "Environment",
       labels: "Labels",
       labelsHint: "One per line, key=value",
+      scenarioHint:
+        "Pick this host's network scenario first; the platform still verifies with a real connection test before commit.",
+      dialogDesc:
+        "Pick the network scenario first, then fill in the matching access form; the platform still runs a real connection test before the preview.",
+      selectedMode: "Selected mode",
+      changeMode: "Change",
+      modeSwitchTitle: "Change access mode?",
+      modeSwitchWarning:
+        "Fields specific to the current mode will be cleared. Name, environment, and labels are preserved.",
+      back: "Back",
+      next: "Next",
+      scope: "Bastion scope",
+      legendOk: "Direct reachable",
+      legendBad: "Blocked",
+      legendTun: "Via SSH tunnel",
+      groupStandalone: "Standalone hosts (no bastion)",
+      groupMember: "Bastion members (intranet hosts via bastion)",
+      footerHint:
+        "The server-side connection test remains the source of truth; a wrong pick is corrected at test time.",
+      footerSelfHint:
+        "The command is shown once in the confirmation result; regenerate if lost.",
+      architecture: "CPU architecture",
+      selfEnrolledPrereqTitle: "Prerequisites",
+      selfEnrolledPrereq:
+        "The target host must reach the artifact domain (collector download) and the telemetry domain (push). After creation you get a one-time install command to run on the machine.",
+      selfEnrolledNextTitle: "No connection test",
+      selfEnrolledNext:
+        "This host registers itself from the target side; there is no inbound path. Generate the preview directly - the one-time install command appears after confirmation.",
+      commandTitle: "Install command generated",
+      commandOnce:
+        "Shown once. Regenerate from the host detail page if lost; a command works on a single machine once.",
+      commandExpires: "Valid until {{time}}",
+      commandSaved: "Saved, close",
+      installInstructions: {
+        downloadRiskTitle: "The one-line command contains a token",
+        downloadRisk:
+          "This command downloads the bootstrap through a trusted certificate chain, but contains a one-time token. Do not retain it in shared shell history, terminal recordings, or pipeline logs.",
+        insecureFirstFetchTitle:
+          "Fast onboarding with a self-signed certificate",
+        insecureFirstFetch:
+          "This command contains a one-time token and skips server-certificate verification only while downloading the initial bootstrap script. The bootstrap uses the embedded CA and SHA-256 verification for subsequent downloads. Do not retain it in shared shell history.",
+        bundle: "Trust Bundle epoch {{epoch}} · SHA-256 {{sha}}",
+        installer: "Installer SHA-256 {{sha}}",
+        capabilityWarning: "User-mode capability limit",
+        missing: "Install instructions unavailable",
+        missingDescription:
+          "The server did not return an executable structured instruction. Generate a new one.",
+        scope: {
+          "linux-system": "Linux system",
+          "linux-user": "Linux user",
+          kubernetes: "Kubernetes",
+        },
+      },
       egressNote:
         "Allow the Direct Executor egress address on the target network: {{ip}}",
       egressNotConfigured: "not configured",
@@ -648,8 +1185,43 @@ export const hostsEn = {
       testing: "Testing…",
       testPassed: "Test passed; ready to preview",
       testFailed: "Test failed",
+      connectionTestSummary: "Connection test result",
+      networkPrerequisite: "Network prerequisite",
       needTest: "Run the connection test first",
+      scenarioFallback:
+        "If the test fails, re-check the scenario: pick the outbound-only self-enroll card for NAT/office hosts, or the bastion member scenario for intranet targets.",
       preview: "Generate preview",
+      testAndPreview: "Test connection & preview",
+      generateCommand: "Generate one-time install command",
+      completed: "Host created",
+      completedDesc:
+        "The connection test and resource creation both completed.",
+      modeGrid: {
+        mode: "Access mode",
+        modeDirect: "direct_ssh (Argus Direct Executor)",
+        modeBastion: "via_bastion (via bastion Connector)",
+        modeSelf: "self_enrolled (self-register)",
+        install: "Install & config",
+        installExecutor: "Direct Executor installs/upgrades via SSH",
+        installConnector: "Bastion Connector installs/upgrades via SSH",
+        installSelf: "Config frozen at install; regenerate command to change",
+        telemetry: "Telemetry path",
+        telemetryDirect: "Direct push to Argus (direct_argus)",
+        telemetryExecutorTunnel: "Via executor reverse tunnel",
+        telemetryGateway: "Member -> bastion gateway -> Argus",
+        telemetryBastionTunnel: "Bastion reverse tunnel -> gateway -> Argus",
+        terminal: "Remote terminal",
+        terminalYes: "Supported",
+        terminalNo: "Not in v1",
+        liveness: "Liveness",
+        livenessProbe: "Periodic probe + last send",
+        livenessSeen: "Last successful send",
+        egress: "Network prerequisite",
+        egressBoth: "Bidirectional",
+        egressInOnly: "Argus -> host only",
+        egressSelf: "Host reaches two platform domains",
+        egressBastion: "Bastion has egress",
+      },
     },
     preview: {
       createTitle: "Create host {{name}}",
@@ -661,6 +1233,74 @@ export const hostsEn = {
         "Submitted for dual approval per policy; it executes only after approval. Track it in the Approvals center — this list refreshes once approved.",
       close: "Close",
       submitted: "Confirmed; execution task created",
+      executionFailed: "Execution failed. Check the reason and try again.",
+      executionTimeout:
+        "Timed out waiting for the result. Refresh later to view the final status.",
+    },
+    bastionGrid: {
+      access: "Access",
+      accessValue: "Register a Connector via one-time install command",
+      prereq: "Prerequisite",
+      prereqValue: "Outbound to gateway:9443 and telemetry:4317/4318",
+      members: "Manage members",
+      membersValue: "Connector manages intranet members via SSH/WinRM",
+      telemetry: "Telemetry role",
+      telemetryValue:
+        "Optional Edge Gateway: receives member OTLP, pushes outbound",
+      terminal: "Remote terminal",
+      terminalValue: "Supported · local PTY + member session streams",
+      egress: "Network prerequisite",
+      egressValue: "Bastion has outbound access",
+    },
+    selfEnrollPanel: {
+      title: "Self-enroll install command",
+      desc: "This host has no inbound path; run the one-time command on the target machine to install or uninstall. Each generated command works once.",
+      install: "Generate install command",
+      uninstall: "Generate uninstall command",
+      failed: "Failed to generate the command; try again later",
+      dismiss: "Close",
+      uninstallResult: "Uninstall command generated",
+    },
+    pendingActions: {
+      failed: "Operation failed",
+      delete: "Delete",
+      claimCommand: "Claim install command",
+      rotateCommand: "Regenerate install command",
+      viewApproval: "View approval",
+      viewProgress: "View installation progress",
+      viewFailure: "View failure details",
+      resultMissing:
+        "The server did not provide a claimable result. Refresh and try again.",
+      operationMissing:
+        "The server did not provide an installation operation reference.",
+      operationLoadFailed:
+        "Installation progress could not be loaded. Try again later.",
+    },
+    bastionOperation: {
+      queued: "Queued",
+      ssh_connecting: "Connecting over SSH",
+      artifact_verifying: "Verifying artifact",
+      artifact_transferring: "Transferring artifact",
+      service_installing: "Installing and converging service",
+      control_tunnel_establishing: "Establishing control tunnel",
+      enrolling: "Enrolling Connector",
+      waiting_connector_online: "Waiting for Connector online",
+      completed: "Installation completed",
+    },
+    bastionOperationStatus: {
+      queued: "Queued",
+      running: "Running",
+      succeeded: "Succeeded",
+      failed: "Failed",
+      result_unknown: "Result reconciliation required",
+      expired: "Expired",
+      cancelled: "Cancelled",
+    },
+    bastionOperationEventStatus: {
+      started: "Started",
+      succeeded: "Succeeded",
+      failed: "Failed",
+      retrying: "Retrying",
     },
     detail: {
       backToList: "Hosts",
@@ -711,6 +1351,7 @@ export const hostsEn = {
       start: "Open session",
       starting: "Opening…",
       end: "End session",
+      closeSession: "Close session",
       activeSessions: "Active sessions",
       historySessions: "Session history",
       noActiveSessions: "No active sessions",
@@ -753,6 +1394,10 @@ export const hostsEn = {
       dockPositionBottom: "Dock to bottom",
       dockPositionLeft: "Dock to left",
       dockPositionRight: "Dock to right",
+      positionBottom: "Bottom",
+      positionLeft: "Left",
+      positionRight: "Right",
+      positionWindow: "Separate window",
       resetSize: "Drag to resize, double-click to reset",
       connectionState: {
         connecting: "Connecting",
@@ -788,6 +1433,13 @@ export const hostsEn = {
         profileLogs: "host-basic + system logs",
         profileFull: "host-full (metrics + logs + processes)",
         routeDirect: "Direct to Argus",
+        transportTunnel: "Via reverse tunnel",
+        transportTunnelDesc:
+          "When the target cannot push out (or cannot reach the bastion OTLP port), relay telemetry over an SSH tunnel established by the platform side",
+        loopbackPort: "Loopback port",
+        loopbackPortInvalid:
+          "Loopback port must be an integer between 1 and 65534",
+        transportDirectBack: "Back to direct push",
         routeDirectDesc: "Push from this host to the Argus ingest endpoint",
         routeGateway: "Via bastion Gateway",
         routeGatewayDesc: "Push through the Edge Gateway of {{scope}}",
@@ -805,6 +1457,18 @@ export const hostsEn = {
         revisionValue: "R{{effective}} / target R{{desired}}",
         route: "Push route",
         routeDirect: "Direct to Argus",
+        transport: {
+          executor_tunnel: "Executor tunnel",
+          bastion_tunnel: "Bastion tunnel",
+        },
+        tunnelStatus: {
+          desired: "Tunnel desired",
+          establishing: "Tunnel establishing",
+          established: "Tunnel established",
+          degraded: "Tunnel degraded",
+          down: "Tunnel down",
+          removed: "Tunnel removed",
+        },
         routeViaGateway: "Via {{route}}",
         capabilities: "Capabilities",
         capabilitiesDesc:

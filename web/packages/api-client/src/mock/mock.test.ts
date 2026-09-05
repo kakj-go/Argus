@@ -248,7 +248,11 @@ describe("hosts CRUD", () => {
     expect(action.risk).toBe("write");
 
     const result = await client.approvals.confirm(action.action_ref);
-    expect(result.execution).toBeUndefined();
+    expect(result.execution).toMatchObject({
+      action_ref: action.action_ref,
+      status: "succeeded",
+      one_time_result_state: "unavailable",
+    });
     expect(result.pending_action.status).toBe("succeeded");
 
     const hosts = await client.hosts.list({ query: "mock-host-01" });
@@ -301,6 +305,7 @@ describe("hosts CRUD", () => {
         distribution_version_id: "dist-linux-arm64-v1",
         profile_ids: ["profile-host-basic"],
         route_kind: "bastion_gateway",
+        transport: "direct",
         gateway_collector_id: "col-db-01",
       },
     );
@@ -315,10 +320,21 @@ describe("hosts CRUD", () => {
       const settled = await client.hosts.getCollector("host-cache-bj-01");
       return settled?.status === "converged";
     });
+    expect(
+      (await client.hosts.getCollector("host-cache-bj-01"))?.route,
+    ).toMatchObject({
+      kind: "bastion_gateway",
+      transport: "direct",
+      gateway_collector_id: "col-db-01",
+    });
 
     const route = await client.approvals.preview({
       tool: "telemetry.collector.route",
-      input_data: { hostId: "host-cache-bj-01", route: "direct_argus" },
+      input_data: {
+        hostId: "host-cache-bj-01",
+        route_kind: "direct_argus",
+        transport: "direct",
+      },
     });
     const routeExecution = await client.approvals.confirm(route.action_ref);
     await waitFor(async () => {
@@ -808,7 +824,11 @@ describe("connector generated port", () => {
 
     const result = await client.approvals.confirm(action.action_ref);
     expect(result.pending_action.status).toBe("succeeded");
-    expect(result.execution).toBeUndefined();
+    expect(result.execution).toMatchObject({
+      action_ref: action.action_ref,
+      status: "succeeded",
+      one_time_result_state: "unavailable",
+    });
     const updated = await client.connectors.getBastionScope(before.id);
     expect(updated.name).toBe("上海核心堡垒机");
     expect(updated.resource_version).toBe(before.resource_version + 1);

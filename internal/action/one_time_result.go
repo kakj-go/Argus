@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kakj-go/Argus/internal/audit"
+	"github.com/kakj-go/Argus/internal/installinstruction"
 	"github.com/kakj-go/Argus/internal/resource"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
@@ -27,21 +28,28 @@ var (
 	ErrOneTimeResultConsumed     = errors.New("one-time action result already consumed")
 )
 
-const oneTimeResultKindEnrollment = "connector_enrollment"
+const (
+	oneTimeResultKindHostInstall      = "host_install_command"
+	oneTimeResultKindHostUninstall    = "host_uninstall_command"
+	oneTimeResultKindConnectorInstall = "connector_install_command"
+)
 
 type OneTimeResult struct {
-	ExecutionID uuid.UUID
-	ResultKind  string
-	Enrollment  resource.EnrollmentResult
-	ExpiresAt   time.Time
+	ExecutionID     uuid.UUID
+	ResultKind      string
+	InstructionSets []installinstruction.Set
+	ExpiresAt       time.Time
 }
 
 type oneTimeResultPayload struct {
-	Enrollment resource.EnrollmentResult `json:"enrollment"`
+	InstructionSets []installinstruction.Set `json:"instruction_sets,omitempty"`
 }
 
-func storeOneTimeResult(ctx context.Context, q *db.Queries, key []byte, execution db.Execution, authorizationVersion int64, enrollment resource.EnrollmentResult) error {
-	payload, err := json.Marshal(oneTimeResultPayload{Enrollment: enrollment})
+func storeOneTimeResult(ctx context.Context, q *db.Queries, key []byte, execution db.Execution, authorizationVersion int64, result resource.OneTimeCommandResult, resultKind string) error {
+	if !validOneTimeResultPayload(result.InstructionSets) || !validOneTimeResultKind(resultKind) {
+		return ErrOneTimeResultNotAvailable
+	}
+	payload, err := json.Marshal(oneTimeResultPayload{InstructionSets: result.InstructionSets})
 	if err != nil {
 		return err
 	}
@@ -52,9 +60,9 @@ func storeOneTimeResult(ctx context.Context, q *db.Queries, key []byte, executio
 	}
 	_, err = q.CreateExecutionOneTimeResult(ctx, db.CreateExecutionOneTimeResultParams{
 		ID: newID(), ExecutionID: execution.ID, EnterpriseID: execution.EnterpriseID,
-		AuthorizationVersion: authorizationVersion, ResultKind: oneTimeResultKindEnrollment,
+		AuthorizationVersion: authorizationVersion, ResultKind: resultKind,
 		KeyVersion: 1, Nonce: nonce, Ciphertext: ciphertext,
-		ExpiresAt: pgtype.Timestamptz{Time: enrollment.ExpiresAt.UTC(), Valid: true},
+		ExpiresAt: pgtype.Timestamptz{Time: result.ExpiresAt.UTC(), Valid: true},
 	})
 	return err
 }
@@ -100,7 +108,7 @@ func (service Service) ClaimOneTimeResult(ctx context.Context, actorID string, e
 			}
 			defer clear(plaintext)
 			var payload oneTimeResultPayload
-			if err := json.Unmarshal(plaintext, &payload); err != nil || payload.Enrollment.InstallCommand == "" {
+			if err := json.Unmarshal(plaintext, &payload); err != nil || !validOneTimeResultPayload(payload.InstructionSets) || !validOneTimeResultKind(record.ResultKind) {
 				return OneTimeResult{}, ErrOneTimeResultNotAvailable
 			}
 			if _, err := q.ConsumeExecutionOneTimeResult(ctx, db.ConsumeExecutionOneTimeResultParams{
@@ -117,12 +125,43 @@ func (service Service) ClaimOneTimeResult(ctx context.Context, actorID string, e
 			if err != nil {
 				return OneTimeResult{}, err
 			}
-			return OneTimeResult{ExecutionID: executionID, ResultKind: record.ResultKind, Enrollment: payload.Enrollment, ExpiresAt: record.ExpiresAt.Time}, nil
+			return OneTimeResult{ExecutionID: executionID, ResultKind: record.ResultKind,
+				InstructionSets: payload.InstructionSets, ExpiresAt: record.ExpiresAt.Time}, nil
 		})
+}
+
+func validOneTimeResultPayload(sets []installinstruction.Set) bool {
+	if len(sets) == 0 {
+		return false
+	}
+	seen := map[installinstruction.Scope]struct{}{}
+	for _, set := range sets {
+		tlsValid := set.Scope == installinstruction.ScopeKubernetes && set.DownloadTLSMode == ""
+		tlsValid = tlsValid || ((set.Scope == installinstruction.ScopeLinuxSystem || set.Scope == installinstruction.ScopeLinuxUser) &&
+			(set.DownloadTLSMode == string(installinstruction.DownloadTLSStrict) || set.DownloadTLSMode == string(installinstruction.DownloadTLSInsecureFirstFetch)))
+		if !tlsValid || set.Command == "" || set.ExpiresAt.IsZero() ||
+			set.TrustBundleEpoch < 1 || len(set.TrustBundleSHA256) != 64 || len(set.InstallerSHA256) != 64 {
+			return false
+		}
+		if _, exists := seen[set.Scope]; exists {
+			return false
+		}
+		seen[set.Scope] = struct{}{}
+	}
+	return true
 }
 
 func oneTimeResultAuthorizationCurrent(userStatus string, currentVersion, resultVersion int64) bool {
 	return userStatus == "active" && currentVersion == resultVersion
+}
+
+func validOneTimeResultKind(value string) bool {
+	switch value {
+	case oneTimeResultKindHostInstall, oneTimeResultKindHostUninstall, oneTimeResultKindConnectorInstall:
+		return true
+	default:
+		return false
+	}
 }
 
 func encryptOneTimeResult(key, plaintext, aad []byte) ([]byte, []byte, error) {
@@ -160,5 +199,5 @@ func oneTimeResultAEAD(key []byte) (cipher.AEAD, error) {
 }
 
 func oneTimeResultAAD(enterpriseID, executionID uuid.UUID) []byte {
-	return []byte(fmt.Sprintf("argus.action_one_time_result/v1\x00%s\x00%s", enterpriseID, executionID))
+	return []byte(fmt.Sprintf("argus.action_one_time_result/v2\x00%s\x00%s", enterpriseID, executionID))
 }

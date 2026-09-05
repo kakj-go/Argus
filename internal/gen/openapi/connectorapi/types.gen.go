@@ -11,6 +11,78 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for BastionPreviewCreateInstallMode.
+const (
+	BastionPreviewCreateInstallModeCommand             BastionPreviewCreateInstallMode = "command"
+	BastionPreviewCreateInstallModeDirectInstall       BastionPreviewCreateInstallMode = "direct_install"
+	BastionPreviewCreateInstallModeDirectInstallTunnel BastionPreviewCreateInstallMode = "direct_install_tunnel"
+)
+
+// Valid indicates whether the value is a known member of the BastionPreviewCreateInstallMode enum.
+func (e BastionPreviewCreateInstallMode) Valid() bool {
+	switch e {
+	case BastionPreviewCreateInstallModeCommand:
+		return true
+	case BastionPreviewCreateInstallModeDirectInstall:
+		return true
+	case BastionPreviewCreateInstallModeDirectInstallTunnel:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BastionScopeControlTunnelStatus.
+const (
+	BastionScopeControlTunnelStatusDegraded     BastionScopeControlTunnelStatus = "degraded"
+	BastionScopeControlTunnelStatusDesired      BastionScopeControlTunnelStatus = "desired"
+	BastionScopeControlTunnelStatusDown         BastionScopeControlTunnelStatus = "down"
+	BastionScopeControlTunnelStatusEstablished  BastionScopeControlTunnelStatus = "established"
+	BastionScopeControlTunnelStatusEstablishing BastionScopeControlTunnelStatus = "establishing"
+	BastionScopeControlTunnelStatusRemoved      BastionScopeControlTunnelStatus = "removed"
+)
+
+// Valid indicates whether the value is a known member of the BastionScopeControlTunnelStatus enum.
+func (e BastionScopeControlTunnelStatus) Valid() bool {
+	switch e {
+	case BastionScopeControlTunnelStatusDegraded:
+		return true
+	case BastionScopeControlTunnelStatusDesired:
+		return true
+	case BastionScopeControlTunnelStatusDown:
+		return true
+	case BastionScopeControlTunnelStatusEstablished:
+		return true
+	case BastionScopeControlTunnelStatusEstablishing:
+		return true
+	case BastionScopeControlTunnelStatusRemoved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BastionScopeOnboardingMode.
+const (
+	BastionScopeOnboardingModeCommand             BastionScopeOnboardingMode = "command"
+	BastionScopeOnboardingModeDirectInstall       BastionScopeOnboardingMode = "direct_install"
+	BastionScopeOnboardingModeDirectInstallTunnel BastionScopeOnboardingMode = "direct_install_tunnel"
+)
+
+// Valid indicates whether the value is a known member of the BastionScopeOnboardingMode enum.
+func (e BastionScopeOnboardingMode) Valid() bool {
+	switch e {
+	case BastionScopeOnboardingModeCommand:
+		return true
+	case BastionScopeOnboardingModeDirectInstall:
+		return true
+	case BastionScopeOnboardingModeDirectInstallTunnel:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BastionScopeStatus.
 const (
 	BastionScopeStatusActive           BastionScopeStatus = "active"
@@ -77,18 +149,219 @@ func (e ConnectorStatus) Valid() bool {
 	}
 }
 
+// Defines values for ConnectorEnrollRequestArchitecture.
+const (
+	Amd64 ConnectorEnrollRequestArchitecture = "amd64"
+	Arm64 ConnectorEnrollRequestArchitecture = "arm64"
+)
+
+// Valid indicates whether the value is a known member of the ConnectorEnrollRequestArchitecture enum.
+func (e ConnectorEnrollRequestArchitecture) Valid() bool {
+	switch e {
+	case Amd64:
+		return true
+	case Arm64:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConnectorEnrollResultResult.
 const (
-	IdempotentRetry ConnectorEnrollResultResult = "idempotent_retry"
-	Registered      ConnectorEnrollResultResult = "registered"
+	ConnectorEnrollResultResultIdempotentRetry ConnectorEnrollResultResult = "idempotent_retry"
+	ConnectorEnrollResultResultRegistered      ConnectorEnrollResultResult = "registered"
 )
 
 // Valid indicates whether the value is a known member of the ConnectorEnrollResultResult enum.
 func (e ConnectorEnrollResultResult) Valid() bool {
 	switch e {
-	case IdempotentRetry:
+	case ConnectorEnrollResultResultIdempotentRetry:
 		return true
-	case Registered:
+	case ConnectorEnrollResultResultRegistered:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectorInstallOperationControlTunnelStatus.
+const (
+	ConnectorInstallOperationControlTunnelStatusDegraded     ConnectorInstallOperationControlTunnelStatus = "degraded"
+	ConnectorInstallOperationControlTunnelStatusDesired      ConnectorInstallOperationControlTunnelStatus = "desired"
+	ConnectorInstallOperationControlTunnelStatusDown         ConnectorInstallOperationControlTunnelStatus = "down"
+	ConnectorInstallOperationControlTunnelStatusEstablished  ConnectorInstallOperationControlTunnelStatus = "established"
+	ConnectorInstallOperationControlTunnelStatusEstablishing ConnectorInstallOperationControlTunnelStatus = "establishing"
+	ConnectorInstallOperationControlTunnelStatusRemoved      ConnectorInstallOperationControlTunnelStatus = "removed"
+)
+
+// Valid indicates whether the value is a known member of the ConnectorInstallOperationControlTunnelStatus enum.
+func (e ConnectorInstallOperationControlTunnelStatus) Valid() bool {
+	switch e {
+	case ConnectorInstallOperationControlTunnelStatusDegraded:
+		return true
+	case ConnectorInstallOperationControlTunnelStatusDesired:
+		return true
+	case ConnectorInstallOperationControlTunnelStatusDown:
+		return true
+	case ConnectorInstallOperationControlTunnelStatusEstablished:
+		return true
+	case ConnectorInstallOperationControlTunnelStatusEstablishing:
+		return true
+	case ConnectorInstallOperationControlTunnelStatusRemoved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectorInstallOperationInstallMode.
+const (
+	ConnectorInstallOperationInstallModeDirectInstall       ConnectorInstallOperationInstallMode = "direct_install"
+	ConnectorInstallOperationInstallModeDirectInstallTunnel ConnectorInstallOperationInstallMode = "direct_install_tunnel"
+)
+
+// Valid indicates whether the value is a known member of the ConnectorInstallOperationInstallMode enum.
+func (e ConnectorInstallOperationInstallMode) Valid() bool {
+	switch e {
+	case ConnectorInstallOperationInstallModeDirectInstall:
+		return true
+	case ConnectorInstallOperationInstallModeDirectInstallTunnel:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectorInstallOperationStage.
+const (
+	ConnectorInstallOperationStageArtifactTransferring      ConnectorInstallOperationStage = "artifact_transferring"
+	ConnectorInstallOperationStageArtifactVerifying         ConnectorInstallOperationStage = "artifact_verifying"
+	ConnectorInstallOperationStageCompleted                 ConnectorInstallOperationStage = "completed"
+	ConnectorInstallOperationStageControlTunnelEstablishing ConnectorInstallOperationStage = "control_tunnel_establishing"
+	ConnectorInstallOperationStageEnrolling                 ConnectorInstallOperationStage = "enrolling"
+	ConnectorInstallOperationStageQueued                    ConnectorInstallOperationStage = "queued"
+	ConnectorInstallOperationStageServiceInstalling         ConnectorInstallOperationStage = "service_installing"
+	ConnectorInstallOperationStageSshConnecting             ConnectorInstallOperationStage = "ssh_connecting"
+	ConnectorInstallOperationStageWaitingConnectorOnline    ConnectorInstallOperationStage = "waiting_connector_online"
+)
+
+// Valid indicates whether the value is a known member of the ConnectorInstallOperationStage enum.
+func (e ConnectorInstallOperationStage) Valid() bool {
+	switch e {
+	case ConnectorInstallOperationStageArtifactTransferring:
+		return true
+	case ConnectorInstallOperationStageArtifactVerifying:
+		return true
+	case ConnectorInstallOperationStageCompleted:
+		return true
+	case ConnectorInstallOperationStageControlTunnelEstablishing:
+		return true
+	case ConnectorInstallOperationStageEnrolling:
+		return true
+	case ConnectorInstallOperationStageQueued:
+		return true
+	case ConnectorInstallOperationStageServiceInstalling:
+		return true
+	case ConnectorInstallOperationStageSshConnecting:
+		return true
+	case ConnectorInstallOperationStageWaitingConnectorOnline:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectorInstallOperationStatus.
+const (
+	ConnectorInstallOperationStatusCancelled     ConnectorInstallOperationStatus = "cancelled"
+	ConnectorInstallOperationStatusExpired       ConnectorInstallOperationStatus = "expired"
+	ConnectorInstallOperationStatusFailed        ConnectorInstallOperationStatus = "failed"
+	ConnectorInstallOperationStatusQueued        ConnectorInstallOperationStatus = "queued"
+	ConnectorInstallOperationStatusResultUnknown ConnectorInstallOperationStatus = "result_unknown"
+	ConnectorInstallOperationStatusRunning       ConnectorInstallOperationStatus = "running"
+	ConnectorInstallOperationStatusSucceeded     ConnectorInstallOperationStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ConnectorInstallOperationStatus enum.
+func (e ConnectorInstallOperationStatus) Valid() bool {
+	switch e {
+	case ConnectorInstallOperationStatusCancelled:
+		return true
+	case ConnectorInstallOperationStatusExpired:
+		return true
+	case ConnectorInstallOperationStatusFailed:
+		return true
+	case ConnectorInstallOperationStatusQueued:
+		return true
+	case ConnectorInstallOperationStatusResultUnknown:
+		return true
+	case ConnectorInstallOperationStatusRunning:
+		return true
+	case ConnectorInstallOperationStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectorInstallOperationEventStage.
+const (
+	ConnectorInstallOperationEventStageArtifactTransferring      ConnectorInstallOperationEventStage = "artifact_transferring"
+	ConnectorInstallOperationEventStageArtifactVerifying         ConnectorInstallOperationEventStage = "artifact_verifying"
+	ConnectorInstallOperationEventStageCompleted                 ConnectorInstallOperationEventStage = "completed"
+	ConnectorInstallOperationEventStageControlTunnelEstablishing ConnectorInstallOperationEventStage = "control_tunnel_establishing"
+	ConnectorInstallOperationEventStageEnrolling                 ConnectorInstallOperationEventStage = "enrolling"
+	ConnectorInstallOperationEventStageQueued                    ConnectorInstallOperationEventStage = "queued"
+	ConnectorInstallOperationEventStageServiceInstalling         ConnectorInstallOperationEventStage = "service_installing"
+	ConnectorInstallOperationEventStageSshConnecting             ConnectorInstallOperationEventStage = "ssh_connecting"
+	ConnectorInstallOperationEventStageWaitingConnectorOnline    ConnectorInstallOperationEventStage = "waiting_connector_online"
+)
+
+// Valid indicates whether the value is a known member of the ConnectorInstallOperationEventStage enum.
+func (e ConnectorInstallOperationEventStage) Valid() bool {
+	switch e {
+	case ConnectorInstallOperationEventStageArtifactTransferring:
+		return true
+	case ConnectorInstallOperationEventStageArtifactVerifying:
+		return true
+	case ConnectorInstallOperationEventStageCompleted:
+		return true
+	case ConnectorInstallOperationEventStageControlTunnelEstablishing:
+		return true
+	case ConnectorInstallOperationEventStageEnrolling:
+		return true
+	case ConnectorInstallOperationEventStageQueued:
+		return true
+	case ConnectorInstallOperationEventStageServiceInstalling:
+		return true
+	case ConnectorInstallOperationEventStageSshConnecting:
+		return true
+	case ConnectorInstallOperationEventStageWaitingConnectorOnline:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectorInstallOperationEventStatus.
+const (
+	ConnectorInstallOperationEventStatusFailed    ConnectorInstallOperationEventStatus = "failed"
+	ConnectorInstallOperationEventStatusRetrying  ConnectorInstallOperationEventStatus = "retrying"
+	ConnectorInstallOperationEventStatusStarted   ConnectorInstallOperationEventStatus = "started"
+	ConnectorInstallOperationEventStatusSucceeded ConnectorInstallOperationEventStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ConnectorInstallOperationEventStatus enum.
+func (e ConnectorInstallOperationEventStatus) Valid() bool {
+	switch e {
+	case ConnectorInstallOperationEventStatusFailed:
+		return true
+	case ConnectorInstallOperationEventStatusRetrying:
+		return true
+	case ConnectorInstallOperationEventStatusStarted:
+		return true
+	case ConnectorInstallOperationEventStatusSucceeded:
 		return true
 	default:
 		return false
@@ -97,16 +370,16 @@ func (e ConnectorEnrollResultResult) Valid() bool {
 
 // Defines values for ConnectorRole.
 const (
-	Bastion    ConnectorRole = "bastion"
-	Kubernetes ConnectorRole = "kubernetes"
+	ConnectorRoleBastion    ConnectorRole = "bastion"
+	ConnectorRoleKubernetes ConnectorRole = "kubernetes"
 )
 
 // Valid indicates whether the value is a known member of the ConnectorRole enum.
 func (e ConnectorRole) Valid() bool {
 	switch e {
-	case Bastion:
+	case ConnectorRoleBastion:
 		return true
-	case Kubernetes:
+	case ConnectorRoleKubernetes:
 		return true
 	default:
 		return false
@@ -134,6 +407,78 @@ func (e Environment) Valid() bool {
 	}
 }
 
+// Defines values for InstallInstructionSetDownloadTlsMode.
+const (
+	InsecureFirstFetch InstallInstructionSetDownloadTlsMode = "insecure-first-fetch"
+	Strict             InstallInstructionSetDownloadTlsMode = "strict"
+)
+
+// Valid indicates whether the value is a known member of the InstallInstructionSetDownloadTlsMode enum.
+func (e InstallInstructionSetDownloadTlsMode) Valid() bool {
+	switch e {
+	case InsecureFirstFetch:
+		return true
+	case Strict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstallInstructionSetScope.
+const (
+	InstallInstructionSetScopeKubernetes  InstallInstructionSetScope = "kubernetes"
+	InstallInstructionSetScopeLinuxSystem InstallInstructionSetScope = "linux-system"
+	InstallInstructionSetScopeLinuxUser   InstallInstructionSetScope = "linux-user"
+)
+
+// Valid indicates whether the value is a known member of the InstallInstructionSetScope enum.
+func (e InstallInstructionSetScope) Valid() bool {
+	switch e {
+	case InstallInstructionSetScopeKubernetes:
+		return true
+	case InstallInstructionSetScopeLinuxSystem:
+		return true
+	case InstallInstructionSetScopeLinuxUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OnboardingProjectionState.
+const (
+	OnboardingProjectionStateAwaitingApproval OnboardingProjectionState = "awaiting_approval"
+	OnboardingProjectionStateCommandAvailable OnboardingProjectionState = "command_available"
+	OnboardingProjectionStateCommandConsumed  OnboardingProjectionState = "command_consumed"
+	OnboardingProjectionStateCommandExpired   OnboardingProjectionState = "command_expired"
+	OnboardingProjectionStateInstallFailed    OnboardingProjectionState = "install_failed"
+	OnboardingProjectionStateInstalling       OnboardingProjectionState = "installing"
+	OnboardingProjectionStateRegistered       OnboardingProjectionState = "registered"
+)
+
+// Valid indicates whether the value is a known member of the OnboardingProjectionState enum.
+func (e OnboardingProjectionState) Valid() bool {
+	switch e {
+	case OnboardingProjectionStateAwaitingApproval:
+		return true
+	case OnboardingProjectionStateCommandAvailable:
+		return true
+	case OnboardingProjectionStateCommandConsumed:
+		return true
+	case OnboardingProjectionStateCommandExpired:
+		return true
+	case OnboardingProjectionStateInstallFailed:
+		return true
+	case OnboardingProjectionStateInstalling:
+		return true
+	case OnboardingProjectionStateRegistered:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PartialMetadataReasons.
 const (
 	AuthorizationFiltered PartialMetadataReasons = "authorization_filtered"
@@ -152,6 +497,51 @@ func (e PartialMetadataReasons) Valid() bool {
 	case SourceTimeout:
 		return true
 	case SourceUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TrustBundleSnapshotState.
+const (
+	TrustBundleSnapshotStateFailed      TrustBundleSnapshotState = "failed"
+	TrustBundleSnapshotStateOverlapping TrustBundleSnapshotState = "overlapping"
+	TrustBundleSnapshotStatePreparing   TrustBundleSnapshotState = "preparing"
+	TrustBundleSnapshotStateRetiring    TrustBundleSnapshotState = "retiring"
+	TrustBundleSnapshotStateStable      TrustBundleSnapshotState = "stable"
+)
+
+// Valid indicates whether the value is a known member of the TrustBundleSnapshotState enum.
+func (e TrustBundleSnapshotState) Valid() bool {
+	switch e {
+	case TrustBundleSnapshotStateFailed:
+		return true
+	case TrustBundleSnapshotStateOverlapping:
+		return true
+	case TrustBundleSnapshotStatePreparing:
+		return true
+	case TrustBundleSnapshotStateRetiring:
+		return true
+	case TrustBundleSnapshotStateStable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetConnectorBootstrapScriptParamsScope.
+const (
+	GetConnectorBootstrapScriptParamsScopeLinuxSystem GetConnectorBootstrapScriptParamsScope = "linux-system"
+	GetConnectorBootstrapScriptParamsScopeLinuxUser   GetConnectorBootstrapScriptParamsScope = "linux-user"
+)
+
+// Valid indicates whether the value is a known member of the GetConnectorBootstrapScriptParamsScope enum.
+func (e GetConnectorBootstrapScriptParamsScope) Valid() bool {
+	switch e {
+	case GetConnectorBootstrapScriptParamsScopeLinuxSystem:
+		return true
+	case GetConnectorBootstrapScriptParamsScopeLinuxUser:
 		return true
 	default:
 		return false
@@ -183,29 +573,64 @@ type ApiError_Params_AdditionalProperties struct {
 	union json.RawMessage
 }
 
+// BastionConnectorReplacementPreview defines model for BastionConnectorReplacementPreview.
+type BastionConnectorReplacementPreview struct {
+	// Address 模式 B/C 必填；必须与本次连接测试一致
+	Address *string `json:"address,omitempty"`
+
+	// ConnectionTestId 模式 B/C 必填；必须是当前有效的 direct_ssh 测试
+	ConnectionTestId *openapi_types.UUID `json:"connection_test_id,omitempty"`
+	CredentialId     *openapi_types.UUID `json:"credential_id,omitempty"`
+	ExpectedVersion  int64               `json:"expected_version"`
+	Port             *int                `json:"port,omitempty"`
+	Username         *string             `json:"username,omitempty"`
+}
+
 // BastionPreviewCreate defines model for BastionPreviewCreate.
 type BastionPreviewCreate struct {
-	Environment Environment `json:"environment"`
-	Labels      UserLabels  `json:"labels"`
-	Name        string      `json:"name"`
+	Address *string `json:"address,omitempty"`
+
+	// ConnectionTestId 代装模式必填:与本表单字段匹配且成功的 direct_ssh 主机连接测试
+	ConnectionTestId *openapi_types.UUID             `json:"connection_test_id,omitempty"`
+	CredentialId     *openapi_types.UUID             `json:"credential_id,omitempty"`
+	Environment      Environment                     `json:"environment"`
+	InstallMode      BastionPreviewCreateInstallMode `json:"install_mode"`
+	Labels           UserLabels                      `json:"labels"`
+	Name             string                          `json:"name"`
+	Port             *int                            `json:"port,omitempty"`
+	Username         *string                         `json:"username,omitempty"`
 }
+
+// BastionPreviewCreateInstallMode defines model for BastionPreviewCreate.InstallMode.
+type BastionPreviewCreateInstallMode string
 
 // BastionScope defines model for BastionScope.
 type BastionScope struct {
 	ActiveConnectorId *openapi_types.UUID `json:"active_connector_id,omitempty"`
 	ConnectorHostId   *openapi_types.UUID `json:"connector_host_id,omitempty"`
-	CreatedAt         time.Time           `json:"created_at"`
-	EnterpriseId      *openapi_types.UUID `json:"enterprise_id,omitempty"`
-	Environment       Environment         `json:"environment"`
-	FencingGeneration int64               `json:"fencing_generation"`
-	Id                openapi_types.UUID  `json:"id"`
-	Labels            Labels              `json:"labels"`
-	MemberCount       int                 `json:"member_count"`
-	Name              string              `json:"name"`
-	ResourceVersion   int64               `json:"resource_version"`
-	Status            BastionScopeStatus  `json:"status"`
-	UpdatedAt         time.Time           `json:"updated_at"`
+
+	// ControlTunnelStatus 模式 C 长期控制隧道的权威状态；与 Connector 在线状态独立
+	ControlTunnelStatus *BastionScopeControlTunnelStatus `json:"control_tunnel_status,omitempty"`
+	CreatedAt           time.Time                        `json:"created_at"`
+	EnterpriseId        *openapi_types.UUID              `json:"enterprise_id,omitempty"`
+	Environment         Environment                      `json:"environment"`
+	FencingGeneration   int64                            `json:"fencing_generation"`
+	Id                  openapi_types.UUID               `json:"id"`
+	Labels              Labels                           `json:"labels"`
+	MemberCount         int                              `json:"member_count"`
+	Name                string                           `json:"name"`
+	Onboarding          OnboardingProjection             `json:"onboarding"`
+	OnboardingMode      *BastionScopeOnboardingMode      `json:"onboarding_mode,omitempty"`
+	ResourceVersion     int64                            `json:"resource_version"`
+	Status              BastionScopeStatus               `json:"status"`
+	UpdatedAt           time.Time                        `json:"updated_at"`
 }
+
+// BastionScopeControlTunnelStatus 模式 C 长期控制隧道的权威状态；与 Connector 在线状态独立
+type BastionScopeControlTunnelStatus string
+
+// BastionScopeOnboardingMode defines model for BastionScope.OnboardingMode.
+type BastionScopeOnboardingMode string
 
 // BastionScopeStatus defines model for BastionScope.Status.
 type BastionScopeStatus string
@@ -242,18 +667,21 @@ type ConnectorStatus string
 
 // ConnectorEnrollRequest defines model for ConnectorEnrollRequest.
 type ConnectorEnrollRequest struct {
-	Capabilities      []string `json:"capabilities"`
-	CsrPem            *string  `json:"csr_pem,omitempty"`
-	DeviceFingerprint string   `json:"device_fingerprint"`
-	InstanceId        string   `json:"instance_id"`
-	Name              string   `json:"name"`
-	SoftwareVersion   string   `json:"software_version"`
+	Architecture      ConnectorEnrollRequestArchitecture `json:"architecture"`
+	Capabilities      []string                           `json:"capabilities"`
+	CsrPem            *string                            `json:"csr_pem,omitempty"`
+	DeviceFingerprint string                             `json:"device_fingerprint"`
+	InstanceId        string                             `json:"instance_id"`
+	Name              string                             `json:"name"`
+	SoftwareVersion   string                             `json:"software_version"`
 }
+
+// ConnectorEnrollRequestArchitecture defines model for ConnectorEnrollRequest.Architecture.
+type ConnectorEnrollRequestArchitecture string
 
 // ConnectorEnrollResult defines model for ConnectorEnrollResult.
 type ConnectorEnrollResult struct {
 	BastionScopeId       *openapi_types.UUID         `json:"bastion_scope_id,omitempty"`
-	CaBundlePem          string                      `json:"ca_bundle_pem"`
 	CertificateExpiresAt time.Time                   `json:"certificate_expires_at"`
 	CertificatePem       *string                     `json:"certificate_pem,omitempty"`
 	ConnectorId          openapi_types.UUID          `json:"connector_id"`
@@ -262,10 +690,64 @@ type ConnectorEnrollResult struct {
 	KubernetesClusterId  *openapi_types.UUID         `json:"kubernetes_cluster_id,omitempty"`
 	Result               ConnectorEnrollResultResult `json:"result"`
 	Role                 ConnectorRole               `json:"role"`
+	TrustBundle          TrustBundleSnapshot         `json:"trust_bundle"`
 }
 
 // ConnectorEnrollResultResult defines model for ConnectorEnrollResult.Result.
 type ConnectorEnrollResultResult string
+
+// ConnectorInstallOperation defines model for ConnectorInstallOperation.
+type ConnectorInstallOperation struct {
+	Attempt             int                                           `json:"attempt"`
+	BastionScopeId      openapi_types.UUID                            `json:"bastion_scope_id"`
+	CompletedAt         *time.Time                                    `json:"completed_at,omitempty"`
+	ConnectionTestId    *openapi_types.UUID                           `json:"connection_test_id,omitempty"`
+	ConnectorId         openapi_types.UUID                            `json:"connector_id"`
+	ConnectorOnlineAt   *time.Time                                    `json:"connector_online_at,omitempty"`
+	ControlTunnelStatus *ConnectorInstallOperationControlTunnelStatus `json:"control_tunnel_status,omitempty"`
+	CreatedAt           time.Time                                     `json:"created_at"`
+	ErrorCode           *string                                       `json:"error_code,omitempty"`
+	Events              []ConnectorInstallOperationEvent              `json:"events"`
+	ExpiresAt           time.Time                                     `json:"expires_at"`
+	HostId              openapi_types.UUID                            `json:"host_id"`
+	Id                  openapi_types.UUID                            `json:"id"`
+	InstallMode         ConnectorInstallOperationInstallMode          `json:"install_mode"`
+	MaxAttempts         int                                           `json:"max_attempts"`
+	ReleaseVersionId    *openapi_types.UUID                           `json:"release_version_id,omitempty"`
+	RetryOf             *openapi_types.UUID                           `json:"retry_of,omitempty"`
+	Stage               ConnectorInstallOperationStage                `json:"stage"`
+	StartedAt           *time.Time                                    `json:"started_at,omitempty"`
+	Status              ConnectorInstallOperationStatus               `json:"status"`
+	UpdatedAt           time.Time                                     `json:"updated_at"`
+}
+
+// ConnectorInstallOperationControlTunnelStatus defines model for ConnectorInstallOperation.ControlTunnelStatus.
+type ConnectorInstallOperationControlTunnelStatus string
+
+// ConnectorInstallOperationInstallMode defines model for ConnectorInstallOperation.InstallMode.
+type ConnectorInstallOperationInstallMode string
+
+// ConnectorInstallOperationStage defines model for ConnectorInstallOperation.Stage.
+type ConnectorInstallOperationStage string
+
+// ConnectorInstallOperationStatus defines model for ConnectorInstallOperation.Status.
+type ConnectorInstallOperationStatus string
+
+// ConnectorInstallOperationEvent defines model for ConnectorInstallOperationEvent.
+type ConnectorInstallOperationEvent struct {
+	Detail     *string                              `json:"detail,omitempty"`
+	ErrorCode  *string                              `json:"error_code,omitempty"`
+	Id         openapi_types.UUID                   `json:"id"`
+	OccurredAt time.Time                            `json:"occurred_at"`
+	Stage      ConnectorInstallOperationEventStage  `json:"stage"`
+	Status     ConnectorInstallOperationEventStatus `json:"status"`
+}
+
+// ConnectorInstallOperationEventStage defines model for ConnectorInstallOperationEvent.Stage.
+type ConnectorInstallOperationEventStage string
+
+// ConnectorInstallOperationEventStatus defines model for ConnectorInstallOperationEvent.Status.
+type ConnectorInstallOperationEventStatus string
 
 // ConnectorPage defines model for ConnectorPage.
 type ConnectorPage struct {
@@ -289,11 +771,44 @@ type Environment string
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
 
+// InstallInstructionSet defines model for InstallInstructionSet.
+type InstallInstructionSet struct {
+	CapabilityWarnings []string `json:"capability_warnings"`
+
+	// Command 唯一面向用户展示的一键安装命令。Host 与手工 Connector 下载动态引导脚本；Kubernetes 使用等价的单命令临时脚本执行。
+	Command           *string                               `json:"command,omitempty"`
+	DownloadTlsMode   *InstallInstructionSetDownloadTlsMode `json:"download_tls_mode,omitempty"`
+	ExpiresAt         time.Time                             `json:"expires_at"`
+	InstallerSha256   string                                `json:"installer_sha256"`
+	Scope             InstallInstructionSetScope            `json:"scope"`
+	TrustBundleEpoch  int64                                 `json:"trust_bundle_epoch"`
+	TrustBundleSha256 string                                `json:"trust_bundle_sha256"`
+}
+
+// InstallInstructionSetDownloadTlsMode defines model for InstallInstructionSet.DownloadTlsMode.
+type InstallInstructionSetDownloadTlsMode string
+
+// InstallInstructionSetScope defines model for InstallInstructionSet.Scope.
+type InstallInstructionSetScope string
+
 // LabelValue defines model for LabelValue.
 type LabelValue = string
 
 // Labels defines model for Labels.
 type Labels map[string]LabelValue
+
+// OnboardingProjection defines model for OnboardingProjection.
+type OnboardingProjection struct {
+	ErrorCode        *string                   `json:"error_code,omitempty"`
+	ExecutionId      *openapi_types.UUID       `json:"execution_id,omitempty"`
+	OperationId      *openapi_types.UUID       `json:"operation_id,omitempty"`
+	PendingActionRef *string                   `json:"pending_action_ref,omitempty"`
+	State            OnboardingProjectionState `json:"state"`
+	UpdatedAt        time.Time                 `json:"updated_at"`
+}
+
+// OnboardingProjectionState defines model for OnboardingProjection.State.
+type OnboardingProjectionState string
 
 // PartialMetadata defines model for PartialMetadata.
 type PartialMetadata struct {
@@ -344,6 +859,21 @@ type ResourcePreviewUpdate struct {
 // SystemLabelKey defines model for SystemLabelKey.
 type SystemLabelKey = string
 
+// TrustBundleSnapshot defines model for TrustBundleSnapshot.
+type TrustBundleSnapshot struct {
+	BundlePem             string                   `json:"bundle_pem"`
+	BundleSha256          string                   `json:"bundle_sha256"`
+	CurrentCaFingerprints []string                 `json:"current_ca_fingerprints"`
+	Epoch                 int64                    `json:"epoch"`
+	NextCaFingerprints    []string                 `json:"next_ca_fingerprints"`
+	RetireAt              *time.Time               `json:"retire_at,omitempty"`
+	StartedAt             time.Time                `json:"started_at"`
+	State                 TrustBundleSnapshotState `json:"state"`
+}
+
+// TrustBundleSnapshotState defines model for TrustBundleSnapshot.State.
+type TrustBundleSnapshotState string
+
 // UserLabelKey defines model for UserLabelKey.
 type UserLabelKey = string
 
@@ -352,8 +882,9 @@ type UserLabels map[string]LabelValue
 
 // PendingActionPublicSchema defines model for pending-action-public.schema.
 type PendingActionPublicSchema struct {
-	ActionRef string `json:"action_ref"`
-	Approval  *struct {
+	ActionRef  string `json:"action_ref"`
+	ActionType string `json:"action_type"`
+	Approval   *struct {
 		ApprovedCount    int     `json:"approved_count"`
 		MinimumApprovers int     `json:"minimum_approvers"`
 		PolicyRef        *string `json:"policy_ref,omitempty"`
@@ -396,6 +927,14 @@ type ResourceId = openapi_types.UUID
 // Error defines model for Error.
 type Error = ApiError
 
+// GetConnectorBootstrapScriptParams defines parameters for GetConnectorBootstrapScript.
+type GetConnectorBootstrapScriptParams struct {
+	Scope GetConnectorBootstrapScriptParamsScope `form:"scope" json:"scope"`
+}
+
+// GetConnectorBootstrapScriptParamsScope defines parameters for GetConnectorBootstrapScript.
+type GetConnectorBootstrapScriptParamsScope string
+
 // EnrollConnectorParams defines parameters for EnrollConnector.
 type EnrollConnectorParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
@@ -413,20 +952,32 @@ type PreviewCreateBastionScopeParams struct {
 	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
 }
 
+// PreviewBastionConnectorReplacementParams defines parameters for PreviewBastionConnectorReplacement.
+type PreviewBastionConnectorReplacementParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
+}
+
 // PreviewDeleteBastionScopeParams defines parameters for PreviewDeleteBastionScope.
 type PreviewDeleteBastionScopeParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
 }
 
-// PreviewReplaceBastionConnectorParams defines parameters for PreviewReplaceBastionConnector.
-type PreviewReplaceBastionConnectorParams struct {
+// PreviewBastionEnrollmentRotateParams defines parameters for PreviewBastionEnrollmentRotate.
+type PreviewBastionEnrollmentRotateParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
 }
 
 // PreviewUpdateBastionScopeParams defines parameters for PreviewUpdateBastionScope.
 type PreviewUpdateBastionScopeParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
+}
+
+// PreviewRetryConnectorInstallOperationParams defines parameters for PreviewRetryConnectorInstallOperation.
+type PreviewRetryConnectorInstallOperationParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
 }
@@ -456,11 +1007,14 @@ type EnrollConnectorJSONRequestBody = ConnectorEnrollRequest
 // PreviewCreateBastionScopeJSONRequestBody defines body for PreviewCreateBastionScope for application/json ContentType.
 type PreviewCreateBastionScopeJSONRequestBody = BastionPreviewCreate
 
+// PreviewBastionConnectorReplacementJSONRequestBody defines body for PreviewBastionConnectorReplacement for application/json ContentType.
+type PreviewBastionConnectorReplacementJSONRequestBody = BastionConnectorReplacementPreview
+
 // PreviewDeleteBastionScopeJSONRequestBody defines body for PreviewDeleteBastionScope for application/json ContentType.
 type PreviewDeleteBastionScopeJSONRequestBody = ResourcePreviewDelete
 
-// PreviewReplaceBastionConnectorJSONRequestBody defines body for PreviewReplaceBastionConnector for application/json ContentType.
-type PreviewReplaceBastionConnectorJSONRequestBody = ResourcePreviewDelete
+// PreviewBastionEnrollmentRotateJSONRequestBody defines body for PreviewBastionEnrollmentRotate for application/json ContentType.
+type PreviewBastionEnrollmentRotateJSONRequestBody = ResourcePreviewDelete
 
 // PreviewUpdateBastionScopeJSONRequestBody defines body for PreviewUpdateBastionScope for application/json ContentType.
 type PreviewUpdateBastionScopeJSONRequestBody = ResourcePreviewUpdate

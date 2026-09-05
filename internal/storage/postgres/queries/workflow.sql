@@ -141,6 +141,17 @@ SELECT EXISTS (
     WHERE execution_id = $1 AND enterprise_id = $2 AND consumed_at IS NULL AND expires_at > now()
 );
 
+-- name: GetExecutionOneTimeResultState :one
+SELECT COALESCE((
+    SELECT CASE
+        WHEN consumed_at IS NOT NULL THEN 'consumed'
+        WHEN expires_at <= now() THEN 'expired'
+        ELSE 'available'
+    END
+    FROM execution_one_time_results
+    WHERE execution_id = $1 AND enterprise_id = $2
+), 'unavailable')::text;
+
 -- name: ConsumeExecutionOneTimeResult :one
 UPDATE execution_one_time_results SET consumed_by_user_id = $3, consumed_at = now()
 WHERE execution_id = $1 AND enterprise_id = $2 AND consumed_at IS NULL AND expires_at > now()
@@ -165,6 +176,11 @@ WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING *;
 -- name: MarkExecutionTelemetryResultUnknown :one
 UPDATE executions SET status = 'result_unknown', telemetry_collector_operation_id = $3,
     error_code = 'EXECUTION_RESULT_UNKNOWN', updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING *;
+
+-- name: MarkExecutionConnectorInstallResultUnknown :one
+UPDATE executions SET status = 'result_unknown', connector_install_operation_id = $3,
+    error_code = NULL, updated_at = now()
 WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING *;
 
 -- name: ListUncertainExecutions :many

@@ -23,11 +23,13 @@ import (
 )
 
 const (
-	certManagerVersion = "1.20.3"
-	strimziChartURL    = "https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1.0/strimzi-kafka-operator-helm-3-chart-1.1.0.tgz"
-	altinityChartURL   = "https://github.com/Altinity/clickhouse-operator/releases/download/release-0.27.3/altinity-clickhouse-operator-0.27.3.tgz"
-	openSandboxURL     = "https://github.com/opensandbox-group/OpenSandbox/archive/refs/tags/helm/opensandbox/0.2.0.tar.gz"
-	certManagerURL     = "https://charts.jetstack.io/charts/cert-manager-v" + certManagerVersion + ".tgz"
+	certManagerVersion  = "1.20.3"
+	trustManagerVersion = "0.24.0"
+	strimziChartURL     = "https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.1.0/strimzi-kafka-operator-helm-3-chart-1.1.0.tgz"
+	altinityChartURL    = "https://github.com/Altinity/clickhouse-operator/releases/download/release-0.27.3/altinity-clickhouse-operator-0.27.3.tgz"
+	openSandboxURL      = "https://github.com/opensandbox-group/OpenSandbox/archive/refs/tags/helm/opensandbox/0.2.0.tar.gz"
+	certManagerURL      = "https://charts.jetstack.io/charts/cert-manager-v" + certManagerVersion + ".tgz"
+	trustManagerURL     = "https://charts.jetstack.io/charts/trust-manager-v" + trustManagerVersion + ".tgz"
 )
 
 type helmManager struct {
@@ -60,6 +62,11 @@ func (h helmManager) installOrUpgrade(ctx context.Context, releaseName, namespac
 		upgrade.WaitStrategy = kube.StatusWatcherStrategy
 		upgrade.WaitForJobs = true
 		upgrade.CleanupOnFail = true
+		// Argus rotation and runtime controllers intentionally update a small
+		// set of Helm-owned fields. The values passed to this upgrade have first
+		// preserved that live PKI state, so reclaim ownership instead of failing
+		// every post-rotation upgrade with an SSA field-manager conflict.
+		upgrade.ForceConflicts = true
 		if _, err := upgrade.RunWithContext(ctx, releaseName, ch, values); err != nil {
 			if !strings.Contains(strings.ToLower(err.Error()), "another operation") {
 				return fmt.Errorf("upgrade Helm release %s: %w", releaseName, err)

@@ -1,33 +1,22 @@
-{{- if and .Values.tls.enabled (ne .Values.tls.mode "user-provided") }}
-{{- /* One multi-SAN certificate for every browser-facing host behind the
-       ingress; the remote-access WSS endpoint shares the enterprise host
-       and needs no certificate of its own. */}}
+{{- $hosts := dict "enterprise" .Values.hosts.enterprise "platform" .Values.hosts.platform "cards" .Values.hosts.cards -}}
+{{- with .Values.hosts.artifact }}{{- $_ := set $hosts "artifact" . -}}{{- end }}
+{{- range $name, $host := $hosts }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: argus-web
-  namespace: {{ .Values.namespaces.system }}
+  name: argus-{{ $name }}
+  namespace: {{ $.Values.namespaces.system }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ $.Values.releaseId | quote }}}
 spec:
-  secretName: argus-web-tls
+  secretName: argus-{{ $name }}-tls
   duration: 2160h
   renewBefore: 360h
-  # 显式 CN 让自签证书具备完整 Subject/Issuer DN;无 CN 时 issuer DN 为空,
-  # OpenSSL 系客户端(curl/mc)与部分链校验会拒绝该证书。
-  commonName: argus-ingress
-  dnsNames:
-    - {{ .Values.hosts.enterprise }}
-    - {{ .Values.hosts.platform }}
-    - {{ .Values.hosts.cards }}
-    {{- with .Values.hosts.artifact }}
-    - {{ . }}
-    {{- end }}
-  privateKey:
-    algorithm: ECDSA
-    size: 256
-  usages:
-    - server auth
+  dnsNames: [{{ $host | quote }}]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
+  usages: [server auth]
   issuerRef:
-    name: {{ .Values.tls.issuerName }}
-    kind: {{ .Values.tls.issuerKind }}
+    name: {{ $.Values.pki.issuerName }}
+    kind: ClusterIssuer
+    group: {{ $.Values.pki.issuerGroup }}
 {{- end }}

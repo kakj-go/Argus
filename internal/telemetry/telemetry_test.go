@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	commonv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/common/v1"
 	telemetryv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/telemetry/v1"
@@ -94,6 +95,12 @@ func TestDownstreamIdentityRejectsIncompleteMixedAndNonGatewayClaims(t *testing.
 	if _, err = (&IngestServer{}).resolveDownstreamIdentity(context.Background(), direct, reference); err == nil {
 		t.Fatal("non-Gateway Collector forwarded a downstream identity")
 	}
+	direct.CertificateSerial = "00ab"
+	if _, err = (&IngestServer{}).resolveDownstreamIdentity(context.Background(), direct, downstreamReference{
+		collectorID: direct.CollectorID, serial: direct.CertificateSerial, found: true,
+	}); err == nil {
+		t.Fatal("non-Gateway Collector used a downstream self-reference")
+	}
 	kubernetesGateway := TrustedIdentity{EnterpriseID: uuid.New(), ResourceID: uuid.New(), CollectorID: reference.collectorID,
 		ResourceType: "kubernetes_cluster", Role: "daemonset", CertificateSerial: reference.serial}
 	resolved, err = (&IngestServer{}).resolveDownstreamIdentity(context.Background(), kubernetesGateway, reference)
@@ -109,6 +116,46 @@ func TestDownstreamIdentityRejectsIncompleteMixedAndNonGatewayClaims(t *testing.
 				t.Fatal("forged Kubernetes Gateway downstream identity was accepted")
 			}
 		})
+	}
+
+	edgeGateway := TrustedIdentity{EnterpriseID: uuid.New(), ResourceID: uuid.New(), CollectorID: reference.collectorID,
+		ResourceType: "host", Role: "edge_gateway", CertificateSerial: reference.serial}
+	resolved, err = (&IngestServer{}).resolveDownstreamIdentity(context.Background(), edgeGateway, reference)
+	if err != nil || resolved != edgeGateway {
+		t.Fatalf("same-Collector Edge Gateway identity rejected: %#v %v", resolved, err)
+	}
+	for name, forged := range map[string]downstreamReference{
+		"collector": {collectorID: uuid.New(), serial: reference.serial, found: true},
+		"serial":    {collectorID: reference.collectorID, serial: "deadbeef", found: true},
+	} {
+		t.Run("Edge Gateway rejects forged "+name, func(t *testing.T) {
+			if _, err := (&IngestServer{}).resolveDownstreamIdentity(context.Background(), edgeGateway, forged); err == nil {
+				t.Fatal("forged Edge Gateway downstream identity was accepted")
+			}
+		})
+	}
+}
+
+func TestEdgeGatewaySelfIdentitySurvivesExporterQueueSerialization(t *testing.T) {
+	collectorID := uuid.New()
+	gateway := TrustedIdentity{EnterpriseID: uuid.New(), ResourceID: uuid.New(), CollectorID: collectorID,
+		ResourceType: "host", Role: "edge_gateway", CertificateSerial: "00ab"}
+	request := &collectmetrics.ExportMetricsServiceRequest{ResourceMetrics: []*metricspb.ResourceMetrics{{Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{
+		{Key: "argus.downstream.collector.id", Value: stringValue(collectorID.String())},
+		{Key: "argus.downstream.certificate.serial", Value: stringValue("00AB")},
+	}}}}}
+
+	encoded, err := proto.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal queued telemetry: %v", err)
+	}
+	replayed := &collectmetrics.ExportMetricsServiceRequest{}
+	if err = proto.Unmarshal(encoded, replayed); err != nil {
+		t.Fatalf("unmarshal queued telemetry: %v", err)
+	}
+	resolved, err := (&IngestServer{}).resolveMetricPayloadIdentity(context.Background(), gateway, replayed)
+	if err != nil || resolved != gateway {
+		t.Fatalf("queued Edge Gateway self identity rejected: %#v %v", resolved, err)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -30,10 +29,12 @@ import (
 	"github.com/kakj-go/Argus/internal/secret"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 	"github.com/kakj-go/Argus/internal/telemetrybinding"
+	"github.com/kakj-go/Argus/internal/tlsmaterial"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 const (
-	ProtocolVersion      = "argus.connector/v1"
+	ProtocolVersion      = "argus.connector/v2"
 	MaxMessageBytes      = 1 << 20
 	MaxInflightCommands  = 16
 	defaultDispatchEvery = 500 * time.Millisecond
@@ -41,14 +42,17 @@ const (
 
 type Gateway struct {
 	connectorv1.UnimplementedConnectorControlServiceServer
-	Service                   Service
-	Credentials               secret.Service
-	HeartbeatInterval         time.Duration
-	DispatchInterval          time.Duration
-	Dispatch                  *DispatchHub
-	RemoteAccess              *RemoteAccessHub
-	Drain                     <-chan struct{}
-	CreateCollectorEnrollment func(context.Context, uuid.UUID) (CollectorEnrollmentMaterial, error)
+	Service                              Service
+	Credentials                          secret.Service
+	HeartbeatInterval                    time.Duration
+	DispatchInterval                     time.Duration
+	Dispatch                             *DispatchHub
+	RemoteAccess                         *RemoteAccessHub
+	Drain                                <-chan struct{}
+	CreateCollectorEnrollment            func(context.Context, uuid.UUID) (CollectorEnrollmentMaterial, error)
+	TelemetryTunnelLimit                 int
+	TelemetryTunnelForwardTarget         string
+	TelemetryTunnelIdentityForwardTarget string
 }
 
 type CollectorEnrollmentMaterial struct {
@@ -79,6 +83,18 @@ func (gateway Gateway) Connect(stream connectorv1.ConnectorControlService_Connec
 	}
 	epoch := opened.ConnectionEpoch
 	defer gateway.Service.Disconnect(context.Background(), identity, epoch)
+	nodeKind := "connector"
+	if connectorRecord.Role == "kubernetes" {
+		nodeKind = "kubernetes_connector"
+	}
+	trustNode := trustbundle.Node{Kind: nodeKind, ID: identity.ConnectorID.String(),
+		EnterpriseID: uuid.NullUUID{UUID: identity.EnterpriseID, Valid: true}}
+	bundle, trustCurrent, err := gateway.Service.TrustBundles.Observe(stream.Context(), trustNode, trustbundle.Acknowledgement{
+		Epoch: int64(hello.GetTrustBundleEpoch()), SHA256: hello.GetTrustBundleSha256(), Fingerprints: hello.GetTrustBundleCaFingerprints(),
+	})
+	if err != nil {
+		return gateway.close(stream, 1, commonv1.CloseReason_CLOSE_REASON_PROTOCOL_ERROR, "TRUST_BUNDLE_STATE_INVALID")
+	}
 	serverNonce := make([]byte, 32)
 	if _, err := rand.Read(serverNonce); err != nil {
 		return err
@@ -92,7 +108,19 @@ func (gateway Gateway) Connect(stream connectorv1.ConnectorControlService_Connec
 		return err
 	}
 	serverSequence++
+	if !trustCurrent {
+		if err := stream.Send(&connectorv1.ConnectResponse{Sequence: serverSequence, Frame: &connectorv1.ConnectResponse_TrustBundleUpdate{
+			TrustBundleUpdate: trustBundleUpdate(bundle)}}); err != nil {
+			return err
+		}
+		serverSequence++
+	}
 	if err := gateway.sendReconcile(stream, identity, epoch, &serverSequence); err != nil {
+		return err
+	}
+	tunnelLeases := make(map[uuid.UUID]cachedConnectorTunnelLease)
+	defer gateway.releaseTelemetryTunnels(identity, epoch, tunnelLeases)
+	if err := gateway.sendTelemetryTunnelDesired(stream, identity, epoch, &serverSequence, tunnelLeases); err != nil {
 		return err
 	}
 
@@ -125,6 +153,17 @@ func (gateway Gateway) Connect(stream connectorv1.ConnectorControlService_Connec
 			return err
 		}
 		for _, command := range commands {
+			ready, failureCode, gateErr := gateway.collectorTunnelDispatchGate(stream.Context(), command)
+			if gateErr != nil {
+				return gateErr
+			}
+			if failureCode != "" {
+				_, _ = gateway.Service.TransitionCommand(stream.Context(), identity, epoch, command.CommandID, "failed", nil, failureCode)
+				continue
+			}
+			if !ready {
+				continue
+			}
 			frame, err := gateway.typedCommand(stream.Context(), command)
 			if err != nil {
 				_, _ = gateway.Service.TransitionCommand(stream.Context(), identity, epoch, command.CommandID, "failed", nil, "CONNECTOR_COMMAND_SCHEMA_INVALID")
@@ -185,7 +224,7 @@ func (gateway Gateway) Connect(stream connectorv1.ConnectorControlService_Connec
 					return gateway.close(stream, serverSequence, commonv1.CloseReason_CLOSE_REASON_AUTHORIZATION_REVOKED, "CONNECTOR_CERTIFICATE_ROTATION_FAILED")
 				}
 				grant := &connectorv1.CertificateRotationGrant{ConnectionEpoch: uint64(epoch), CertificatePem: []byte(certificate.PEM),
-					CaBundlePem: []byte(certificate.CABundlePEM), NotAfter: timestamppb.New(certificate.NotAfter)}
+					NotAfter: timestamppb.New(certificate.NotAfter)}
 				if err := stream.Send(&connectorv1.ConnectResponse{Sequence: serverSequence, Frame: &connectorv1.ConnectResponse_CertificateRotationGrant{
 					CertificateRotationGrant: grant}}); err != nil {
 					return err
@@ -194,6 +233,11 @@ func (gateway Gateway) Connect(stream connectorv1.ConnectorControlService_Connec
 			}
 			if err := gateway.handleFrame(stream.Context(), identity, epoch, message, pendingAcknowledgements, activeCommands); err != nil {
 				return gateway.close(stream, serverSequence, commonv1.CloseReason_CLOSE_REASON_PROTOCOL_ERROR, "CONNECTOR_FRAME_INVALID")
+			}
+			if message.GetHeartbeat() != nil || message.GetTelemetryTunnelStatusSet() != nil {
+				if err := gateway.sendTelemetryTunnelDesired(stream, identity, epoch, &serverSequence, tunnelLeases); err != nil {
+					return err
+				}
 			}
 			if message.GetHeartbeat() != nil {
 				if !heartbeatDeadline.Stop() {
@@ -227,6 +271,50 @@ func (gateway Gateway) Connect(stream connectorv1.ConnectorControlService_Connec
 	}
 }
 
+func (gateway Gateway) collectorTunnelDispatchGate(ctx context.Context, command db.ConnectorCommand) (bool, string, error) {
+	if command.CommandType != "collector_management" {
+		return true, "", nil
+	}
+	var request connectorv1.CollectorManagementCommand
+	if protojson.Unmarshal(command.Payload, &request) != nil {
+		return false, "CONNECTOR_COMMAND_SCHEMA_INVALID", nil
+	}
+	transport := request.GetTransport()
+	if request.GetOperation() == "uninstall" || (transport != "executor_tunnel" && transport != "bastion_tunnel") {
+		return true, "", nil
+	}
+	collectorID, err := uuid.Parse(request.GetCollectorId())
+	if err != nil {
+		return false, "CONNECTOR_COMMAND_SCHEMA_INVALID", nil
+	}
+	tunnel, err := gateway.Service.Store.Queries.GetTelemetryTunnelByCollector(ctx, collectorID)
+	if err != nil {
+		return false, "", err
+	}
+	if tunnel.EnterpriseID != command.EnterpriseID || tunnel.Transport != transport {
+		return false, "COLLECTOR_ROUTE_INVALID", nil
+	}
+	if tunnel.Status == "established" {
+		return true, "", nil
+	}
+	switch tunnel.LastDropReason {
+	case "loopback_port_conflict":
+		return false, "COLLECTOR_LOOPBACK_PORT_CONFLICT", nil
+	case "tunnel_forward_target_unconfigured":
+		return false, "TUNNEL_FORWARD_TARGET_UNCONFIGURED", nil
+	case "tunnel_quota_exceeded":
+		return false, "TUNNEL_QUOTA_EXCEEDED", nil
+	case "credential_revoked", "credential_unavailable":
+		return false, "CREDENTIAL_UNAVAILABLE", nil
+	case "host_key_changed":
+		return false, "COLLECTOR_TARGET_HOST_KEY_CHANGED", nil
+	}
+	if tunnel.Status == "removed" {
+		return false, "COLLECTOR_MANAGEMENT_FAILED", nil
+	}
+	return false, "", nil
+}
+
 type receiveResult struct {
 	message *connectorv1.ConnectRequest
 	err     error
@@ -248,7 +336,12 @@ func (gateway Gateway) handleFrame(ctx context.Context, identity TrustedIdentity
 		if request.GetHeartbeat().GetConnectionEpoch() != uint64(epoch) {
 			return ErrConnectorFenced
 		}
+		if err := gateway.applyTelemetryTunnelStatuses(ctx, identity, epoch, request.GetHeartbeat().GetTelemetryTunnels()); err != nil {
+			return err
+		}
 		return gateway.Service.Heartbeat(ctx, identity, epoch)
+	case request.GetTelemetryTunnelStatusSet() != nil:
+		return gateway.applyTelemetryTunnelStatuses(ctx, identity, epoch, request.GetTelemetryTunnelStatusSet().GetTunnels())
 	case request.GetAcknowledge() != nil:
 		sequence := request.GetAcknowledge().GetServerSequence()
 		commandID, ok := acknowledgements[sequence]
@@ -328,9 +421,33 @@ func (gateway Gateway) handleFrame(ctx context.Context, identity TrustedIdentity
 		return gateway.RemoteAccess.Deliver(identity.ConnectorID, epoch, request)
 	case request.GetCertificateRotationRequest() != nil:
 		return nil
+	case request.GetTrustBundleAcknowledge() != nil:
+		acknowledgement := request.GetTrustBundleAcknowledge()
+		nodeKind := "connector"
+		current, err := gateway.Service.Store.Queries.GetConnector(ctx, db.GetConnectorParams{ID: identity.ConnectorID, EnterpriseID: identity.EnterpriseID})
+		if err != nil {
+			return err
+		}
+		if current.Role == "kubernetes" {
+			nodeKind = "kubernetes_connector"
+		}
+		return gateway.Service.TrustBundles.Acknowledge(ctx, trustbundle.Node{Kind: nodeKind, ID: identity.ConnectorID.String(),
+			EnterpriseID: uuid.NullUUID{UUID: identity.EnterpriseID, Valid: true}}, trustbundle.Acknowledgement{
+			Epoch: int64(acknowledgement.GetEpoch()), SHA256: acknowledgement.GetBundleSha256(), Fingerprints: acknowledgement.GetCaFingerprints(),
+		})
 	default:
 		return ErrCommandState
 	}
+}
+
+func trustBundleUpdate(bundle trustbundle.Bundle) *connectorv1.TrustBundleUpdate {
+	value := &connectorv1.TrustBundleUpdate{Epoch: uint64(bundle.Epoch), BundlePem: bundle.Material.PEM,
+		BundleSha256: bundle.Material.SHA256, CurrentCaFingerprints: bundle.CurrentCAFingerprints,
+		NextCaFingerprints: bundle.NextCAFingerprints, State: bundle.State, StartedAt: timestamppb.New(bundle.StartedAt)}
+	if !bundle.RetireAt.IsZero() {
+		value.RetireAt = timestamppb.New(bundle.RetireAt)
+	}
+	return value
 }
 
 func marshalTypedResult(value *anypb.Any) ([]byte, error) {
@@ -360,8 +477,22 @@ func (gateway Gateway) fulfillCredentialLease(ctx context.Context, identity Trus
 		}
 	} else {
 		lease, leaseErr := gateway.Service.Store.Queries.GetCredentialLease(ctx, db.GetCredentialLeaseParams{ID: leaseID, EnterpriseID: identity.EnterpriseID})
-		if leaseErr != nil || lease.TargetResourceType != "remote_access_session" || lease.OperationRef != commandID ||
+		if leaseErr != nil || lease.OperationRef != commandID ||
 			lease.RecipientType != "connector" || lease.RecipientID != identity.ConnectorID.String() || lease.Status != "active" {
+			return nil, secret.ErrInvalidLease
+		}
+		switch lease.TargetResourceType {
+		case "remote_access_session":
+		case "telemetry_tunnel":
+			tunnel, tunnelErr := gateway.Service.Store.Queries.GetTelemetryTunnel(ctx, db.GetTelemetryTunnelParams{
+				ID: lease.TargetResourceID, EnterpriseID: identity.EnterpriseID})
+			if tunnelErr != nil || !tunnel.ConnectorID.Valid || tunnel.ConnectorID.UUID != identity.ConnectorID ||
+				tunnel.LeaseOwner != connectorTunnelOwner(identity.ConnectorID, epoch) ||
+				tunnel.OwnerConnectionEpoch != epoch || tunnel.Status == "removed" ||
+				lease.OperationRef != fmt.Sprintf("telemetry_tunnel:%s:%d:%d", tunnel.ID, tunnel.Epoch, tunnel.Fence) {
+				return nil, secret.ErrInvalidLease
+			}
+		default:
 			return nil, secret.ErrInvalidLease
 		}
 	}
@@ -388,7 +519,7 @@ func (gateway Gateway) completeConnectionTest(ctx context.Context, command db.Co
 			if typed.UnmarshalTo(&value) != nil {
 				return ErrCommandState
 			}
-			result.ResolvedIPs, result.HostKeyFingerprint, result.RemoteVersion, result.LatencyMS = value.ResolvedIps, value.HostKeyFingerprint, value.RemoteVersion, int64(value.LatencyMillis)
+			result = hostProbeConnectionTestResult(&value)
 		} else {
 			var value connectorv1.KubernetesConnectionProbeResult
 			if typed.UnmarshalTo(&value) != nil {
@@ -401,6 +532,14 @@ func (gateway Gateway) completeConnectionTest(ctx context.Context, command db.Co
 	_, err = gateway.Service.Store.Queries.CompleteConnectionTest(ctx, db.CompleteConnectionTestParams{ID: testID, EnterpriseID: command.EnterpriseID,
 		Status: status, Result: encoded, ErrorCode: pgtype.Text{String: errorCode, Valid: errorCode != ""}})
 	return err
+}
+
+func hostProbeConnectionTestResult(value *connectorv1.HostConnectionProbeResult) resource.ConnectionTestResult {
+	return resource.ConnectionTestResult{
+		ResolvedIPs: value.GetResolvedIps(), HostKeyFingerprint: value.GetHostKeyFingerprint(),
+		RemoteVersion: value.GetRemoteVersion(), LatencyMS: int64(value.GetLatencyMillis()),
+		Architecture: value.GetArchitecture(),
+	}
 }
 
 func (gateway Gateway) trustedIdentity(ctx context.Context) (TrustedIdentity, db.Connector, error) {
@@ -419,6 +558,11 @@ func (gateway Gateway) trustedIdentity(ctx context.Context) (TrustedIdentity, db
 	}
 	value, err := gateway.Service.Store.Queries.GetConnectorByID(ctx, connectorID)
 	if err != nil {
+		return TrustedIdentity{}, db.Connector{}, ErrConnectorFenced
+	}
+	pkiIdentity, err := gateway.Service.Store.Queries.GetActivePKICertificateIdentity(ctx, trustbundle.CertificateSerial(certificate))
+	if err != nil || trustbundle.VerifyCertificateIdentity(pkiIdentity, certificate, trustbundle.CertificateIdentity{Kind: "connector",
+		SubjectID: connectorID.String(), EnterpriseID: uuid.NullUUID{UUID: value.EnterpriseID, Valid: true}, Usage: x509.ExtKeyUsageClientAuth}) != nil {
 		return TrustedIdentity{}, db.Connector{}, ErrConnectorFenced
 	}
 	identity := TrustedIdentity{ConnectorID: connectorID, EnterpriseID: value.EnterpriseID, SerialNumber: certificate.SerialNumber.String()}
@@ -591,6 +735,20 @@ func (gateway Gateway) sendReconcile(stream connectorv1.ConnectorControlService_
 	return nil
 }
 
+func (gateway Gateway) sendTelemetryTunnelDesired(stream connectorv1.ConnectorControlService_ConnectServer,
+	identity TrustedIdentity, epoch int64, sequence *uint64, cache map[uuid.UUID]cachedConnectorTunnelLease) error {
+	desired, err := gateway.desiredTelemetryTunnels(stream.Context(), identity, epoch, cache)
+	if err != nil {
+		return err
+	}
+	if err = stream.Send(&connectorv1.ConnectResponse{Sequence: *sequence,
+		Frame: &connectorv1.ConnectResponse_TelemetryTunnelDesiredSet{TelemetryTunnelDesiredSet: desired}}); err != nil {
+		return err
+	}
+	*sequence++
+	return nil
+}
+
 func (gateway Gateway) markUncertain(identity TrustedIdentity, epoch int64, values map[string]activeCommand) {
 	for commandID, command := range values {
 		status := "delivery_unknown"
@@ -649,19 +807,10 @@ func normalizeResultStatus(value string) string {
 }
 
 func LoadServerTLS(certPath, keyPath, caPath string) (*tls.Config, error) {
-	certificate, err := tls.LoadX509KeyPair(certPath, keyPath)
+	material, err := tlsmaterial.Load(tlsmaterial.Options{CertificatePath: certPath, PrivateKeyPath: keyPath,
+		CABundlePath: caPath, Usage: x509.ExtKeyUsageServerAuth})
 	if err != nil {
 		return nil, err
 	}
-	caPEM, err := osReadFile(caPath)
-	if err != nil {
-		return nil, err
-	}
-	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("connector client CA bundle is invalid")
-	}
-	return &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots}, nil
+	return material.ServerConfig(tls.RequireAndVerifyClientCert, nil)
 }
-
-var osReadFile = func(path string) ([]byte, error) { return os.ReadFile(path) }

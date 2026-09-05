@@ -7,6 +7,7 @@ import type {
 } from "../generated/contracts";
 import type { MockBastionScope, MockConnector } from "./resource-models";
 import type { MockContext } from "./context";
+import { ApiError } from "../transport/errors";
 
 function connectorContract(value: MockConnector): Connector {
   return {
@@ -37,8 +38,19 @@ function scopeContract(value: MockBastionScope): BastionScope {
     environment: value.environment,
     labels: value.labels,
     status: value.status === "degraded" ? "suspected_offline" : value.status,
+    onboarding_mode: value.onboardingMode ?? "command",
+    onboarding: {
+      state:
+        value.onboardingState ??
+        (value.status === "pending" ? "command_available" : "registered"),
+      execution_id: value.onboardingExecutionId,
+      operation_id: value.onboardingOperationId,
+      error_code: value.onboardingErrorCode,
+      updated_at: value.updatedAt,
+    },
     connector_host_id: value.connectorHostId,
     active_connector_id: value.activeConnectorId,
+    control_tunnel_status: value.controlTunnelStatus,
     fencing_generation: 1,
     member_count: value.memberHostIds.length,
     resource_version: value.resourceVersion ?? 1,
@@ -96,6 +108,29 @@ export function createConnectorsDomain(
     },
     async previewCreateBastionScope(input) {
       await ctx.pause();
+      const name = input.name.toLocaleLowerCase();
+      const conflicts =
+        db.bastionScopes.some(
+          (entry) =>
+            entry.enterpriseId === ctx.enterpriseId() &&
+            entry.name.toLocaleLowerCase() === name,
+        ) ||
+        db.hosts.some(
+          (entry) =>
+            entry.enterpriseId === ctx.enterpriseId() &&
+            entry.name.toLocaleLowerCase() === name,
+        );
+      if (conflicts) {
+        throw new ApiError(
+          {
+            code: "RESOURCE_NAME_CONFLICT",
+            message_key: "errors.common.resource_name_conflict",
+            request_id: `mock-request-${Date.now()}`,
+            retryable: false,
+          },
+          409,
+        );
+      }
       return ctx.createPendingAction({
         tool: "bastion.scope.create",
         title: `创建堡垒机范围 ${input.name}`,
@@ -104,26 +139,113 @@ export function createConnectorsDomain(
     },
     async previewUpdateBastionScope(scopeId, input) {
       await ctx.pause();
+      const scope = ctx.mustFind(
+        db.bastionScopes,
+        (entry) => entry.id === scopeId,
+        "bastion scope",
+      );
       return ctx.createPendingAction({
         tool: "bastion.scope.update",
-        title: `更新堡垒机范围 ${scopeId}`,
-        input_data: { scope_id: scopeId, ...input },
+        input_data: { scope_id: scopeId, name: scope.name, ...input },
       });
     },
     async previewDeleteBastionScope(scopeId, expectedVersion) {
       await ctx.pause();
+      const scope = ctx.mustFind(
+        db.bastionScopes,
+        (entry) => entry.id === scopeId,
+        "bastion scope",
+      );
       return ctx.createPendingAction({
         tool: "bastion.scope.delete",
-        title: `删除堡垒机范围 ${scopeId}`,
-        input_data: { scope_id: scopeId, expected_version: expectedVersion },
+        input_data: {
+          scope_id: scopeId,
+          name: scope.name,
+          expected_version: expectedVersion,
+        },
       });
     },
-    async previewReplaceBastionConnector(scopeId, expectedVersion) {
+    async previewEnrollmentRotate(scopeId, expectedVersion) {
       await ctx.pause();
+      const scope = ctx.mustFind(
+        db.bastionScopes,
+        (entry) => entry.id === scopeId,
+        "bastion scope",
+      );
+      if (
+        (scope.onboardingMode ?? "command") !== "command" ||
+        scope.activeConnectorId
+      ) {
+        throw new Error("BASTION_ENROLLMENT_ROTATE_NOT_ALLOWED");
+      }
+      return ctx.createPendingAction({
+        tool: "bastion.enrollment.rotate",
+        title: `轮换堡垒机安装命令 ${scope.name}`,
+        input_data: {
+          scope_id: scopeId,
+          name: scope.name,
+          expected_version: expectedVersion,
+        },
+      });
+    },
+    async previewConnectorReplacement(scopeId, input) {
+      await ctx.pause();
+      const scope = ctx.mustFind(
+        db.bastionScopes,
+        (entry) => entry.id === scopeId,
+        "bastion scope",
+      );
+      if (!scope.activeConnectorId) {
+        throw new Error("CONNECTOR_COMMAND_STATE_CONFLICT");
+      }
+      if (
+        (scope.onboardingMode === "direct_install" ||
+          scope.onboardingMode === "direct_install_tunnel") &&
+        (!input.address ||
+          !input.port ||
+          !input.username ||
+          !input.credential_id ||
+          !input.connection_test_id)
+      ) {
+        throw new Error("CONNECTION_TEST_REQUIRED");
+      }
       return ctx.createPendingAction({
         tool: "bastion.connector.replace",
         title: `替换堡垒机 Connector ${scopeId}`,
-        input_data: { scope_id: scopeId, expected_version: expectedVersion },
+        input_data: {
+          scope_id: scopeId,
+          name: scope.name,
+          install_mode: scope.onboardingMode ?? "command",
+          ...input,
+        },
+      });
+    },
+    async getInstallOperation(operationId) {
+      await ctx.pause();
+      const operation = ctx.mustFind(
+        db.connectorInstallOperations,
+        (entry) => entry.id === operationId,
+        "connector install operation",
+      );
+      return {
+        ...operation,
+        events: operation.events.map((event) => ({ ...event })),
+      };
+    },
+    async previewRetryInstallOperation(operationId) {
+      await ctx.pause();
+      const operation = ctx.mustFind(
+        db.connectorInstallOperations,
+        (entry) => entry.id === operationId,
+        "connector install operation",
+      );
+      if (!["failed", "expired", "result_unknown"].includes(operation.status)) {
+        throw new Error("CONNECTOR_INSTALL_RETRY_NOT_ALLOWED");
+      }
+      return ctx.createPendingAction({
+        tool: "bastion.connector.install.retry",
+        title: `重试 Connector 安装 ${operation.id}`,
+        input_data: { operation_id: operation.id },
       });
     },
     async previewUninstallConnector(connectorId, expectedVersion) {
@@ -141,6 +263,7 @@ export function createConnectorsDomain(
         title: `卸载 Connector ${connector.name}`,
         input_data: {
           connector_id: connectorId,
+          name: connector.name,
           expected_version: expectedVersion,
         },
       });

@@ -204,6 +204,7 @@ func TestSuiteDependencies(t *testing.T) {
 		"m7":        {"m2", "m3", "m4", "m5", "m7"},
 		"m10-query": {"m2", "m3", "m4", "m5", "m7", "m10-query"},
 		"m8":        {"m6", "m7", "m8"},
+		"p4":        {"m2", "p4"},
 	}
 	if !reflect.DeepEqual(suiteDependencies, want) {
 		t.Fatalf("suite dependencies = %#v", suiteDependencies)

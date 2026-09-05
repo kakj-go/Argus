@@ -35,6 +35,7 @@ import (
 
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 	"github.com/kakj-go/Argus/internal/storage/redis"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 const (
@@ -70,6 +71,7 @@ type IngestServer struct {
 	Kafka              *kgo.Client
 	Logger             *slog.Logger
 	Identity           *IdentityService
+	SelfEnroll         *SelfEnrollService
 	IngestGRPCEndpoint string
 	IngestHTTPEndpoint string
 }
@@ -95,10 +97,14 @@ func NewIngestGRPCServer(server *IngestServer, tlsConfig *tls.Config) *grpc.Serv
 func (server *IngestServer) HTTPHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/identity/enroll", server.httpEnrollCollector)
+	mux.HandleFunc("/v1/host-bootstrap-script", server.httpHostBootstrapScript)
+	mux.HandleFunc("/v1/host-install/", server.httpHostInstallBootstrap)
+	mux.HandleFunc("/v1/host-uninstall/", server.httpHostUninstall)
 	mux.HandleFunc("/v1/metrics", server.httpExport("metrics"))
 	mux.HandleFunc("/v1/logs", server.httpExport("logs"))
 	mux.HandleFunc("/v1/traces", server.httpExport("traces"))
 	mux.HandleFunc("/v1/identity/rotate", server.httpRotateCertificate)
+	mux.HandleFunc("/v1/identity/trust-bundle", server.httpTrustBundle)
 	return mux
 }
 
@@ -109,16 +115,18 @@ func (server *IngestServer) httpEnrollCollector(writer http.ResponseWriter, requ
 		return
 	}
 	var body struct {
-		CollectorID string `json:"collector_id"`
-		CSRPem      string `json:"csr_pem"`
+		CollectorID  string `json:"collector_id"`
+		ClientCSRPem string `json:"client_csr_pem"`
+		ServerCSRPem string `json:"server_csr_pem"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 24<<10))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&body) != nil || body.CollectorID == "" || body.CSRPem == "" {
+	if decoder.Decode(&body) != nil || body.CollectorID == "" || body.ClientCSRPem == "" || body.ServerCSRPem == "" {
 		http.Error(writer, "telemetry enrollment request invalid", http.StatusBadRequest)
 		return
 	}
-	result, err := server.Identity.Enroll(request.Context(), request.Header.Get("X-Argus-Telemetry-Enrollment-Token"), body.CollectorID, body.CSRPem)
+	result, err := server.Identity.Enroll(request.Context(), request.Header.Get("X-Argus-Telemetry-Enrollment-Token"),
+		body.CollectorID, body.ClientCSRPem, body.ServerCSRPem)
 	if err != nil {
 		http.Error(writer, "telemetry enrollment rejected", http.StatusUnauthorized)
 		return
@@ -132,15 +140,16 @@ func (server *IngestServer) httpRotateCertificate(writer http.ResponseWriter, re
 		return
 	}
 	var body struct {
-		CSRPem string `json:"csr_pem"`
+		ClientCSRPem string `json:"client_csr_pem"`
+		ServerCSRPem string `json:"server_csr_pem"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 16<<10))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&body) != nil || body.CSRPem == "" {
+	if decoder.Decode(&body) != nil || body.ClientCSRPem == "" || body.ServerCSRPem == "" {
 		http.Error(writer, "telemetry rotation request invalid", http.StatusBadRequest)
 		return
 	}
-	result, err := server.Identity.Rotate(request.Context(), request.TLS.PeerCertificates[0], body.CSRPem)
+	result, err := server.Identity.Rotate(request.Context(), request.TLS.PeerCertificates[0], body.ClientCSRPem, body.ServerCSRPem)
 	if err != nil {
 		http.Error(writer, "telemetry certificate fenced", http.StatusUnauthorized)
 		return
@@ -152,10 +161,60 @@ func (server *IngestServer) writeCertificateResult(writer http.ResponseWriter, r
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(writer).Encode(map[string]any{
-		"collector_id": result.CollectorID, "certificate_pem": result.CertificatePEM, "ca_bundle_pem": result.CABundlePEM,
+		"collector_id": result.CollectorID, "client_certificate_pem": result.ClientCertificatePEM,
+		"server_certificate_pem": result.ServerCertificatePEM, "trust_bundle": trustBundleJSON(result.TrustBundle),
 		"ingest_grpc_endpoint": server.IngestGRPCEndpoint, "ingest_http_endpoint": server.IngestHTTPEndpoint,
 		"certificate_expires_at": result.ExpiresAt,
 	})
+}
+
+func (server *IngestServer) httpTrustBundle(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost || request.TLS == nil || len(request.TLS.PeerCertificates) != 1 ||
+		server.Identity == nil || server.Identity.TrustBundles.Store == nil {
+		http.Error(writer, "telemetry identity required", http.StatusUnauthorized)
+		return
+	}
+	identity, err := server.resolveIdentity(request.Context(), request.TLS.PeerCertificates[0])
+	if err != nil {
+		http.Error(writer, "telemetry identity fenced", http.StatusUnauthorized)
+		return
+	}
+	var observed struct {
+		Epoch          int64    `json:"epoch"`
+		BundleSHA256   string   `json:"bundle_sha256"`
+		CAFingerprints []string `json:"ca_fingerprints"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&observed) != nil {
+		http.Error(writer, "telemetry Trust Bundle report invalid", http.StatusBadRequest)
+		return
+	}
+	bundle, current, err := server.Identity.TrustBundles.Observe(request.Context(), trustbundle.Node{Kind: "collector",
+		ID: identity.CollectorID.String(), EnterpriseID: uuid.NullUUID{UUID: identity.EnterpriseID, Valid: true}}, trustbundle.Acknowledgement{
+		Epoch: observed.Epoch, SHA256: observed.BundleSHA256, Fingerprints: observed.CAFingerprints,
+	})
+	if err != nil {
+		http.Error(writer, "telemetry Trust Bundle state unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	if current {
+		writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(writer).Encode(trustBundleJSON(bundle))
+}
+
+func trustBundleJSON(bundle trustbundle.Bundle) map[string]any {
+	value := map[string]any{"epoch": bundle.Epoch, "state": bundle.State, "bundle_pem": string(bundle.Material.PEM),
+		"bundle_sha256": bundle.Material.SHA256, "current_ca_fingerprints": bundle.CurrentCAFingerprints,
+		"next_ca_fingerprints": bundle.NextCAFingerprints, "started_at": bundle.StartedAt}
+	if !bundle.RetireAt.IsZero() {
+		value["retire_at"] = bundle.RetireAt
+	}
+	return value
 }
 
 func (server *IngestServer) Export(ctx context.Context, request *collectmetrics.ExportMetricsServiceRequest) (*collectmetrics.ExportMetricsServiceResponse, error) {
@@ -358,7 +417,14 @@ func (server *IngestServer) resolveDownstreamIdentity(ctx context.Context, gatew
 	if !reference.found {
 		return gateway, nil
 	}
-	if gateway.Role == "daemonset" && reference.collectorID == gateway.CollectorID && reference.serial == gateway.CertificateSerial {
+	// Gateway receivers also accept telemetry produced on the Gateway host. The
+	// identity processor persists the authenticated receiver identity in the
+	// payload before the exporter queue, so an exact self-reference must remain
+	// valid after a restart or tunnel outage. This does not authorize another
+	// Collector: both the Collector ID and active certificate serial must match
+	// the mTLS identity already resolved for this connection.
+	if (gateway.Role == "daemonset" || gateway.Role == "edge_gateway") &&
+		reference.collectorID == gateway.CollectorID && reference.serial == gateway.CertificateSerial {
 		return gateway, nil
 	}
 	if gateway.Role != "edge_gateway" {

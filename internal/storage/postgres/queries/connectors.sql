@@ -1,13 +1,41 @@
 -- name: CreateBastionScope :one
-INSERT INTO bastion_scopes (id, enterprise_id, name, environment, labels, labels_hash)
-VALUES ($1,$2,$3,$4,$5,$6) RETURNING *;
+INSERT INTO bastion_scopes (id, enterprise_id, name, environment, labels, labels_hash, onboarding_mode)
+VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *;
+
+-- name: BastionNameAvailable :one
+-- A Bastion Scope and its connector_local root Host share the user-visible
+-- name. Both live-name namespaces must therefore be free before preview.
+SELECT NOT EXISTS (
+  SELECT 1 FROM bastion_scopes AS scope
+  WHERE scope.enterprise_id = sqlc.arg('enterprise_id')
+    AND lower(scope.name) = lower(sqlc.arg('name')) AND scope.status <> 'deleted'
+) AND NOT EXISTS (
+  SELECT 1 FROM hosts AS host
+  WHERE host.enterprise_id = sqlc.arg('enterprise_id')
+    AND lower(host.name) = lower(sqlc.arg('name')) AND host.status <> 'deleted'
+) AS available;
+
+-- name: AttachBastionRootHost :one
+-- Creation is one transaction: link the preallocated root Host before the
+-- newly created Scope can become externally visible.
+UPDATE bastion_scopes SET connector_host_id = $3, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND status = 'pending' AND connector_host_id IS NULL
+RETURNING *;
 
 -- name: GetBastionScope :one
-SELECT s.*, (SELECT count(*) FROM hosts h WHERE h.bastion_scope_id = s.id AND h.connection_mode = 'via_bastion' AND h.status <> 'deleted')::bigint AS member_count
+SELECT s.*,
+  COALESCE((SELECT tunnel.status::text FROM connector_control_tunnels AS tunnel
+   WHERE tunnel.bastion_scope_id = s.id
+   ORDER BY tunnel.epoch DESC, tunnel.updated_at DESC LIMIT 1), ''::text)::text AS control_tunnel_status,
+  (SELECT count(*) FROM hosts h WHERE h.bastion_scope_id = s.id AND h.connection_mode = 'via_bastion' AND h.status <> 'deleted')::bigint AS member_count
 FROM bastion_scopes s WHERE s.id = $1 AND s.enterprise_id = $2 AND s.status <> 'deleted';
 
 -- name: ListBastionScopes :many
-SELECT s.*, (SELECT count(*) FROM hosts h WHERE h.bastion_scope_id = s.id AND h.connection_mode = 'via_bastion' AND h.status <> 'deleted')::bigint AS member_count
+SELECT s.*,
+  COALESCE((SELECT tunnel.status::text FROM connector_control_tunnels AS tunnel
+   WHERE tunnel.bastion_scope_id = s.id
+   ORDER BY tunnel.epoch DESC, tunnel.updated_at DESC LIMIT 1), ''::text)::text AS control_tunnel_status,
+  (SELECT count(*) FROM hosts h WHERE h.bastion_scope_id = s.id AND h.connection_mode = 'via_bastion' AND h.status <> 'deleted')::bigint AS member_count
 FROM bastion_scopes s WHERE s.enterprise_id = $1 AND s.status <> 'deleted' ORDER BY s.created_at, s.id;
 
 -- name: UpdateBastionScope :one
@@ -18,13 +46,19 @@ WHERE id = $1 AND enterprise_id = $2 AND resource_version = $3 AND status <> 'de
 
 -- name: FenceBastionScope :one
 UPDATE bastion_scopes SET fencing_generation = fencing_generation + 1, active_connector_id = NULL, status = 'offline', resource_version = resource_version + 1, updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND resource_version = $3 AND status IN ('offline','uninstalled','suspected_offline') RETURNING *;
+WHERE id = $1 AND enterprise_id = $2 AND resource_version = $3 AND status IN ('active','offline','uninstalled','suspected_offline') RETURNING *;
+
+-- name: TouchPendingBastionScope :one
+-- pending(尚未注册)作用域的替换:撤销旧令牌并递增版本,不发生 fencing。
+UPDATE bastion_scopes SET resource_version = resource_version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND resource_version = $3 AND status = 'pending' RETURNING *;
 
 -- name: DeleteBastionScope :one
 UPDATE bastion_scopes AS scope SET status = 'deleted', deleted_at = now(), resource_version = scope.resource_version + 1, updated_at = now()
 WHERE scope.id = $1 AND scope.enterprise_id = $2 AND scope.resource_version = $3
-AND (scope.status = 'uninstalled' OR (scope.status = 'offline' AND scope.active_connector_id IS NULL))
+AND (scope.status = 'uninstalled' OR scope.status = 'pending' OR (scope.status = 'offline' AND scope.active_connector_id IS NULL))
 AND NOT EXISTS (SELECT 1 FROM hosts AS host WHERE host.bastion_scope_id = scope.id AND host.connection_mode = 'via_bastion' AND host.status <> 'deleted')
+AND NOT EXISTS (SELECT 1 FROM hosts AS host WHERE host.bastion_scope_id = scope.id AND host.connection_mode = 'connector_local' AND host.status <> 'deleted')
 AND NOT EXISTS (
   SELECT 1 FROM connector_commands AS command
   JOIN connectors AS connector ON connector.id = command.connector_id AND connector.enterprise_id = command.enterprise_id
@@ -34,8 +68,11 @@ AND NOT EXISTS (
 RETURNING *;
 
 -- name: CreateConnectorEnrollmentToken :one
-INSERT INTO connector_enrollment_tokens (id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, expires_at, created_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *;
+INSERT INTO connector_enrollment_tokens (id, preallocated_connector_id, enterprise_id, role, purpose, bastion_scope_id, kubernetes_cluster_id, preallocated_host_id, token_hash, policy, expires_at, created_by, release_version_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *;
+
+-- name: GetEnrollmentTokenByHash :one
+SELECT * FROM connector_enrollment_tokens WHERE token_hash = $1;
 
 -- name: GetEnrollmentTokenForUpdate :one
 SELECT * FROM connector_enrollment_tokens WHERE token_hash = $1 FOR UPDATE;
@@ -139,6 +176,14 @@ WHERE id = $1 AND enterprise_id = $2 AND status NOT IN ('uninstalled','revoked')
 -- name: RevokeConnectorCertificates :exec
 UPDATE connector_certificates SET status = 'revoked', revoked_at = now()
 WHERE connector_id = $1 AND enterprise_id = $2 AND status IN ('active','overlap');
+
+-- name: FenceConnectorForReplacement :execrows
+UPDATE connectors SET status = 'revoked', connection_epoch = connection_epoch + 1,
+ version = version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND status <> 'revoked';
+
+-- name: DeleteConnectorSessionsForReplacement :execrows
+DELETE FROM connector_sessions WHERE connector_id = $1 AND enterprise_id = $2;
 
 -- name: AdvanceConnectorEpoch :one
 UPDATE connectors SET connection_epoch = connection_epoch + 1, status = 'online', connected_at = now(), last_heartbeat_at = now(), updated_at = now()

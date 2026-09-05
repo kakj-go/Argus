@@ -7,8 +7,11 @@ export const commonZh = {
     loading: "加载中…",
     retry: "重试",
     cancel: "取消",
+    close: "关闭",
     requestReference: "请求 ID：{{requestId}}",
     unknown: "未知",
+    clientUnavailable: "客户端不可用",
+    clientUnavailableDescription: "客户端初始化失败，请检查运行时配置后重试。",
     collectorSettlement: {
       title: "正在应用 Collector 变更",
       description: "安装与配置在后台执行，完成后自动关闭。",
@@ -74,8 +77,12 @@ export const commonEn = {
     loading: "Loading…",
     retry: "Retry",
     cancel: "Cancel",
+    close: "Close",
     requestReference: "Request ID: {{requestId}}",
     unknown: "Unknown",
+    clientUnavailable: "Client unavailable",
+    clientUnavailableDescription:
+      "Client initialization failed. Check the runtime configuration and try again.",
     collectorSettlement: {
       title: "Applying collector change",
       description:

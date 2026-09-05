@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/kakj-go/Argus/internal/telemetry/queryengine/chstats"
@@ -222,18 +223,11 @@ FROM %s WHERE series_id IN (?) AND timestamp >= ? AND timestamp <= ? ORDER BY se
 	result := make([]*series, 0, len(seriesByID))
 	loadedSamples := 0
 	for _, item := range seriesByID {
-		for i := 0; i < len(item.timestamps); i++ {
-			for j := i + 1; j < len(item.timestamps); j++ {
-				if item.timestamps[j] < item.timestamps[i] {
-					item.timestamps[i], item.timestamps[j] = item.timestamps[j], item.timestamps[i]
-					item.values[i], item.values[j] = item.values[j], item.values[i]
-					item.histograms[i], item.histograms[j] = item.histograms[j], item.histograms[i]
-					item.types[i], item.types[j] = item.types[j], item.types[i]
-				}
-			}
-		}
+		sort.SliceStable(item.samples, func(i, j int) bool {
+			return item.samples[i].T() < item.samples[j].T()
+		})
 		dedupeSeries(item)
-		loadedSamples += len(item.timestamps)
+		loadedSamples += len(item.samples)
 		result = append(result, item)
 	}
 	if q.maxSamples > 0 && loadedSamples > q.maxSamples {
@@ -425,79 +419,54 @@ func (q *querier) LabelNames(ctx context.Context, _ *storage.LabelHints, matcher
 func (*querier) Close() error { return nil }
 
 type series struct {
-	id         string
-	labels     labels.Labels
-	timestamps []int64
-	values     []float64
-	histograms []*histogram.FloatHistogram
-	types      []chunkenc.ValueType
+	id      string
+	labels  labels.Labels
+	samples chunks.SampleSlice
 }
 
 func (s *series) Labels() labels.Labels { return s.labels }
 func (s *series) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
-	return &seriesIterator{series: s, index: -1}
+	return storage.NewListSeriesIteratorWithCopy(s.samples)
 }
 
 func appendFloatSample(item *series, timestamp time.Time, value float64, stale bool) {
-	item.timestamps = append(item.timestamps, timestamp.UnixNano()/1e6)
 	if stale {
-		item.values = append(item.values, staleNaN)
-	} else {
-		item.values = append(item.values, value)
+		value = staleNaN
 	}
-	item.histograms = append(item.histograms, nil)
-	item.types = append(item.types, chunkenc.ValFloat)
+	item.samples = append(item.samples, querySample{timestamp: timestamp.UnixNano() / 1e6, value: value})
 }
 
 func appendHistogramSample(item *series, timestamp time.Time, value *histogram.FloatHistogram, maxSamples int) {
 	if value == nil || timestamp.IsZero() {
 		return
 	}
-	item.timestamps = append(item.timestamps, timestamp.UnixNano()/1e6)
-	item.values = append(item.values, 0)
-	item.histograms = append(item.histograms, value)
-	item.types = append(item.types, chunkenc.ValFloatHistogram)
+	item.samples = append(item.samples, querySample{timestamp: timestamp.UnixNano() / 1e6, floatHistogram: value})
 }
 
-type seriesIterator struct {
-	series *series
-	index  int
+type querySample struct {
+	timestamp      int64
+	value          float64
+	floatHistogram *histogram.FloatHistogram
 }
 
-func (it *seriesIterator) Next() chunkenc.ValueType {
-	it.index++
-	if it.index >= len(it.series.timestamps) {
-		return chunkenc.ValNone
+func (sample querySample) T() int64                      { return sample.timestamp }
+func (querySample) ST() int64                            { return 0 }
+func (sample querySample) F() float64                    { return sample.value }
+func (querySample) H() *histogram.Histogram              { return nil }
+func (sample querySample) FH() *histogram.FloatHistogram { return sample.floatHistogram }
+func (sample querySample) Type() chunkenc.ValueType {
+	if sample.floatHistogram != nil {
+		return chunkenc.ValFloatHistogram
 	}
-	return it.series.types[it.index]
+	return chunkenc.ValFloat
 }
-func (it *seriesIterator) Seek(timestamp int64) chunkenc.ValueType {
-	if it.index < 0 {
-		it.index = 0
+func (sample querySample) Copy() chunks.Sample {
+	copy := sample
+	if sample.floatHistogram != nil {
+		copy.floatHistogram = sample.floatHistogram.Copy()
 	}
-	for it.index < len(it.series.timestamps) && it.series.timestamps[it.index] < timestamp {
-		it.index++
-	}
-	if it.index >= len(it.series.timestamps) {
-		return chunkenc.ValNone
-	}
-	return it.series.types[it.index]
+	return copy
 }
-func (it *seriesIterator) At() (int64, float64) {
-	return it.series.timestamps[it.index], it.series.values[it.index]
-}
-func (it *seriesIterator) AtHistogram(_ *histogram.Histogram) (int64, *histogram.Histogram) {
-	return it.series.timestamps[it.index], nil
-}
-func (it *seriesIterator) AtFloatHistogram(_ *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
-	if it.series.histograms[it.index] == nil {
-		return it.series.timestamps[it.index], nil
-	}
-	return it.series.timestamps[it.index], it.series.histograms[it.index].Copy()
-}
-func (it *seriesIterator) AtT() int64  { return it.series.timestamps[it.index] }
-func (it *seriesIterator) AtST() int64 { return 0 }
-func (it *seriesIterator) Err() error  { return nil }
 
 type seriesSet struct {
 	items []*series
@@ -557,27 +526,19 @@ func labelsToMap(values labels.Labels) map[string]string {
 }
 
 func dedupeSeries(item *series) {
-	if item == nil || len(item.timestamps) < 2 {
+	if item == nil || len(item.samples) < 2 {
 		return
 	}
 	write := 0
-	for read := 0; read < len(item.timestamps); read++ {
-		if write > 0 && item.timestamps[write-1] == item.timestamps[read] {
-			item.values[write-1] = item.values[read]
-			item.histograms[write-1] = item.histograms[read]
-			item.types[write-1] = item.types[read]
+	for read := 0; read < len(item.samples); read++ {
+		if write > 0 && item.samples[write-1].T() == item.samples[read].T() {
+			item.samples[write-1] = item.samples[read]
 			continue
 		}
-		item.timestamps[write] = item.timestamps[read]
-		item.values[write] = item.values[read]
-		item.histograms[write] = item.histograms[read]
-		item.types[write] = item.types[read]
+		item.samples[write] = item.samples[read]
 		write++
 	}
-	item.timestamps = item.timestamps[:write]
-	item.values = item.values[:write]
-	item.histograms = item.histograms[:write]
-	item.types = item.types[:write]
+	item.samples = item.samples[:write]
 }
 
 func quoteIdentifier(value string) string { return "`" + strings.ReplaceAll(value, "`", "") + "`" }

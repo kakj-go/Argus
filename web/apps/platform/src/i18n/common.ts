@@ -18,6 +18,9 @@ export const commonZh = {
   "common.no": "否",
   "common.requestReference": "请求 ID：{{requestId}}",
   "common.saveFailed": "保存失败，请检查标记字段后重试。",
+  "common.clientUnavailable": "客户端不可用",
+  "common.clientUnavailableDescription":
+    "客户端初始化失败，请检查运行时配置后重试。",
 };
 
 export const commonEn = {
@@ -39,4 +42,7 @@ export const commonEn = {
   "common.no": "No",
   "common.requestReference": "Request ID: {{requestId}}",
   "common.saveFailed": "Save failed. Check the indicated fields and try again.",
+  "common.clientUnavailable": "Client unavailable",
+  "common.clientUnavailableDescription":
+    "Client initialization failed. Check the runtime configuration and try again.",
 };

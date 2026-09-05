@@ -22,33 +22,33 @@ func TestOwnedCRDSelectorsIncludeRunScopedOpenSandboxRelease(t *testing.T) {
 	}
 }
 
-func TestDeleteTelemetryRootCASecret(t *testing.T) {
+func TestDeleteManagedRootCASecret(t *testing.T) {
 	client := fake.NewSimpleClientset(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
 		Namespace: "cert-manager",
-		Name:      "argus-e2e-telemetry-root-ca",
-		Labels:    map[string]string{"argus.io/release-id": "argus-e2e"},
+		Name:      "argus-e2e-root-ca",
+		Labels:    map[string]string{"argus.io/release-id": "argus-e2e", "argus.io/pki-role": "managed-root"},
 	}})
 
-	if err := deleteTelemetryRootCASecret(context.Background(), client, "argus-e2e"); err != nil {
+	if err := deleteManagedRootCASecret(context.Background(), client, "argus-e2e"); err != nil {
 		t.Fatal(err)
 	}
-	_, err := client.CoreV1().Secrets("cert-manager").Get(context.Background(), "argus-e2e-telemetry-root-ca", metav1.GetOptions{})
+	_, err := client.CoreV1().Secrets("cert-manager").Get(context.Background(), "argus-e2e-root-ca", metav1.GetOptions{})
 	if !apierrors.IsNotFound(err) {
-		t.Fatalf("telemetry root CA Secret still exists: %v", err)
+		t.Fatalf("managed root CA Secret still exists: %v", err)
 	}
 }
 
-func TestDeleteTelemetryRootCASecretRejectsDifferentOwner(t *testing.T) {
+func TestDeleteManagedRootCASecretRejectsDifferentOwner(t *testing.T) {
 	client := fake.NewSimpleClientset(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
 		Namespace: "cert-manager",
-		Name:      "argus-e2e-telemetry-root-ca",
-		Labels:    map[string]string{"argus.io/release-id": "another-release"},
+		Name:      "argus-e2e-root-ca",
+		Labels:    map[string]string{"argus.io/release-id": "another-release", "argus.io/pki-role": "managed-root"},
 	}})
 
-	if err := deleteTelemetryRootCASecret(context.Background(), client, "argus-e2e"); err == nil {
+	if err := deleteManagedRootCASecret(context.Background(), client, "argus-e2e"); err == nil {
 		t.Fatal("expected release ownership mismatch")
 	}
-	if _, err := client.CoreV1().Secrets("cert-manager").Get(context.Background(), "argus-e2e-telemetry-root-ca", metav1.GetOptions{}); err != nil {
+	if _, err := client.CoreV1().Secrets("cert-manager").Get(context.Background(), "argus-e2e-root-ca", metav1.GetOptions{}); err != nil {
 		t.Fatalf("mismatched Secret should remain: %v", err)
 	}
 }

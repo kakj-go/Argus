@@ -111,12 +111,12 @@ paths:
                 $ref: '#/components/schemas/pending-action-public.schema'
         default:
           $ref: '#/components/responses/Error'
-  /enterprise/bastion-scopes/{id}/actions/preview-replacement:
+  /enterprise/bastion-scopes/{id}/actions/preview-enrollment-rotate:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
     post:
-      operationId: previewReplaceBastionConnector
-      summary: Fence the active Connector through a confirmed replacement action.
+      operationId: previewBastionEnrollmentRotate
+      summary: Freeze a new mode A Connector installation command.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/CsrfToken'
@@ -126,6 +126,63 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ResourcePreviewDelete'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/bastion-scopes/{id}/actions/preview-connector-replacement:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: previewBastionConnectorReplacement
+      summary: Fence the active Connector through a confirmed replacement action.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BastionConnectorReplacementPreview'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/connector-install-operations/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: getConnectorInstallOperation
+      summary: Get the durable Connector installation progress and public event timeline.
+      responses:
+        '200':
+          description: Connector installation operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorInstallOperation'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/connector-install-operations/{id}/actions/preview-retry:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: previewRetryConnectorInstallOperation
+      summary: Freeze a retry of a terminal failed Connector installation operation.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
       responses:
         '201':
           description: Pending Action.
@@ -232,6 +289,43 @@ paths:
                 $ref: '#/components/schemas/ConnectorEnrollResult'
         default:
           $ref: '#/components/responses/Error'
+  /connectors/bootstrap-script:
+    get:
+      operationId: getConnectorBootstrapScript
+      summary: Download a strict Connector bootstrap script using a pending enrollment token.
+      description: 公开目标机端点；短命令可仅对本次脚本下载放宽 TLS，返回脚本内嵌版本化 Trust Bundle，后续请求保持严格校验。读取脚本不消费 enrollment token。
+      security:
+        - connectorEnrollmentToken: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - linux-system
+              - linux-user
+      responses:
+        '200':
+          description: Generated strict bootstrap script.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+            Content-Disposition:
+              schema:
+                type: string
+            X-Content-Type-Options:
+              schema:
+                type: string
+          content:
+            text/x-shellscript:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 131072
+        default:
+          $ref: '#/components/responses/Error'
 components:
   securitySchemes:
     sessionCookie:
@@ -253,6 +347,8 @@ components:
         - environment
         - labels
         - status
+        - onboarding_mode
+        - onboarding
         - fencing_generation
         - member_count
         - resource_version
@@ -284,12 +380,32 @@ components:
             - uninstalling
             - uninstalled
             - deleted
+        onboarding_mode:
+          type: string
+          enum:
+            - command
+            - direct_install
+            - direct_install_tunnel
+          readOnly: true
+        onboarding:
+          $ref: '#/components/schemas/OnboardingProjection'
         connector_host_id:
           type: string
           format: uuid
         active_connector_id:
           type: string
           format: uuid
+        control_tunnel_status:
+          type: string
+          enum:
+            - desired
+            - establishing
+            - established
+            - degraded
+            - down
+            - removed
+          readOnly: true
+          description: 模式 C 长期控制隧道的权威状态；与 Connector 在线状态独立
         fencing_generation:
           type: integer
           format: int64
@@ -327,6 +443,7 @@ components:
         - name
         - environment
         - labels
+        - install_mode
       properties:
         name:
           type: string
@@ -336,6 +453,140 @@ components:
           $ref: '#/components/schemas/Environment'
         labels:
           $ref: '#/components/schemas/UserLabels'
+        install_mode:
+          type: string
+          enum:
+            - command
+            - direct_install
+            - direct_install_tunnel
+        address:
+          type: string
+          minLength: 1
+          maxLength: 512
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        username:
+          type: string
+          minLength: 1
+          maxLength: 256
+        credential_id:
+          type: string
+          format: uuid
+        connection_test_id:
+          type: string
+          format: uuid
+          description: 代装模式必填:与本表单字段匹配且成功的 direct_ssh 主机连接测试
+    ConnectorInstallOperation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - connector_id
+        - bastion_scope_id
+        - host_id
+        - install_mode
+        - stage
+        - status
+        - attempt
+        - max_attempts
+        - events
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        connector_id:
+          type: string
+          format: uuid
+        bastion_scope_id:
+          type: string
+          format: uuid
+        host_id:
+          type: string
+          format: uuid
+        retry_of:
+          type: string
+          format: uuid
+        connection_test_id:
+          type: string
+          format: uuid
+        release_version_id:
+          type: string
+          format: uuid
+        install_mode:
+          type: string
+          enum:
+            - direct_install
+            - direct_install_tunnel
+        stage:
+          type: string
+          enum:
+            - queued
+            - ssh_connecting
+            - artifact_verifying
+            - artifact_transferring
+            - service_installing
+            - control_tunnel_establishing
+            - enrolling
+            - waiting_connector_online
+            - completed
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - succeeded
+            - failed
+            - result_unknown
+            - expired
+            - cancelled
+        attempt:
+          type: integer
+          minimum: 0
+          maximum: 3
+        max_attempts:
+          type: integer
+          minimum: 1
+          maximum: 3
+        connector_online_at:
+          type: string
+          format: date-time
+        control_tunnel_status:
+          type: string
+          enum:
+            - desired
+            - establishing
+            - established
+            - degraded
+            - down
+            - removed
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        events:
+          type: array
+          maxItems: 256
+          items:
+            $ref: '#/components/schemas/ConnectorInstallOperationEvent'
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     Connector:
       type: object
       additionalProperties: false
@@ -438,6 +689,7 @@ components:
         - csr_pem
         - device_fingerprint
         - instance_id
+        - architecture
         - name
         - software_version
         - capabilities
@@ -455,6 +707,11 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+        architecture:
+          type: string
+          enum:
+            - amd64
+            - arm64
         name:
           type: string
           minLength: 1
@@ -478,7 +735,7 @@ components:
         - connector_id
         - role
         - certificate_pem
-        - ca_bundle_pem
+        - trust_bundle
         - gateway_endpoint
         - certificate_expires_at
         - result
@@ -500,8 +757,8 @@ components:
         certificate_pem:
           type: string
           writeOnly: true
-        ca_bundle_pem:
-          type: string
+        trust_bundle:
+          $ref: '#/components/schemas/TrustBundleSnapshot'
         gateway_endpoint:
           type: string
           minLength: 1
@@ -514,6 +771,55 @@ components:
           enum:
             - registered
             - idempotent_retry
+    InstallInstructionSet:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - command
+        - expires_at
+        - trust_bundle_epoch
+        - trust_bundle_sha256
+        - installer_sha256
+        - capability_warnings
+      properties:
+        scope:
+          type: string
+          enum:
+            - linux-system
+            - linux-user
+            - kubernetes
+        command:
+          type: string
+          minLength: 1
+          maxLength: 131072
+          writeOnly: true
+          description: 唯一面向用户展示的一键安装命令。Host 与手工 Connector 下载动态引导脚本；Kubernetes 使用等价的单命令临时脚本执行。
+        download_tls_mode:
+          type: string
+          enum:
+            - strict
+            - insecure-first-fetch
+        expires_at:
+          type: string
+          format: date-time
+        trust_bundle_epoch:
+          type: integer
+          format: int64
+          minimum: 1
+        trust_bundle_sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        installer_sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        capability_warnings:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1024
     RequestId:
       type: string
       minLength: 16
@@ -580,6 +886,39 @@ components:
           - $ref: '#/components/schemas/SystemLabelKey'
       additionalProperties:
         $ref: '#/components/schemas/LabelValue'
+    OnboardingProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - updated_at
+      properties:
+        state:
+          type: string
+          enum:
+            - command_available
+            - command_consumed
+            - command_expired
+            - awaiting_approval
+            - installing
+            - install_failed
+            - registered
+        pending_action_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+        execution_id:
+          type: string
+          format: uuid
+        operation_id:
+          type: string
+          format: uuid
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        updated_at:
+          type: string
+          format: date-time
     PartialMetadata:
       type: object
       additionalProperties: false
@@ -657,6 +996,7 @@ components:
       required:
         - schema_version
         - action_ref
+        - action_type
         - title
         - summary
         - risk
@@ -673,6 +1013,10 @@ components:
         action_ref:
           type: string
           minLength: 1
+        action_type:
+          type: string
+          minLength: 3
+          maxLength: 128
         title:
           type: string
           minLength: 1
@@ -798,11 +1142,131 @@ components:
           type: integer
           format: int64
           minimum: 1
+    BastionConnectorReplacementPreview:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_version
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+        address:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: 模式 B/C 必填；必须与本次连接测试一致
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        username:
+          type: string
+          minLength: 1
+          maxLength: 256
+        credential_id:
+          type: string
+          format: uuid
+        connection_test_id:
+          type: string
+          format: uuid
+          description: 模式 B/C 必填；必须是当前有效的 direct_ssh 测试
+    ConnectorInstallOperationEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - stage
+        - status
+        - occurred_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        stage:
+          type: string
+          enum:
+            - queued
+            - ssh_connecting
+            - artifact_verifying
+            - artifact_transferring
+            - service_installing
+            - control_tunnel_establishing
+            - enrolling
+            - waiting_connector_online
+            - completed
+        status:
+          type: string
+          enum:
+            - started
+            - succeeded
+            - failed
+            - retrying
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        detail:
+          type: string
+          maxLength: 1024
+        occurred_at:
+          type: string
+          format: date-time
     ConnectorRole:
       type: string
       enum:
         - bastion
         - kubernetes
+    TrustBundleSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - epoch
+        - state
+        - bundle_pem
+        - bundle_sha256
+        - current_ca_fingerprints
+        - next_ca_fingerprints
+        - started_at
+      properties:
+        epoch:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          type: string
+          enum:
+            - stable
+            - preparing
+            - overlapping
+            - retiring
+            - failed
+        bundle_pem:
+          type: string
+          minLength: 128
+          maxLength: 131072
+        bundle_sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        current_ca_fingerprints:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            pattern: ^[a-f0-9]{64}$
+        next_ca_fingerprints:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: ^[a-f0-9]{64}$
+        started_at:
+          type: string
+          format: date-time
+        retire_at:
+          type: string
+          format: date-time
   parameters:
     Cursor:
       name: cursor

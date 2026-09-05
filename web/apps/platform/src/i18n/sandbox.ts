@@ -35,6 +35,9 @@ export const sandboxZh = {
   "sandbox.backends.test.success": "连接测试通过",
   "sandbox.backends.test.failure": "连接测试失败",
   "sandbox.backends.test.latency": "延迟 {{ms}} ms",
+  "sandbox.backends.test.status.passed": "通过",
+  "sandbox.backends.test.status.failed": "失败",
+  "sandbox.backends.test.status.skipped": "已跳过",
 
   "sandbox.images.add": "登记镜像",
   "sandbox.images.table.name": "名称",
@@ -172,6 +175,9 @@ export const sandboxEn = {
   "sandbox.backends.test.success": "Connection test passed",
   "sandbox.backends.test.failure": "Connection test failed",
   "sandbox.backends.test.latency": "Latency {{ms}} ms",
+  "sandbox.backends.test.status.passed": "Passed",
+  "sandbox.backends.test.status.failed": "Failed",
+  "sandbox.backends.test.status.skipped": "Skipped",
 
   "sandbox.images.add": "Register image",
   "sandbox.images.table.name": "Name",

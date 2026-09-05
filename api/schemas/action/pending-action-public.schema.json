@@ -4,10 +4,11 @@
   "title": "PendingActionPublic",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "action_ref", "title", "summary", "risk", "preview", "diff", "status", "available_actions", "expires_at", "created_at", "updated_at"],
+  "required": ["schema_version", "action_ref", "action_type", "title", "summary", "risk", "preview", "diff", "status", "available_actions", "expires_at", "created_at", "updated_at"],
   "properties": {
     "schema_version": {"const": "argus.pending_action/v1"},
     "action_ref": {"type": "string", "minLength": 1},
+    "action_type": {"type": "string", "minLength": 3, "maxLength": 128},
     "title": {"type": "string", "minLength": 1, "maxLength": 256},
     "summary": {"type": "string", "minLength": 1, "maxLength": 4096},
     "risk": {"enum": ["read", "write", "dangerous", "critical"]},

@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package argus.connector.v1;
+
+option go_package = "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1;connectorv1";
+
+import "google/protobuf/timestamp.proto";
+
+// The gateway sends a complete desired snapshot on connect and every
+// heartbeat. A tunnel omitted from the snapshot must be closed immediately.
+message TelemetryTunnelDesiredSet {
+  repeated TelemetryTunnelDesired tunnels = 1;
+  bool full_snapshot = 2;
+}
+
+message TelemetryTunnelDesired {
+  string tunnel_id = 1;
+  string collector_id = 2;
+  uint64 epoch = 3;
+  uint64 fence = 4;
+  string target_address = 5;
+  uint32 target_port = 6;
+  string target_username = 7;
+  string pinned_host_key = 8;
+  uint32 loopback_port = 9;
+  string forward_target = 10;
+  string credential_lease_id = 11;
+  google.protobuf.Timestamp lease_expires_at = 12;
+  uint32 identity_loopback_port = 13;
+  string identity_forward_target = 14;
+}
+
+message TelemetryTunnelStatusSet {
+  repeated TelemetryTunnelStatus tunnels = 1;
+}
+
+message TelemetryTunnelStatus {
+  string tunnel_id = 1;
+  uint64 epoch = 2;
+  uint64 fence = 3;
+  string status = 4;
+  uint64 bytes_relayed = 5;
+  uint64 throttled_events = 6;
+  string drop_reason = 7;
+}

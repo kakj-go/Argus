@@ -50,6 +50,13 @@ func TestEnrollmentEndpointRequiresHTTPSOutsideLoopback(t *testing.T) {
 	}
 }
 
+func TestPinnedEnrollmentAddressOnlyOverridesDialing(t *testing.T) {
+	transport := pinnedAddressTransport("127.0.0.1:8443")
+	if transport.DialContext == nil || transport.TLSClientConfig != nil {
+		t.Fatalf("pinned base transport must leave TLS identity to tlsmaterial: %#v", transport)
+	}
+}
+
 func TestParseGatewayEndpointRequiresGRPCSTarget(t *testing.T) {
 	for _, value := range []string{"gateway.example.test:9443", "grpcs://gateway.example.test:9443"} {
 		parsed, err := parseGatewayEndpoint(value)

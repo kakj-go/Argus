@@ -14,14 +14,15 @@ import (
 const usage = `usage:
   argus-dev doctor portable|e2e|release [--output text|json]
   argus-dev contracts lint|generate|check|breaking
-  argus-dev check query-parsers|production-artifacts|web-entrypoints|all
+  argus-dev check query-parsers|production-artifacts|tls-security|web-entrypoints|all
   argus-dev repo fmt|test|vet|run-server|migrate|sqlc
-  argus-dev collector build linux-arm64|windows-amd64|all
+  argus-dev collector build linux-arm64|linux-amd64|windows-amd64|all
   argus-dev collector publish-image [--repository REPO] [--tag TAG] [--push]  # --push 发布 arm64+amd64 多架构 manifest
   argus-dev collector publish-artifacts --endpoint URL --access-key K --secret-key K [--bucket B] [--public-base URL] [--key-id ID] [--windows]
+  argus-dev connector publish-artifacts --endpoint URL --access-key K --secret-key K --version VERSION [--database-url URL]
   argus-dev query promql|kql|skywalking|tenant-schema
   argus-dev web build --api-mode mock|real
-  argus-dev e2e run --suite m2|m3|m4|m5|m6|m7|m8|m10-query [options]
+  argus-dev e2e run --suite m2|m3|m4|m5|m6|m7|m8|m10-query|p4 [options]
   argus-dev release local [--version VERSION] [--output DIR]`
 
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -77,6 +78,8 @@ func (a *App) run(ctx context.Context, args []string) error {
 		return a.runRepo(ctx, args[1:])
 	case "collector":
 		return a.runCollector(ctx, args[1:])
+	case "connector":
+		return a.runConnector(ctx, args[1:])
 	case "query":
 		return a.runQuery(ctx, args[1:])
 	case "web":

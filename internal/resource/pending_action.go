@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kakj-go/Argus/internal/audit"
+	"github.com/kakj-go/Argus/internal/installinstruction"
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 )
@@ -60,18 +61,27 @@ type ActionCommitResult struct {
 	ErrorCode            string
 	ConnectorCommandID   uuid.NullUUID
 	TelemetryOperationID uuid.NullUUID
-	Enrollment           *EnrollmentResult
+	OneTimeCommand       *OneTimeCommandResult
+	// ConnectorInstallOperationID is the durable operation reference used by
+	// direct Connector installation. The action remains result_unknown until
+	// that operation reaches its complete success condition.
+	ConnectorInstallOperationID uuid.NullUUID
+	OneTimeResultKind           string
 }
 
 type EnrollmentResult struct {
-	EnrollmentID   uuid.UUID `json:"enrollment_id"`
-	InstallCommand string    `json:"install_command"`
-	ExpiresAt      time.Time `json:"expires_at"`
+	EnrollmentID    uuid.UUID                `json:"enrollment_id"`
+	InstructionSets []installinstruction.Set `json:"instruction_sets"`
+	ExpiresAt       time.Time                `json:"expires_at"`
+}
+
+type OneTimeCommandResult struct {
+	InstructionSets []installinstruction.Set
+	ExpiresAt       time.Time
 }
 
 type ActionConfirmation struct {
-	PendingAction db.PendingAction  `json:"pending_action"`
-	Enrollment    *EnrollmentResult `json:"enrollment,omitempty"`
+	PendingAction db.PendingAction `json:"pending_action"`
 }
 
 type ActionCommitFunc func(context.Context, *db.Queries, db.PendingAction, json.RawMessage) (ActionCommitResult, error)
@@ -333,7 +343,7 @@ func (service PendingActionService) Confirm(ctx context.Context, actorID string,
 		if err := appendResourceAudit(ctx, q, actorID, enterpriseID, "pending_action.confirm", action.ResourceType, action.ResourceID.UUID, map[string]any{"status": status}); err != nil {
 			return ActionConfirmation{}, err
 		}
-		return ActionConfirmation{PendingAction: result, Enrollment: commitResult.Enrollment}, nil
+		return ActionConfirmation{PendingAction: result}, nil
 	})
 }
 

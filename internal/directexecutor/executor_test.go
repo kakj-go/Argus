@@ -3,20 +3,31 @@ package directexecutor
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
+	"encoding/pem"
 	"errors"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
+	connectorv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/connector/v1"
 	"github.com/kakj-go/Argus/internal/resource"
+	"github.com/kakj-go/Argus/internal/secret"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 func TestClassifyConnectionError(t *testing.T) {
@@ -156,4 +167,91 @@ func TestParseAddressesRejectsInvalidValues(t *testing.T) {
 	if _, err := parseAddresses([]string{"not-an-ip"}); !errors.Is(err, resource.ErrDirectTargetDenied) {
 		t.Fatalf("expected invalid address denial, got %v", err)
 	}
+}
+
+func TestConnectorInstallTunnelErrorsAreStable(t *testing.T) {
+	tests := map[error]string{
+		errHostKeyMismatch:              "SSH_HOST_KEY_CHANGED",
+		errTunnelQuotaExceeded:          "TUNNEL_QUOTA_EXCEEDED",
+		secret.ErrCredentialUnavailable: "CREDENTIAL_UNAVAILABLE",
+		errCredentialVersionStale:       "CREDENTIAL_VERSION_STALE",
+	}
+	for input, expected := range tests {
+		if actual := connectorInstallErrorCode(input); actual != expected {
+			t.Fatalf("connectorInstallErrorCode(%v) = %q, want %q", input, actual, expected)
+		}
+	}
+}
+
+func TestConnectorInstallPersistsCollectorArtifactTrust(t *testing.T) {
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := &connectorv1.ConnectorInstallCommand{Artifact: &connectorv1.CollectorArtifact{SigningKeyId: "release-key"},
+		ArtifactSigningPublicKey: base64.RawStdEncoding.EncodeToString(publicKey)}
+	decoded, err := connectorInstallSigningKey(command)
+	if err != nil || !bytes.Equal(decoded, publicKey) {
+		t.Fatalf("frozen signing root rejected: %v", err)
+	}
+	unit := connectorSystemdUnit(command, true)
+	for _, required := range []string{
+		"ARGUS_OTELCOL_SIGNING_PUBLIC_KEYS_FILE=/etc/argus-connector/otelcol-signing-keys.json",
+		"ARGUS_OTELCOL_ARTIFACT_CA_PATH=/etc/argus-connector/otelcol-artifact-ca.pem",
+		"ReadWritePaths=/var/lib/argus-connector /etc/argus-connector /var/lib/argus-otelcol",
+	} {
+		if !strings.Contains(unit, required) {
+			t.Fatalf("Connector unit omitted %q", required)
+		}
+	}
+	if strings.Contains(unit, "User=argus-connector") {
+		t.Fatal("Connector local installer unexpectedly runs without host installation privileges")
+	}
+	command.ArtifactSigningPublicKey = "invalid"
+	if _, err = connectorInstallSigningKey(command); err == nil {
+		t.Fatal("invalid frozen signing root accepted")
+	}
+}
+
+func TestConnectorSSHInstallPinsPrivateCAForEnrollment(t *testing.T) {
+	caPEM := directExecutorTestCA(t)
+	material, err := trustbundle.Parse(caPEM, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := &connectorv1.ConnectorInstallCommand{
+		ConnectorId: "01a05d47-319d-70b7-a768-f8aa2401f0da", EnrollmentEndpoint: "https://argus.private.example",
+		EnrollDialAddress: "127.0.0.1:8443", TrustBundlePem: caPEM, TrustBundleEpoch: 2,
+		TrustBundleSha256: material.SHA256, TrustBundleCaFingerprints: material.Fingerprints,
+	}
+	parsed, err := connectorInstallTrustBundle(command)
+	if err != nil || parsed.SHA256 != material.SHA256 {
+		t.Fatalf("valid private Trust Bundle rejected: %v", err)
+	}
+	enroll := connectorEnrollCommand(command, "one-time-token")
+	for _, expected := range []string{"ARGUS_CONNECTOR_ENROLL_ADDRESS='127.0.0.1:8443'", "--server 'https://argus.private.example'", "--ca-file /etc/argus-connector/server-ca.pem"} {
+		if !strings.Contains(enroll, expected) {
+			t.Fatalf("remote enrollment command omitted %q: %s", expected, enroll)
+		}
+	}
+	command.TrustBundleSha256 = strings.Repeat("0", 64)
+	if _, err = connectorInstallTrustBundle(command); err == nil {
+		t.Fatal("tampered remote installation Trust Bundle was accepted")
+	}
+}
+
+func directExecutorTestCA(t *testing.T) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{SerialNumber: big.NewInt(99), Subject: pkix.Name{CommonName: "remote-install-root"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour), IsCA: true, BasicConstraintsValid: true,
+		KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature}
+	raw, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: raw})
 }

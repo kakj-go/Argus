@@ -13,12 +13,35 @@ import (
 	"github.com/kakj-go/Argus/internal/pagination"
 	"github.com/kakj-go/Argus/internal/platform"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 type PlatformHandler struct {
-	Auth       SetupHandler
-	Enterprise platform.EnterpriseService
-	Cursor     pagination.Signer
+	Auth         SetupHandler
+	Enterprise   platform.EnterpriseService
+	Cursor       pagination.Signer
+	TrustBundles trustbundle.Service
+}
+
+func (handler PlatformHandler) GetPlatformPKIStatus(ctx context.Context, _ platformapi.GetPlatformPKIStatusRequestObject) (platformapi.GetPlatformPKIStatusResponseObject, error) {
+	if _, response := handler.platformPrincipal(ctx, false, ""); response != nil {
+		return platformapi.GetPlatformPKIStatusdefaultJSONResponse{Body: *response, StatusCode: http.StatusUnauthorized}, nil
+	}
+	if handler.TrustBundles.Store == nil {
+		return platformapi.GetPlatformPKIStatusdefaultJSONResponse{Body: platformError(ctx, errors.New("Trust Bundle service is not configured")), StatusCode: http.StatusServiceUnavailable}, nil
+	}
+	bundles, err := handler.TrustBundles.Store.Queries.ListTrustBundles(ctx, 10)
+	if err != nil {
+		return platformapi.GetPlatformPKIStatusdefaultJSONResponse{Body: platformError(ctx, err), StatusCode: http.StatusInternalServerError}, nil
+	}
+	var nodes []db.PkiNodeTrustAck
+	if len(bundles) > 0 {
+		nodes, err = handler.TrustBundles.Store.Queries.ListNodeTrustAcks(ctx, bundles[0].Epoch)
+		if err != nil {
+			return platformapi.GetPlatformPKIStatusdefaultJSONResponse{Body: platformError(ctx, err), StatusCode: http.StatusInternalServerError}, nil
+		}
+	}
+	return platformapi.GetPlatformPKIStatus200JSONResponse(toPlatformPKIStatus(bundles, nodes)), nil
 }
 
 func (handler PlatformHandler) ListEnterprises(ctx context.Context, request platformapi.ListEnterprisesRequestObject) (platformapi.ListEnterprisesResponseObject, error) {
@@ -239,6 +262,75 @@ func toPlatformEnterpriseUser(user db.EnterpriseUser) platformapi.EnterpriseUser
 func toCreatedCredential(value platform.CreatedCredential) platformapi.CreatedUserCredential {
 	password := value.TemporaryPassword
 	return platformapi.CreatedUserCredential{User: toPlatformEnterpriseUser(value.User), TemporaryPassword: &password, ExpiresAt: value.ExpiresAt}
+}
+
+func toPlatformPKIStatus(bundles []db.PkiTrustBundle, nodes []db.PkiNodeTrustAck) platformapi.PKIStatus {
+	result := platformapi.PKIStatus{
+		Bundles: []platformapi.PKIBundleStatus{},
+		Nodes:   []platformapi.PKINodeStatus{},
+	}
+	for _, bundle := range bundles {
+		item := platformapi.PKIBundleStatus{
+			Epoch:                 bundle.Epoch,
+			State:                 platformapi.PKIBundleStatusState(bundle.State),
+			Direction:             platformapi.PKIBundleStatusDirection(bundle.Direction),
+			BundleSha256:          bundle.BundleSha256,
+			CurrentCaFingerprints: append([]string{}, bundle.CurrentCaFingerprints...),
+			NextCaFingerprints:    append([]string{}, bundle.NextCaFingerprints...),
+			StartedAt:             bundle.StartedAt.Time.UTC(),
+		}
+		if bundle.RetireAt.Valid {
+			retireAt := bundle.RetireAt.Time.UTC()
+			item.RetireAt = &retireAt
+		}
+		if bundle.LastError != "" {
+			lastError := bundle.LastError
+			item.LastError = &lastError
+		}
+		result.Bundles = append(result.Bundles, item)
+	}
+	for _, node := range nodes {
+		item := platformapi.PKINodeStatus{
+			Id:            node.NodeID,
+			Kind:          platformapi.PKINodeStatusKind(node.NodeKind),
+			Status:        platformapi.PKINodeStatusStatus(node.Status),
+			Epoch:         node.Epoch,
+			BlocksCutover: node.RequiredForCutover,
+			UpdatedAt:     node.UpdatedAt.Time.UTC(),
+		}
+		if node.EnterpriseID.Valid {
+			enterpriseID := openapi_types.UUID(node.EnterpriseID.UUID)
+			item.EnterpriseId = &enterpriseID
+		}
+		if node.BundleSha256 != "" {
+			sha256 := node.BundleSha256
+			item.BundleSha256 = &sha256
+		}
+		if len(node.CaFingerprints) > 0 {
+			fingerprints := append([]string{}, node.CaFingerprints...)
+			item.CaFingerprints = &fingerprints
+		}
+		if node.AcknowledgedAt.Valid {
+			acknowledgedAt := node.AcknowledgedAt.Time.UTC()
+			item.AcknowledgedAt = &acknowledgedAt
+		}
+		if node.Error != "" {
+			errorValue := node.Error
+			item.Error = &errorValue
+		}
+		switch node.Status {
+		case "acked":
+			result.AcknowledgedNodes++
+		case "pending":
+			result.PendingNodes++
+		case "failed":
+			result.FailedNodes++
+		case "trust_expired":
+			result.TrustExpiredNodes++
+		}
+		result.Nodes = append(result.Nodes, item)
+	}
+	return result
 }
 
 func emptyPlatformPage() platformapi.CursorPage {

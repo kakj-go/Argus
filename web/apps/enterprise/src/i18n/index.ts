@@ -7,6 +7,7 @@ import { commonEn, commonZh } from "./common";
 import { hostsEn, hostsZh } from "./hosts";
 import { kubernetesEn, kubernetesZh } from "./kubernetes";
 import { loginEn, loginZh } from "./login";
+import { pendingActionsEn, pendingActionsZh } from "./pending-actions";
 import { remoteAccessEn, remoteAccessZh } from "./remote-access";
 import { remoteSessionsEn, remoteSessionsZh } from "./remote-sessions";
 import { governanceEn, governanceZh } from "./governance";
@@ -37,6 +38,7 @@ const modulesZh = [
   telemetryZh,
   settingsZh,
   governanceZh,
+  pendingActionsZh,
   errorsZh,
 ];
 const modulesEn = [
@@ -53,6 +55,7 @@ const modulesEn = [
   telemetryEn,
   settingsEn,
   governanceEn,
+  pendingActionsEn,
   errorsEn,
 ];
 

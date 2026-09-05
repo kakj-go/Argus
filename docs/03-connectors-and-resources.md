@@ -26,7 +26,7 @@ M3 已实现 Secret/Credential、Host/Kubernetes、Bastion Scope、Connector 注
 
 M6 已实现 RemoteAccessGrant/Policy、AccessRequest/Lease、一次性 Ticket、SSH PTY、HTTPS WinRS PowerShell 行模式、跨 Gateway peer 路由和加密录像。Remote Access 继续与 Agent、Card、PendingAction 和 Execution 隔离；M8 已补齐本地 MFA、Step-up、Break Glass 和录像备份恢复，Production 不可变保留与真实 Windows Server 兼容矩阵仍由独立 Validation 清单阻断。
 
-Connector PKI 由 cert-manager 签发。安装器复用同 major/minor 且 patch 不低于版本锁基线的实例，否则安装锁定版本。Server 和 Connector Gateway 都通过独立 ServiceAccount 与最小 CertificateRequest RBAC 使用同一个 namespaced Issuer；Gateway 缺少 Issuer 或权限时必须 fail closed，不能让轮换退化为继续使用旧证书。实例卸载不得删除被其他安装复用的 cert-manager CRD。
+Connector PKI 由 cert-manager 签发。安装器复用兼容版本的 cert-manager/trust-manager，否则安装锁定版本。所有 Argus 证书引用同一个全局 `ClusterIssuer`，但 Connector Gateway 服务端与每个 Connector 客户端分别使用独立私钥、用途化 URI SAN 和单一 EKU。Gateway 缺少 Issuer、公共 Trust Bundle 或权限时必须 fail closed；Bundle 以 epoch/SHA-256/CA 指纹更新并由节点 ACK。实例卸载不得删除被其他安装复用的 CRD。完整轮换和修复流程见 [全链路 PKI、TLS 与 Trust Bundle](./18-pki-and-tls.md)。
 
 堡垒机还可以安装 `argus-otelcol` 并启用 Edge Gateway 模式，从而成为遥测中间机；此时用户看到的是一台同时具备堡垒访问与遥测网关角色的主机，但底层仍是两个独立进程：
 
@@ -68,13 +68,16 @@ Bastion Scope 与 Connector 实例分开保存。用户归类标签保存在根 
 
 第一版主机连接模式固定为：
 
-| 模式                        | 创建方式                                   | 执行路径                         | 是否属于 Bastion Scope |
-| --------------------------- | ------------------------------------------ | -------------------------------- | ---------------------- |
-| `connector_local`           | 执行 Connector 安装命令并完成注册          | Connector 管理本机               | 是，且为根堡垒机       |
-| `via_bastion`               | 手工填写内网地址、Credential 并选择堡垒机  | Argus → Connector → SSH/WinRM    | 是，且为成员主机       |
-| `direct_ssh`/`direct_winrm` | 手工填写目标地址、Credential，不选择堡垒机 | Argus Direct Executor → 目标主机 | 否                     |
+| 模式 | 创建方式 | 执行路径 | 是否属于 Bastion Scope |
+| --- | --- | --- | --- |
+| `connector_local` | 手动命令或平台 SSH 代安装 Connector 并完成注册 | Connector 管理本机 | 是，且为根堡垒机 |
+| `via_bastion` | 填写内网地址、Credential 并选择堡垒机 | Argus → Connector → SSH/WinRM | 是，且为成员主机 |
+| `direct_ssh`/`direct_winrm` | 填写目标地址、Credential，不选择堡垒机 | Argus Direct Executor → 目标主机 | 否 |
+| `self_enrolled` | 平台生成一次性安装命令，用户在目标机器执行 | 无入站执行路径；bootstrap 自装并激活 | 否 |
 
 “经堡垒机”和“直连”是显式接入路径，不根据 IP 字符串自动推导。服务端必须解析 DNS/IP、校验实际目的地址；Direct Executor 可以连接其部署网络可达的公网或私网目标，但必须拒绝环回、链路本地、云元数据和配置的禁用网段。
+
+产品界面中的五种普通主机模式不是五个新的 `connection_mode`。双向可达与只进不出都使用 Direct 模式，通过 Telemetry Route 的 `transport=direct|executor_tunnel` 区分遥测物理路径；标准堡垒机成员与受限端口成员都使用 `via_bastion`，通过 `transport=direct|bastion_tunnel` 区分成员到 Gateway 的路径；只出不进使用 `self_enrolled`。
 
 ### 2.3 Remote Access Session
 
@@ -109,24 +112,49 @@ Remote Access Session 是人工作业通道，不是 MCP Tool Commit。AI、交�
 
 ## 3. 堡垒机安装、注册和界面创建
 
-具有 `bastion_scope.create` 和相应资源 DataAuthorizationGrant 的企业用户在“主机”页面点击“添加堡垒机”，填写名称、用户标签和安装策略并生成一次性安装命令。创建注册令牌时即创建一个 `pending` Bastion Scope，界面显示“等待 Connector 注册”的分组框；Connector 注册成功后在同一事务或可恢复工作流中创建/绑定同企业的堡垒机 Host，并激活 Scope。
+具有 `bastion_scope.create` 的企业用户在“主机”页面点击“添加堡垒机”，第一步选择安装模式，第二步再填写对应信息。三种正式模式为：
+
+| 模式 | 网络前件 | 第二步信息 | 确认方式 | 用户结果 |
+| --- | --- | --- | --- | --- |
+| A 手动命令安装 | 堡垒机可出站；不要求 Argus 可 SSH | 名称、环境、标签 | 冻结 Scope/Host/Connector 计划 | 一次性安装命令 |
+| B 平台 SSH 代安装 | Argus 可 SSH，堡垒机可出站 | A 的字段 + 地址、端口、账号、Credential | ConnectionTest + 安装 Preview | 安装 operation 进度与完成状态 |
+| C 平台代安装 + 控制隧道 | Argus 可 SSH，堡垒机无出站 | 同 B | ConnectionTest + 安装/控制隧道 Preview | 安装、控制隧道和 Connector 回连进度 |
+
+堡垒机既无出站、Argus 也无法 SSH 时没有可执行路径，界面不保留一个看似可选的禁用模式。模式 C 由 Direct Executor 在同一 SSH 连接上建立 `127.0.0.1:8443 → enrollment Web/API` 与 `127.0.0.1:9443 → Connector Gateway` remote forward；它只解决安装、enrollment 和 Connector 控制长连接，堡垒机及成员 Collector 的遥测仍独立选择 Telemetry Route 与 transport。
+
+确认后才预分配 Bastion Scope、根 Host 和 Connector 身份。模式 A 创建 registration token，并把安装命令作为 Execution 加密一次性结果；模式 B/C 创建 `connector_install_operations` 冻结计划，由 Direct Executor 安装、启动并等待 enrollment/online。B/C 的内部 enrollment token 不返回浏览器，也不显示为用户命令。关闭安装进度界面不取消 operation，用户可以从待注册 Scope 或任务记录恢复。
+
+Preview 必须同时冻结并校验活动 Connector 发行版，而不能只校验表单。模式 A 要求发行清单、安装脚本及 Linux amd64/arm64 两个签名对象都已存在；B/C 要求 ConnectionTest 探测到的架构对象已存在。缺少目录记录或对象返回 `CONNECTOR_ARTIFACT_UNAVAILABLE`，在创建确认卡片前 fail closed；Confirm/Commit 只能使用 Preview 冻结的 release ID 与 manifest hash，不得重新选择“当前活动版本”。确认卡片本身属于危险操作语义，正常顺序仍是“Preview 卡片 → 用户确认 → Execution 加密一次性命令 → 原发起人领取”，不能在确认前泄露 token 或命令。
 
 ```mermaid
 sequenceDiagram
     participant U as 用户
     participant S as Argus 服务端
-    participant C as Connector
+    participant E as Direct Executor
+    participant C as 目标 Connector
 
-    U->>S: 创建 pending Bastion Scope 和一次性注册令牌
-    S-->>U: 返回安装命令、有效期和剩余次数
-    U->>C: 在目标机器执行安装命令
-    C->>C: 生成本地私钥和 CSR
-    C->>S: 注册并提交设备信息
-    S->>S: 校验企业、DataAuthorizationGrant、Bastion Scope、有效期、次数和安装策略
-    S->>S: 创建/绑定 connector_local Host
+    U->>S: 选择 A/B/C 并填写第二步信息
+    opt B/C
+        S->>E: 执行并冻结 SSH ConnectionTest
+        E-->>S: 地址、Host Key、Credential 版本与诊断
+    end
+    S-->>U: Scope/Host/安装或隧道 Preview
+    U->>S: Confirm Pending Action
+    alt A 手动命令
+        S->>S: 创建 pending Scope、令牌和加密一次性结果
+        U->>S: 原子领取安装命令
+        U->>C: 在堡垒机执行命令
+    else B/C 平台代安装
+        S->>E: 创建并认领 connector_install operation
+        E->>C: SSH 安装并启动 Connector
+        opt C 控制隧道
+            E->>C: 维持 8443/9443 remote forward
+        end
+    end
+    C->>S: enrollment、CSR 与设备信息
+    S->>S: 原子消费令牌并激活 Scope/root Host
     S-->>C: 签发 Connector 身份与证书
-    S->>S: 作废注册令牌并激活 Bastion Scope
-    C->>S: 使用 mTLS 建立出站长连接
+    C->>S: mTLS 控制长连接（A/B 直连，C 经隧道）
 ```
 
 一次性注册令牌必须绑定：
@@ -140,21 +168,28 @@ sequenceDiagram
 
 安装命令不能包含永久访问令牌。Connector 必须在本地生成私钥和 CSR；私钥不得出现在安装命令或服务端。服务端证书绑定企业、Connector、Host、设备公钥、序列号和允许能力，并支持按设备吊销与短窗口重叠轮换。
 
-### 3.1 编辑与更新安装
+### 3.1 编辑、待注册轮换与 Connector 替换
 
-“编辑堡垒机”编辑的是稳定的 Bastion Scope，字段与新增时的业务字段保持一致：名称和用户标签。根堡垒机 Host 的地址、端口和 Connector 身份由注册事实产生，不允许在该表单中手工修改。Scope 名称或标签保存后，服务端同步更新根堡垒机 Host 与当前 Connector 的展示元数据，但不得改变 Scope ID、Host ID 或成员主机关系；标签变化不改变 DataAuthorizationGrant，也不递增 AuthorizationVersion。
+“编辑堡垒机”编辑的是稳定的 Bastion Scope，元数据字段为名称、环境和标签。根堡垒机 Host 的注册身份由 enrollment 事实产生；模式 B/C 的安装地址、账号和 Credential 属于冻结 operation 输入，不作为 Scope 元数据长期回填。Scope 元数据保存后，服务端同步更新根 Host 与当前 Connector 的展示信息，但不得改变 Scope ID、Host ID 或成员主机关系；标签变化不改变 DataAuthorizationGrant，也不递增 AuthorizationVersion。
 
-编辑抽屉底部提供“堡垒机安装/更新命令”，用于首次安装，或在当前 Connector 已卸载、已被隔离或被服务端判定为离线后迁移到另一台机器。打开编辑抽屉不能自动生成令牌；用户必须显式点击“生成新命令”。在线 Connector 不允许直接生成替换命令，必须先主动卸载，或者等待服务端确认其长期离线，防止两台机器同时获得有效身份。
+安装相关操作按资源状态分开：
 
-更新注册完成时保持 `bastion_scope_id` 与根堡垒机 `host_id` 不变，签发新的 Connector 身份和证书。针对离线实例生成新命令时，服务端必须先增加 Scope 的 fencing generation、吊销旧证书并清空 `active_connector_id`；旧机器之后即使恢复网络也不能重新成为活动 Connector，只能使用新命令重新注册。
+- Scope 尚无 active Connector 时，命令丢失或过期调用 `bastion.enrollment.rotate`。该动作只撤销旧未消费 token、创建新 token 和加密一次性结果，不增加 fencing generation，也不伪装成 Connector replacement。
+- Scope 已有 active Connector，需要迁移、隔离或更换机器时调用 `bastion.connector.replace`。该危险动作冻结当前 Connector/epoch，增加 fencing generation、吊销旧证书并创建替换 operation；旧机器恢复后不能重新成为活动 Connector。
+- B/C 自动安装失败时按 `connector_install_operations` 语义查看诊断、重新测试或幂等重试；不能退化为向用户展示内部 enrollment token。
+- 主动卸载继续使用 §3.2 的独立类型化命令，不能复用 enrollment rotate 或 replacement。
+
+以上写动作都进入 PendingAction。领取已执行完成但尚未领取的一次性结果使用统一 claim 接口，不创建新 token。旧的“显示命令”入口不得调用 Connector replacement；不存在 active Connector 的 Scope 必须由服务端拒绝 replacement，而不是只靠前端隐藏按钮。
+
+替换注册完成时保持 `bastion_scope_id` 与根堡垒机 `host_id` 不变，签发新的 Connector 身份和证书。命令轮换、替换与领取均记录独立审计事件；审计只保存 token/result ID、状态和摘要，不保存命令或 token 明文。
 
 ### 3.2 主动卸载与离线检测
 
 在线堡垒机提供独立的“卸载堡垒机”操作。点击后由 PendingAction 冻结当前 `connector_id + bastion_scope_id + connection_epoch + fencing generation`，Confirm 后派发类型化 `connector_uninstall` 命令。Connector 必须先上报同时证明 `identity_removed = true` 和 `service_stopped = true` 的成功结果；Gateway 持久化 Connector/Scope 最终状态并 ACK 覆盖该结果序号后，客户端才删除本地身份并退出。不能先删除本地身份再尝试上报，否则服务端无法区分正常卸载与网络故障。
 
-卸载期间 Scope 进入 `uninstalling`，阻止新命令、任务和 Remote Access Session；已有会话按策略排空或终止。服务端确认后 Connector 进入 `uninstalled`，Scope 进入 `uninstalled`，但保留 Scope、根 Host、成员主机、权限和监控配置。此时页面重新提供安装命令，以便快速更换承载同一批成员主机的堡垒机。
+卸载期间 Scope 进入 `uninstalling`，阻止新命令、任务和 Remote Access Session；已有会话按策略排空或终止。服务端确认后 Connector 进入 `uninstalled`，Scope 进入 `uninstalled`，但保留 Scope、根 Host、成员主机、权限和监控配置。此时页面重新进入 A/B/C 安装模式选择，以便用手动命令或平台代安装恢复承载同一批成员主机的堡垒机。
 
-Gateway 按心跳维护在线事实。推荐心跳周期 30 秒，连续 3 次未收到心跳进入 `suspected_offline`，持续 5 分钟仍未恢复才在控制面标记为 `offline`；阈值必须可配置。短暂抖动不能直接开放替换。离线状态生成新安装命令等同于管理员确认隔离旧实例，必须执行 fencing 并写入审计。
+Gateway 按心跳维护在线事实。推荐心跳周期 30 秒，连续 3 次未收到心跳进入 `suspected_offline`，持续 5 分钟仍未恢复才在控制面标记为 `offline`；阈值必须可配置。短暂抖动不能直接开放替换。离线状态发起重新安装属于 `bastion.connector.replace`，等同于管理员确认隔离旧实例，必须执行 fencing 并写入审计。
 
 有效 Connector 重连并取得新的 `connection_epoch` 时，服务端必须在同一恢复路径把对应 Bastion Scope 恢复为 `active`，或把 KubernetesCluster 恢复为 `connected`。Redis Registry 丢失、Gateway Drain 或短暂断连不能让资源状态永久停留在 `suspected_offline`。
 
@@ -168,23 +203,29 @@ Gateway 按心跳维护在线事实。推荐心跳周期 30 秒，连续 3 次�
 
 如果仍有成员主机，点击删除后弹窗必须列出成员数量并提示“请先将全部主机移出该堡垒机”，确认按钮保持禁用。满足门禁后再次确认才逻辑删除 Scope 与根堡垒机 Host，并撤销历史 Connector 的活动凭据和未消费命令；根 Host 保留 `deleted_at` 墓碑，审计记录和历史引用继续保留，不做级联物理删除。
 
+Scope 与根堡垒机 Host 必须作为一个生命周期单元维护。创建 Scope 的事务必须同时创建 `connection_mode = connector_local` 的根 Host，并在提交前把其 ID 写入 `bastion_scopes.connector_host_id`；即使 Connector 尚未注册，也不能把该关联推迟到 enrollment。删除顺序固定为先逻辑删除根 Host，再逻辑删除 Scope，数据库删除条件还要阻止存在有效根 Host 的 Scope 被单独删除。升级时需要修复历史孤儿根 Host并回填缺失关联。
+
+名称唯一性继续由数据库的条件唯一索引保证，Scope 与 Host 的索引都只约束未删除记录；软删除墓碑不参与冲突，因此删除完成后允许复用原名称。不能通过移除唯一索引规避生命周期错误，否则并发创建会产生同名有效资源。创建预览必须同时检查两个有效名称空间；若名称仍被有效资源占用，稳定返回 HTTP `409` / `RESOURCE_NAME_CONFLICT`，该错误属于永久业务冲突，Worker 不得重试。只有根 Host 与 Scope 都完成逻辑删除后，重建同名资源才会成功。
+
 ### 3.4 一次性令牌互斥与幂等
 
-注册令牌生命周期固定为 `active → consumed`，或从 `active` 进入 `revoked / expired`。用途区分首次注册 `initial_registration` 与替换安装 `connector_replacement`。服务端必须使用数据库条件更新或行锁原子消费令牌，消费条件至少包含 `status = active`、`remaining_uses = 1` 和 `expires_at > now()`，不能用进程内锁代替持久化互斥。
+注册令牌生命周期固定为 `active → consumed`，或从 `active` 进入 `revoked / expired`。用途区分首次注册 `initial_registration`、待注册轮换 `enrollment_rotation` 与已有实例替换 `connector_replacement`；前两者要求不存在 active Connector，后者要求存在被 fencing 的 active Connector。服务端必须使用数据库条件更新或行锁原子消费令牌，消费条件至少包含 `status = active`、`remaining_uses = 1` 和 `expires_at > now()`，不能用进程内锁代替持久化互斥。
+
+注册 token 的有效期与 Execution 一次性结果的领取期是两个概念。安装命令在服务端生成后立即写入 AES-GCM 加密的 `execution_one_time_results`，公开 Execution 只投影 `one_time_result_available`；原发起人通过统一幂等接口原子领取。结果过期或已经用新 Idempotency-Key 领取时不能恢复明文，用户需要显式发起 enrollment rotation；claim 本身不得生成新 token。
 
 多台机器执行同一安装命令时遵循以下规则：
 
 - 第一台通过校验并原子消费令牌的机器获得 Connector 身份。
-- 不同设备再次提交同一令牌时返回 HTTP `409`、错误码 `TOKEN_ALREADY_CONSUMED`，并说明该命令已由其他机器使用，需要在堡垒机编辑页生成新命令；不得静默成功，也不得替换当前 Connector。
+- 不同设备再次提交同一令牌时返回 HTTP `409`、错误码 `TOKEN_ALREADY_CONSUMED`，并说明该命令已由其他机器使用；待注册 Scope 需要发起 enrollment rotation，已有 active Connector 则必须进入显式 replacement，不得静默成功或自动替换当前 Connector。
 - 同一设备以相同设备指纹和注册请求重试时返回首次注册结果，记为 `idempotent_retry`，不得创建第二个 Connector 或重复切换。
 - 被新命令替代的旧命令返回 `TOKEN_REVOKED`；过期命令返回 `TOKEN_EXPIRED`；未知命令返回 `TOKEN_MISSING`。
 - 日志和审计只保存令牌 ID、用途、状态、消费时间与设备指纹摘要，不记录明文令牌。
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active: 在待注册、离线或已卸载状态生成命令
+    [*] --> Active: initial / enrollment_rotation / connector_replacement
     Active --> Consumed: 首台设备原子注册成功
-    Active --> Revoked: 生成同 Scope 新命令
+    Active --> Revoked: 轮换未消费 token 或执行 replacement
     Active --> Expired: 到达 expires_at
     Consumed --> Consumed: 同设备幂等重试
     Consumed --> Conflict: 其他设备再次使用
@@ -294,6 +335,28 @@ Server 与 Direct Executor 之间使用独立内部 CA 的 mTLS gRPC。Server �
 
 ## 6. 添加和管理主机
 
+### 6.0 主机与堡垒机统一新增向导
+
+主机和堡垒机共用 `select_mode → details → verify|confirm_command → installing|command_result|completed` 领域状态机。步骤条只覆盖用户可以返回编辑的输入和验证阶段；安装进度、一次性命令和完成页是提交后的结果状态，不伪装成可编辑步骤。
+
+- 第一步只显示模式卡、适用网络条件、需要准备和平台行为，不渲染名称、地址、Credential、标签或命令表单。
+- 第二步只显示已选模式摘要与该模式字段；“更改模式”返回第一步，不在表单旁保留完整模式列表。
+- 第三步中，SSH/WinRM 路径执行 ConnectionTest 并展示冻结事实与 Preview；`self_enrolled` 和堡垒机 A 展示冻结计划并明确“确认并生成命令”。
+- B/C 和其他自动安装路径提交后进入可恢复 operation 进度；A/`self_enrolled` 进入一次性结果领取与展示。
+- 步骤、可见 DOM、焦点、Enter 提交和错误定位由同一状态驱动。表单必须使用真实 `<form>`，不得使用静态步骤条、隐藏空表单或场景与表单同屏的伪步骤。
+
+普通主机五种产品模式的字段和确认分支固定为：
+
+| 产品模式 | 第二步字段 | 第三步与结果 |
+| --- | --- | --- |
+| 双向可达 | 名称、地址、协议、端口、系统、环境、账号、Credential、标签 | ConnectionTest + Preview → 创建/安装状态 |
+| 只进不出 | 同双向可达 | ConnectionTest + `executor_tunnel` 前件 Preview → 安装/隧道状态 |
+| 只出不进/自助安装 | 名称、架构、环境、标签 | 冻结计划 + 确认 → 一次性安装命令 |
+| 标准堡垒机成员 | 所属 Bastion Scope + 地址、协议、端口、系统、环境、账号、Credential、标签 | Connector 路径测试 + Preview → 创建/安装状态 |
+| 受限端口堡垒机成员 | 同标准成员 | Connector 路径与 `bastion_tunnel` 前件测试 → 安装/隧道状态 |
+
+从第二步返回第一步时保留名称、环境、标签等公共字段。地址、账号、Credential、Scope 和架构只在兼容模式间保留；切换到不兼容模式时清除，清除用户已经选择的 Credential 前需要明确提示。当前版本不持久化未提交草稿，也不迁移旧 localStorage 向导数据。
+
 ### 6.1 通过堡垒机添加内网主机
 
 用户填写：
@@ -311,15 +374,33 @@ labels
 流程固定为：
 
 ```text
-选择堡垒机
-→ 填写内网地址和 Secret 表单
+第一步选择「标准堡垒机成员」或「受限端口堡垒机成员」
+→ 第二步选择 Bastion Scope 并填写内网地址和 Secret 表单
 → Connector 测试 DNS、路由、Host Key 和认证
-→ 展示资源与连接预览
+→ 第三步展示资源、连接路径与可选隧道预览
 → 用户确认
 → 创建 Host 并加入 Bastion Scope
 ```
 
 成员主机在主机页面显示在所属堡垒机框内，其连接路径明确为“Argus → 堡垒机 → 内网地址”。移动到另一个 Scope 会改变网络路径和凭证使用边界，必须 Preview/Commit，不能只修改前端分组。
+
+### 6.1a 添加自助注册主机（self_enrolled，PlanV4）
+
+“只出不进”主机（Argus 不可直达、目标可出站访问 Argus）的固定流程：
+
+```text
+第一步选择「只出不进/自助安装」
+→ 第二步填写名称/架构/环境/标签（当前仅支持 Linux，免 ConnectionTest）
+→ Preview/Confirm 创建 onboarding 主机
+→ Execution 产生加密一次性结果，原发起人原子领取并在当前结果态展示
+→ 用户在目标机器执行结构化安全引导命令（内嵌公共 Bundle，`curl --cacert` 下载并固定 SHA-256 后才执行安装器）
+→ 首次 bootstrap 激活主机、回填自报地址并开始 direct_argus 推送
+→ 命令丢失/过期 = `host.enrollment.rotate`；已注册主机卸载 = 独立 `host.uninstall.command`
+```
+
+自助安装 Preview 还必须校验目标架构的 Collector 对象和同一存储桶根下的 `install/host.sh`。例如产物位于 `/argus-collector-artifacts/argus-otelcol/...` 时，脚本固定为 `/argus-collector-artifacts/install/host.sh`，不能错误退回域名根路径。目录元数据存在但对象缺失时返回 `COLLECTOR_ARTIFACT_UNAVAILABLE`，不生成一个必然下载失败的确认卡片或安装命令。
+
+远程终端与远程运维对该模式 fail closed；在线状态以 Collector enrollment/心跳形成的 `last_seen` 投影为准。轮换只撤销旧未消费 enrollment token，不执行 Connector fencing；卸载命令使用独立的短期一次性授权。旧 `POST /enterprise/hosts/{id}/install-command` 同时生成安装/卸载明文的开发期接口删除，不保留兼容端点。
 
 ### 6.2 添加直连独立主机
 
@@ -336,10 +417,12 @@ labels
 流程固定为：
 
 ```text
-解析并校验目标地址
+第一步选择「双向可达」或「只进不出」
+→ 第二步填写目标与 Credential
+→ 解析并校验目标地址
 → 显示 Argus 固定出口 IP
 → Direct Executor 测试 Host Key、端口和认证
-→ 展示资源与连接预览
+→ 第三步展示资源、连接预览与可选 `executor_tunnel` 前件
 → 用户确认
 → 创建独立 Host
 ```
@@ -472,6 +555,23 @@ Collector 安装、升级、配置收敛、Profile 开关和 Telemetry Route 变
 
 ## 8. 主机管理界面
 
+新增主机与堡垒机使用 §6.0 的统一状态机和共享 `@argus/ui` Wizard/Dialog 原语，业务模式目录、字段、验证和结果适配器留在 Enterprise hosts 领域。可用卡片不重复显示“已支持”；只对推荐、不可用或规划中状态显示有决策意义的徽章。协议枚举、route kind、transport 和内部端口放入可展开技术详情，不作为用户完成模式选择的前置知识。
+
+待注册 Scope/Host 卡片按领域状态提供唯一明确的下一步：
+
+| 状态 | 主操作 |
+| --- | --- |
+| 一次性结果可领取 | 领取安装命令 |
+| 已领取、等待注册 | 重新生成安装命令 |
+| enrollment rotation 待审批 | 查看审批 |
+| 审批通过、结果可领取 | 领取安装命令 |
+| token/结果过期 | 重新生成安装命令 |
+| B/C 自动安装中 | 查看安装进度 |
+| 自动安装失败 | 查看原因并重试或重新测试 |
+| 已注册 | 打开详情 |
+
+卡片不能写“执行下面的命令”却不显示命令，也不能暴露原始 i18n key、Tool 名、内部 Scope/Host ID 或未整理 diff。Connector replacement 只从已有 Connector 的维护入口发起，并明确展示 fencing 影响。
+
 主机页面采用“Bastion Scope 分组卡片 + 独立主机”结构：
 
 ```text
@@ -538,7 +638,7 @@ connection_status
 
 kubeconfig 作为 Secret 处理，模型只获得 context、cluster name 和 server 地址等非敏感摘要。集群接入先测试 API、集群身份、版本和权限，再配置授权 Namespace Scope 并确认写入。
 
-`in_cluster` 确认会返回一次性 Connector 安装命令。Enterprise 前端只在确认结果抽屉中展示并允许复制；关闭抽屉后立即清除，不能写入 URL、localStorage、Query Cache、日志或普通 KubernetesCluster DTO。
+`in_cluster` 确认会产生一次性 Connector 安装命令。Execution 公开对象只返回结果可领取状态，原发起人通过统一 claim 接口原子领取；领取后的明文只在当前结果抽屉中展示并允许复制，关闭后立即清除，不能写入 URL、localStorage、Query Cache、日志或普通 KubernetesCluster DTO。
 
 第一版管理能力覆盖集群 CRUD、连接测试、Namespace/Node/Pod/Deployment/StatefulSet/DaemonSet/Service 查询和 Pod 日志。变更操作继续使用两阶段确认。
 
@@ -567,9 +667,10 @@ Collector 安装入口位于主机详情。执行路径继承 Host 的连接模�
 connector_local  → 本机 Connector 安装本机 Collector
 via_bastion      → 所属堡垒机 Connector 经 SSH/WinRM 安装成员 Collector
 direct_ssh       → Direct Executor 经 SSH 安装 Collector
+self_enrolled    → 用户执行冻结的一次性 bootstrap 命令安装 Collector
 ```
 
-安装 Preview 必须展示完整执行路径、OS/架构/权限、下载或 Tunnel 模式、文件与服务变化、端口、防火墙、版本、Digest、健康检查和回滚计划。
+安装 Preview 必须展示完整执行路径、OS/架构/权限、下载或 Tunnel 模式、文件与服务变化、端口、防火墙、版本、Digest、Telemetry Route kind × transport、健康检查和回滚计划。`executor_tunnel`/`bastion_tunnel` 的执行顺序固定为建立隧道、安装/配置 Collector、经隧道验证健康与首条数据、最后把 route 转为 active；不能只做端口连通测试。
 
 Connector Artifact Tunnel 只使用平台发布清单中的不可变 Artifact，支持分块、续传、SHA256/签名校验、带宽限制、临时文件清理和进度上报。Direct Executor 可以让目标从批准地址下载，或通过受控 Artifact 读取路径传输；两种方式都不能成为任意文件写入能力。
 
@@ -587,11 +688,17 @@ Connector 只负责安装、控制和 Artifact；Collector 自身通过 OTLP 主
 bastion.scope.list(filter, sort, page)
 bastion.scope.get(scope_id)
 bastion.scope.create.preview / commit
+bastion.enrollment.rotate.preview / commit
+bastion.connector.replace.preview / commit
 
 host.list(filter, sort, page)
 host.get(host_id)
 host.test_connection(host_id 或临时连接引用)
 host.create.preview / commit
+host.enrollment.rotate.preview / commit
+host.uninstall.command.preview / commit
+
+execution.one_time_result.claim(execution_id, idempotency_key)
 
 remote_access.session.create
 remote_access.session.terminate
@@ -603,7 +710,7 @@ kubernetes.resource.get(cluster_id, resource_type, namespace, name)
 kubernetes.pod.logs(cluster_id, namespace, pod, container, options)
 ```
 
-上面列表中的 `remote_access.*` 是人工管理 UI/OpenAPI 领域接口，不注册为模型可发现的 MCP Tool；其他变更 Tool 继续遵守 Preview/Commit。是否需要远程会话审批由策略决定，但短期票据签发必须在最终重新授权后完成。
+`execution.one_time_result.claim` 是读取已执行结果的幂等 OpenAPI 领域接口，不生成新 token，也不注册为模型可发现的 MCP Tool。上面列表中的 `remote_access.*` 同样是人工管理 UI/OpenAPI 领域接口；其他变更 Tool 继续遵守 Preview/Commit。是否需要远程会话审批由策略决定，但短期票据签发必须在最终重新授权后完成。开发期直接返回主机命令的旧接口和待注册 Scope 误用 replacement 的调用直接删除，不保留双接口或兼容客户端方法。
 
 主机过滤覆盖名称/地址、在线状态、连接模式、Bastion Scope、Connector、平台、环境、团队、标签、Collector 和 Telemetry Route。服务端始终求用户过滤与授权 Scope 的交集。Cursor 签名绑定企业、资源类型、过滤哈希、稳定排序和有效期。
 

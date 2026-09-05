@@ -43,9 +43,25 @@ type Executor struct {
 	TelemetryIngestGRPCEndpoint string
 	TelemetryIngestHTTPEndpoint string
 	CollectorArtifactHTTPClient *http.Client
-	Timeout                     time.Duration
-	slotOnce                    sync.Once
-	slots                       chan struct{}
+	// CollectorArtifactCABundle 与签名根会随 B/C 安装持久化到目标
+	// Connector，使其后续代装 Collector 时沿用平台的 fail-closed 信任链。
+	CollectorArtifactCABundle []byte
+	Timeout                   time.Duration
+	// TunnelForwardTarget 是隧道回传的内部 ingest 端点(svc 直连);为空且存在
+	// desired 隧道时 fail closed(不建立半隧道)。
+	TunnelForwardTarget         string
+	TunnelIdentityForwardTarget string
+	// 模式C堡垒机控制隧道的内部转发目标(Task 06)。
+	ConnectorEnrollForwardTarget  string
+	ConnectorGatewayForwardTarget string
+	OperationSecretKey            []byte
+	TelemetryTunnelLimit          int
+	ControlTunnelLimit            int
+	TunnelBytesPerSecond          int64
+	controlTunnels                *connectorControlTunnelSupervisor
+	tunnels                       *tunnelSupervisor
+	slotOnce                      sync.Once
+	slots                         chan struct{}
 }
 
 type connectionPlan struct {
@@ -63,6 +79,13 @@ func (executor *Executor) Run(ctx context.Context) error {
 	if concurrency < 1 || concurrency > 64 {
 		concurrency = 8
 	}
+	if executor.tunnels == nil {
+		executor.tunnels = newTunnelSupervisor(executor.TunnelForwardTarget, executor.TunnelIdentityForwardTarget,
+			executor.telemetryTunnelLimit(), executor.TunnelBytesPerSecond)
+	}
+	go executor.RunTunnelReconciler(ctx)
+	go executor.runConnectorInstallLoop(ctx)
+	go executor.runConnectorTunnelReconciler(ctx)
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -110,6 +133,20 @@ func (executor *Executor) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (executor *Executor) telemetryTunnelLimit() int {
+	if executor.TelemetryTunnelLimit <= 0 {
+		return 64
+	}
+	return executor.TelemetryTunnelLimit
+}
+
+func (executor *Executor) controlTunnelLimit() int {
+	if executor.ControlTunnelLimit <= 0 {
+		return 32
+	}
+	return executor.ControlTunnelLimit
 }
 
 func (executor *Executor) concurrency() int {
@@ -318,30 +355,33 @@ func (executor *Executor) probeSSH(ctx context.Context, plan connectionPlan, add
 	client := ssh.NewClient(clientConnection, channels, requests)
 	defer client.Close()
 	// Collector 产物按目标架构分发,连接测试时探测 uname -m 并随主机记录,
-	// 安装计划据此选择 linux_amd64 / linux_arm64 产物。
-	architecture := probeArchitecture(client)
+	// 安装计划据此选择 linux_amd64 / linux_arm64 产物。架构无法确认时
+	// 连接测试失败，禁止默认为另一架构后继续生成安装计划。
+	architecture, err := probeArchitecture(client)
+	if err != nil {
+		return resource.ConnectionTestResult{}, err
+	}
 	return resource.ConnectionTestResult{ResolvedIPs: addressStrings(addresses), HostKeyFingerprint: fingerprint, RemoteVersion: string(clientConnection.ServerVersion()), Architecture: architecture}, nil
 }
 
-// probeArchitecture 把远端 uname -m 归一化为 Go GOARCH 命名;
-// 探测失败返回空串,由上层按默认架构(amd64)处理。
-func probeArchitecture(client *ssh.Client) string {
+// probeArchitecture 把远端 uname -m 归一化为 Go GOARCH 命名。
+func probeArchitecture(client *ssh.Client) (string, error) {
 	session, err := client.NewSession()
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("open architecture probe session: %w", err)
 	}
 	defer session.Close()
-	output, err := session.Output("uname -m 2>/dev/null || echo")
+	output, err := session.Output("uname -m")
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("probe target architecture: %w", err)
 	}
 	switch strings.TrimSpace(string(output)) {
 	case "x86_64", "amd64":
-		return "amd64"
+		return "amd64", nil
 	case "aarch64", "arm64":
-		return "arm64"
+		return "arm64", nil
 	default:
-		return ""
+		return "", fmt.Errorf("unsupported target architecture %q", strings.TrimSpace(string(output)))
 	}
 }
 

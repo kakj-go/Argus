@@ -235,6 +235,7 @@ MCP 核心协议提供 `structuredContent` 和可选 `outputSchema`，但不定�
   },
   "pending_action": {
     "action_ref": "pa_01K2...",
+    "action_type": "host.create",
     "expires_at": "2026-08-14T17:10:00+08:00",
     "available_actions": ["confirm", "cancel"]
   }
@@ -255,6 +256,7 @@ MCP 核心协议提供 `structuredContent` 和可选 `outputSchema`，但不定�
     },
     "pending_action": {
       "action_ref": "pa_01K2...",
+      "action_type": "host.create",
       "expires_at": "2026-08-14T17:10:00+08:00",
       "available_actions": ["confirm", "cancel"]
     }
@@ -373,6 +375,10 @@ Commit Tool 不得出现在 Model Agent 的 Tool Registry 投影中。Tool Gatew
 ## 11. Pending Action、审批和执行状态
 
 Pending Action 表示操作生命周期并只引用不可变计划记录和私有 Token Record；不可变计划记录保存 Preview 冻结的执行参数和哈希，Token Record 独立保存加密的一次性能力及消费状态。User Confirmation 表示发起人确认，Approval Request 表示额外审批，Execution 表示实际执行，这些对象不能合并成一个布尔字段或一条混合私有记录。
+
+公共 `PendingActionPublic` 必须返回服务端持久化的稳定 `action_type`。`action_type` 是前端展示与策略诊断使用的领域标识，不包含私有计划或 Token；`title`、`summary`、`diff` 仍可作为服务端审计文本保存，但不能作为多语言 UI 的主要文案来源。Enterprise 前端按 `action_type + 公开 preview 参数` 通过统一 Presenter 生成标题、摘要、Diff 和结果文案，主机、Kubernetes、审批和 Chat 必须复用同一映射。已知动作缺少映射时测试失败；运行时遇到未知动作时使用本地化通用文案并隐藏原始内部文本和 ID，不允许猜测服务端文本语言。
+
+这一字段扩展是有意的契约边界调整：数据库原本已经保存 `action_type`，公开投影此前丢弃该字段，导致客户端只能按英文/中文标题启发式识别动作。补回稳定字段会同步更新所有引用 `PendingActionPublic` 的 OpenAPI bundle、Go 类型和 TypeScript 客户端，但不改变确认、审批、授权或幂等语义。
 
 ```mermaid
 stateDiagram-v2

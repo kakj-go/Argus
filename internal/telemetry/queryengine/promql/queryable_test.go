@@ -5,12 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 )
 
 func TestSeriesSetStartsAtFirstSeries(t *testing.T) {
@@ -56,8 +55,8 @@ func TestHistogramBaseAndSyntheticSeries(t *testing.T) {
 		t.Fatalf("expected count, sum and bucket series, got %d", len(seriesByID))
 	}
 	for _, item := range seriesByID {
-		if len(item.timestamps) != 1 {
-			t.Fatalf("expected one histogram sample, got %d", len(item.timestamps))
+		if len(item.samples) != 1 {
+			t.Fatalf("expected one histogram sample, got %d", len(item.samples))
 		}
 	}
 }
@@ -70,8 +69,8 @@ func TestSummaryAndNativeHistogramSamples(t *testing.T) {
 		t.Fatalf("expected summary count, sum and quantile series, got %d", len(seriesByID))
 	}
 	for _, item := range seriesByID {
-		if len(item.timestamps) != 1 {
-			t.Fatalf("expected one summary sample, got %d", len(item.timestamps))
+		if len(item.samples) != 1 {
+			t.Fatalf("expected one summary sample, got %d", len(item.samples))
 		}
 	}
 	scale, zeroCount, zeroThreshold, positiveOffset := int32(0), uint64(1), 0.001, int32(0)
@@ -82,18 +81,22 @@ func TestSummaryAndNativeHistogramSamples(t *testing.T) {
 }
 
 func TestDedupeSeriesKeepsLastIngestedSample(t *testing.T) {
-	item := &series{timestamps: []int64{10, 10, 20}, values: []float64{1, 2, 3}, histograms: []*histogram.FloatHistogram{nil, nil, nil}, types: []chunkenc.ValueType{chunkenc.ValFloat, chunkenc.ValFloat, chunkenc.ValFloat}}
+	item := &series{samples: chunks.SampleSlice{
+		querySample{timestamp: 10, value: 1},
+		querySample{timestamp: 10, value: 2},
+		querySample{timestamp: 20, value: 3},
+	}}
 	dedupeSeries(item)
-	if len(item.timestamps) != 2 || item.timestamps[0] != 10 || item.values[0] != 2 || item.values[1] != 3 {
-		t.Fatalf("unexpected deduped samples: %#v %#v", item.timestamps, item.values)
+	if len(item.samples) != 2 || item.samples[0].T() != 10 || item.samples[0].F() != 2 || item.samples[1].F() != 3 {
+		t.Fatalf("unexpected deduped samples: %#v", item.samples)
 	}
 }
 
 func TestSeriesIteratorSupportsRangeAggregationReuse(t *testing.T) {
 	start := time.Unix(1_700_000_000, 0).UnixMilli()
 	items := []*series{
-		{id: "a", labels: labelSet(map[string]string{"__name__": "usage", "service": "api", "instance": "a"}), timestamps: []int64{start, start + 60_000, start + 120_000}, values: []float64{2, 4, 6}, histograms: make([]*histogram.FloatHistogram, 3), types: []chunkenc.ValueType{chunkenc.ValFloat, chunkenc.ValFloat, chunkenc.ValFloat}},
-		{id: "b", labels: labelSet(map[string]string{"__name__": "usage", "service": "api", "instance": "b"}), timestamps: []int64{start, start + 60_000, start + 120_000}, values: []float64{1, 2, 3}, histograms: make([]*histogram.FloatHistogram, 3), types: []chunkenc.ValueType{chunkenc.ValFloat, chunkenc.ValFloat, chunkenc.ValFloat}},
+		{id: "a", labels: labelSet(map[string]string{"__name__": "usage", "service": "api", "instance": "a"}), samples: chunks.SampleSlice{querySample{timestamp: start, value: 2}, querySample{timestamp: start + 60_000, value: 4}, querySample{timestamp: start + 120_000, value: 6}}},
+		{id: "b", labels: labelSet(map[string]string{"__name__": "usage", "service": "api", "instance": "b"}), samples: chunks.SampleSlice{querySample{timestamp: start, value: 1}, querySample{timestamp: start + 60_000, value: 2}, querySample{timestamp: start + 120_000, value: 3}}},
 	}
 	queryable := storage.MockQueryable{MockQuerier: &storage.MockQuerier{SelectMockFunction: func(bool, *storage.SelectHints, ...*labels.Matcher) storage.SeriesSet {
 		return &seriesSet{items: items, index: -1}

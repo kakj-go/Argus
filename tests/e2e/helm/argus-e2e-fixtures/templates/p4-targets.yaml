@@ -1,0 +1,52 @@
+{{- if .Values.features.p4StaticTargets }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argus-e2e-p4-target
+  namespace: {{ .Values.namespaces.system }}
+  labels: &p4TargetLabels
+    app.kubernetes.io/name: argus-e2e-p4-target
+    app.kubernetes.io/part-of: argus-e2e
+    argus.io/release-id: {{ .Values.releaseId | quote }}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: argus-e2e-p4-target}}
+  template:
+    metadata: {labels: *p4TargetLabels}
+    spec:
+      containers:
+        - name: systemd
+          image: {{ .Values.images.systemdTarget | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: [/sbin/init]
+          securityContext: {privileged: true, runAsNonRoot: false, runAsUser: 0}
+          ports: [{name: ssh, containerPort: 22}]
+          readinessProbe: {tcpSocket: {port: ssh}, initialDelaySeconds: 2, periodSeconds: 2}
+          volumeMounts:
+            - {name: cgroup, mountPath: /sys/fs/cgroup}
+      volumes:
+        - {name: cgroup, hostPath: {path: /sys/fs/cgroup, type: Directory}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-e2e-p4-target
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  selector: {app.kubernetes.io/name: argus-e2e-p4-target}
+  externalIPs: [198.51.100.10]
+  ports: [{name: ssh, port: 22, targetPort: ssh}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argus-e2e-p4-target-ingress
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: argus-e2e-p4-target}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: argus-direct-executor}}
+      ports: [{protocol: TCP, port: 22}]
+{{- end }}

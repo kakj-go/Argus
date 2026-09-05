@@ -43,10 +43,9 @@ func TestPrintSetupInitializationLinkRemindsOperatorToOpenIt(t *testing.T) {
 	}
 }
 
-func TestSetupInitializationURLUsesTLSWhenEnabled(t *testing.T) {
+func TestSetupInitializationURLAlwaysUsesTLS(t *testing.T) {
 	cfg := &InstallConfig{}
 	cfg.Spec.Exposure.PlatformHost = "platform.argus.example.com"
-	cfg.Spec.Exposure.TLS = &TLSConfig{Enabled: true, Mode: TLSModeCertManagerSelfSigned}
 	got := setupInitializationURL(cfg, "token/with spaces")
 	want := "https://platform.argus.example.com/login#argus_setup_token=token%2Fwith+spaces"
 	if got != want {

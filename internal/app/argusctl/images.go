@@ -22,6 +22,9 @@ func (a *App) imagesBuild(ctx context.Context, cfg *InstallConfig, platform stri
 	if err != nil {
 		return err
 	}
+	if err := a.buildConnectorDistributionArtifacts(ctx, root); err != nil {
+		return err
+	}
 	if cfg.Spec.Images.Mode == "local-registry" && !strings.Contains(platform, ",") {
 		if err := a.ensureRegistry(ctx, cfg); err != nil {
 			return err
@@ -138,7 +141,10 @@ func (a *App) imagesClean(ctx context.Context, cfg *InstallConfig) error {
 		}
 	}
 	_, _ = a.runner.quiet(ctx, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", "kube-system", "delete", "daemonset", loaderName, "--ignore-not-found=true", "--wait=true")
-	_, _ = a.runner.quiet(ctx, "docker", "container", "rm", "--force", cfg.registryContainerName())
+	// The registry image declares /var/lib/registry as a volume. Removing the
+	// container without --volumes leaves one anonymous volume behind for every
+	// E2E run, eventually exhausting the Docker Desktop disk.
+	_, _ = a.runner.quiet(ctx, "docker", "container", "rm", "--force", "--volumes", cfg.registryContainerName())
 	_, _ = a.runner.quiet(ctx, "docker", "buildx", "rm", "--force", buildxBuilderName(cfg))
 	for _, image := range []string{cfg.Image("argus-backend"), cfg.Image("argus-web"), cfg.Image("minio")} {
 		_, _ = a.runner.quiet(ctx, "docker", "image", "rm", "--force", image)

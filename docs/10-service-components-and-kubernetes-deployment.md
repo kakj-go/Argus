@@ -178,10 +178,11 @@ flowchart LR
     P["集群预检"] --> N["Namespace 与基础策略"]
     N --> O["Operator 与 CRD"]
     O --> D["有状态依赖"]
-    D --> S["OpenSandbox"]
-    D --> PM["PostgreSQL Migration"]
-    D --> CM["ClickHouse Schema Migration"]
-    D --> I["Telemetry Ingest"]
+    D --> R["签名制品发布"]
+    R --> S["OpenSandbox"]
+    R --> PM["PostgreSQL Migration"]
+    R --> CM["ClickHouse Schema Migration"]
+    R --> I["Telemetry Ingest"]
     PM --> A["Server / Worker / Gateway"]
     CM --> W["Writer / Telemetry Query"]
     A --> B["Bootstrap 信息"]
@@ -191,7 +192,7 @@ flowchart LR
     B --> V
 ```
 
-对外访问只有域名模式：安装配置必须提供 `spec.exposure` 的 `enterpriseHost`、`platformHost`、`connectorHost` 并强制开启 `tls.enabled`（`cert-manager-selfsigned`、`cert-manager-issuer`、`user-provided` 三选一），不允许 HTTP 暴露。门户流量经 Ingress（默认 `nginx` IngressClass）路由到 `argus-web` 三个 server；Enterprise `argus.<domain>`、Platform `platform.<domain>`、Card Runtime `cards.<domain>`（由企业域派生）；Remote WSS 统一由企业门户域名 `argus.<domain>` 的 `/v1/sessions` 路径承载，与企业页面同源共用 TLS。浏览器 Origin 精确允许列表只包含三个 HTTPS 门户域名，loopback Origin 不再进入任何 Profile 的允许列表，`argusctl tunnel` port-forward 模式已移除。Web 容器以当前页面同源访问 `/api/v1/`（`VITE_API_BASE_URL=/`），由 Nginx 代理到集群内 `argus-server`；卡片 Origin 与 Platform 跳转地址由 Helm 渲染的 `/argus-runtime.json` 在运行时注入，Web 镜像不烧录任何域名。Platform 在未初始化时显示首次初始化向导，初始化完成后同一地址只进入登录页；Card Runtime 是 Enterprise 自动加载的隔离 Origin，不是用户门户。自签证书（`cert-manager-selfsigned`）首次访问需要信任 CA，安装输出的初始化链接固定 HTTPS。
+对外访问只有域名模式：安装配置必须提供 `spec.exposure` 的 `enterpriseHost`、`platformHost`、`connectorHost`，并通过 `spec.pki.mode=managed|existing-cluster-issuer` 强制使用唯一全局 `ClusterIssuer`，不允许 HTTP 暴露或直接提供叶证书。门户流量经 Ingress（默认 `nginx` IngressClass）路由到 `argus-web` 三个 server；Enterprise `argus.<domain>`、Platform `platform.<domain>`、Card Runtime `cards.<domain>`（由企业域派生）；Remote WSS 统一由企业门户域名 `argus.<domain>` 的 `/v1/sessions` 路径承载，与企业页面同源。浏览器 Origin 精确允许列表只包含三个 HTTPS 门户域名。Web 容器以当前页面同源访问 `/api/v1/`（`VITE_API_BASE_URL=/`），由 Nginx 代理到集群内 `argus-server`；卡片 Origin 与 Platform 跳转地址由 Helm 渲染的 `/argus-runtime.json` 在运行时注入。Platform 在未初始化时显示首次初始化向导，初始化完成后同一地址只进入登录页。managed 私有 CA 不要求写入 Connector/Collector 的系统信任库，但首次浏览器访问仍需由客户信任该 CA。
 
 每一步写入 `ArgusInstallation` 状态或安装状态 ConfigMap。再次执行相同命令时，从未完成阶段继续，并对配置变更生成计划。自动化/GitOps 环境也可以直接使用对应 Helm Release 和 CR，不强制使用 `argusctl`。
 
@@ -319,7 +320,7 @@ spec:
 
 创建 Namespace、ServiceAccount、RBAC、NetworkPolicy、ResourceQuota、LimitRange、证书和镜像拉取 Secret。默认网络策略全部拒绝，再逐条允许必要调用方向。
 
-Connector PKI 的 Server Enrollment 与 Gateway Rotation 共用 namespaced CA Issuer，但使用独立 ServiceAccount。Gateway 只获得创建、读取和观察 CertificateRequest 所需的最小权限；Issuer、Namespace 或 generation 缺失时启动失败。兼容 cert-manager 的判定固定为同 major/minor 且 patch 不低于版本锁基线，避免以字符串完全相等误拒绝兼容补丁版本。
+所有 Argus 服务端和客户端证书引用同一个 `ClusterIssuer`，但每个身份使用独立 Secret、私钥、SAN 和单一 EKU。trust-manager 只向带 Argus 标签的控制面命名空间分发公共 `argus-trust-bundle`；客户目标集群由 Kubernetes Connector 更新固定名称的 Bundle/身份对象，不安装 trust-manager。Issuer、Bundle、Namespace 或签发用途探测缺失时启动/安装失败。兼容 cert-manager/trust-manager 的判定固定为同 major/minor 且 patch 不低于版本锁基线。
 
 ### 7.3 Operator 与 CRD
 
@@ -334,7 +335,9 @@ Kafka 第一版统一使用 Strimzi Kafka Operator 和 KRaft；Evaluation Profil
 - PostgreSQL 主实例可写且 Migration 账号可连接。
 - Redis 可用；清空 Redis 不会丢失唯一业务状态。
 - Artifact Store Bucket、生命周期和加密策略已创建。
-- `argus-data` 通过幂等 `argus-minio-bucket-init` Job 创建 `argus-remote-recordings`，安装器必须等待该 Job 完成后才能启动依赖 Object Store 的 Server 和 Connector Gateway。
+- `argus-data` 通过幂等 `argus-minio-bucket-init` Job 创建 `argus-remote-recordings`、`argus-collector-artifacts` 和 `argus-connector-artifacts`；后两个桶只允许匿名下载，完整性信任根仍是 SHA256 + Ed25519。
+- 安装器等待 MinIO 与 Bucket Job 后，经 Kubernetes API port-forward 把安装配置声明的 Collector 双架构/可选 Windows 对象、同桶主机安装脚本，以及 Connector Linux amd64/arm64、安装脚本和不可变 manifest 发布到 Artifact Store。所有本地文件必须与配置的大小、SHA256、签名和公钥一致，否则安装在 Server 启动前失败。
+- PostgreSQL Migration 完成后，安装器才把同一 Connector manifest 的 ID、版本和 hash 注册为活动发行版；数据库目录和对象存储不能成为两个可独立成功的人工步骤。Server/Worker 在 Preview/Confirm 时通过内部 Artifact Store origin 对冻结 URL 做 HEAD 校验，防止对象被删除后继续生成无效命令。
 - Kafka Controller/Broker 就绪，Topic 和 ACL 已配置。
 - ClickHouseInstallation 所有 Shard/Replica 就绪，Keeper 达到法定数量。
 
@@ -429,7 +432,7 @@ Writer 的 Kafka Receiver 配置 `message_marking.after: true`、`on_error: fals
 | `otlp.argus.example.com:4317`      | `argus-telemetry-ingest`  | OTLP/gRPC TLS | 遥测推送                                                             |
 | `otlp-http.argus.example.com:4318` | `argus-telemetry-ingest`  | OTLP/HTTP TLS | 遥测推送                                                             |
 
-`argus-direct-executor`、`argus-telemetry-query`、PostgreSQL、Redis、Kafka、ClickHouse、OpenSandbox Backend 和 Writer 都只暴露集群内 Service。所有对外入口强制 TLS：门户与 Remote WSS 走 Ingress 的 HTTPS/WSS（证书由 `spec.exposure.tls` 三种模式之一签发）；Connector 控制链路不走 Ingress，由专用 LoadBalancer Service `argus-connector-gateway-public` 做 TCP 直通（`grpcs://<connectorHost>:9443`，TLS 由网关自身 PKI 终结，网关证书 SAN 含公网 connectorHost 与集群内 Service 名）；OTLP 独立暴露。即使部署在同一集群，也不能用一个 Ingress 主机混合 Connector 与 OTLP 流量；Remote Access 的 `/v1/sessions` 路径可以与 Connector Gateway 使用相同程序，但必须使用独立 Listener、限流和 HPA 指标（TLS 与门户共用同一张多 SAN 证书）。
+`argus-direct-executor`、`argus-telemetry-query`、PostgreSQL、Redis、Kafka、ClickHouse、OpenSandbox Backend 和 Writer 都只暴露集群内 Service。所有 Argus 对外入口强制 TLS，证书均由全局 `ClusterIssuer` 签发且每个服务使用独立叶证书：门户与 Remote WSS 走 Ingress；Connector 控制链路由专用 LoadBalancer Service `argus-connector-gateway-public` 做 TCP 直通（`grpcs://<connectorHost>:9443`，网关证书 SAN 含公网 connectorHost 与集群内 Service 名）；OTLP 独立暴露。即使部署在同一集群，也不能用一个 Ingress 主机混合 Connector 与 OTLP 流量；Remote Access 的 `/v1/sessions` 路径可以与 Connector Gateway 使用相同程序，但必须使用独立 Listener、限流、证书用途和 HPA 指标。
 
 ## 11. 初始化与超级管理员
 

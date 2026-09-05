@@ -124,16 +124,16 @@ func (e Environment) Valid() bool {
 
 // Defines values for HostArchitecture.
 const (
-	Amd64 HostArchitecture = "amd64"
-	Arm64 HostArchitecture = "arm64"
+	HostArchitectureAmd64 HostArchitecture = "amd64"
+	HostArchitectureArm64 HostArchitecture = "arm64"
 )
 
 // Valid indicates whether the value is a known member of the HostArchitecture enum.
 func (e HostArchitecture) Valid() bool {
 	switch e {
-	case Amd64:
+	case HostArchitectureAmd64:
 		return true
-	case Arm64:
+	case HostArchitectureArm64:
 		return true
 	default:
 		return false
@@ -232,6 +232,7 @@ const (
 	HostConnectionModeConnectorLocal HostConnectionMode = "connector_local"
 	HostConnectionModeDirectSsh      HostConnectionMode = "direct_ssh"
 	HostConnectionModeDirectWinrm    HostConnectionMode = "direct_winrm"
+	HostConnectionModeSelfEnrolled   HostConnectionMode = "self_enrolled"
 	HostConnectionModeViaBastion     HostConnectionMode = "via_bastion"
 )
 
@@ -243,6 +244,8 @@ func (e HostConnectionMode) Valid() bool {
 	case HostConnectionModeDirectSsh:
 		return true
 	case HostConnectionModeDirectWinrm:
+		return true
+	case HostConnectionModeSelfEnrolled:
 		return true
 	case HostConnectionModeViaBastion:
 		return true
@@ -290,11 +293,30 @@ func (e HostConnectionTestCreatePlatform) Valid() bool {
 	}
 }
 
+// Defines values for HostPreviewCreateArchitecture.
+const (
+	HostPreviewCreateArchitectureAmd64 HostPreviewCreateArchitecture = "amd64"
+	HostPreviewCreateArchitectureArm64 HostPreviewCreateArchitecture = "arm64"
+)
+
+// Valid indicates whether the value is a known member of the HostPreviewCreateArchitecture enum.
+func (e HostPreviewCreateArchitecture) Valid() bool {
+	switch e {
+	case HostPreviewCreateArchitectureAmd64:
+		return true
+	case HostPreviewCreateArchitectureArm64:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HostPreviewCreateConnectionMode.
 const (
-	HostPreviewCreateConnectionModeDirectSsh   HostPreviewCreateConnectionMode = "direct_ssh"
-	HostPreviewCreateConnectionModeDirectWinrm HostPreviewCreateConnectionMode = "direct_winrm"
-	HostPreviewCreateConnectionModeViaBastion  HostPreviewCreateConnectionMode = "via_bastion"
+	HostPreviewCreateConnectionModeDirectSsh    HostPreviewCreateConnectionMode = "direct_ssh"
+	HostPreviewCreateConnectionModeDirectWinrm  HostPreviewCreateConnectionMode = "direct_winrm"
+	HostPreviewCreateConnectionModeSelfEnrolled HostPreviewCreateConnectionMode = "self_enrolled"
+	HostPreviewCreateConnectionModeViaBastion   HostPreviewCreateConnectionMode = "via_bastion"
 )
 
 // Valid indicates whether the value is a known member of the HostPreviewCreateConnectionMode enum.
@@ -303,6 +325,8 @@ func (e HostPreviewCreateConnectionMode) Valid() bool {
 	case HostPreviewCreateConnectionModeDirectSsh:
 		return true
 	case HostPreviewCreateConnectionModeDirectWinrm:
+		return true
+	case HostPreviewCreateConnectionModeSelfEnrolled:
 		return true
 	case HostPreviewCreateConnectionModeViaBastion:
 		return true
@@ -344,6 +368,39 @@ func (e HostPreviewUpdateConnectionMode) Valid() bool {
 	case HostPreviewUpdateConnectionModeDirectWinrm:
 		return true
 	case HostPreviewUpdateConnectionModeViaBastion:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OnboardingProjectionState.
+const (
+	AwaitingApproval OnboardingProjectionState = "awaiting_approval"
+	CommandAvailable OnboardingProjectionState = "command_available"
+	CommandConsumed  OnboardingProjectionState = "command_consumed"
+	CommandExpired   OnboardingProjectionState = "command_expired"
+	InstallFailed    OnboardingProjectionState = "install_failed"
+	Installing       OnboardingProjectionState = "installing"
+	Registered       OnboardingProjectionState = "registered"
+)
+
+// Valid indicates whether the value is a known member of the OnboardingProjectionState enum.
+func (e OnboardingProjectionState) Valid() bool {
+	switch e {
+	case AwaitingApproval:
+		return true
+	case CommandAvailable:
+		return true
+	case CommandConsumed:
+		return true
+	case CommandExpired:
+		return true
+	case InstallFailed:
+		return true
+	case Installing:
+		return true
+	case Registered:
 		return true
 	default:
 		return false
@@ -446,9 +503,10 @@ type Environment string
 
 // Host defines model for Host.
 type Host struct {
+	// Address self_enrolled 主机在激活前为空,激活后为自报地址
 	Address string `json:"address"`
 
-	// Architecture 连接测试探测的目标架构(uname -m 归一化),Collector 安装按此选择分发产物;缺省按 amd64 处理
+	// Architecture 连接测试探测的目标架构(uname -m 归一化),Linux 连接测试必须成功识别架构,Collector 安装按此选择签名产物
 	Architecture     *HostArchitecture    `json:"architecture,omitempty"`
 	BastionScopeId   *openapi_types.UUID  `json:"bastion_scope_id,omitempty"`
 	ConnectionMode   HostConnectionMode   `json:"connection_mode"`
@@ -467,11 +525,14 @@ type Host struct {
 	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
 
 	// LiveStatus 周期探活的实时状态(直连主机);key_changed 表示 SSH 主机键与 pin 值不一致
-	LiveStatus    *HostLiveStatus `json:"live_status,omitempty"`
-	Name          string          `json:"name"`
-	PinnedHostKey *string         `json:"pinned_host_key,omitempty"`
-	Platform      HostPlatform    `json:"platform"`
-	Port          int             `json:"port"`
+	LiveStatus    *HostLiveStatus      `json:"live_status,omitempty"`
+	Name          string               `json:"name"`
+	Onboarding    OnboardingProjection `json:"onboarding"`
+	PinnedHostKey *string              `json:"pinned_host_key,omitempty"`
+	Platform      HostPlatform         `json:"platform"`
+
+	// Port self_enrolled 主机在激活前为 0
+	Port int `json:"port"`
 
 	// ProbeLatencyMs 最近一次探活往返时延
 	ProbeLatencyMs  *int       `json:"probe_latency_ms,omitempty"`
@@ -480,7 +541,7 @@ type Host struct {
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
-// HostArchitecture 连接测试探测的目标架构(uname -m 归一化),Collector 安装按此选择分发产物;缺省按 amd64 处理
+// HostArchitecture 连接测试探测的目标架构(uname -m 归一化),Linux 连接测试必须成功识别架构,Collector 安装按此选择签名产物
 type HostArchitecture string
 
 // HostConnectionStatus defines model for Host.ConnectionStatus.
@@ -523,24 +584,41 @@ type HostPage struct {
 
 // HostPreviewCreate defines model for HostPreviewCreate.
 type HostPreviewCreate struct {
-	Address          string                          `json:"address"`
-	BastionScopeId   *openapi_types.UUID             `json:"bastion_scope_id,omitempty"`
-	ConnectionMode   HostPreviewCreateConnectionMode `json:"connection_mode"`
-	ConnectionTestId openapi_types.UUID              `json:"connection_test_id"`
-	CredentialId     openapi_types.UUID              `json:"credential_id"`
-	Environment      Environment                     `json:"environment"`
-	Hostname         *string                         `json:"hostname,omitempty"`
-	Labels           UserLabels                      `json:"labels"`
-	Name             string                          `json:"name"`
-	Platform         HostPreviewCreatePlatform       `json:"platform"`
-	Port             int                             `json:"port"`
-	Username         string                          `json:"username"`
+	// Address self_enrolled 模式不填写;其余模式必填(服务端按模式校验)
+	Address *string `json:"address,omitempty"`
+
+	// Architecture self_enrolled 模式由用户按目标机器选择;其余模式由连接测试探测,不接受填写
+	Architecture   *HostPreviewCreateArchitecture  `json:"architecture,omitempty"`
+	BastionScopeId *openapi_types.UUID             `json:"bastion_scope_id,omitempty"`
+	ConnectionMode HostPreviewCreateConnectionMode `json:"connection_mode"`
+
+	// ConnectionTestId self_enrolled 模式免测试,不提供;其余模式必填(服务端按模式校验)
+	ConnectionTestId *openapi_types.UUID `json:"connection_test_id,omitempty"`
+
+	// CredentialId self_enrolled 模式不提供
+	CredentialId *openapi_types.UUID `json:"credential_id,omitempty"`
+	Environment  Environment         `json:"environment"`
+	Hostname     *string             `json:"hostname,omitempty"`
+	Labels       UserLabels          `json:"labels"`
+	Name         string              `json:"name"`
+
+	// Platform self_enrolled 第一版仅支持 linux
+	Platform HostPreviewCreatePlatform `json:"platform"`
+
+	// Port self_enrolled 模式不填写;其余模式必填(服务端按模式校验)
+	Port *int `json:"port,omitempty"`
+
+	// Username self_enrolled 模式不提供
+	Username *string `json:"username,omitempty"`
 }
+
+// HostPreviewCreateArchitecture self_enrolled 模式由用户按目标机器选择;其余模式由连接测试探测,不接受填写
+type HostPreviewCreateArchitecture string
 
 // HostPreviewCreateConnectionMode defines model for HostPreviewCreate.ConnectionMode.
 type HostPreviewCreateConnectionMode string
 
-// HostPreviewCreatePlatform defines model for HostPreviewCreate.Platform.
+// HostPreviewCreatePlatform self_enrolled 第一版仅支持 linux
 type HostPreviewCreatePlatform string
 
 // HostPreviewUpdate defines model for HostPreviewUpdate.
@@ -568,6 +646,19 @@ type LabelValue = string
 
 // Labels defines model for Labels.
 type Labels map[string]LabelValue
+
+// OnboardingProjection defines model for OnboardingProjection.
+type OnboardingProjection struct {
+	ErrorCode        *string                   `json:"error_code,omitempty"`
+	ExecutionId      *openapi_types.UUID       `json:"execution_id,omitempty"`
+	OperationId      *openapi_types.UUID       `json:"operation_id,omitempty"`
+	PendingActionRef *string                   `json:"pending_action_ref,omitempty"`
+	State            OnboardingProjectionState `json:"state"`
+	UpdatedAt        time.Time                 `json:"updated_at"`
+}
+
+// OnboardingProjectionState defines model for OnboardingProjection.State.
+type OnboardingProjectionState string
 
 // PartialMetadata defines model for PartialMetadata.
 type PartialMetadata struct {
@@ -617,8 +708,9 @@ type UserLabels map[string]LabelValue
 
 // PendingActionPublicSchema defines model for pending-action-public.schema.
 type PendingActionPublicSchema struct {
-	ActionRef string `json:"action_ref"`
-	Approval  *struct {
+	ActionRef  string `json:"action_ref"`
+	ActionType string `json:"action_type"`
+	Approval   *struct {
 		ApprovedCount    int     `json:"approved_count"`
 		MinimumApprovers int     `json:"minimum_approvers"`
 		PolicyRef        *string `json:"policy_ref,omitempty"`
@@ -686,6 +778,18 @@ type PreviewDeleteHostParams struct {
 	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
 }
 
+// PreviewHostEnrollmentRotateParams defines parameters for PreviewHostEnrollmentRotate.
+type PreviewHostEnrollmentRotateParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
+}
+
+// PreviewHostUninstallCommandParams defines parameters for PreviewHostUninstallCommand.
+type PreviewHostUninstallCommandParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+	XCSRFToken     CsrfToken      `json:"X-CSRF-Token"`
+}
+
 // PreviewUpdateHostParams defines parameters for PreviewUpdateHost.
 type PreviewUpdateHostParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
@@ -700,6 +804,12 @@ type CreateHostConnectionTestJSONRequestBody = HostConnectionTestCreate
 
 // PreviewDeleteHostJSONRequestBody defines body for PreviewDeleteHost for application/json ContentType.
 type PreviewDeleteHostJSONRequestBody = ResourcePreviewDelete
+
+// PreviewHostEnrollmentRotateJSONRequestBody defines body for PreviewHostEnrollmentRotate for application/json ContentType.
+type PreviewHostEnrollmentRotateJSONRequestBody = ResourcePreviewDelete
+
+// PreviewHostUninstallCommandJSONRequestBody defines body for PreviewHostUninstallCommand for application/json ContentType.
+type PreviewHostUninstallCommandJSONRequestBody = ResourcePreviewDelete
 
 // PreviewUpdateHostJSONRequestBody defines body for PreviewUpdateHost for application/json ContentType.
 type PreviewUpdateHostJSONRequestBody = HostPreviewUpdate

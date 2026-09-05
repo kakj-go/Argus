@@ -22,6 +22,61 @@ var splitWorkerDeployments = []string{
 	"argus-worker-sandbox",
 }
 
+func TestTelemetryCatalogByteSizesRemainDecimalAfterHelmValueRoundTrip(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "evaluation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := loadLocalChart(root, "argus-platform")
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "0123456789abcdef0123456789abcdef", strings.Repeat("a", 64))
+	runtimeValues := values["runtime"].(map[string]any)
+	runtimeValues["otelcolLinuxArm64ByteSize"] = float64(61236274)
+	runtimeValues["otelcolLinuxAmd64Uri"] = "https://artifacts.example/amd64.tar.gz"
+	runtimeValues["otelcolLinuxAmd64Sha256"] = strings.Repeat("a", 64)
+	runtimeValues["otelcolLinuxAmd64Signature"] = "signature"
+	runtimeValues["otelcolLinuxAmd64ByteSize"] = float64(65985234)
+	runtimeValues["otelcolWindowsAmd64Uri"] = "https://artifacts.example/windows.zip"
+	runtimeValues["otelcolWindowsAmd64Sha256"] = strings.Repeat("b", 64)
+	runtimeValues["otelcolWindowsAmd64Signature"] = "signature"
+	runtimeValues["otelcolWindowsAmd64ByteSize"] = float64(65561794)
+	configuration := action.NewConfiguration(action.ConfigurationSetLogger(slog.NewTextHandler(io.Discard, nil)))
+	install := action.NewInstall(configuration)
+	install.ReleaseName = "argus-byte-size-round-trip"
+	install.Namespace = cfg.Spec.Namespaces.System
+	install.DryRunStrategy = action.DryRunClient
+	rendered, err := install.Run(loaded, values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessor, err := release.NewAccessor(rendered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := accessor.Manifest()
+	for _, hook := range accessor.Hooks() {
+		hookAccessor, hookErr := release.NewHookAccessor(hook)
+		if hookErr != nil {
+			t.Fatal(hookErr)
+		}
+		manifest += hookAccessor.Manifest()
+	}
+	for _, value := range []string{"61236274", "65985234", "65561794"} {
+		if !strings.Contains(manifest, `value: "`+value+`"`) {
+			t.Fatalf("catalog byte size %s was not rendered as a decimal integer", value)
+		}
+	}
+	if strings.Contains(manifest, "e+07") {
+		t.Fatal("catalog byte size rendered in scientific notation")
+	}
+}
+
 func TestLocalHardeningInstallerValuesRenderCharts(t *testing.T) {
 	root, err := findRepoRoot(".")
 	if err != nil {
@@ -39,7 +94,7 @@ func TestLocalHardeningInstallerValuesRenderCharts(t *testing.T) {
 		values    map[string]any
 	}{
 		{name: "data", chartName: "argus-data", namespace: cfg.Spec.Namespaces.System, values: dataValues(cfg, credentials)},
-		{name: "platform", chartName: "argus-platform", namespace: cfg.Spec.Namespaces.System, values: platformValues(cfg, credentials, "setup-secret", "idempotency", "cursor", "pending", "")},
+		{name: "platform", chartName: "argus-platform", namespace: cfg.Spec.Namespaces.System, values: platformValues(cfg, credentials, "setup-secret", "idempotency", "cursor", "pending", "", strings.Repeat("a", 64))},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -74,7 +129,7 @@ func TestInstallerProvidesRequiredObjectStoreBootstrapValues(t *testing.T) {
 	if got := images["minioClient"]; got != "minio/mc:RELEASE.2025-08-13T08-35-41Z" {
 		t.Fatalf("minioClient = %v", got)
 	}
-	platform := platformValues(cfg, credentials, "setup-secret", "idempotency", "cursor", "pending", "secret-kek")
+	platform := platformValues(cfg, credentials, "setup-secret", "idempotency", "cursor", "pending", "secret-kek", strings.Repeat("a", 64))
 	runtimeValues := platform["runtime"].(map[string]any)
 	if got := runtimeValues["remoteOrigin"]; got != "https://argus.dev" {
 		t.Fatalf("remoteOrigin = %v", got)
@@ -100,12 +155,14 @@ func TestPlatformValuesUseUnifiedDomainHosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek")
+	values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek", strings.Repeat("a", 64))
 	runtimeValues := values["runtime"].(map[string]any)
 	for key, want := range map[string]string{
-		"remoteOrigin":            "https://argus.dev",
-		"connectorEnrollmentURL":  "https://argus.dev",
-		"connectorGatewayAddress": "grpcs://connector.argus.dev:9443",
+		"remoteOrigin":                     "https://argus.dev",
+		"connectorEnrollmentURL":           "https://argus.dev",
+		"connectorGatewayAddress":          "grpcs://connector.argus.dev:9443",
+		"connectorEnrollmentForwardTarget": "argus.dev:443",
+		"connectorGatewayForwardTarget":    "argus-connector-gateway.argus-e2e-local-system.svc:9443",
 	} {
 		if got := runtimeValues[key]; got != want {
 			t.Fatalf("%s = %v, want %s", key, got, want)
@@ -126,9 +183,29 @@ func TestPlatformValuesUseUnifiedDomainHosts(t *testing.T) {
 	if _, exists := hosts["remote"]; exists {
 		t.Fatal("hosts must not carry a dedicated remote terminal domain")
 	}
-	tls := values["tls"].(map[string]any)
-	if tls["enabled"] != true || tls["mode"] != "cert-manager-selfsigned" {
-		t.Fatalf("tls values = %#v", tls)
+	pki := values["pki"].(map[string]any)
+	if pki["mode"] != "managed" || pki["issuerKind"] != "ClusterIssuer" || pki["issuerGroup"] != "cert-manager.io" {
+		t.Fatalf("pki values = %#v", pki)
+	}
+	if got, want := pki["issuerName"], cfg.Spec.ReleaseID+"-ca"; got != want {
+		t.Fatalf("pki.issuerName = %v, want %s", got, want)
+	}
+}
+
+func TestProductionPlatformValuesCarryExplicitTunnelCapacity(t *testing.T) {
+	root, err := findRepoRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(filepath.Join(root, "deploy", "profiles", "production.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek", strings.Repeat("a", 64))
+	production := values["production"].(map[string]any)
+	capacity := production["directExecutor"].(map[string]any)
+	if capacity["telemetryTunnelLimit"] != 64 || capacity["controlTunnelLimit"] != 32 || capacity["tunnelBytesPerSecond"] != int64(67108864) {
+		t.Fatalf("unexpected production Direct Executor capacity: %#v", capacity)
 	}
 }
 
@@ -141,13 +218,13 @@ func TestPlatformMFARequirementIsExplicitAndDefaultsOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtimeValues := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek")["runtime"].(map[string]any)
+	runtimeValues := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek", strings.Repeat("a", 64))["runtime"].(map[string]any)
 	if got := runtimeValues["platformMfaRequired"]; got != false {
 		t.Fatalf("platformMfaRequired = %v, want false", got)
 	}
 
 	cfg.Spec.Security.PlatformMFARequired = true
-	runtimeValues = platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek")["runtime"].(map[string]any)
+	runtimeValues = platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek", strings.Repeat("a", 64))["runtime"].(map[string]any)
 	if got := runtimeValues["platformMfaRequired"]; got != true {
 		t.Fatalf("platformMfaRequired = %v, want true", got)
 	}
@@ -164,7 +241,7 @@ func TestAllowedOriginsAreHttpsDomainsOnly(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek")
+			values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "secret-kek", strings.Repeat("a", 64))
 			runtimeValues := values["runtime"].(map[string]any)
 			want := []any{
 				"https://argus.dev",
@@ -220,12 +297,25 @@ func TestIngressRendersUnifiedHostsWithTLS(t *testing.T) {
 		t.Fatal("Ingress must not expose a dedicated remote host")
 	}
 	tls := spec["tls"].([]any)
-	if len(tls) != 1 {
-		t.Fatalf("Ingress must terminate TLS with a single multi-SAN secret, got %#v", tls)
+	if len(tls) != 4 {
+		t.Fatalf("Ingress must terminate TLS with four independent secrets, got %#v", tls)
 	}
-	tlsHosts := tls[0].(map[string]any)["hosts"].([]any)
-	if len(tlsHosts) != 4 {
-		t.Fatalf("single TLS secret must cover the browser-facing and artifact hosts, got %#v", tlsHosts)
+	secrets := map[string]string{}
+	for _, entry := range tls {
+		item := entry.(map[string]any)
+		hosts := item["hosts"].([]any)
+		if len(hosts) != 1 {
+			t.Fatalf("each Ingress TLS leaf must cover one host, got %#v", hosts)
+		}
+		secrets[hosts[0].(string)] = item["secretName"].(string)
+	}
+	for host, secret := range map[string]string{
+		"argus.dev": "argus-enterprise-tls", "platform.argus.dev": "argus-platform-tls",
+		"cards.argus.dev": "argus-cards-tls", "artifacts.argus.dev": "argus-artifact-tls",
+	} {
+		if secrets[host] != secret {
+			t.Fatalf("TLS secret for %s = %q, want %q", host, secrets[host], secret)
+		}
 	}
 	for _, rawRule := range rules {
 		rule := rawRule.(map[string]any)
@@ -248,6 +338,148 @@ func TestIngressRendersUnifiedHostsWithTLS(t *testing.T) {
 	if !strings.Contains(runtimeJSON, `"cardOrigin": "https://cards.argus.dev"`) || !strings.Contains(runtimeJSON, `"platformLoginUrl": "https://platform.argus.dev/login"`) {
 		t.Fatalf("runtime config JSON = %q", runtimeJSON)
 	}
+}
+
+func TestManagedPKIRendersOnlyOneSteadyStateClusterIssuer(t *testing.T) {
+	resources := renderPlatformResources(t, "evaluation")
+	issuers := resourcesByKind(resources, "ClusterIssuer")
+	if len(issuers) != 1 {
+		t.Fatalf("managed PKI rendered %d ClusterIssuers, want 1: %#v", len(issuers), issuers)
+	}
+	requireResource(t, issuers, "argus-e2e-local-ca")
+	bundles := resourcesByKind(resources, "Bundle")
+	requireResource(t, bundles, "argus-e2e-local-trust-bundle")
+}
+
+func TestEveryArgusCertificateUsesUniqueSinglePurposeLeaf(t *testing.T) {
+	resources := renderPlatformResources(t, "evaluation")
+	certificates := resourcesByKind(resources, "Certificate")
+	if len(certificates) < 12 {
+		t.Fatalf("rendered only %d Argus Certificates", len(certificates))
+	}
+	secrets := map[string]string{}
+	for name, certificate := range certificates {
+		spec := certificate.Object["spec"].(map[string]any)
+		secret, _ := spec["secretName"].(string)
+		if secret == "" {
+			t.Fatalf("Certificate %s has no Secret", name)
+		}
+		if owner := secrets[certificate.GetNamespace()+"/"+secret]; owner != "" {
+			t.Fatalf("Certificates %s and %s share Secret %s", owner, name, secret)
+		}
+		secrets[certificate.GetNamespace()+"/"+secret] = name
+		issuer := spec["issuerRef"].(map[string]any)
+		if issuer["name"] != "argus-e2e-local-ca" || issuer["kind"] != "ClusterIssuer" || issuer["group"] != "cert-manager.io" {
+			t.Fatalf("Certificate %s uses a non-global Issuer: %#v", name, issuer)
+		}
+		usages := spec["usages"].([]any)
+		if len(usages) != 1 || (usages[0] != "server auth" && usages[0] != "client auth") {
+			t.Fatalf("Certificate %s is not single-purpose: %#v", name, usages)
+		}
+		if usages[0] == "client auth" {
+			uris, _ := spec["uris"].([]any)
+			if len(uris) != 1 || !strings.HasPrefix(uris[0].(string), "spiffe://argus.io/") || spec["duration"] != "24h" || spec["renewBefore"] != "8h" {
+				t.Fatalf("client Certificate %s has invalid URI or lifetime: %#v", name, spec)
+			}
+		} else if spec["duration"] != "2160h" || spec["renewBefore"] != "360h" {
+			t.Fatalf("server Certificate %s has invalid lifetime: %#v", name, spec)
+		}
+	}
+	for _, expected := range []string{
+		"argus-server-direct-executor-client", "argus-worker-direct-executor-client",
+		"argus-connector-gateway-direct-executor-client", "argus-connector-gateway-peer-client",
+		"argus-server-telemetry-client", "argus-worker-telemetry-client",
+	} {
+		requireResource(t, certificates, expected)
+	}
+
+	deployments := resourcesByKind(resources, "Deployment")
+	assertDeploymentSecret(t, requireResource(t, deployments, "argus-server"), "direct-executor-client", "argus-server-direct-executor-client-tls")
+	assertDeploymentSecret(t, requireResource(t, deployments, "argus-server"), "telemetry-client", "argus-server-telemetry-client-tls")
+	assertDeploymentSecret(t, requireResource(t, deployments, "argus-worker"), "direct-executor-client", "argus-worker-direct-executor-client-tls")
+	assertDeploymentSecret(t, requireResource(t, deployments, "argus-worker"), "telemetry-client", "argus-worker-telemetry-client-tls")
+}
+
+func assertDeploymentSecret(t *testing.T, deployment *unstructured.Unstructured, volumeName, secretName string) {
+	t.Helper()
+	volumes, found, err := unstructured.NestedSlice(deployment.Object, "spec", "template", "spec", "volumes")
+	if err != nil || !found {
+		t.Fatalf("read Deployment %s volumes: found=%v err=%v", deployment.GetName(), found, err)
+	}
+	for _, raw := range volumes {
+		volume := raw.(map[string]any)
+		if volume["name"] != volumeName {
+			continue
+		}
+		if volume["secret"].(map[string]any)["secretName"] != secretName {
+			t.Fatalf("Deployment %s volume %s uses %#v, want %s", deployment.GetName(), volumeName, volume["secret"], secretName)
+		}
+		return
+	}
+	t.Fatalf("Deployment %s lacks volume %s", deployment.GetName(), volumeName)
+}
+
+func TestPKIControllerRBACSupportsStagedLeafCutover(t *testing.T) {
+	resources := renderPlatformResources(t, "evaluation")
+	runtimeConfig := requireResource(t, resourcesByKind(resources, "ConfigMap"), "argus-runtime-config")
+	if runtimeConfig.GetLabels()["argus.io/release-id"] != "argus-e2e-local" {
+		t.Fatal("runtime issuer ConfigMap is not protected by release ownership metadata")
+	}
+	telemetryIngest := requireResource(t, resourcesByKind(resources, "Deployment"), "argus-telemetry-ingest")
+	if telemetryIngest.GetLabels()["argus.io/release-id"] != "argus-e2e-local" {
+		t.Fatal("telemetry identity issuer workload is not protected by release ownership metadata")
+	}
+	reader := requireResource(t, resourcesByKind(resources, "ClusterRole"), "argus-e2e-local-pki-target-issuer-reader")
+	rules, found, err := unstructured.NestedSlice(reader.Object, "rules")
+	if err != nil || !found || len(rules) != 1 {
+		t.Fatalf("read target issuer reader rules: found=%v err=%v rules=%#v", found, err, rules)
+	}
+	rule := rules[0].(map[string]any)
+	if !reflect.DeepEqual(rule["resourceNames"], []any{"argus-e2e-local-ca"}) || !reflect.DeepEqual(rule["verbs"], []any{"get"}) {
+		t.Fatalf("target issuer reader must be restricted to the steady issuer: %#v", rule)
+	}
+
+	wantNamespaces := map[string]bool{
+		"argus-e2e-local-system":        false,
+		"argus-e2e-local-observability": false,
+		"argus-e2e-local-sandbox":       false,
+	}
+	for _, resource := range resources {
+		if resource.GetKind() != "Role" || resource.GetName() != "argus-pki-controller-material" {
+			continue
+		}
+		if _, ok := wantNamespaces[resource.GetNamespace()]; !ok {
+			t.Fatalf("PKI material role rendered in unexpected namespace %q", resource.GetNamespace())
+		}
+		wantNamespaces[resource.GetNamespace()] = true
+		rules, found, err := unstructured.NestedSlice(resource.Object, "rules")
+		if err != nil || !found {
+			t.Fatalf("read PKI material rules in %s: found=%v err=%v", resource.GetNamespace(), found, err)
+		}
+		assertPKIMaterialRule(t, rules, "", "secrets", []any{"get", "update", "delete"})
+		assertPKIMaterialRule(t, rules, "", "pods", []any{"list"})
+		assertPKIMaterialRule(t, rules, "cert-manager.io", "certificates", []any{"get", "list", "update", "delete"})
+	}
+	for namespace, found := range wantNamespaces {
+		if !found {
+			t.Errorf("PKI material role missing from namespace %s", namespace)
+		}
+	}
+}
+
+func assertPKIMaterialRule(t *testing.T, rules []any, apiGroup, resource string, verbs []any) {
+	t.Helper()
+	for _, rawRule := range rules {
+		rule := rawRule.(map[string]any)
+		if !reflect.DeepEqual(rule["apiGroups"], []any{apiGroup}) || !reflect.DeepEqual(rule["resources"], []any{resource}) {
+			continue
+		}
+		if !reflect.DeepEqual(rule["verbs"], verbs) {
+			t.Fatalf("%s rule verbs = %#v, want %#v", resource, rule["verbs"], verbs)
+		}
+		return
+	}
+	t.Fatalf("missing PKI material rule for %s/%s", apiGroup, resource)
 }
 
 func TestLocalHardeningOpenBaoRunsAsNonRootWithoutConfigChown(t *testing.T) {
@@ -301,6 +533,11 @@ func TestMinIOBucketInitStopsOptionParsingBeforeCredentials(t *testing.T) {
 	if len(args) != 1 || !strings.Contains(args[0].(string), `mc alias set -- argus`) {
 		t.Fatalf("MinIO bucket init command does not stop option parsing: %#v", args)
 	}
+	for _, bucket := range []string{"argus-collector-artifacts", "argus-connector-artifacts"} {
+		if !strings.Contains(args[0].(string), "mc anonymous set download argus/"+bucket) {
+			t.Fatalf("MinIO bucket init does not publish %s for signed downloads: %#v", bucket, args)
+		}
+	}
 }
 
 func TestSetupTokenIsNeverMountedIntoWeb(t *testing.T) {
@@ -331,7 +568,7 @@ func TestPlatformChartAllowsTelemetryToBeDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "")
+	values := platformValues(cfg, localHardeningTestCredentials(), "setup-secret", "idempotency", "cursor", "pending", "", strings.Repeat("a", 64))
 	runtimeValues := values["runtime"].(map[string]any)
 	runtimeValues["telemetryToolCatalogEnabled"] = false
 	runtimeValues["otelcolLinuxArm64Uri"] = ""
@@ -368,7 +605,7 @@ func TestPlatformChartAllowsTelemetryToBeDisabled(t *testing.T) {
 			t.Fatal(err)
 		}
 		switch object.GetName() {
-		case "argus-telemetry-catalog-sync", "argus-telemetry-ingest", "argus-server-telemetry-client-tls":
+		case "argus-telemetry-catalog-sync", "argus-telemetry-ingest", "argus-server-telemetry-client-tls", "argus-worker-telemetry-client-tls":
 			t.Fatalf("telemetry resource %s rendered while telemetry was disabled", object.GetName())
 		}
 	}
@@ -510,6 +747,7 @@ func renderPlatformResources(t *testing.T, profile string) []*unstructured.Unstr
 		"cursor",
 		"pending",
 		"0123456789abcdef0123456789abcdef",
+		strings.Repeat("a", 64),
 	))
 	if err != nil {
 		t.Fatalf("render platform chart for %s: %v", profile, err)

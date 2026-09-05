@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Argus · 历史探索稿 · 网络环境向导 Demo</title>
+<style>
+  /* 历史设计探索稿：未接入真实应用，不作为实现或验收标准 */
+  :root {
+    color-scheme: dark;
+    --font-sans: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --font-mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+    --bg-canvas: #100f0d;
+    --bg-sidebar: #151310;
+    --bg-surface: #191713;
+    --bg-elevated: #211e19;
+    --bg-muted: #29251f;
+    --bg-hover: #2d2922;
+    --border-subtle: #29261f;
+    --border-default: #39342c;
+    --border-strong: #4a4338;
+    --text-primary: #f2ede4;
+    --text-secondary: #b7afa2;
+    --text-tertiary: #aaa194;
+    --text-disabled: #968d80;
+    --accent: #a94529;
+    --accent-hover: #b14f31;
+    --accent-soft: rgb(220 118 84 / 12%);
+    --success: #8cad6f;
+    --success-soft: rgb(140 173 111 / 11%);
+    --warning: #d5a15b;
+    --warning-soft: rgb(213 161 91 / 11%);
+    --danger: #dc756b;
+    --danger-soft: rgb(220 117 107 / 11%);
+    --info: #7c9fc8;
+    --info-soft: rgb(124 159 200 / 11%);
+    --surface-code: #0c0b0a;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-lg: 0 24px 70px rgb(0 0 0 / 42%);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  /* ====== 演示页骨架（模拟企业门户背景） ====== */
+  .demo-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-sidebar);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .demo-topbar__title { font-size: 15px; font-weight: 680; }
+  .demo-topbar__sub { color: var(--text-tertiary); font-size: 12px; }
+  .demo-topbar__actions { margin-left: auto; display: flex; gap: 8px; }
+  .demo-note {
+    max-width: 1080px;
+    margin: 20px auto 0;
+    padding: 12px 16px;
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 12px;
+    background: var(--bg-surface);
+  }
+  .demo-section { max-width: 1080px; margin: 20px auto 48px; padding: 0 16px; }
+  .demo-section h2 { font-size: 14px; font-weight: 680; margin: 0 0 12px; }
+  .demo-table { width: 100%; border-collapse: collapse; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; font-size: 12px; }
+  .demo-table th, .demo-table td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+  .demo-table th { color: var(--text-tertiary); font-weight: 600; background: var(--bg-elevated); }
+  .demo-table tr:last-child td { border-bottom: none; }
+  .demo-table td { color: var(--text-secondary); }
+  .demo-table td:first-child { color: var(--text-primary); white-space: nowrap; }
+
+  /* ====== 通用元件（复刻 @argus/ui 视觉） ====== */
+  .argus-button {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border-default);
+    background: var(--bg-elevated); color: var(--text-primary);
+    font-size: 13px; font-family: inherit; cursor: pointer;
+  }
+  .argus-button:hover { background: var(--bg-hover); }
+  .argus-button--primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .argus-button--primary:hover { background: var(--accent-hover); }
+  .argus-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .argus-badge--success { background: var(--success-soft); color: var(--success); border-color: rgb(140 173 111 / 30%); }
+  .argus-badge--warning { background: var(--warning-soft); color: var(--warning); border-color: rgb(213 161 91 / 30%); }
+  .argus-badge--danger { background: var(--danger-soft); color: var(--danger); border-color: rgb(220 117 107 / 30%); }
+  .argus-badge--muted { background: var(--bg-muted); color: var(--text-tertiary); border-color: var(--border-default); }
+  .argus-badge--info { background: var(--info-soft); color: var(--info); border-color: rgb(124 159 200 / 30%); }
+
+  /* ====== 弹框 ====== */
+  .argus-dialog__overlay {
+    position: fixed; inset: 0; z-index: 80;
+    background: rgb(0 0 0 / 60%); backdrop-filter: blur(4px);
+    display: none;
+  }
+  .argus-dialog__overlay.is-open { display: block; }
+  .argus-dialog {
+    position: fixed; z-index: 81; top: 50%; left: 50%;
+    width: min(1020px, calc(100vw - 40px));
+    max-height: calc(100dvh - 24px);
+    transform: translate(-50%, -50%);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    display: none;
+    overflow: hidden;
+    flex-direction: column;
+  }
+  .argus-dialog.is-open { display: flex; }
+  .argus-dialog__top {
+    display: flex; align-items: flex-start; gap: 16px;
+    padding: 18px 20px 15px; border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .argus-dialog__title { font-size: 16px; font-weight: 680; }
+  .argus-dialog__description { color: var(--text-tertiary); font-size: 12px; margin-top: 4px; }
+  .argus-dialog__close {
+    margin-left: auto; border: 0; border-radius: 7px; padding: 5px 9px;
+    background: transparent; color: var(--text-tertiary); cursor: pointer; font-size: 14px;
+  }
+  .argus-dialog__close:hover { color: var(--text-primary); background: var(--bg-muted); }
+  .argus-dialog__steps {
+    display: flex; gap: 8px; align-items: center;
+    padding: 12px 20px;
+    background: var(--bg-surface);
+    position: relative; z-index: 2;
+    flex-shrink: 0;
+  }
+  .argus-step { display: flex; align-items: center; gap: 7px; color: var(--text-tertiary); font-size: 12px; }
+  .argus-step__index {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border-strong); font-size: 11px;
+  }
+  .argus-step.is-active { color: var(--text-primary); font-weight: 600; }
+  .argus-step.is-active .argus-step__index { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-hover); }
+  .argus-step-divider { flex: 0 0 24px; height: 1px; background: var(--border-default); }
+  .argus-dialog__body {
+    padding: 16px 20px 20px;
+    flex: 1; min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .argus-dialog__footer {
+    display: flex; align-items: center; gap: 9px;
+    padding: 13px 20px; border-top: 1px solid var(--border-subtle);
+    background: color-mix(in srgb, var(--overlay-black) 8%, transparent);
+    flex-shrink: 0;
+  }
+  .argus-dialog__footer-hint { margin-right: auto; color: var(--text-tertiary); font-size: 11.5px; }
+
+  /* ====== 向导主体：左场景卡 / 右表单 ====== */
+  .wizard {
+    display: grid; grid-template-columns: 352px 1fr; gap: 18px;
+    max-height: min(600px, calc(100dvh - 320px));
+  }
+  .wizard > * { min-height: 0; }
+  .wizard__list { overflow-y: auto; padding-right: 4px; }
+  .wizard .detail { overflow-y: auto; }
+  .wizard__group-label {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--text-tertiary); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.4px; margin: 14px 0 8px;
+  }
+  .wizard__group-label:first-child { margin-top: 0; }
+  .scenario-card {
+    width: 100%; text-align: left; border: 1px solid var(--border-default);
+    border-radius: var(--radius-md); background: var(--bg-elevated);
+    padding: 11px 12px 10px; margin-bottom: 8px; cursor: pointer;
+    font-family: inherit; color: var(--text-primary); position: relative;
+    display: block;
+  }
+  .scenario-card:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+  .scenario-card.is-selected { border-color: var(--accent); background: var(--accent-soft); }
+  .scenario-card__head { display: flex; align-items: center; gap: 8px; }
+  .scenario-card__title { font-size: 13px; font-weight: 640; min-width: 0; }
+  .scenario-card__ref {
+    font-size: 10.5px; color: var(--info); background: var(--info-soft);
+    border: 1px solid rgb(124 159 200 / 25%); border-radius: 999px; padding: 1px 7px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .scenario-card__badge { margin-left: auto; flex-shrink: 0; }
+  .scenario-card__desc { color: var(--text-tertiary); font-size: 11.5px; margin: 5px 0 8px; }
+  .scenario-card svg { display: block; width: 100%; height: auto; }
+
+  .detail { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-elevated); padding: 16px; }
+  .detail__title { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 680; margin-bottom: 4px; }
+  .detail__summary { color: var(--text-tertiary); font-size: 12px; margin-bottom: 14px; }
+
+  .mode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
+  .mode-cell { border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 9px 11px; background: var(--bg-surface); }
+  .mode-cell__label { display: flex; align-items: center; gap: 6px; color: var(--text-tertiary); font-size: 11px; margin-bottom: 3px; }
+  .mode-cell__value { font-size: 12.5px; color: var(--text-primary); }
+  .mode-cell__value .muted { color: var(--text-disabled); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .dot--ok { background: var(--success); }
+  .dot--warn { background: var(--warning); }
+  .dot--bad { background: var(--danger); }
+  .dot--info { background: var(--info); }
+
+  .form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .argus-field { display: flex; flex-direction: column; gap: 5px; }
+  .argus-field--wide { grid-column: 1 / -1; }
+  .argus-field__label { font-size: 12px; color: var(--text-secondary); }
+  .argus-field__label .req { color: var(--accent-hover); margin-left: 2px; }
+  .argus-input, .argus-select, .argus-textarea {
+    width: 100%; padding: 8px 11px; border-radius: 8px;
+    border: 1px solid var(--border-default); background: var(--bg-surface);
+    color: var(--text-primary); font-size: 13px; font-family: inherit;
+  }
+  .argus-input:focus, .argus-select:focus, .argus-textarea:focus { outline: none; border-color: var(--accent); }
+  .argus-input::placeholder, .argus-textarea::placeholder { color: var(--text-disabled); }
+  .argus-textarea { min-height: 66px; resize: vertical; font-family: var(--font-mono); font-size: 12px; }
+
+  .callout {
+    grid-column: 1 / -1; display: flex; gap: 9px;
+    border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12px;
+    border: 1px solid transparent;
+  }
+  .callout--info { background: var(--info-soft); border-color: rgb(124 159 200 / 25%); color: var(--text-secondary); }
+  .callout--warn { background: var(--warning-soft); border-color: rgb(213 161 91 / 28%); color: var(--text-secondary); }
+  .callout__icon { font-size: 13px; line-height: 1.4; }
+  .callout b { color: var(--text-primary); }
+
+  .cmd-block {
+    grid-column: 1 / -1; background: var(--surface-code); color: #f4f0e9;
+    border-radius: var(--radius-sm); padding: 12px 14px;
+    font-family: var(--font-mono); font-size: 12px; line-height: 1.7;
+    word-break: break-all; position: relative;
+  }
+  .cmd-block__copy {
+    position: absolute; top: 8px; right: 8px; border: 1px solid var(--border-strong);
+    background: var(--bg-elevated); color: var(--text-secondary);
+    border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer; font-family: inherit;
+  }
+  .cmd-block .c { color: #8f867a; }
+
+  .legend { display: flex; gap: 14px; align-items: center; color: var(--text-tertiary); font-size: 11px; margin: 2px 0 6px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 18px; height: 0; border-top: 2px solid; display: inline-block; }
+  .legend .l-ok { border-color: var(--success); }
+  .legend .l-bad { border-color: var(--danger); border-top-style: dashed; }
+  .legend .l-tun { border-color: var(--warning); border-top-style: dashed; }
+</style>
+</head>
+<body>
+
+<div class="demo-topbar">
+  <div>
+    <div class="demo-topbar__title">历史探索稿 · 网络环境向导</div>
+    <div class="demo-topbar__sub">仅用于回顾早期视觉方案；正式交互与验收以 PlanV4 Task 07 为准</div>
+  </div>
+  <div class="demo-topbar__actions">
+    <button class="argus-button argus-button--primary" data-open="bastion">打开：新建堡垒机弹框</button>
+    <button class="argus-button" data-open="host">打开：新建主机弹框</button>
+  </div>
+</div>
+
+<div class="demo-note" style="border-color:var(--warning); background:var(--warning-soft); color:var(--text-primary)">
+  <strong>历史稿提示：</strong>本页保留了早期“左侧场景、右侧说明/表单同屏”的探索方案，其中场景范围、状态徽章、模式文案和步骤行为均可能过期。正式产品必须采用 Task 07 定义的真实分步状态机：第一步只选择模式，第二步才填写信息；堡垒机 A/B/C 的最新边界以 Task 06 为准。
+</div>
+
+<div class="demo-section">
+  <h2>场景速查表（弹框卡片与这里的行一一对应）</h2>
+  <table class="demo-table">
+    <thead>
+      <tr>
+        <th style="width:150px">网络场景</th>
+        <th>网络条件</th>
+        <th>接入方式（控制面）</th>
+        <th>指标回传（数据面）</th>
+        <th>远程终端</th>
+        <th style="width:90px">状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>① 独立主机 · 双向可达</td>
+        <td>Argus 可 SSH 到主机，主机可出站访问 Argus</td>
+        <td>Direct Executor SSH 安装/管理</td>
+        <td>Collector 直推 ingest（direct_argus）</td>
+        <td>支持（Executor PTY）</td>
+        <td><span class="argus-badge argus-badge--success">已支持</span></td>
+      </tr>
+      <tr>
+        <td>② 独立主机 · 只进不出</td>
+        <td>Argus 可 SSH 到主机，主机无法出站</td>
+        <td>Direct Executor SSH 安装/管理</td>
+        <td>Executor 建立反向隧道，Collector 推本机端口回传</td>
+        <td>支持（Executor PTY）</td>
+        <td><span class="argus-badge argus-badge--warning">规划中</span></td>
+      </tr>
+      <tr>
+        <td>③ 堡垒机成员 · 连不上堡垒机端口</td>
+        <td>我们不可直达成员；堡垒机可出站、可 SSH 成员；成员连堡垒机 OTLP 端口不通</td>
+        <td>堡垒机 Connector SSH 安装/管理</td>
+        <td>堡垒机向成员建反向隧道 → 成员推本机端口 → 堡垒机 Gateway → Argus</td>
+        <td>支持（Connector 会话流）</td>
+        <td><span class="argus-badge argus-badge--warning">规划中</span></td>
+      </tr>
+      <tr>
+        <td>④ 堡垒机无出站 · 仅可被 SSH 进入</td>
+        <td>Argus 可 SSH 进堡垒机；堡垒机与成员都无出站</td>
+        <td>Executor SSH 进堡垒机，反向隧道承载 Connector 控制通道</td>
+        <td>双层隧道：成员 ←隧道→ 堡垒机 Gateway ←隧道→ Argus</td>
+        <td>支持（隧道内 Connector 会话流）</td>
+        <td><span class="argus-badge argus-badge--danger">暂缓 · 罕见</span></td>
+      </tr>
+      <tr>
+        <td>⑤ 只出不进 · 自助安装命令</td>
+        <td>Argus 不可达主机，主机可出站访问 Argus</td>
+        <td>用户在目标机执行一次性安装命令，自注册（self_enrolled）</td>
+        <td>Collector 直推 ingest（direct_argus）</td>
+        <td>第一版不支持（无回路通道）</td>
+        <td><span class="argus-badge argus-badge--warning">规划中</span></td>
+      </tr>
+      <tr>
+        <td>— 标准堡垒机（现有模式）</td>
+        <td>堡垒机可出站访问 Argus，成员可达堡垒机</td>
+        <td>一次性安装命令注册 Connector，出站长连接</td>
+        <td>成员 → 堡垒机 Gateway → Argus（bastion_gateway）</td>
+        <td>支持（Connector 会话流）</td>
+        <td><span class="argus-badge argus-badge--success">已支持</span></td>
+      </tr>
+      <tr>
+        <td>— 双向完全不通</td>
+        <td>无任何一方可以发起连接</td>
+        <td colspan="3">无路径可达，任何监控系统都无法接入；需要先提供至少一条单向可达（多数情况是部署一台可出站堡垒机）</td>
+        <td><span class="argus-badge argus-badge--muted">不可行</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="demo-note">
+    历史记录：本表曾把场景④理解为需要双层隧道并建议暂缓。该结论已被 Task 06 替代：堡垒机模式 C 复用 Executor SSH remote forward 承载 Connector 控制通道，属于正式交付和 E2E 验收范围。
+  </div>
+</div>
+
+<div class="demo-section" style="margin-top:-24px">
+  <h2>弹框演示</h2>
+  <div class="demo-note" style="max-width:none">
+    以下弹框只演示旧版视觉布局，不代表正式步骤行为。正式界面不得在选择模式时同时显示信息表单；URL hash 仅供浏览本历史稿：<code>#host-h1</code>、<code>#host-h3</code>、<code>#bastion-b1</code> 等。
+  </div>
+</div>
+
+<!-- ============ 新建堡垒机 ============ -->
+<div class="argus-dialog__overlay" id="overlay-bastion" data-close></div>
+<div class="argus-dialog" id="dialog-bastion" role="dialog" aria-modal="true">
+  <div class="argus-dialog__top">
+    <div>
+      <div class="argus-dialog__title">添加堡垒机</div>
+      <div class="argus-dialog__description">第一步确认这台堡垒机的网络环境，第二步按对应方式接入。接入后内网成员主机在「添加主机」中以成员身份加入。</div>
+    </div>
+    <button class="argus-dialog__close" data-close>✕</button>
+  </div>
+  <div class="argus-dialog__steps">
+    <span class="argus-step is-active"><span class="argus-step__index">1</span>网络环境</span>
+    <span class="argus-step-divider"></span>
+    <span class="argus-step"><span class="argus-step__index">2</span>接入信息</span>
+    <span class="argus-step-divider"></span>
+    <span class="argus-step"><span class="argus-step__index">3</span>测试与确认</span>
+  </div>
+  <div class="argus-dialog__body">
+    <div class="wizard" id="wizard-bastion"></div>
+  </div>
+  <div class="argus-dialog__footer">
+    <span class="argus-dialog__footer-hint" id="footer-hint-bastion"></span>
+    <button class="argus-button" data-close>取消</button>
+    <button class="argus-button argus-button--primary" id="primary-bastion"></button>
+  </div>
+</div>
+
+<!-- ============ 新建主机 ============ -->
+<div class="argus-dialog__overlay" id="overlay-host" data-close></div>
+<div class="argus-dialog" id="dialog-host" role="dialog" aria-modal="true">
+  <div class="argus-dialog__top">
+    <div>
+      <div class="argus-dialog__title">添加主机</div>
+      <div class="argus-dialog__description">第一步选择这台主机所在的网络环境（对照示例图判断），第二步填写对应的接入信息。提交前平台会实际发起连接测试，选错场景会在测试阶段被纠正。</div>
+    </div>
+    <button class="argus-dialog__close" data-close>✕</button>
+  </div>
+  <div class="argus-dialog__steps">
+    <span class="argus-step is-active"><span class="argus-step__index">1</span>网络环境</span>
+    <span class="argus-step-divider"></span>
+    <span class="argus-step"><span class="argus-step__index">2</span>接入信息</span>
+    <span class="argus-step-divider"></span>
+    <span class="argus-step"><span class="argus-step__index">3</span>测试与确认</span>
+  </div>
+  <div class="argus-dialog__body">
+    <div class="wizard" id="wizard-host"></div>
+  </div>
+  <div class="argus-dialog__footer">
+    <span class="argus-dialog__footer-hint" id="footer-hint-host"></span>
+    <button class="argus-button" data-close>取消</button>
+    <button class="argus-button argus-button--primary" id="primary-host"></button>
+  </div>
+</div>
+
+<script>
+/* ============ 拓扑小图渲染 ============ */
+const OK = "ok", BAD = "bad", TUN = "tun";
+const NODE_W = 104, NODE_H = 34;
+function topoDiagram(nodes, links) {
+  // nodes: [{id,x,y,label,kind}], links: [{from,to,mode,dir,label,top}]，top 为横线 y；竖线用 orient:'v'
+  const colors = { ok: "var(--success)", bad: "var(--danger)", tun: "var(--warning)" };
+  const dashes = { ok: "none", bad: "5 4", tun: "5 4" };
+  const H = Math.max(
+    Math.max(0, ...links.map(l => l.top || 0)) + 24,
+    Math.max(...nodes.map(n => n.y + NODE_H)) + 8,
+    86,
+  );
+  let svg = `<svg viewBox="0 0 316 ${H}" xmlns="http://www.w3.org/2000/svg" role="img">`;
+  for (const l of links) {
+    const a = nodes.find(n => n.id === l.from), b = nodes.find(n => n.id === l.to);
+    const color = colors[l.mode];
+    const dash = dashes[l.mode] !== "none" ? ` stroke-dasharray="${dashes[l.mode]}"` : "";
+    if (l.orient === "v") {
+      const x = l.x, y1 = a.y + NODE_H + 4, y2 = b.y - 4;
+      svg += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${color}" stroke-width="1.6"${dash}/>`;
+      if (l.dir === "both" || l.dir === "down") svg += `<path d="M ${x} ${y2} L ${x - 3.5} ${y2 - 6} L ${x + 3.5} ${y2 - 6} Z" fill="${color}"/>`;
+      if (l.dir === "both" || l.dir === "up") svg += `<path d="M ${x} ${y1} L ${x - 3.5} ${y1 + 6} L ${x + 3.5} ${y1 + 6} Z" fill="${color}"/>`;
+      svg += `<text x="${l.labelX ?? x + 6}" y="${l.labelY ?? y1 + 14}" font-size="9" fill="${color}">${l.label}</text>`;
+    } else {
+      const x1 = a.x + NODE_W + 6, x2 = b.x - 2, y = l.top || 30;
+      svg += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${color}" stroke-width="1.6"${dash}/>`;
+      if (l.dir === "both" || l.dir === "left") svg += `<path d="M ${x1} ${y} L ${x1 + 6} ${y - 3.5} L ${x1 + 6} ${y + 3.5} Z" fill="${color}"/>`;
+      if (l.dir === "both" || l.dir === "right") svg += `<path d="M ${x2} ${y} L ${x2 - 6} ${y - 3.5} L ${x2 - 6} ${y + 3.5} Z" fill="${color}"/>`;
+      svg += `<text x="${(x1 + x2) / 2}" y="${y - 6}" text-anchor="middle" font-size="9" fill="${color}">${l.label}</text>`;
+    }
+  }
+  for (const n of nodes) {
+    const stroke = n.kind === "argus" ? "var(--accent)" : "var(--border-strong)";
+    svg += `<rect x="${n.x}" y="${n.y}" width="${NODE_W}" height="${NODE_H}" rx="7" fill="var(--bg-surface)" stroke="${stroke}" stroke-width="1.1"/>`;
+    svg += `<text x="${n.x + NODE_W / 2}" y="${n.y + 21}" text-anchor="middle" font-size="11" fill="var(--text-primary)">${n.label}</text>`;
+  }
+  svg += `</svg>`;
+  return svg;
+}
+
+const argusNode = { id: "argus", x: 212, y: 12, label: "Argus 平台", kind: "argus" };
+const hostNode = { id: "host", x: 12, y: 12, label: "目标主机", kind: "host" };
+// 成员场景用 L 形布局：堡垒机/成员在左侧上下排布，Argus 居右
+const memberNodes = () => ([
+  { id: "bastion", x: 12, y: 6, label: "堡垒机", kind: "host" },
+  { id: "host", x: 12, y: 80, label: "成员主机", kind: "host" },
+  { id: "argus", x: 212, y: 26, label: "Argus 平台", kind: "argus" },
+]);
+
+const diagrams = {
+  h1: () => topoDiagram(
+    [hostNode, argusNode],
+    [
+      { from: "host", to: "argus", mode: OK, dir: "left", label: "Argus → SSH 可达", top: 26 },
+      { from: "host", to: "argus", mode: OK, dir: "right", label: "主机可出站推送", top: 62 },
+    ]),
+  h2: () => topoDiagram(
+    [hostNode, argusNode],
+    [
+      { from: "host", to: "argus", mode: OK, dir: "left", label: "Argus → SSH 可达", top: 26 },
+      { from: "host", to: "argus", mode: BAD, dir: "none", label: "主机无出站", top: 62 },
+      { from: "host", to: "argus", mode: TUN, dir: "right", label: "遥测经反向隧道回传", top: 88 },
+    ]),
+  h3: () => topoDiagram(
+    [hostNode, argusNode],
+    [
+      { from: "host", to: "argus", mode: BAD, dir: "none", label: "Argus 不可直达", top: 26 },
+      { from: "host", to: "argus", mode: OK, dir: "right", label: "主机可出站 · 主动注册", top: 62 },
+    ]),
+  m1: () => topoDiagram(
+    memberNodes(),
+    [
+      { from: "bastion", to: "host", mode: OK, dir: "down", label: "SSH 安装管理", orient: "v", x: 36, labelX: 100, labelY: 56 },
+      { from: "host", to: "bastion", mode: OK, dir: "up", label: "OTLP 推送", orient: "v", x: 88, labelX: 100, labelY: 72 },
+      { from: "bastion", to: "argus", mode: OK, dir: "right", label: "出站长连接 · 遥测出站", top: 30 },
+    ]),
+  m2: () => topoDiagram(
+    memberNodes(),
+    [
+      { from: "bastion", to: "host", mode: OK, dir: "down", label: "堡垒机 → SSH 可达", orient: "v", x: 36, labelX: 100, labelY: 56 },
+      { from: "host", to: "bastion", mode: TUN, dir: "up", label: "OTLP 经反向隧道", orient: "v", x: 88, labelX: 100, labelY: 72 },
+      { from: "bastion", to: "argus", mode: OK, dir: "right", label: "出站长连接 · 遥测出站", top: 30 },
+    ]),
+  b1: () => topoDiagram(
+    [{ id: "bastion", x: 12, y: 12, label: "堡垒机", kind: "host" }, argusNode],
+    [
+      { from: "bastion", to: "argus", mode: OK, dir: "right", label: "出站 mTLS 长连接", top: 34 },
+    ]),
+  b2: () => topoDiagram(
+    [{ id: "bastion", x: 12, y: 12, label: "堡垒机", kind: "host" }, argusNode],
+    [
+      { from: "bastion", to: "argus", mode: OK, dir: "left", label: "Argus → SSH 进入", top: 26 },
+      { from: "bastion", to: "argus", mode: BAD, dir: "none", label: "堡垒机无出站", top: 62 },
+      { from: "bastion", to: "argus", mode: TUN, dir: "right", label: "控制+遥测经反向隧道", top: 88 },
+    ]),
+};
+
+/* ============ 表单片段 ============ */
+const f = {
+  label: (text, req) => `<div class="argus-field__label">${text}${req ? '<span class="req">*</span>' : ""}</div>`,
+  input: (name, ph, req, wide) => `<div class="argus-field${wide ? " argus-field--wide" : ""}">${f.label(name, req)}<input class="argus-input" placeholder="${ph || ""}" /></div>`,
+  select: (name, opts, req) => `<div class="argus-field">${f.label(name, req)}<select class="argus-select">${opts.map(o => `<option>${o}</option>`).join("")}</select></div>`,
+  textarea: (name, ph, req) => `<div class="argus-field argus-field--wide">${f.label(name, req)}<textarea class="argus-textarea" placeholder="${ph}"></textarea></div>`,
+  callout: (type, html) => `<div class="callout callout--${type}"><span class="callout__icon">${type === "warn" ? "⚠" : "ℹ"}</span><div>${html}</div></div>`,
+  cmd: (cmd) => `<div class="cmd-block"><button class="cmd-block__copy">复制</button><span class="c"># 在堡垒机 root shell 中执行，一次性令牌 24 小时有效</span><br/>${cmd}</div>`,
+};
+
+const credentialFields = () => [
+  f.input("登录账号", "root 或其他具备安装权限的账号", true),
+  f.select("认证方式", ["密码", "SSH 私钥"], true),
+  f.input("密码", "••••••••", true),
+  f.select("主机密钥策略", ["首次连接自动记录并锁定指纹", "手动粘贴指纹 (sha256)"], false),
+];
+
+/* ============ 场景定义 ============ */
+const SCENARIOS = {
+  host: [
+    {
+      group: "独立主机（不经过堡垒机）",
+      items: [
+        {
+          id: "h1", ref: "场景 ①", status: ["success", "已支持"],
+          title: "双向可达",
+          desc: "Argus 可以 SSH 到这台主机，这台主机也可以出站访问 Argus。",
+          diagram: "h1",
+          headline: "最简单：填地址和账号密码即可，指标直推平台。",
+          modes: [
+            ["接入模式", "direct_ssh（Argus 直连执行器 → 主机）", "info"],
+            ["安装与配置", "Direct Executor 经 SSH 安装 / 升级 / 修复", "ok"],
+            ["指标回传", "Collector 直推 Argus ingest（direct_argus）", "ok"],
+            ["远程终端", "支持 · Executor PTY", "ok"],
+            ["在线检测", "每 60 秒 TCP + SSH 握手探测", "ok"],
+          ],
+          form: [
+            f.input("主机地址", "IP 或域名，如 203.0.113.10", true),
+            f.input("SSH 端口", "22", true),
+            ...credentialFields(),
+            f.input("标签", "如 env=prod, team=infra", false, true),
+          ],
+          primary: "测试连接并预览", hint: "提交后先做只读连接测试，冻结计划后才安装。",
+        },
+        {
+          id: "h2", ref: "场景 ②", status: ["warning", "规划中"],
+          title: "只进不出",
+          desc: "Argus 可以 SSH 到这台主机，但这台主机被禁止出站访问 Argus（常见于严格防火墙的机房）。表单与①相同，但遥测走反向隧道。",
+          diagram: "h2",
+          headline: "填写方式与①完全一致；差异在安装后的数据通路。",
+          modes: [
+            ["接入模式", "direct_ssh + 遥测隧道（规划）", "info"],
+            ["安装与配置", "Direct Executor 经 SSH 安装 / 升级 / 修复", "ok"],
+            ["指标回传", "Executor 维持 SSH 反向隧道，Collector 推本机回环端口", "warn"],
+            ["远程终端", "支持 · Executor PTY", "ok"],
+            ["在线检测", "隧道状态 + 最后成功发送时间", "warn"],
+          ],
+          form: [
+            f.input("主机地址", "IP 或域名", true),
+            f.input("SSH 端口", "22", true),
+            ...credentialFields(),
+            f.callout("warn", "<b>与①的差别：</b>安装后由平台侧维持一条 SSH 反向隧道专门承载指标回传（不复用安装通道、不开放额外入站端口）。隧道断开期间数据在主机本地持久队列缓存，恢复后续传。"),
+            f.input("标签", "如 env=prod", false, true),
+          ],
+          primary: "测试连接并预览", hint: "该模式后端尚未实现，当前仅交互演示。",
+        },
+        {
+          id: "h3", ref: "场景 ⑤", status: ["warning", "规划中"],
+          title: "只出不进 · 自助安装",
+          desc: "Argus 无法直达这台主机（NAT / 办公网 / 云上仅出站），但它可以访问 Argus。由你拿着安装命令去机器上执行。",
+          diagram: "h3",
+          headline: "不需要填地址账号——生成安装命令，拿到目标机器上执行。",
+          modes: [
+            ["接入模式", "self_enrolled 自注册（规划）", "info"],
+            ["安装与配置", "安装时冻结配置；变更需生成新命令重新执行（后续 OpAMP）", "warn"],
+            ["指标回传", "Collector 直推 Argus ingest（direct_argus）", "ok"],
+            ["远程终端", "第一版不支持（无入站路径，无回路通道）", "bad"],
+            ["在线检测", "最后成功发送时间（last_seen）", "warn"],
+          ],
+          form: [
+            f.input("主机名称", "如 office-build-01", true),
+            f.select("操作系统 / 架构", ["Linux amd64", "Linux arm64", "Windows amd64 (验证中)"], true),
+            f.callout("info", "<b>前置条件：</b>目标主机需要能访问 <b>artifacts.平台域名</b>（下载采集器）与 <b>telemetry.平台域名:4317/4318</b>（推送指标）。命令内含一次性注册令牌，绑定企业与预分配主机身份，24 小时有效、仅可消费一次。"),
+            f.cmd("由平台生成：内嵌 CA Bundle 与安装器 SHA-256 的安全引导命令（支持系统级或用户级安装）"),
+            f.callout("warn", "该模式仅覆盖监控采集；远程终端与远程运维不在此模式承诺范围内。"),
+          ],
+          primary: "生成一次性安装命令", hint: "命令仅在确认结果中展示一次，关闭弹框后需重新生成。",
+        },
+      ],
+    },
+    {
+      group: "堡垒机成员（内网主机，经堡垒机接入）",
+      items: [
+        {
+          id: "m1", ref: "标准模式", status: ["success", "已支持"],
+          title: "成员可达堡垒机",
+          desc: "堡垒机已接入 Argus；成员主机能把指标推到堡垒机（网络互通）。",
+          diagram: "m1",
+          headline: "选择所属堡垒机，填内网地址与账号密码。",
+          modes: [
+            ["接入模式", "via_bastion（Argus → 堡垒机 Connector → 成员）", "info"],
+            ["安装与配置", "堡垒机 Connector 经 SSH 安装 / 升级 / 修复", "ok"],
+            ["指标回传", "成员 → 堡垒机 Gateway → Argus（bastion_gateway）", "ok"],
+            ["远程终端", "支持 · Connector 会话流（经堡垒机隧道）", "ok"],
+            ["在线检测", "Collector last_seen", "ok"],
+          ],
+          form: [
+            f.select("所属堡垒机", ["北京生产网关 gw-bj-01 · 在线", "上海办公出口 sh-of-01 · 在线"], true),
+            f.input("内网地址", "如 10.0.8.12", true),
+            f.input("SSH 端口", "22", true),
+            ...credentialFields(),
+            f.input("标签", "如 env=prod, app=web", false, true),
+          ],
+          primary: "测试连接并预览", hint: "由堡垒机 Connector 对成员做只读连接测试。",
+        },
+        {
+          id: "m2", ref: "场景 ③ / ⑤复杂", status: ["warning", "规划中"],
+          title: "成员连不上堡垒机端口",
+          desc: "堡垒机能 SSH 到成员（远程终端可用），但成员连堡垒机的 OTLP 端口也不通（单向防火墙）。由堡垒机向成员建立反向隧道。",
+          diagram: "m2",
+          headline: "填写方式与标准成员一致；差异由平台在堡垒机侧建立反向隧道。",
+          modes: [
+            ["接入模式", "via_bastion + 成员隧道（规划）", "info"],
+            ["安装与配置", "堡垒机 Connector 经 SSH 安装 / 升级 / 修复", "ok"],
+            ["指标回传", "堡垒机向成员建反向隧道 → 成员推本机回环 → 堡垒机 Gateway → Argus", "warn"],
+            ["远程终端", "支持 · Connector 会话流（不依赖新端口）", "ok"],
+            ["在线检测", "隧道状态 + last_seen", "warn"],
+          ],
+          form: [
+            f.select("所属堡垒机", ["北京生产网关 gw-bj-01 · 在线"], true),
+            f.input("内网地址", "如 10.0.8.12", true),
+            f.input("SSH 端口", "22", true),
+            ...credentialFields(),
+            f.callout("warn", "<b>适用判断：</b>你能经堡垒机打开这台机器的终端，但成员到堡垒机的 4317/4318 端口未放行。反向隧道由堡垒机发起，成员侧不需要开任何新入站端口。"),
+            f.input("标签", "如 env=prod", false, true),
+          ],
+          primary: "测试连接并预览", hint: "该模式后端尚未实现，当前仅交互演示。",
+        },
+      ],
+    },
+  ],
+  bastion: [
+    {
+      group: "堡垒机本机接入方式",
+      items: [
+        {
+          id: "b1", ref: "标准模式", status: ["success", "已支持"],
+          title: "堡垒机可出站访问 Argus",
+          desc: "堡垒机可以主动访问 Argus（只需出站，不需要对公网开放任何入站端口）。这是绝大多数环境的标准形态。",
+          diagram: "b1",
+          headline: "生成一次性安装命令，在堡垒机上执行即完成注册。",
+          modes: [
+            ["接入方式", "一次性安装命令注册 Connector", "info"],
+            ["前置条件", "出站访问 gateway:9443 与 telemetry:4317/4318", "ok"],
+            ["管理成员", "Connector 经 SSH/WinRM 管理内网成员", "ok"],
+            ["遥测角色", "可启用 Edge Gateway：接收成员 OTLP 并统一出站", "ok"],
+            ["远程终端", "支持 · 堡垒机本机 PTY + 成员会话流", "ok"],
+          ],
+          form: [
+            f.input("堡垒机名称", "如 北京生产网关", true),
+            f.input("用户标签", "如 site=bj, env=prod", false, true),
+            f.callout("info", "<b>前置条件：</b>这台机器需要能出站访问 <b>connector-gateway:9443</b>（控制长连接）与 <b>telemetry:4317/4318</b>（遥测出站）。如果出站只能放行 9443，遥测可选择代理到另一台已激活堡垒机。"),
+            f.cmd("由平台生成：内嵌 CA Bundle 与安装器 SHA-256 的安全引导命令（校验完成后才请求 sudo）"),
+          ],
+          primary: "生成一次性安装命令", hint: "命令绑定企业、预分配堡垒机身份与有效期，仅可消费一次。",
+        },
+        {
+          id: "b2", ref: "场景 ④", status: ["danger", "暂缓 · 罕见"],
+          title: "堡垒机无出站，仅可被 Argus SSH 进入",
+          desc: "堡垒机被完全禁止出站，但 Argus 执行器网络可以 SSH 登录它。需要双层隧道：Argus → 堡垒机反向隧道承载控制与遥测，堡垒机 → 成员再建一层反向隧道。",
+          diagram: "b2",
+          headline: "填写堡垒机地址账号；平台建立双向隧道链路（成本最高，建议先确认是否真的无法放行出站）。",
+          modes: [
+            ["接入方式", "Executor SSH 进入 + 反向隧道（暂缓）", "info"],
+            ["控制通道", "Connector 连接本机回环端口，经隧道回到 Argus", "warn"],
+            ["遥测回传", "成员 ←隧道→ 堡垒机 Gateway ←隧道→ Argus 双层承载", "warn"],
+            ["稳定性", "任一层隧道断开均影响控制与遥测，需两级重连监督", "bad"],
+            ["建议", "优先与网络方确认放行出站 9443/4317，成本远低于此模式", "warn"],
+          ],
+          form: [
+            f.input("堡垒机地址", "仅 Argus 执行器部署网络可达", true),
+            f.input("SSH 端口", "22", true),
+            ...credentialFields(),
+            f.callout("warn", "<b>为什么暂缓：</b>该拓扑需要把 Connector 控制通道与遥测出站全部搬进 SSH 隧道，可用性与排障复杂度显著上升，且真实环境中「能入站 SSH 却完全无出站」的堡垒机非常罕见。建议此类环境先申请放行出站访问。"),
+          ],
+          primary: "测试连接并预览", hint: "该模式后端尚未排期，当前仅交互演示。",
+        },
+      ],
+    },
+  ],
+};
+
+/* ============ 渲染 ============ */
+const legendHtml = `<div class="legend">
+  <span><i class="l-ok"></i>直连可达</span>
+  <span><i class="l-bad"></i>网络阻断</span>
+  <span><i class="l-tun"></i>经 SSH 隧道承载</span>
+</div>`;
+
+function renderWizard(type) {
+  const wrap = document.getElementById(`wizard-${type}`);
+  const groups = SCENARIOS[type];
+  let html = `<div class="wizard__list">${legendHtml}`;
+  for (const g of groups) {
+    html += `<div class="wizard__group-label">${g.group}</div>`;
+    for (const item of g.items) {
+      html += `<button class="scenario-card" data-type="${type}" data-id="${item.id}">
+        <div class="scenario-card__head">
+          <span class="scenario-card__title">${item.title}</span>
+          <span class="scenario-card__ref">${item.ref}</span>
+          <span class="argus-badge argus-badge--${item.status[0]} scenario-card__badge">${item.status[1]}</span>
+        </div>
+        <div class="scenario-card__desc">${item.desc}</div>
+        ${diagrams[item.diagram]()}
+      </button>`;
+    }
+  }
+  html += `</div><div class="detail" id="detail-${type}"></div>`;
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll(".scenario-card").forEach(card => {
+    card.addEventListener("click", () => selectScenario(type, card.dataset.id));
+  });
+}
+
+function selectScenario(type, id) {
+  const item = SCENARIOS[type].flatMap(g => g.items).find(i => i.id === id);
+  if (!item) return;
+  document.querySelectorAll(`#wizard-${type} .scenario-card`).forEach(c => {
+    c.classList.toggle("is-selected", c.dataset.id === id);
+  });
+  const dotClass = { ok: "dot--ok", warn: "dot--warn", bad: "dot--bad", info: "dot--info" };
+  document.getElementById(`detail-${type}`).innerHTML = `
+    <div class="detail__title">${item.title}
+      <span class="argus-badge argus-badge--${item.status[0]}">${item.status[1]}</span>
+    </div>
+    <div class="detail__summary">${item.headline}</div>
+    <div class="mode-grid">
+      ${item.modes.map(([k, v, tone]) => `
+        <div class="mode-cell">
+          <div class="mode-cell__label"><span class="dot ${dotClass[tone]}"></span>${k}</div>
+          <div class="mode-cell__value">${v}</div>
+        </div>`).join("")}
+    </div>
+    <div class="form">${item.form.join("")}</div>
+  `;
+  document.getElementById(`primary-${type}`).textContent = item.primary;
+  document.getElementById(`footer-hint-${type}`).textContent = item.hint;
+  history.replaceState(null, "", `#${type}-${id}`);
+}
+
+function openDialog(type) {
+  document.getElementById(`overlay-${type}`).classList.add("is-open");
+  document.getElementById(`dialog-${type}`).classList.add("is-open");
+}
+function closeDialogs() {
+  document.querySelectorAll(".argus-dialog__overlay, .argus-dialog").forEach(el => el.classList.remove("is-open"));
+}
+
+document.querySelectorAll("[data-open]").forEach(btn => btn.addEventListener("click", () => openDialog(btn.dataset.open)));
+document.querySelectorAll("[data-close]").forEach(el => el.addEventListener("click", closeDialogs));
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDialogs(); });
+document.addEventListener("click", e => {
+  const copy = e.target.closest(".cmd-block__copy");
+  if (!copy) return;
+  const text = [...copy.parentElement.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim();
+  navigator.clipboard?.writeText(text).then(() => {
+    copy.textContent = "已复制";
+    setTimeout(() => { copy.textContent = "复制"; }, 1500);
+  });
+});
+
+renderWizard("host");
+renderWizard("bastion");
+
+/* URL 直达：#host-h2 / #bastion-b1 */
+const hash = location.hash.replace("#", "");
+if (hash) {
+  const [type, id] = hash.split("-");
+  if (SCENARIOS[type]) {
+    openDialog(type);
+    selectScenario(type, id);
+  }
+} else {
+  openDialog("host");
+  selectScenario("host", "h1");
+}
+</script>
+</body>
+</html>

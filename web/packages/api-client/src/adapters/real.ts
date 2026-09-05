@@ -19,6 +19,7 @@ import type {
   LoginResult,
   Host,
   HostPage,
+  ConnectorInstallOperation,
   KubernetesCluster,
   KubernetesClusterPage,
   KubernetesResourcePage,
@@ -59,6 +60,7 @@ import type {
   StepUpSession,
   TotpEnrollment,
   TotpVerifyRequest,
+  PKIStatus as PKIStatusContract,
 } from "../generated/contracts";
 import type {
   AuditEvent,
@@ -68,6 +70,7 @@ import type {
   EnterpriseAdmin,
   Page,
   PlatformAuditEvent,
+  PlatformPKIStatus,
   Role,
   RoleBinding,
   ServiceAccount,
@@ -560,6 +563,41 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
     list: (filter, query): Promise<Page<PlatformAuditEvent>> =>
       listAudit("platform", filter?.action, query?.page?.limit),
   };
+  client.platform.pki = {
+    async get(): Promise<PlatformPKIStatus> {
+      const value = await http.request<PKIStatusContract>("platform/pki");
+      return {
+        bundles: value.bundles.map((bundle) => ({
+          epoch: bundle.epoch,
+          state: bundle.state,
+          direction: bundle.direction,
+          bundleSha256: bundle.bundle_sha256,
+          currentCaFingerprints: bundle.current_ca_fingerprints,
+          nextCaFingerprints: bundle.next_ca_fingerprints,
+          startedAt: bundle.started_at,
+          retireAt: bundle.retire_at,
+          lastError: bundle.last_error,
+        })),
+        nodes: value.nodes.map((node) => ({
+          id: node.id,
+          kind: node.kind,
+          enterpriseId: node.enterprise_id,
+          epoch: node.epoch,
+          bundleSha256: node.bundle_sha256,
+          caFingerprints: node.ca_fingerprints,
+          status: node.status,
+          blocksCutover: node.blocks_cutover,
+          error: node.error,
+          acknowledgedAt: node.acknowledged_at,
+          updatedAt: node.updated_at,
+        })),
+        acknowledgedNodes: value.acknowledged_nodes,
+        pendingNodes: value.pending_nodes,
+        failedNodes: value.failed_nodes,
+        trustExpiredNodes: value.trust_expired_nodes,
+      };
+    },
+  };
 
   client.secrets = {
     async list() {
@@ -754,6 +792,26 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
       ),
     previewCollectorInstall: (id, input) =>
       client.hosts.previewCollectorAction(id, "install", input),
+    previewEnrollmentRotate: (id, version) =>
+      http.request<PendingActionPublic>(
+        `enterprise/hosts/${id}/actions/preview-enrollment-rotate`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: { expected_version: version },
+        },
+      ),
+    previewUninstallCommand: (id, version) =>
+      http.request<PendingActionPublic>(
+        `enterprise/hosts/${id}/actions/preview-uninstall-command`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: { expected_version: version },
+        },
+      ),
   };
 
   client.kubernetes = {
@@ -991,14 +1049,37 @@ export function createRealAdapter(options: RealAdapterOptions): RealAdapter {
           body: { expected_version: version },
         },
       ),
-    previewReplaceBastionConnector: (id, version) =>
+    previewEnrollmentRotate: (id, version) =>
       http.request<PendingActionPublic>(
-        `enterprise/bastion-scopes/${id}/actions/preview-replacement`,
+        `enterprise/bastion-scopes/${id}/actions/preview-enrollment-rotate`,
         {
           method: "POST",
           csrf: true,
           headers: { "Idempotency-Key": idempotencyKey() },
           body: { expected_version: version },
+        },
+      ),
+    previewConnectorReplacement: (id, input) =>
+      http.request<PendingActionPublic>(
+        `enterprise/bastion-scopes/${id}/actions/preview-connector-replacement`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
+          body: input,
+        },
+      ),
+    getInstallOperation: (id) =>
+      http.request<ConnectorInstallOperation>(
+        `enterprise/connector-install-operations/${id}`,
+      ),
+    previewRetryInstallOperation: (id) =>
+      http.request<PendingActionPublic>(
+        `enterprise/connector-install-operations/${id}/actions/preview-retry`,
+        {
+          method: "POST",
+          csrf: true,
+          headers: { "Idempotency-Key": idempotencyKey() },
         },
       ),
     previewUninstallConnector: (id, version) =>
@@ -1395,6 +1476,10 @@ function createUnavailableClient(): ArgusApiClient {
       previewCollectorAction: () => unavailable("hosts.previewCollectorAction"),
       previewCollectorInstall: () =>
         unavailable("hosts.previewCollectorInstall"),
+      previewEnrollmentRotate: () =>
+        unavailable("hosts.previewEnrollmentRotate"),
+      previewUninstallCommand: () =>
+        unavailable("hosts.previewUninstallCommand"),
     },
     remoteAccess: {
       listGrants: () => unavailable("remoteAccess.listGrants"),
@@ -1480,8 +1565,13 @@ function createUnavailableClient(): ArgusApiClient {
         unavailable("connectors.previewUpdateBastionScope"),
       previewDeleteBastionScope: () =>
         unavailable("connectors.previewDeleteBastionScope"),
-      previewReplaceBastionConnector: () =>
-        unavailable("connectors.previewReplaceBastionConnector"),
+      previewEnrollmentRotate: () =>
+        unavailable("connectors.previewEnrollmentRotate"),
+      previewConnectorReplacement: () =>
+        unavailable("connectors.previewConnectorReplacement"),
+      getInstallOperation: () => unavailable("connectors.getInstallOperation"),
+      previewRetryInstallOperation: () =>
+        unavailable("connectors.previewRetryInstallOperation"),
       previewUninstallConnector: () =>
         unavailable("connectors.previewUninstallConnector"),
     },
@@ -1668,6 +1758,7 @@ function createUnavailableClient(): ArgusApiClient {
         list: () => unavailable("platform.usage.list"),
       },
       audit: { list: () => unavailable("platform.audit.list") },
+      pki: { get: () => unavailable("platform.pki.get") },
     },
     setup: {
       status: () => unavailable("setup.status"),

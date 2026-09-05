@@ -30,6 +30,7 @@
         "storageClass",
         "images",
         "exposure",
+        "pki",
         "persistence"
       ],
       "properties": {
@@ -66,31 +67,48 @@
         "exposure": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["ingressClassName", "enterpriseHost", "platformHost", "connectorHost", "tls"],
+          "required": ["ingressClassName", "enterpriseHost", "platformHost", "connectorHost"],
           "properties": {
             "ingressClassName": { "type": "string" },
             "enterpriseHost": { "type": "string", "minLength": 1 },
             "platformHost": { "type": "string", "minLength": 1 },
             "connectorHost": { "type": "string", "minLength": 1 },
-            "tls": {
+            "artifactHost": { "type": "string" }
+          }
+        },
+        "pki": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "rotation"],
+          "properties": {
+            "mode": { "enum": ["managed", "existing-cluster-issuer"] },
+            "bootstrapTLSMode": { "enum": ["strict", "insecure-first-fetch"] },
+            "issuerRef": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["enabled", "mode"],
+              "required": ["name"],
               "properties": {
-                "enabled": { "const": true },
-                "mode": {
-                  "enum": ["cert-manager-selfsigned", "cert-manager-issuer", "user-provided"]
-                },
-                "issuerRef": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "name": { "type": "string" },
-                    "kind": { "enum": ["Issuer", "ClusterIssuer"] }
-                  }
-                },
-                "secretName": { "type": "string" }
+                "name": { "type": "string", "minLength": 1 },
+                "group": { "const": "cert-manager.io", "default": "cert-manager.io" }
               }
+            },
+            "caBundle": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file": { "type": "string", "minLength": 1 },
+                "inlinePEM": { "type": "string", "minLength": 1 }
+              },
+              "oneOf": [
+                { "required": ["file"], "not": { "required": ["inlinePEM"] } },
+                { "required": ["inlinePEM"], "not": { "required": ["file"] } }
+              ]
+            },
+            "rotation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["overlap"],
+              "properties": { "overlap": { "type": "string", "pattern": "^[0-9]+(h|m|s)$" } }
             }
           }
         },
@@ -118,6 +136,16 @@
                 "verificationURL": { "type": "string" }
               }
             }
+          }
+        },
+        "directExecutor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["telemetryTunnelLimit", "controlTunnelLimit", "tunnelBytesPerSecond"],
+          "properties": {
+            "telemetryTunnelLimit": { "type": "integer", "minimum": 1 },
+            "controlTunnelLimit": { "type": "integer", "minimum": 1 },
+            "tunnelBytesPerSecond": { "type": "integer", "minimum": 1 }
           }
         },
         "openSandbox": {

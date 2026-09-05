@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -67,12 +69,26 @@ func (manager Manager) ApplySSH(ctx context.Context, command *connectorv1.Collec
 		}
 		return sshResult(command, "uninstalled"), nil
 	}
-	artifact, err := manager.FetchArtifact(ctx, command.GetArtifact())
+	artifactFile, err := os.CreateTemp("", ".argus-collector-artifact-*")
 	if err != nil {
 		return Result{}, err
 	}
+	artifactPath := artifactFile.Name()
+	defer func() {
+		_ = artifactFile.Close()
+		_ = os.Remove(artifactPath)
+	}()
+	if err = artifactFile.Chmod(0o600); err != nil {
+		return Result{}, err
+	}
+	if err = manager.FetchArtifactTo(ctx, command.GetArtifact(), artifactFile); err != nil {
+		return Result{}, err
+	}
+	if _, err = artifactFile.Seek(0, io.SeekStart); err != nil {
+		return Result{}, err
+	}
 	prepare := "umask 077; install -d -m 0700 " + directory + "/release /etc/argus-otelcol; cat > " + directory + "/artifact.tar.gz"
-	if err = runSSH(client, prepare, artifact); err != nil {
+	if err = runSSHReader(client, prepare, artifactFile); err != nil {
 		return Result{}, err
 	}
 	runtimeConfig, err := configbundle.Extract(command.GetRenderedConfig(), "host")
@@ -82,15 +98,22 @@ func (manager Manager) ApplySSH(ctx context.Context, command *connectorv1.Collec
 	if err = runSSH(client, "umask 077; cat > /etc/argus-otelcol/config.yaml", runtimeConfig); err != nil {
 		return Result{}, err
 	}
-	serverCA, err := configbundle.ServerCA(command.GetRenderedConfig())
+	trust, err := commandTrustBundle(command)
 	if err != nil {
 		return Result{}, err
 	}
-	if err = runSSH(client, "umask 077; cat > /etc/argus-otelcol/server-ca.pem", serverCA); err != nil {
+	if err = runSSH(client, "umask 077; cat > /etc/argus-otelcol/server-ca.pem", trust.PEM); err != nil {
+		return Result{}, err
+	}
+	prepareIdentity := "active=''; [ -f /var/lib/argus-otelcol/.active-collector-id ] && active=$(cat /var/lib/argus-otelcol/.active-collector-id); " +
+		"if [ \"$active\" != '" + command.GetCollectorId() + "' ]; then systemctl disable --now argus-otelcol.service >/dev/null 2>&1 || true; rm -rf /var/lib/argus-otelcol/identity; fi; " +
+		"install -d -m 0700 /var/lib/argus-otelcol/identity; printf '%s' '" + command.GetCollectorId() + "' > /var/lib/argus-otelcol/.active-collector-id"
+	if err = runSSH(client, prepareIdentity, nil); err != nil {
 		return Result{}, err
 	}
 	if len(command.GetEnrollmentToken()) > 0 {
-		if err = runSSH(client, "umask 077; cat > /etc/argus-otelcol/enrollment-token", command.GetEnrollmentToken()); err != nil {
+		writeToken := "umask 077; if [ -s /var/lib/argus-otelcol/identity/client.pem ]; then cat >/dev/null; rm -f /etc/argus-otelcol/enrollment-token; else cat > /etc/argus-otelcol/enrollment-token; fi"
+		if err = runSSH(client, writeToken, command.GetEnrollmentToken()); err != nil {
 			return Result{}, err
 		}
 	}
@@ -113,7 +136,10 @@ func sshActivateCommand(directory string) string {
 	return "rm -rf " + directory + "/release/*; tar -xzf " + directory + "/artifact.tar.gz -C " + directory +
 		"/release; test -x " + directory + "/release/argus-otelcol; install -m 0755 " + directory +
 		"/release/argus-otelcol /usr/local/bin/argus-otelcol; systemctl daemon-reload; systemctl enable --now argus-otelcol.service; " +
-		"systemctl is-active --quiet argus-otelcol.service; sleep 2; systemctl is-active --quiet argus-otelcol.service"
+		"i=0; while [ \"$i\" -lt 90 ]; do if systemctl is-active --quiet argus-otelcol.service && " +
+		"test -s /var/lib/argus-otelcol/identity/client.pem && test -s /var/lib/argus-otelcol/identity/client-key.pem && " +
+		"test -s /var/lib/argus-otelcol/identity/ca.pem && test ! -e /etc/argus-otelcol/enrollment-token; then exit 0; fi; " +
+		"i=$((i+1)); sleep 1; done; exit 1"
 }
 
 func sshAuthentication(value []byte) (ssh.AuthMethod, error) {
@@ -128,13 +154,20 @@ func sshAuthentication(value []byte) (ssh.AuthMethod, error) {
 }
 
 func runSSH(client *ssh.Client, command string, input []byte) error {
+	if input == nil {
+		return runSSHReader(client, command, nil)
+	}
+	return runSSHReader(client, command, bytes.NewReader(input))
+}
+
+func runSSHReader(client *ssh.Client, command string, input io.Reader) error {
 	session, err := client.NewSession()
 	if err != nil {
 		return err
 	}
 	defer session.Close()
 	if input != nil {
-		session.Stdin = bytes.NewReader(input)
+		session.Stdin = input
 	}
 	// 远端 stderr 必须进入错误信息:目标缺命令(exit 127)、权限不足等
 	// 失败原因只有远端输出能说明,仅退出码无法诊断。

@@ -12,6 +12,9 @@ import (
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// GetConnectorBootstrapScript Download a strict Connector bootstrap script using a pending enrollment token.
+	// (GET /connectors/bootstrap-script)
+	GetConnectorBootstrapScript(ctx context.Context, request GetConnectorBootstrapScriptRequestObject) (GetConnectorBootstrapScriptResponseObject, error)
 	// EnrollConnector Consume a one-time enrollment token and sign a Connector CSR.
 	// (POST /connectors/enroll)
 	EnrollConnector(ctx context.Context, request EnrollConnectorRequestObject) (EnrollConnectorResponseObject, error)
@@ -24,15 +27,24 @@ type StrictServerInterface interface {
 	// GetBastionScope Get a Bastion Scope.
 	// (GET /enterprise/bastion-scopes/{id})
 	GetBastionScope(ctx context.Context, request GetBastionScopeRequestObject) (GetBastionScopeResponseObject, error)
+	// PreviewBastionConnectorReplacement Fence the active Connector through a confirmed replacement action.
+	// (POST /enterprise/bastion-scopes/{id}/actions/preview-connector-replacement)
+	PreviewBastionConnectorReplacement(ctx context.Context, request PreviewBastionConnectorReplacementRequestObject) (PreviewBastionConnectorReplacementResponseObject, error)
 	// PreviewDeleteBastionScope Freeze a Bastion Scope deletion.
 	// (POST /enterprise/bastion-scopes/{id}/actions/preview-delete)
 	PreviewDeleteBastionScope(ctx context.Context, request PreviewDeleteBastionScopeRequestObject) (PreviewDeleteBastionScopeResponseObject, error)
-	// PreviewReplaceBastionConnector Fence the active Connector through a confirmed replacement action.
-	// (POST /enterprise/bastion-scopes/{id}/actions/preview-replacement)
-	PreviewReplaceBastionConnector(ctx context.Context, request PreviewReplaceBastionConnectorRequestObject) (PreviewReplaceBastionConnectorResponseObject, error)
+	// PreviewBastionEnrollmentRotate Freeze a new mode A Connector installation command.
+	// (POST /enterprise/bastion-scopes/{id}/actions/preview-enrollment-rotate)
+	PreviewBastionEnrollmentRotate(ctx context.Context, request PreviewBastionEnrollmentRotateRequestObject) (PreviewBastionEnrollmentRotateResponseObject, error)
 	// PreviewUpdateBastionScope Freeze a Bastion Scope update or migration.
 	// (POST /enterprise/bastion-scopes/{id}/actions/preview-update)
 	PreviewUpdateBastionScope(ctx context.Context, request PreviewUpdateBastionScopeRequestObject) (PreviewUpdateBastionScopeResponseObject, error)
+	// GetConnectorInstallOperation Get the durable Connector installation progress and public event timeline.
+	// (GET /enterprise/connector-install-operations/{id})
+	GetConnectorInstallOperation(ctx context.Context, request GetConnectorInstallOperationRequestObject) (GetConnectorInstallOperationResponseObject, error)
+	// PreviewRetryConnectorInstallOperation Freeze a retry of a terminal failed Connector installation operation.
+	// (POST /enterprise/connector-install-operations/{id}/actions/preview-retry)
+	PreviewRetryConnectorInstallOperation(ctx context.Context, request PreviewRetryConnectorInstallOperationRequestObject) (PreviewRetryConnectorInstallOperationResponseObject, error)
 	// ListConnectors List Connector diagnostics.
 	// (GET /enterprise/connectors)
 	ListConnectors(ctx context.Context, request ListConnectorsRequestObject) (ListConnectorsResponseObject, error)
@@ -84,6 +96,32 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// GetConnectorBootstrapScript operation middleware
+func (sh *strictHandler) GetConnectorBootstrapScript(w http.ResponseWriter, r *http.Request, params GetConnectorBootstrapScriptParams) {
+	var request GetConnectorBootstrapScriptRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetConnectorBootstrapScript(ctx, request.(GetConnectorBootstrapScriptRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetConnectorBootstrapScript")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetConnectorBootstrapScriptResponseObject); ok {
+		if err := validResponse.VisitGetConnectorBootstrapScriptResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // EnrollConnector operation middleware
@@ -204,6 +242,40 @@ func (sh *strictHandler) GetBastionScope(w http.ResponseWriter, r *http.Request,
 	}
 }
 
+// PreviewBastionConnectorReplacement operation middleware
+func (sh *strictHandler) PreviewBastionConnectorReplacement(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewBastionConnectorReplacementParams) {
+	var request PreviewBastionConnectorReplacementRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body PreviewBastionConnectorReplacementJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PreviewBastionConnectorReplacement(ctx, request.(PreviewBastionConnectorReplacementRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PreviewBastionConnectorReplacement")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PreviewBastionConnectorReplacementResponseObject); ok {
+		if err := validResponse.VisitPreviewBastionConnectorReplacementResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // PreviewDeleteBastionScope operation middleware
 func (sh *strictHandler) PreviewDeleteBastionScope(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewDeleteBastionScopeParams) {
 	var request PreviewDeleteBastionScopeRequestObject
@@ -238,14 +310,14 @@ func (sh *strictHandler) PreviewDeleteBastionScope(w http.ResponseWriter, r *htt
 	}
 }
 
-// PreviewReplaceBastionConnector operation middleware
-func (sh *strictHandler) PreviewReplaceBastionConnector(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewReplaceBastionConnectorParams) {
-	var request PreviewReplaceBastionConnectorRequestObject
+// PreviewBastionEnrollmentRotate operation middleware
+func (sh *strictHandler) PreviewBastionEnrollmentRotate(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewBastionEnrollmentRotateParams) {
+	var request PreviewBastionEnrollmentRotateRequestObject
 
 	request.Id = id
 	request.Params = params
 
-	var body PreviewReplaceBastionConnectorJSONRequestBody
+	var body PreviewBastionEnrollmentRotateJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -253,18 +325,18 @@ func (sh *strictHandler) PreviewReplaceBastionConnector(w http.ResponseWriter, r
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.PreviewReplaceBastionConnector(ctx, request.(PreviewReplaceBastionConnectorRequestObject))
+		return sh.ssi.PreviewBastionEnrollmentRotate(ctx, request.(PreviewBastionEnrollmentRotateRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "PreviewReplaceBastionConnector")
+		handler = middleware(handler, "PreviewBastionEnrollmentRotate")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(PreviewReplaceBastionConnectorResponseObject); ok {
-		if err := validResponse.VisitPreviewReplaceBastionConnectorResponse(w); err != nil {
+	} else if validResponse, ok := response.(PreviewBastionEnrollmentRotateResponseObject); ok {
+		if err := validResponse.VisitPreviewBastionEnrollmentRotateResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -299,6 +371,59 @@ func (sh *strictHandler) PreviewUpdateBastionScope(w http.ResponseWriter, r *htt
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PreviewUpdateBastionScopeResponseObject); ok {
 		if err := validResponse.VisitPreviewUpdateBastionScopeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetConnectorInstallOperation operation middleware
+func (sh *strictHandler) GetConnectorInstallOperation(w http.ResponseWriter, r *http.Request, id ResourceId) {
+	var request GetConnectorInstallOperationRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetConnectorInstallOperation(ctx, request.(GetConnectorInstallOperationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetConnectorInstallOperation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetConnectorInstallOperationResponseObject); ok {
+		if err := validResponse.VisitGetConnectorInstallOperationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PreviewRetryConnectorInstallOperation operation middleware
+func (sh *strictHandler) PreviewRetryConnectorInstallOperation(w http.ResponseWriter, r *http.Request, id ResourceId, params PreviewRetryConnectorInstallOperationParams) {
+	var request PreviewRetryConnectorInstallOperationRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PreviewRetryConnectorInstallOperation(ctx, request.(PreviewRetryConnectorInstallOperationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PreviewRetryConnectorInstallOperation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PreviewRetryConnectorInstallOperationResponseObject); ok {
+		if err := validResponse.VisitPreviewRetryConnectorInstallOperationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -11,7 +11,6 @@ import (
 	"math/big"
 	"net/url"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,11 +18,13 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 func TestApplyKubernetesUsesFixedTypedResources(t *testing.T) {
-	client := fake.NewClientset()
-	command := collectorCommand(testConfigBundle(t), "linux_arm64", "https://artifacts.example/collector.tar.gz", []byte("artifact"))
+	client := fake.NewClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: KubernetesNamespace, Labels: map[string]string{"app.kubernetes.io/part-of": "argus"}}})
+	command := collectorCommand(t, testConfigBundle(t), "linux_arm64", "https://artifacts.example/collector.tar.gz", []byte("artifact"))
 	command.ResourceType = "kubernetes_cluster"
 	command.KubernetesImage = "registry.example/argus-otelcol:test"
 	identity := testKubernetesIdentity(t, command.GetCollectorId())
@@ -39,6 +40,15 @@ func TestApplyKubernetesUsesFixedTypedResources(t *testing.T) {
 		t.Fatalf("fixed DaemonSet missing: %v", err)
 	}
 	agent := daemonSet.Spec.Template.Spec.Containers[0]
+	if !slices.ContainsFunc(agent.VolumeMounts, func(value corev1.VolumeMount) bool {
+		return value.Name == "identity-bootstrap" && value.MountPath == "/var/run/argus-bootstrap/identity" && value.ReadOnly
+	}) || !slices.ContainsFunc(agent.VolumeMounts, func(value corev1.VolumeMount) bool {
+		return value.Name == "identity-state" && value.MountPath == "/var/lib/argus-otelcol/identity" && !value.ReadOnly
+	}) || !slices.ContainsFunc(daemonSet.Spec.Template.Spec.Volumes, func(value corev1.Volume) bool {
+		return value.Name == "identity-state" && value.EmptyDir != nil
+	}) {
+		t.Fatal("Collector identity is not bootstrapped into a writable runtime volume")
+	}
 	if !slices.ContainsFunc(agent.Env, func(value corev1.EnvVar) bool {
 		return value.Name == "K8S_NODE_NAME" && value.ValueFrom != nil && value.ValueFrom.FieldRef != nil && value.ValueFrom.FieldRef.FieldPath == "spec.nodeName"
 	}) {
@@ -54,11 +64,8 @@ func TestApplyKubernetesUsesFixedTypedResources(t *testing.T) {
 	}) {
 		t.Fatal("DaemonSet does not mount the kubelet public certificate chain read-only")
 	}
-	roleName := "argus-otelcol-" + strings.ReplaceAll(command.GetCollectorId(), "-", "")[:12]
-	role, err := client.RbacV1().ClusterRoles().Get(context.Background(), roleName, metav1.GetOptions{})
-	if err != nil || !hasResource(role.Rules, "batch", "jobs") || !hasResource(role.Rules, "autoscaling", "horizontalpodautoscalers") ||
-		!hasResource(role.Rules, "apps", "replicasets") || !hasResource(role.Rules, "", "nodes/stats") {
-		t.Fatal("fixed Collector RBAC does not cover enabled Kubernetes receivers")
+	if roles, listErr := client.RbacV1().ClusterRoles().List(context.Background(), metav1.ListOptions{}); listErr != nil || len(roles.Items) != 0 {
+		t.Fatal("runtime Collector convergence must not create cluster-scoped RBAC")
 	}
 	deployment, err := client.AppsV1().Deployments(KubernetesNamespace).Get(context.Background(), "argus-otelcol-gateway", metav1.GetOptions{})
 	if err != nil {
@@ -70,6 +77,21 @@ func TestApplyKubernetesUsesFixedTypedResources(t *testing.T) {
 	}
 	if container.ReadinessProbe.HTTPGet == nil || container.ReadinessProbe.HTTPGet.Port.StrVal != "health" {
 		t.Fatal("Gateway readiness does not use the fixed health endpoint")
+	}
+	if !slices.ContainsFunc(container.Env, func(value corev1.EnvVar) bool {
+		return value.Name == "ARGUS_TELEMETRY_KUBERNETES_MIRROR" && value.Value == "1"
+	}) {
+		t.Fatal("Gateway does not persist rotated identity material")
+	}
+	identitySecret, err := client.CoreV1().Secrets(KubernetesNamespace).Get(context.Background(), collectorIdentitySecret, metav1.GetOptions{})
+	if err != nil || len(identitySecret.Data["trust-bundle.json"]) == 0 {
+		t.Fatal("Collector bootstrap Secret is missing versioned Trust Bundle state")
+	}
+	identityRole, err := client.RbacV1().Roles(KubernetesNamespace).Get(context.Background(), "argus-otelcol-identity", metav1.GetOptions{})
+	if err != nil || !slices.ContainsFunc(identityRole.Rules, func(rule rbacv1.PolicyRule) bool {
+		return slices.Contains(rule.Resources, "secrets") && slices.Equal(rule.ResourceNames, []string{collectorIdentitySecret})
+	}) {
+		t.Fatal("Collector identity persistence is not constrained to its fixed Secret")
 	}
 	if _, err = (Manager{}).ApplyKubernetes(context.Background(), command, KubernetesOptions{Client: client, Image: "registry.example/argus-otelcol:other", IdentityMaterial: &identity}); err != ErrInvalidCommand {
 		t.Fatalf("mismatched frozen Kubernetes image returned %v", err)
@@ -97,25 +119,34 @@ func testKubernetesIdentity(t *testing.T, collectorID string) IdentityMaterial {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	issue := func(serial int64, uriValue string, dnsNames []string, usage x509.ExtKeyUsage) ([]byte, []byte) {
+		key, keyErr := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if keyErr != nil {
+			t.Fatal(keyErr)
+		}
+		uri, _ := url.Parse(uriValue)
+		leafTemplate := &x509.Certificate{SerialNumber: big.NewInt(serial), Subject: pkix.Name{CommonName: "argus-otelcol"}, URIs: []*url.URL{uri},
+			DNSNames: dnsNames, NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature,
+			ExtKeyUsage: []x509.ExtKeyUsage{usage}}
+		leafDER, issueErr := x509.CreateCertificate(rand.Reader, leafTemplate, ca, &key.PublicKey, caKey)
+		if issueErr != nil {
+			t.Fatal(issueErr)
+		}
+		privateDER, marshalErr := x509.MarshalPKCS8PrivateKey(key)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER}), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER})
+	}
+	clientCertificate, clientKey := issue(2, "spiffe://argus/telemetry/collectors/"+collectorID, nil, x509.ExtKeyUsageClientAuth)
+	serverCertificate, serverKey := issue(3, "spiffe://argus/telemetry/collector-servers/"+collectorID,
+		[]string{"collector-" + collectorID + ".argus.telemetry"}, x509.ExtKeyUsageServerAuth)
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+	trust, err := trustbundle.Parse(caPEM, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
-	uri, _ := url.Parse("spiffe://argus/telemetry/collectors/" + collectorID)
-	leafTemplate := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "argus-otelcol"}, URIs: []*url.URL{uri},
-		DNSNames:  []string{"collector-" + collectorID + ".argus.telemetry"},
-		NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}}
-	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, ca, &key.PublicKey, caKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	privateDER, _ := x509.MarshalPKCS8PrivateKey(key)
-	return IdentityMaterial{CertificatePEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER}),
-		PrivateKeyPEM: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER}), CABundlePEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})}
-}
-
-func hasResource(rules []rbacv1.PolicyRule, group, resource string) bool {
-	return slices.ContainsFunc(rules, func(rule rbacv1.PolicyRule) bool {
-		return slices.Contains(rule.APIGroups, group) && slices.Contains(rule.Resources, resource)
-	})
+	return IdentityMaterial{ClientCertificatePEM: clientCertificate, ClientPrivateKeyPEM: clientKey,
+		ServerCertificatePEM: serverCertificate, ServerPrivateKeyPEM: serverKey, CABundlePEM: trust.PEM,
+		TrustBundleEpoch: 1, TrustBundleSHA256: trust.SHA256, TrustBundleCAFingerprints: trust.Fingerprints}
 }

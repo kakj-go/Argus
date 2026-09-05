@@ -23,6 +23,7 @@ codes:
   CONTEXT_COMPACTION_FAILED: {http_status: 503, message_key: errors.agent.context_compaction_failed, retryable: true}
   CONTRACT_VERSION_UNSUPPORTED: {http_status: 400, message_key: errors.common.contract_version_unsupported, retryable: false}
   RESOURCE_NOT_FOUND: {http_status: 404, message_key: errors.common.resource_not_found, retryable: false}
+  RESOURCE_NAME_CONFLICT: {http_status: 409, message_key: errors.common.resource_name_conflict, retryable: false}
   VERSION_CONFLICT: {http_status: 409, message_key: errors.common.version_conflict, retryable: true}
   SETUP_ALREADY_INITIALIZED: {http_status: 409, message_key: errors.setup.already_initialized, retryable: false}
   SETUP_TOKEN_INVALID: {http_status: 403, message_key: errors.setup.token_invalid, retryable: false}
@@ -63,6 +64,19 @@ codes:
   CONNECTION_TEST_FAILED: {http_status: 422, message_key: errors.connection_test.failed, retryable: false}
   DIRECT_TARGET_DENIED: {http_status: 403, message_key: errors.direct.target_denied, retryable: false}
   DIRECT_PLAN_INVALID: {http_status: 422, message_key: errors.direct.plan_invalid, retryable: false}
+  HOST_INSTALL_TOKEN_INVALID: {http_status: 401, message_key: errors.host_install.token_invalid, retryable: false}
+  HOST_INSTALL_TOKEN_CONFLICT: {http_status: 409, message_key: errors.host_install.token_conflict, retryable: false}
+  HOST_UNINSTALL_TOKEN_INVALID: {http_status: 401, message_key: errors.host_uninstall.token_invalid, retryable: false}
+  HOST_UNINSTALL_TOKEN_CONFLICT: {http_status: 409, message_key: errors.host_uninstall.token_conflict, retryable: false}
+  HOST_INSTALL_FAILED: {http_status: 409, message_key: errors.host_install.failed, retryable: true}
+  HOST_ONBOARDING_STATE_UNAVAILABLE: {http_status: 500, message_key: errors.host_install.state_unavailable, retryable: true}
+  HOST_SELF_ENROLL_UNSUPPORTED_PLATFORM: {http_status: 422, message_key: errors.host_install.unsupported_platform, retryable: false}
+  HOST_OPERATION_UNSUPPORTED_FOR_SELF_ENROLLED: {http_status: 409, message_key: errors.host_install.operation_unsupported, retryable: false}
+  COLLECTOR_ROUTE_TRANSPORT_INVALID: {http_status: 422, message_key: errors.telemetry.route_transport_invalid, retryable: false}
+  COLLECTOR_LOOPBACK_PORT_CONFLICT: {http_status: 409, message_key: errors.telemetry.loopback_port_conflict, retryable: true}
+  TUNNEL_FORWARD_TARGET_UNCONFIGURED: {http_status: 503, message_key: errors.telemetry.tunnel_forward_target_unconfigured, retryable: true}
+  TUNNEL_QUOTA_EXCEEDED: {http_status: 422, message_key: errors.telemetry.tunnel_quota_exceeded, retryable: false}
+  CONTROL_TUNNEL_UNAVAILABLE: {http_status: 503, message_key: errors.connector.control_tunnel_unavailable, retryable: true}
   KUBERNETES_QUERY_UNAVAILABLE: {http_status: 503, message_key: errors.kubernetes.query_unavailable, retryable: true}
   CONNECTOR_ENROLLMENT_INVALID: {http_status: 401, message_key: errors.connector.enrollment_invalid, retryable: false}
   CONNECTOR_ENROLLMENT_CONFLICT: {http_status: 409, message_key: errors.connector.enrollment_conflict, retryable: false}
@@ -77,6 +91,16 @@ codes:
   CONNECTOR_COMMAND_SCHEMA_INVALID: {http_status: 422, message_key: errors.connector.command_schema_invalid, retryable: false}
   CONNECTOR_RESULT_NOT_REPLAYABLE: {http_status: 409, message_key: errors.connector.result_not_replayable, retryable: false}
   CONNECTOR_CERTIFICATE_ROTATION_FAILED: {http_status: 409, message_key: errors.connector.certificate_rotation_failed, retryable: true}
+  CONNECTOR_ARTIFACT_INVALID: {http_status: 422, message_key: errors.connector.artifact_invalid, retryable: false}
+  CONNECTOR_ARTIFACT_UNAVAILABLE: {http_status: 503, message_key: errors.connector.artifact_unavailable, retryable: true}
+  CONNECTOR_INSTALL_TARGET_DENIED: {http_status: 403, message_key: errors.connector.install_target_denied, retryable: false}
+  CONNECTOR_INSTALL_TIMEOUT: {http_status: 504, message_key: errors.connector.install_timeout, retryable: true}
+  CONNECTOR_INSTALL_FAILED: {http_status: 409, message_key: errors.connector.install_failed, retryable: true}
+  CONNECTOR_INSTALL_RESULT_UNKNOWN: {http_status: 202, message_key: errors.connector.install_result_unknown, retryable: true}
+  CONNECTOR_INSTALL_EXPIRED: {http_status: 410, message_key: errors.connector.install_expired, retryable: false}
+  CONNECTOR_ONLINE_NOT_CONVERGED: {http_status: 409, message_key: errors.connector.online_not_converged, retryable: true}
+  BASTION_ONBOARDING_STATE_UNAVAILABLE: {http_status: 500, message_key: errors.connector.state_unavailable, retryable: true}
+  SSH_HOST_KEY_CHANGED: {http_status: 409, message_key: errors.connection_test.ssh_host_key_changed, retryable: false}
   MODEL_ENDPOINT_NOT_ALLOWED: {http_status: 422, message_key: errors.model.endpoint_not_allowed, retryable: false}
   MODEL_COMPATIBILITY_FAILED: {http_status: 422, message_key: errors.model.compatibility_failed, retryable: false}
   MODEL_UNAVAILABLE: {http_status: 503, message_key: errors.model.unavailable, retryable: true}
@@ -92,6 +116,7 @@ codes:
   APPROVAL_POLICY_REQUIRED: {http_status: 422, message_key: errors.approval.policy_required, retryable: false}
   APPROVAL_NOT_ELIGIBLE: {http_status: 403, message_key: errors.approval.not_eligible, retryable: false}
   ACTION_INVALIDATED: {http_status: 409, message_key: errors.actions.invalidated, retryable: false}
+  ACTION_EXECUTION_FAILED: {http_status: 500, message_key: errors.actions.execution_failed, retryable: true}
   EXECUTION_RESULT_UNKNOWN: {http_status: 202, message_key: errors.execution.execution_result_unknown, retryable: true}
   ACTION_RESULT_NOT_AVAILABLE: {http_status: 404, message_key: errors.execution.one_time_result_not_available, retryable: true}
   ACTION_RESULT_EXPIRED: {http_status: 410, message_key: errors.execution.one_time_result_expired, retryable: false}
@@ -135,6 +160,7 @@ codes:
   WINRM_TLS_REQUIRED: {http_status: 422, message_key: errors.remote_access.winrm_tls_required, retryable: false}
   COLLECTOR_DISTRIBUTION_UNSUPPORTED: {http_status: 422, message_key: errors.telemetry.distribution_unsupported, retryable: false}
   COLLECTOR_ARTIFACT_INVALID: {http_status: 422, message_key: errors.telemetry.artifact_invalid, retryable: false}
+  COLLECTOR_ARTIFACT_UNAVAILABLE: {http_status: 503, message_key: errors.telemetry.artifact_unavailable, retryable: true}
   COLLECTOR_NOT_FOUND: {http_status: 404, message_key: errors.telemetry.collector_not_found, retryable: false}
   COLLECTOR_DISTRIBUTION_VALIDATION_PENDING: {http_status: 400, message_key: errors.telemetry.distribution_validation_pending, retryable: true}
   COLLECTOR_PROFILE_INCOMPATIBLE: {http_status: 422, message_key: errors.telemetry.profile_incompatible, retryable: false}

@@ -274,10 +274,10 @@ CREATE INDEX connector_certificates_active ON connector_certificates (connector_
 
 CREATE TABLE connector_enrollment_tokens (
     id uuid PRIMARY KEY,
-    preallocated_connector_id uuid NOT NULL UNIQUE,
+    preallocated_connector_id uuid NOT NULL,
     enterprise_id uuid NOT NULL REFERENCES enterprises(id),
     role text NOT NULL CHECK (role IN ('bastion','kubernetes')),
-    purpose text NOT NULL CHECK (purpose IN ('initial_registration','connector_replacement','kubernetes_registration')),
+    purpose text NOT NULL CHECK (purpose IN ('initial_registration','connector_replacement','kubernetes_registration','pki_repair')),
     bastion_scope_id uuid,
     kubernetes_cluster_id uuid,
     preallocated_host_id uuid,

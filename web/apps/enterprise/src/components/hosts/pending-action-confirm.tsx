@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  formatApiError,
   formatErrorCode,
   useApi,
   type ConfirmActionResult,
@@ -56,11 +57,17 @@ export function PendingActionConfirm({
       // 尚未落库,列表刷了个寂寞(如新增主机后短暂看不到新主机)。
       if (result.execution && !result.one_time_result) {
         const executionId = result.execution.execution_id;
-        for (let attempt = 0; attempt < 120; attempt += 1) {
+        let settled = false;
+        const deadline = Date.now() + 65_000;
+        let delay = 400;
+        while (Date.now() < deadline) {
           const execution = await api.executions.get(executionId);
           result = { ...result, execution };
           if (execution.status === "succeeded") {
-            if (execution.one_time_result_available) {
+            if (
+              claimOneTimeResult &&
+              execution.one_time_result_state === "available"
+            ) {
               result = {
                 ...result,
                 one_time_result: await api.executions.claimOneTimeResult(
@@ -68,15 +75,45 @@ export function PendingActionConfirm({
                 ),
               };
             }
+            settled = true;
             break;
+          }
+          if (execution.status === "result_unknown") {
+            if (execution.operation_ref) {
+              settled = true;
+              break;
+            }
+            setStatus("failed");
+            setResultMessage(
+              formatErrorCode(
+                execution.error_code ?? "EXECUTION_RESULT_UNKNOWN",
+                t("hosts.preview.executionFailed"),
+              ),
+            );
+            return;
           }
           if (
             execution.status === "failed" ||
             execution.status === "cancelled"
           ) {
-            throw new Error(formatErrorCode(execution.error_code, "Execution failed"));
+            setStatus(
+              execution.status === "cancelled" ? "cancelled" : "failed",
+            );
+            setResultMessage(
+              formatErrorCode(
+                execution.error_code,
+                t("hosts.preview.executionFailed"),
+              ),
+            );
+            return;
           }
-          await new Promise((resolve) => window.setTimeout(resolve, 500));
+          await new Promise((resolve) => window.setTimeout(resolve, delay));
+          delay = Math.min(delay * 2, 4_000);
+        }
+        if (!settled) {
+          setStatus("failed");
+          setResultMessage(t("hosts.preview.executionTimeout"));
+          return;
         }
       }
       setStatus("success");
@@ -93,8 +130,13 @@ export function PendingActionConfirm({
         return;
       }
       onDone?.(result);
-    } catch {
+    } catch (cause) {
       setStatus("failed");
+      setResultMessage(
+        formatApiError(cause, t("hosts.preview.executionFailed"), (requestId) =>
+          t("common.requestReference", { requestId }),
+        ),
+      );
     } finally {
       setConfirming(false);
     }
@@ -107,8 +149,13 @@ export function PendingActionConfirm({
       await api.approvals.cancel(action.action_ref);
       setStatus("cancelled");
       onCancel?.();
-    } catch {
+    } catch (cause) {
       setStatus("failed");
+      setResultMessage(
+        formatApiError(cause, t("hosts.preview.executionFailed"), (requestId) =>
+          t("common.requestReference", { requestId }),
+        ),
+      );
     } finally {
       setConfirming(false);
     }

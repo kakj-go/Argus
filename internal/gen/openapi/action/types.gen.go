@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // ActionBinding defines model for ActionBinding.
@@ -42,14 +43,23 @@ type ApprovalRequest struct {
 
 // Execution defines model for Execution.
 type Execution struct {
-	ActionRef              string      `json:"action_ref"`
-	CreatedAt              time.Time   `json:"created_at"`
-	ErrorCode              *string     `json:"error_code,omitempty"`
-	ExecutionId            string      `json:"execution_id"`
-	OneTimeResultAvailable *bool       `json:"one_time_result_available,omitempty"`
-	ResultRef              *string     `json:"result_ref,omitempty"`
-	Status                 interface{} `json:"status"`
-	UpdatedAt              time.Time   `json:"updated_at"`
+	ActionRef          string      `json:"action_ref"`
+	CreatedAt          time.Time   `json:"created_at"`
+	ErrorCode          *string     `json:"error_code,omitempty"`
+	ExecutionId        string      `json:"execution_id"`
+	OneTimeResultState interface{} `json:"one_time_result_state,omitempty"`
+	OperationRef       *struct {
+		Id   openapi_types.UUID `json:"id"`
+		Kind interface{}        `json:"kind"`
+	} `json:"operation_ref,omitempty"`
+	ResourceRef *struct {
+		ResourceId   string `json:"resource_id"`
+		ResourceType string `json:"resource_type"`
+		Version      int    `json:"version"`
+	} `json:"resource_ref,omitempty"`
+	ResultRef *string     `json:"result_ref,omitempty"`
+	Status    interface{} `json:"status"`
+	UpdatedAt time.Time   `json:"updated_at"`
 }
 
 // PendingActionPublic defines model for PendingActionPublic.
@@ -77,8 +87,9 @@ type PublicJsonValue4 = []*PublicJsonValue
 
 // PendingActionPublicSchema defines model for pending-action-public.schema.
 type PendingActionPublicSchema struct {
-	ActionRef string `json:"action_ref"`
-	Approval  *struct {
+	ActionRef  string `json:"action_ref"`
+	ActionType string `json:"action_type"`
+	Approval   *struct {
 		ApprovedCount    int     `json:"approved_count"`
 		MinimumApprovers int     `json:"minimum_approvers"`
 		PolicyRef        *string `json:"policy_ref,omitempty"`

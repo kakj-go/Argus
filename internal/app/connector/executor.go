@@ -119,6 +119,12 @@ func executeHostProbe(ctx context.Context, payload *anypb.Any, credential []byte
 		if err != nil {
 			return nil, err
 		}
+		architecture, err := connectorTargetArchitecture(connection)
+		if err != nil {
+			_ = connection.Close()
+			return nil, err
+		}
+		result.Architecture = architecture
 		result.RemoteVersion = string(connection.ServerVersion())
 		_ = connection.Close()
 	case "winrm":
@@ -149,6 +155,26 @@ func executeHostProbe(ctx context.Context, payload *anypb.Any, credential []byte
 	}
 	result.LatencyMillis = uint64(time.Since(started).Milliseconds())
 	return result, nil
+}
+
+func connectorTargetArchitecture(client *ssh.Client) (string, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("open architecture probe session: %w", err)
+	}
+	defer session.Close()
+	output, err := session.Output("uname -m")
+	if err != nil {
+		return "", fmt.Errorf("probe target architecture: %w", err)
+	}
+	switch strings.TrimSpace(string(output)) {
+	case "x86_64", "amd64":
+		return "amd64", nil
+	case "aarch64", "arm64":
+		return "arm64", nil
+	default:
+		return "", fmt.Errorf("unsupported target architecture %q", strings.TrimSpace(string(output)))
+	}
 }
 
 func executeKubernetesProbe(ctx context.Context, payload *anypb.Any, credential []byte) (*connectorv1.KubernetesConnectionProbeResult, error) {

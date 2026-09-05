@@ -25,6 +25,7 @@ import "../styles/hosts.css";
 import { ComponentsTab } from "../components/hosts/components-tab";
 import { TasksTab } from "../components/hosts/tasks-tab";
 import { RealTerminalTab } from "../components/hosts/real-terminal-tab";
+import { SelfEnrollCommandPanel } from "../components/hosts/self-enroll-command-panel";
 import { ResourceTelemetry } from "../components/telemetry/resource-telemetry";
 import {
   collectorTone,
@@ -289,14 +290,18 @@ export function HostDetailPage() {
         />
       )}
       {host && (
-        <Tabs defaultValue={initialTab}>
+        <>
+          <SelfEnrollCommandPanel host={host} />
+          <Tabs defaultValue={initialTab}>
           <TabsList>
             <TabsTrigger value="overview">
               {t("hosts.detail.tabOverview")}
             </TabsTrigger>
-            <TabsTrigger value="terminal">
-              {t("hosts.detail.tabTerminal")}
-            </TabsTrigger>
+            {host.connection_mode !== "self_enrolled" && (
+              <TabsTrigger value="terminal">
+                {t("hosts.detail.tabTerminal")}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="components">
               {t("hosts.detail.tabComponents")}
             </TabsTrigger>
@@ -310,9 +315,11 @@ export function HostDetailPage() {
           <TabsContent value="overview">
             <OverviewTab host={host} />
           </TabsContent>
-          <TabsContent value="terminal">
-            {realMode ? <RealTerminalTab host={host} /> : <EmptyState description={t("hosts.terminal.realOnlyDesc")} title={t("hosts.terminal.realOnly")} />}
-          </TabsContent>
+          {host.connection_mode !== "self_enrolled" && (
+            <TabsContent value="terminal">
+              {realMode ? <RealTerminalTab host={host} /> : <EmptyState description={t("hosts.terminal.realOnlyDesc")} title={t("hosts.terminal.realOnly")} />}
+            </TabsContent>
+          )}
           <TabsContent value="components">
             <div id="otlp-collector">
               <ComponentsTab
@@ -334,7 +341,8 @@ export function HostDetailPage() {
           {!realMode && <TabsContent value="tasks">
             <TasksTab host={host} />
           </TabsContent>}
-        </Tabs>
+          </Tabs>
+        </>
       )}
     </PageShell>
   );

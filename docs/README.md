@@ -26,13 +26,16 @@ Argus 是一个面向 AIOps 场景的多租户 SaaS 控制平面。产品以 Cha
 16. [端到端实现计划](./15-end-to-end-implementation-plan.md)
 17. [Agent Harness 与上下文管理](./16-agent-harness-and-context-management.md)
 18. [输入校验与安全错误契约](./17-validation-and-error-contract.md)
-19. [分阶段任务文件](./plans/README.md)
-20. [M9 查询语言 ADR](./adr/telemetry-query-ir.md)
-21. [显式资源数据授权 ADR](./adr/explicit-resource-data-authorization.md)
-22. [M9 ClickHouse 语义子集 ADR](./adr/clickhouse-semantic-subset.md)
-23. [M10 单进程 Telemetry Query Engine ADR](./adr/telemetry-query-engine.md)
-24. [PlanV2 遥测仪表盘与 AI 分析](./planv2/README.md)
-25. [PlanV3 企业级远程访问治理](./planv3/README.md)
+19. [全链路 PKI、TLS 与 Trust Bundle](./18-pki-and-tls.md)
+20. [分阶段任务文件](./plans/README.md)
+21. [M9 查询语言 ADR](./adr/telemetry-query-ir.md)
+22. [显式资源数据授权 ADR](./adr/explicit-resource-data-authorization.md)
+23. [M9 ClickHouse 语义子集 ADR](./adr/clickhouse-semantic-subset.md)
+24. [M10 单进程 Telemetry Query Engine ADR](./adr/telemetry-query-engine.md)
+25. [PlanV2 遥测仪表盘与 AI 分析](./planv2/README.md)
+26. [PlanV3 企业级远程访问治理](./planv3/README.md)
+27. [PlanV4 主机网络接入模式扩展](./planv4/README.md)
+28. [PlanV5 小内核 Agent、Tool Discovery 与 Tool 自带模板](./planv5/README.md)
 
 远程终端正式采用与页面内容切分视口的 Terminal Dock（非遮罩，类似浏览器 DevTools）：连接生命周期由 `TerminalSessionProvider` 与 Gateway 共同管理，支持底部/左侧/右侧三向停靠切换与 20%～80% 拖拽，位置与尺寸持久化在 `argus.terminalDock`；`server_ready` 语义与远端 shell 启动进度对齐（Connector 路径等待 `state: active`）。
 

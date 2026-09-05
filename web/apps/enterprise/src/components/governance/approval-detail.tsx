@@ -14,7 +14,6 @@ import {
   formConstraint,
   formatApiError,
   formatErrorCode,
-  humanizeAuditCode,
   presentApiFormError,
   useApi,
 } from "@argus/api-client";
@@ -31,6 +30,10 @@ import {
   Textarea,
 } from "@argus/ui";
 import { formatDateTimeFull, pendingStatusTone } from "./utils";
+import {
+  presentPendingAction,
+  presentPendingActionPreview,
+} from "../pending-action-presentation";
 
 const approvalReasonConstraint = formConstraint(
   "ApprovalDecisionCreate",
@@ -65,16 +68,18 @@ function cardStatus(action: PendingActionPublic): PreviewCommitStatus {
   }
 }
 
-function resultMessage(action: PendingActionPublic): string | undefined {
-  return action.result_summary;
-}
-
 /**
  * 待审批详情区：完整 PreviewCommitCard + 审批要求 + 按状态区分的操作。
  * awaiting_confirmation 使用卡片自带的确认/取消；awaiting_approval
  * 使用下方审批操作区（批准/驳回，含职责分离禁用）；终态只读。
  */
-export function ApprovalDetail({ actionRef, readOnly = false }: { actionRef: string; readOnly?: boolean }) {
+export function ApprovalDetail({
+  actionRef,
+  readOnly = false,
+}: {
+  actionRef: string;
+  readOnly?: boolean;
+}) {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
@@ -144,11 +149,6 @@ export function ApprovalDetail({ actionRef, readOnly = false }: { actionRef: str
   const policyLabel = (id: string) =>
     policies.find((item) => item.id === id)?.name ??
     t("governance.approvals.detail.unknownPolicy");
-  const previewFieldLabel = (key: string) =>
-    t(`governance.approvals.previewFields.${key.replaceAll(".", "_")}`, {
-      defaultValue: humanizeAuditCode(key),
-    });
-
   const invalidate = () => {
     // 前缀失效同时覆盖列表与外壳徽标 ["approvals","awaiting_approval"]。
     void queryClient.invalidateQueries({ queryKey: ["approvals"] });
@@ -260,10 +260,6 @@ export function ApprovalDetail({ actionRef, readOnly = false }: { actionRef: str
 
   const approval = action.approval;
   const approvedCount = approval?.approved_count ?? 0;
-  const preview =
-    typeof action.preview === "object" && action.preview !== null
-      ? (action.preview as Record<string, unknown>)
-      : {};
   const busy =
     confirmMutation.isPending ||
     cancelMutation.isPending ||
@@ -276,6 +272,8 @@ export function ApprovalDetail({ actionRef, readOnly = false }: { actionRef: str
     action.status === "awaiting_confirmation" ||
     action.status === "awaiting_approval" ||
     action.status === "ready";
+  const presented = presentPendingAction(action, t);
+  const presentedPreview = presentPendingActionPreview(action, t);
 
   return (
     <div className="argus-approval-detail">
@@ -288,13 +286,13 @@ export function ApprovalDetail({ actionRef, readOnly = false }: { actionRef: str
       <PreviewCommitCard
         className={isConfirmable ? undefined : "argus-approval-card--static"}
         confirming={confirmMutation.isPending || cancelMutation.isPending}
-        diff={diffForCard(action)}
+        diff={diffForCard({ ...action, diff: presented.diff })}
         expiresAt={showCountdown ? action.expires_at : undefined}
-        resultMessage={resultMessage(action)}
+        resultMessage={presented.resultSummary}
         risk={action.risk}
         riskLabel={t(`governance.approvals.risk.${action.risk}`)}
         status={cardStatus(action)}
-        title={action.title}
+        title={presented.title}
         {...(isConfirmable
           ? {
               confirmLabel: t("governance.approvals.detail.confirm"),
@@ -307,10 +305,7 @@ export function ApprovalDetail({ actionRef, readOnly = false }: { actionRef: str
         <KeyValueGrid
           columns={2}
           items={[
-            ...Object.entries(preview).map(([key, value]) => ({
-              label: previewFieldLabel(key),
-              value: String(value),
-            })),
+            ...presentedPreview,
             {
               label: t("governance.approvals.detail.createdAt"),
               value: formatDateTimeFull(action.created_at, locale),
@@ -498,12 +493,10 @@ export function ApprovalDetail({ actionRef, readOnly = false }: { actionRef: str
           <section className="argus-approval-block">
             {execution && (
               <Alert
-                description={
-                  formatErrorCode(
-                    execution.error_code,
-                    t("governance.approvals.detail.executionStatusDescription"),
-                  )
-                }
+                description={formatErrorCode(
+                  execution.error_code,
+                  t("governance.approvals.detail.executionStatusDescription"),
+                )}
                 title={t(
                   `governance.approvals.executionStatus.${execution.status}`,
                 )}

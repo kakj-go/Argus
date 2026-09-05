@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,8 +57,45 @@ func parseConnectorEnrollmentCommand(command string) (connectorEnrollmentCommand
 	return result, nil
 }
 
+func parseConnectorCommandResult(command string) (connectorEnrollmentCommand, error) {
+	if result, err := parseConnectorEnrollmentCommand(command); err == nil {
+		return result, nil
+	}
+	fields := strings.Fields(command)
+	if len(fields) < 12 || fields[0] != "curl" || !slices.Contains(fields, "--connector-id") {
+		return connectorEnrollmentCommand{}, fmt.Errorf("invalid Connector install command")
+	}
+	result := connectorEnrollmentCommand{}
+	seen := map[string]bool{}
+	for index := 0; index+1 < len(fields); index++ {
+		flag := fields[index]
+		if flag != "--connector-id" && flag != "--token" && flag != "--server" && flag != "--role" {
+			continue
+		}
+		if seen[flag] {
+			return connectorEnrollmentCommand{}, fmt.Errorf("invalid Connector install command")
+		}
+		seen[flag] = true
+		value := strings.Trim(fields[index+1], "'")
+		switch flag {
+		case "--connector-id":
+			result.ConnectorID = value
+		case "--token":
+			result.Token = value
+		case "--server":
+			result.Server = value
+		case "--role":
+			result.Role = value
+		}
+	}
+	if result.ConnectorID == "" || result.Token == "" || result.Server == "" || result.Role != "bastion" {
+		return connectorEnrollmentCommand{}, fmt.Errorf("invalid Connector install command")
+	}
+	return result, nil
+}
+
 func (a *App) startM3BastionConnector(ctx context.Context, env *E2EEnvironment) error {
-	command, err := parseConnectorEnrollmentCommand(env.State.Values["m3_bastion_install_command"])
+	command, err := parseConnectorCommandResult(env.State.Values["m3_bastion_install_command"])
 	if err != nil {
 		return err
 	}

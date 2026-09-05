@@ -25,6 +25,7 @@ import (
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
 	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 func Run(ctx context.Context, logger *slog.Logger) error {
@@ -76,20 +77,33 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	defer remotePeerListener.Close()
-	remotePeerTLS, err := remoteaccess.LoadGatewayPeerServerTLS(cfg.TLSCertificate, cfg.TLSPrivateKey, cfg.ClientCABundle, cfg.RemotePeerServerName)
+	remotePeerTLS, err := remoteaccess.LoadGatewayPeerServerTLS(cfg.TLSCertificate, cfg.TLSPrivateKey, cfg.ClientCABundle,
+		store.Queries, cfg.RemotePeerClientURI)
 	if err != nil {
 		return err
 	}
-	remotePeerDialer, err := remoteaccess.NewGatewayPeerDialer(cfg.TLSCertificate, cfg.TLSPrivateKey, cfg.ClientCABundle,
+	remotePeerDialer, err := remoteaccess.NewGatewayPeerDialer(cfg.RemotePeerClientCertificate, cfg.RemotePeerClientPrivateKey, cfg.ClientCABundle,
 		cfg.RemotePeerServerName, cfg.RemotePeerHeadlessSuffix, cfg.RemotePeerPort)
 	if err != nil {
 		return err
 	}
 	remotePeerDialer.Resolver = remoteaccess.KubernetesGatewayPeerResolver{Client: kubernetesClient, Namespace: cfg.SystemNamespace}
 	remotePeerDialer.Logger = logger
-	domain := connector.Service{Store: store, Redis: redisClient, GatewayInstance: cfg.InstanceID, RegistryTTL: 95 * time.Second,
+	bundles := trustbundle.Service{Store: store, MountedPath: cfg.TrustBundlePath, InitialEpoch: cfg.TrustBundleEpoch}
+	activeBundle, err := bundles.EnsureInitial(ctx)
+	if err != nil {
+		return err
+	}
+	bundleNodeID := trustbundle.ProcessNodeID("connector-gateway")
+	if err := bundles.AcknowledgeMounted(ctx, bundleNodeID); err != nil {
+		return err
+	}
+	go bundles.RunMountedAcknowledger(ctx, bundleNodeID, 5*time.Second, func(err error) {
+		logger.Warn("Trust Bundle acknowledgement failed", "error", err)
+	})
+	domain := connector.Service{Store: store, Redis: redisClient, GatewayInstance: cfg.InstanceID, RegistryTTL: 95 * time.Second, TrustBundles: bundles,
 		Issuer: connector.CertManagerIssuer{Client: kubernetesClient, Namespace: cfg.SystemNamespace,
-			IssuerName: cfg.IssuerName, IssuerGeneration: cfg.IssuerGeneration}}
+			IssuerName: cfg.IssuerName, IssuerKind: "ClusterIssuer", IssuerGeneration: int32(activeBundle.Epoch)}}
 	dispatchHub := connector.NewDispatchHub()
 	remoteHub := connector.NewRemoteAccessHub()
 	terminationHub := remoteaccess.NewTerminationHub()
@@ -99,7 +113,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	collectorIdentity := telemetryservice.IdentityService{Store: store}
 	connectorv1.RegisterConnectorControlServiceServer(grpcServer, connector.Gateway{Service: domain,
 		Credentials: secretservice.Service{Store: store, Keyring: keyring}, HeartbeatInterval: cfg.HeartbeatInterval, Dispatch: dispatchHub,
-		RemoteAccess: remoteHub, Drain: forceRemoteDrain,
+		RemoteAccess: remoteHub, Drain: forceRemoteDrain, TelemetryTunnelIdentityForwardTarget: cfg.TelemetryIngestHTTPEndpoint,
 		CreateCollectorEnrollment: func(ctx context.Context, collectorID uuid.UUID) (connector.CollectorEnrollmentMaterial, error) {
 			token, tokenErr := collectorIdentity.CreateEnrollmentToken(ctx, nil, collectorID)
 			return connector.CollectorEnrollmentMaterial{Token: token, EnrollmentEndpoint: cfg.TelemetryEnrollmentEndpoint,

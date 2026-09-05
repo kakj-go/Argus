@@ -430,6 +430,20 @@ kbd,
   display: grid;
   gap: var(--space-px-14);
 }
+.argus-pki-fingerprints {
+  display: grid;
+  gap: var(--space-px-4);
+}
+.argus-pki-fingerprints code,
+.argus-pki-hash,
+.argus-pki-short-hash {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.argus-pki-short-hash {
+  display: inline-block;
+  max-width: 18rem;
+}
 .argus-stat-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

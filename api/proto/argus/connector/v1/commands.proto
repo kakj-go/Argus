@@ -47,6 +47,9 @@ message HostConnectionProbeResult {
   string platform = 3;
   string remote_version = 4;
   uint64 latency_millis = 5;
+  // Normalized uname -m value. Linux probes must return amd64 or arm64 so
+  // signed installation artifacts can be frozen during ConnectionTest.
+  string architecture = 6;
 }
 
 message KubernetesConnectionProbe {
@@ -112,8 +115,25 @@ message CertificateRotationRequest {
 message CertificateRotationGrant {
   uint64 connection_epoch = 1;
   bytes certificate_pem = 2;
-  bytes ca_bundle_pem = 3;
   google.protobuf.Timestamp not_after = 4;
+  reserved 3;
+}
+
+message TrustBundleUpdate {
+  uint64 epoch = 1;
+  bytes bundle_pem = 2;
+  string bundle_sha256 = 3;
+  repeated string current_ca_fingerprints = 4;
+  repeated string next_ca_fingerprints = 5;
+  string state = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp retire_at = 8;
+}
+
+message TrustBundleAcknowledge {
+  uint64 epoch = 1;
+  string bundle_sha256 = 2;
+  repeated string ca_fingerprints = 3;
 }
 
 message CredentialLeaseRequest {

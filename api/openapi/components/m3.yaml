@@ -143,20 +143,20 @@ components:
         page: {$ref: "./common.yaml#/components/schemas/CursorPage"}
     HostConnectionMode:
       type: string
-      enum: [connector_local, via_bastion, direct_ssh, direct_winrm]
+      enum: [connector_local, via_bastion, direct_ssh, direct_winrm, self_enrolled]
     Host:
       type: object
       additionalProperties: false
-      required: [id, enterprise_id, name, address, port, platform, connection_mode, environment, labels, labels_version, resource_version, connection_status, status, created_at, updated_at]
+      required: [id, enterprise_id, name, address, port, platform, connection_mode, environment, labels, labels_version, resource_version, connection_status, status, onboarding, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         enterprise_id: {type: string, format: uuid, readOnly: true}
         name: {type: string, minLength: 1, maxLength: 128}
         hostname: {type: string, maxLength: 253}
-        address: {type: string, minLength: 1, maxLength: 512}
-        port: {type: integer, minimum: 1, maximum: 65535}
+        address: {type: string, minLength: 0, maxLength: 512, description: 'self_enrolled 主机在激活前为空,激活后为自报地址'}
+        port: {type: integer, minimum: 0, maximum: 65535, description: 'self_enrolled 主机在激活前为 0'}
         platform: {type: string, enum: [linux, windows]}
-        architecture: {type: string, enum: [amd64, arm64], readOnly: true, description: '连接测试探测的目标架构(uname -m 归一化),Collector 安装按此选择分发产物;缺省按 amd64 处理'}
+        architecture: {type: string, enum: [amd64, arm64], readOnly: true, description: '连接测试探测的目标架构(uname -m 归一化),Linux 连接测试必须成功识别架构,Collector 安装按此选择签名产物'}
         connection_mode: {$ref: "#/components/schemas/HostConnectionMode"}
         bastion_scope_id: {type: string, format: uuid}
         connector_id: {type: string, format: uuid}
@@ -171,6 +171,7 @@ components:
         pinned_host_key: {type: string, maxLength: 512}
         last_seen_at: {type: string, format: date-time}
         status: {type: string, enum: [active, disabled, deleted]}
+        onboarding: {$ref: "#/components/schemas/OnboardingProjection"}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     HostPage:
@@ -183,20 +184,32 @@ components:
     HostPreviewCreate:
       type: object
       additionalProperties: false
-      required: [name, address, port, platform, connection_mode, credential_id, username, environment, labels, connection_test_id]
+      required: [name, platform, connection_mode, environment, labels]
       properties:
         name: {type: string, minLength: 1, maxLength: 128}
         hostname: {type: string, maxLength: 253}
-        address: {type: string, minLength: 1, maxLength: 512}
-        port: {type: integer, minimum: 1, maximum: 65535}
-        platform: {type: string, enum: [linux, windows]}
-        connection_mode: {type: string, enum: [via_bastion, direct_ssh, direct_winrm]}
+        address: {type: string, minLength: 0, maxLength: 512, description: 'self_enrolled 模式不填写;其余模式必填(服务端按模式校验)'}
+        port: {type: integer, minimum: 0, maximum: 65535, description: 'self_enrolled 模式不填写;其余模式必填(服务端按模式校验)'}
+        platform: {type: string, enum: [linux, windows], description: 'self_enrolled 第一版仅支持 linux'}
+        connection_mode: {type: string, enum: [via_bastion, direct_ssh, direct_winrm, self_enrolled]}
         bastion_scope_id: {type: string, format: uuid}
-        credential_id: {type: string, format: uuid}
-        username: {type: string, minLength: 1, maxLength: 256}
+        credential_id: {type: string, format: uuid, description: 'self_enrolled 模式不提供'}
+        username: {type: string, minLength: 0, maxLength: 256, description: 'self_enrolled 模式不提供'}
+        architecture: {type: string, enum: [amd64, arm64], description: 'self_enrolled 模式由用户按目标机器选择;其余模式由连接测试探测,不接受填写'}
         environment: {$ref: "#/components/schemas/Environment"}
         labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/UserLabels"}
-        connection_test_id: {type: string, format: uuid}
+        connection_test_id: {type: string, format: uuid, description: 'self_enrolled 模式免测试,不提供;其余模式必填(服务端按模式校验)'}
+    OnboardingProjection:
+      type: object
+      additionalProperties: false
+      required: [state, updated_at]
+      properties:
+        state: {type: string, enum: [command_available, command_consumed, command_expired, awaiting_approval, installing, install_failed, registered]}
+        pending_action_ref: {type: string, minLength: 1, maxLength: 128}
+        execution_id: {type: string, format: uuid}
+        operation_id: {type: string, format: uuid}
+        error_code: {type: string, pattern: "^[A-Z][A-Z0-9_]*$"}
+        updated_at: {type: string, format: date-time}
     ResourcePreviewUpdate:
       type: object
       additionalProperties: false
@@ -228,6 +241,17 @@ components:
       required: [expected_version]
       properties:
         expected_version: {type: integer, format: int64, minimum: 1}
+    BastionConnectorReplacementPreview:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+        address: {type: string, minLength: 1, maxLength: 512, description: '模式 B/C 必填；必须与本次连接测试一致'}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        username: {type: string, minLength: 1, maxLength: 256}
+        credential_id: {type: string, format: uuid}
+        connection_test_id: {type: string, format: uuid, description: '模式 B/C 必填；必须是当前有效的 direct_ssh 测试'}
     ConnectionTest:
       type: object
       additionalProperties: false
@@ -319,6 +343,7 @@ components:
         environment: {$ref: "#/components/schemas/Environment"}
         labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/UserLabels"}
         connection_test_id: {type: string, format: uuid}
+        connector_image_pull_secrets: {type: array, maxItems: 16, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 253, pattern: '^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$'}, description: '仅 in_cluster：目标集群中已存在的 Connector 镜像拉取 Secret'}
     KubernetesPreviewUpdate:
       type: object
       additionalProperties: false
@@ -408,7 +433,7 @@ components:
     BastionScope:
       type: object
       additionalProperties: false
-      required: [id, enterprise_id, name, environment, labels, status, fencing_generation, member_count, resource_version, created_at, updated_at]
+      required: [id, enterprise_id, name, environment, labels, status, onboarding_mode, onboarding, fencing_generation, member_count, resource_version, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         enterprise_id: {type: string, format: uuid, readOnly: true}
@@ -416,8 +441,11 @@ components:
         environment: {$ref: "#/components/schemas/Environment"}
         labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/Labels"}
         status: {type: string, enum: [pending, active, suspected_offline, offline, uninstalling, uninstalled, deleted]}
+        onboarding_mode: {type: string, enum: [command, direct_install, direct_install_tunnel], readOnly: true}
+        onboarding: {$ref: "#/components/schemas/OnboardingProjection"}
         connector_host_id: {type: string, format: uuid}
         active_connector_id: {type: string, format: uuid}
+        control_tunnel_status: {type: string, enum: [desired, establishing, established, degraded, down, removed], readOnly: true, description: '模式 C 长期控制隧道的权威状态；与 Connector 在线状态独立'}
         fencing_generation: {type: integer, format: int64, minimum: 1}
         member_count: {type: integer, minimum: 0}
         resource_version: {type: integer, format: int64, minimum: 1}
@@ -433,34 +461,85 @@ components:
     BastionPreviewCreate:
       type: object
       additionalProperties: false
-      required: [name, environment, labels]
+      required: [name, environment, labels, install_mode]
       properties:
         name: {type: string, minLength: 1, maxLength: 128}
         environment: {$ref: "#/components/schemas/Environment"}
         labels: {$ref: "../../schemas/labels/labels.schema.json#/$defs/UserLabels"}
+        # PlanV4 Task 06 安装模式:command=一次性命令行;direct_install=
+        # 平台 SSH 代装(双向可达);direct_install_tunnel=代装+控制通道反向隧道
+        # (堡垒机无出站)。后两者要求 direct 字段与成功的 direct_ssh 连接测试。
+        install_mode: {type: string, enum: [command, direct_install, direct_install_tunnel]}
+        address: {type: string, minLength: 1, maxLength: 512}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        username: {type: string, minLength: 1, maxLength: 256}
+        credential_id: {type: string, format: uuid}
+        connection_test_id: {type: string, format: uuid, description: '代装模式必填:与本表单字段匹配且成功的 direct_ssh 主机连接测试'}
+    ConnectorInstallOperationEvent:
+      type: object
+      additionalProperties: false
+      required: [id, stage, status, occurred_at]
+      properties:
+        id: {type: string, format: uuid}
+        stage: {type: string, enum: [queued, ssh_connecting, artifact_verifying, artifact_transferring, service_installing, control_tunnel_establishing, enrolling, waiting_connector_online, completed]}
+        status: {type: string, enum: [started, succeeded, failed, retrying]}
+        error_code: {type: string, pattern: "^[A-Z][A-Z0-9_]*$"}
+        detail: {type: string, maxLength: 1024}
+        occurred_at: {type: string, format: date-time}
+    ConnectorInstallOperation:
+      type: object
+      additionalProperties: false
+      required: [id, connector_id, bastion_scope_id, host_id, install_mode, stage, status, attempt, max_attempts, events, expires_at, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        connector_id: {type: string, format: uuid}
+        bastion_scope_id: {type: string, format: uuid}
+        host_id: {type: string, format: uuid}
+        retry_of: {type: string, format: uuid}
+        connection_test_id: {type: string, format: uuid}
+        release_version_id: {type: string, format: uuid}
+        install_mode: {type: string, enum: [direct_install, direct_install_tunnel]}
+        stage: {type: string, enum: [queued, ssh_connecting, artifact_verifying, artifact_transferring, service_installing, control_tunnel_establishing, enrolling, waiting_connector_online, completed]}
+        status: {type: string, enum: [queued, running, succeeded, failed, result_unknown, expired, cancelled]}
+        attempt: {type: integer, minimum: 0, maximum: 3}
+        max_attempts: {type: integer, minimum: 1, maximum: 3}
+        connector_online_at: {type: string, format: date-time}
+        control_tunnel_status: {type: string, enum: [desired, establishing, established, degraded, down, removed]}
+        error_code: {type: string, pattern: "^[A-Z][A-Z0-9_]*$"}
+        events: {type: array, maxItems: 256, items: {$ref: "#/components/schemas/ConnectorInstallOperationEvent"}}
+        started_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
     EnrollmentResult:
       type: object
       additionalProperties: false
-      required: [enrollment_id, install_command, expires_at]
+      required: [enrollment_id, instruction_sets, expires_at]
       properties:
         enrollment_id: {type: string, format: uuid}
-        install_command: {type: string, minLength: 1, maxLength: 8192, writeOnly: true}
+        instruction_sets:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: {$ref: ./common.yaml#/components/schemas/InstallInstructionSet}
         expires_at: {type: string, format: date-time}
     ConnectorEnrollRequest:
       type: object
       additionalProperties: false
-      required: [csr_pem, device_fingerprint, instance_id, name, software_version, capabilities]
+      required: [csr_pem, device_fingerprint, instance_id, architecture, name, software_version, capabilities]
       properties:
         csr_pem: {type: string, minLength: 1, maxLength: 32768, writeOnly: true}
         device_fingerprint: {type: string, minLength: 32, maxLength: 256}
         instance_id: {type: string, minLength: 1, maxLength: 128}
+        architecture: {type: string, enum: [amd64, arm64]}
         name: {type: string, minLength: 1, maxLength: 128}
         software_version: {type: string, minLength: 1, maxLength: 128}
         capabilities: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, minLength: 2, pattern: "^[a-z][a-z0-9_.-]+$"}}
     ConnectorEnrollResult:
       type: object
       additionalProperties: false
-      required: [connector_id, role, certificate_pem, ca_bundle_pem, gateway_endpoint, certificate_expires_at, result]
+      required: [connector_id, role, certificate_pem, trust_bundle, gateway_endpoint, certificate_expires_at, result]
       properties:
         connector_id: {type: string, format: uuid}
         role: {$ref: "#/components/schemas/ConnectorRole"}
@@ -468,7 +547,7 @@ components:
         bastion_scope_id: {type: string, format: uuid}
         kubernetes_cluster_id: {type: string, format: uuid}
         certificate_pem: {type: string, writeOnly: true}
-        ca_bundle_pem: {type: string}
+        trust_bundle: {$ref: ./common.yaml#/components/schemas/TrustBundleSnapshot}
         gateway_endpoint: {type: string, minLength: 1, maxLength: 2048}
         certificate_expires_at: {type: string, format: date-time}
         result: {type: string, enum: [registered, idempotent_retry]}

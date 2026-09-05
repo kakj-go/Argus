@@ -23,6 +23,9 @@ const usage = `usage:
   argusctl install --config FILE
   argusctl status --config FILE [--output text|json]
   argusctl verify --config FILE [--output text|json] [--artifacts DIR]
+  argusctl pki status|rotate|abort --config FILE [--output text|json]
+  argusctl pki extend --config FILE --duration 168h
+  argusctl pki repair-command --config FILE --node-kind KIND --node-id ID [--output text|json]
   argusctl setup-token rotate --config FILE
   argusctl admin reset-password --config FILE --user-id UUID
   argusctl telemetry dlq replay --config FILE --record-id UUID
@@ -73,6 +76,11 @@ func (a *App) run(ctx context.Context, args []string) error {
 			return errors.New("usage: argusctl setup-token rotate --config FILE")
 		}
 		return a.runSetupTokenRotate(ctx, args[2:])
+	case "pki":
+		if len(args) < 2 || !contains([]string{"status", "rotate", "extend", "abort", "repair-command"}, args[1]) {
+			return errors.New("usage: argusctl pki status|rotate|extend|abort|repair-command --config FILE")
+		}
+		return a.runPKI(ctx, args[1], args[2:])
 	case "admin":
 		if len(args) < 2 || args[1] != "reset-password" {
 			return errors.New("usage: argusctl admin reset-password --config FILE --user-id UUID")

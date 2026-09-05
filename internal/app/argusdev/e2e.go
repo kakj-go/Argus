@@ -49,6 +49,9 @@ type E2EEnvironment struct {
 	ManagedClusterRBAC []string
 	State              *ScenarioState
 	CollectorArtifacts *E2ECollectorArtifacts
+	ConnectorArtifacts *E2EConnectorArtifacts
+	ArtifactSigning    *E2EArtifactSigning
+	ArtifactTLS        fixtureCertificate
 	installed          bool
 	imagesAttempted    bool
 	installAttempted   bool
@@ -66,6 +69,7 @@ var suiteDependencies = map[string][]string{
 	"m7":        {"m2", "m3", "m4", "m5", "m7"},
 	"m10-query": {"m2", "m3", "m4", "m5", "m7", "m10-query"},
 	"m8":        {"m6", "m7", "m8"},
+	"p4":        {"m2", "p4"},
 }
 
 func (a *App) runE2E(ctx context.Context, args []string) error {
@@ -183,6 +187,9 @@ func (a *App) runE2ECluster(ctx context.Context, options E2EOptions) (returnErr 
 	if err := a.resolveE2EAccess(ctx, env); err != nil {
 		return err
 	}
+	if err := a.registerE2EConnectorRelease(ctx, env); err != nil {
+		return err
+	}
 	if err := a.runE2EScenarios(ctx, env); err != nil {
 		return err
 	}
@@ -220,9 +227,16 @@ func (a *App) prepareE2EEnvironment(ctx context.Context, env *E2EEnvironment) er
 	env.SandboxNS = kubernetesNameForDev(release + "-sandbox")
 	env.ObservNS = kubernetesNameForDev(release + "-observability")
 	env.ImageTag = kubernetesNameForDev("e2e-" + env.Options.RunID)
+	if err := a.prepareE2EArtifactServer(env); err != nil {
+		return err
+	}
 	if err := a.prepareE2ECollectorArtifacts(ctx, env); err != nil {
 		return err
 	}
+	if err := a.prepareE2EConnectorArtifacts(ctx, env); err != nil {
+		return err
+	}
+	env.clearArtifactSigningPrivateKey()
 	profile := "evaluation"
 	if env.Options.Suite == "m8" {
 		profile = "local-hardening"
@@ -264,6 +278,14 @@ func (a *App) writeE2EConfig(env *E2EEnvironment, profile string) (string, error
 	spec["kubeContext"] = env.Options.KubeContext
 	spec["releaseId"] = env.ReleaseID
 	spec["namespaces"] = map[string]any{"system": env.SystemNS, "sandbox": env.SandboxNS, "observability": env.ObservNS}
+	// Ingress-nginx rejects duplicate host/path pairs across namespaces. Give
+	// every E2E release its own DNS suffix so a suite can coexist with a local
+	// Argus installation (and with another suite) without mutating either one.
+	exposure := nestedMap(spec, "exposure")
+	e2eDomain := env.ReleaseID + ".argus.test"
+	exposure["enterpriseHost"] = "enterprise." + e2eDomain
+	exposure["platformHost"] = "platform." + e2eDomain
+	exposure["connectorHost"] = "connector." + e2eDomain
 	images := nestedMap(spec, "images")
 	images["tag"] = env.ImageTag
 	images["pullPolicy"] = "Never"
@@ -272,6 +294,8 @@ func (a *App) writeE2EConfig(env *E2EEnvironment, profile string) (string, error
 			"collectorVersion": artifacts.Version,
 			"linuxArm64Uri":    artifacts.LinuxURI, "linuxArm64Sha256": artifacts.LinuxSHA256,
 			"linuxArm64Signature": artifacts.LinuxSignature, "linuxArm64ByteSize": artifacts.LinuxByteSize,
+			"linuxAmd64Uri": artifacts.LinuxAMD64URI, "linuxAmd64Sha256": artifacts.LinuxAMD64SHA256,
+			"linuxAmd64Signature": artifacts.LinuxAMD64Signature, "linuxAmd64ByteSize": artifacts.LinuxAMD64ByteSize,
 			"windowsAmd64Uri": artifacts.WindowsURI, "windowsAmd64Sha256": artifacts.WindowsSHA256,
 			"windowsAmd64Signature": artifacts.WindowsSignature, "windowsAmd64ByteSize": artifacts.WindowsByteSize,
 			"signingKeyId": artifacts.SigningKeyID, "signingPublicKey": artifacts.SigningPublicKey,

@@ -90,6 +90,30 @@ WHERE id = $1 AND enterprise_id = $2 AND status = 'active' AND expires_at > now(
 -- name: GetCredentialLease :one
 SELECT * FROM credential_leases WHERE id = $1 AND enterprise_id = $2;
 
+-- name: RenewCredentialLease :one
+UPDATE credential_leases AS lease SET
+  expires_at = sqlc.arg('expires_at')
+FROM credentials AS credential
+WHERE lease.id = sqlc.arg('id')
+  AND lease.enterprise_id = sqlc.arg('enterprise_id')
+  AND lease.status = 'active'
+  AND lease.expires_at > now()
+  AND lease.recipient_type = sqlc.arg('recipient_type')
+  AND lease.recipient_id = sqlc.arg('recipient_id')
+  AND credential.id = lease.credential_id
+  AND credential.enterprise_id = lease.enterprise_id
+  AND credential.status = 'active'
+  AND credential.version = sqlc.arg('credential_version')
+RETURNING lease.*;
+
+-- name: ExpireCredentialLeases :execrows
+UPDATE credential_leases SET status = 'expired'
+WHERE status = 'active' AND expires_at <= now();
+
 -- name: RevokeCredentialLease :exec
 UPDATE credential_leases SET status = 'revoked'
 WHERE id = $1 AND enterprise_id = $2 AND status = 'active';
+
+-- name: RevokeCredentialLeasesByCredential :execrows
+UPDATE credential_leases SET status = 'revoked'
+WHERE credential_id = $1 AND enterprise_id = $2 AND status = 'active';

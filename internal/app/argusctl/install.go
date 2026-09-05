@@ -2,15 +2,26 @@ package argusctl
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/pem"
+	"errors"
 	"fmt"
+	"math/big"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilversion "k8s.io/apimachinery/pkg/util/version"
@@ -48,6 +59,12 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 		return err
 	}
 	if err := ensureCertManager(ctx, clients, helm); err != nil {
+		return err
+	}
+	if err := ensureTrustManager(ctx, clients, helm); err != nil {
+		return err
+	}
+	if err := ensurePKITrustSource(ctx, clients, cfg); err != nil {
 		return err
 	}
 
@@ -120,11 +137,22 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 	if err := clients.setStage(ctx, cfg, "data", "running", "installing PostgreSQL, Redis, MinIO, Kafka, Keeper and ClickHouse"); err != nil {
 		return err
 	}
+	// The bucket initializer is deliberately idempotent and must run again when
+	// the chart adds a bucket or changes its download policy. Kubernetes Job pod
+	// templates are immutable, so remove the previous one before Helm applies the
+	// current manifest. The Job only contains mc mb/policy commands and owns no
+	// persistent data.
+	_, _ = a.runner.quiet(ctx, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.System,
+		"delete", "job", "argus-minio-bucket-init", "--ignore-not-found=true", "--wait=false")
 	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-data", cfg.Spec.Namespaces.System, dataChart, dataValues(cfg, credentials, preflight.Network)); err != nil {
 		return err
 	}
 	if err := waitForData(ctx, clients, cfg); err != nil {
 		return err
+	}
+	connectorRelease, err := a.publishInstallArtifacts(ctx, cfg, clients, root, credentials)
+	if err != nil {
+		return fmt.Errorf("publish installation artifacts: %w", err)
 	}
 	if err := clients.setStage(ctx, cfg, "data", "complete", "data services ready"); err != nil {
 		return err
@@ -221,8 +249,20 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 		_, _ = a.runner.quiet(ctx, "kubectl", "--context", cfg.Spec.KubeContext, "--namespace", cfg.Spec.Namespaces.System,
 			"delete", "job", "argus-postgresql-migration", "--ignore-not-found=true", "--wait=false")
 	}
-	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-platform", cfg.Spec.Namespaces.System, platformChart, platformValues(cfg, credentials, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK, preflight.Network)); err != nil {
+	platformValues := platformValues(cfg, credentials, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK, connectorRelease.HostInstallerSHA256, preflight.Network)
+	runtimePKI, err := preserveRuntimePKIState(ctx, clients, cfg, platformValues)
+	if err != nil {
 		return err
+	}
+	if err := helm.installOrUpgrade(ctx, cfg.Spec.ReleaseID+"-platform", cfg.Spec.Namespaces.System, platformChart, platformValues); err != nil {
+		return err
+	}
+	issuerMaterial, err := configuredIssuerMaterial(ctx, clients, cfg)
+	if err != nil {
+		return err
+	}
+	if err := probeClusterIssuer(ctx, clients, cfg, cfg.globalIssuerName(), runtimePKI.IssuerGeneration, issuerMaterial); err != nil {
+		return fmt.Errorf("global ClusterIssuer failed mandatory serverAuth/clientAuth probes: %w", err)
 	}
 	if cfg.Spec.Images.Mode == "local-registry" {
 		// Local evaluation images intentionally reuse tags such as dev and use
@@ -234,6 +274,9 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 		}
 	}
 	if err := waitForPlatform(ctx, clients, cfg); err != nil {
+		return err
+	}
+	if err := registerConnectorRelease(ctx, clients, cfg, credentials, connectorRelease); err != nil {
 		return err
 	}
 	if err := clients.setStage(ctx, cfg, "platform", "complete", "platform roles and PostgreSQL schema ready"); err != nil {
@@ -254,6 +297,60 @@ func (a *App) install(ctx context.Context, cfg *InstallConfig) error {
 		_, _ = fmt.Fprintf(a.stdout, "Run argusctl setup-token rotate --config %s if the initialization link was not saved.\n", cfg.path)
 	}
 	return nil
+}
+
+type runtimePKIState struct {
+	TrustBundleEpoch          int64
+	ConnectorIssuerGeneration int64
+	TelemetryIssuerGeneration int64
+	IssuerGeneration          int64
+}
+
+func preserveRuntimePKIState(ctx context.Context, clients *kubeClients, cfg *InstallConfig, values map[string]any) (runtimePKIState, error) {
+	state := runtimePKIState{TrustBundleEpoch: 1, ConnectorIssuerGeneration: 1, TelemetryIssuerGeneration: 1, IssuerGeneration: 1}
+	runtimeConfig, err := clients.typed.CoreV1().ConfigMaps(cfg.Spec.Namespaces.System).Get(ctx, "argus-runtime-config", metav1.GetOptions{})
+	if err == nil {
+		state.TrustBundleEpoch = positiveInt64(runtimeConfig.Data["ARGUS_TRUST_BUNDLE_EPOCH"], state.TrustBundleEpoch)
+		state.ConnectorIssuerGeneration = positiveInt64(runtimeConfig.Data["ARGUS_CONNECTOR_ISSUER_GENERATION"], state.ConnectorIssuerGeneration)
+		state.TelemetryIssuerGeneration = positiveInt64(runtimeConfig.Data["ARGUS_TELEMETRY_ISSUER_GENERATION"], state.TelemetryIssuerGeneration)
+	} else if !apierrors.IsNotFound(err) {
+		return state, fmt.Errorf("read existing runtime PKI state: %w", err)
+	}
+	trustSource, err := clients.typed.CoreV1().ConfigMaps("cert-manager").Get(ctx, cfg.trustSourceName(), metav1.GetOptions{})
+	if err == nil {
+		state.TrustBundleEpoch = positiveInt64(trustSource.Annotations["argus.io/trust-bundle-epoch"], state.TrustBundleEpoch)
+	} else if !apierrors.IsNotFound(err) {
+		return state, fmt.Errorf("read Trust Bundle epoch: %w", err)
+	}
+	if cfg.Spec.PKI.Mode == PKIModeManaged {
+		root, getErr := clients.typed.CoreV1().Secrets("cert-manager").Get(ctx, cfg.Spec.ReleaseID+"-root-ca", metav1.GetOptions{})
+		if getErr != nil {
+			return state, fmt.Errorf("read managed issuer generation: %w", getErr)
+		}
+		generation := positiveInt64(root.Annotations["argus.io/pki-epoch"], 1)
+		state.ConnectorIssuerGeneration = generation
+		state.TelemetryIssuerGeneration = generation
+	}
+	if state.ConnectorIssuerGeneration != state.TelemetryIssuerGeneration {
+		return state, fmt.Errorf("runtime issuer generations disagree: connector=%d telemetry=%d", state.ConnectorIssuerGeneration, state.TelemetryIssuerGeneration)
+	}
+	state.IssuerGeneration = state.ConnectorIssuerGeneration
+	runtimeValues, ok := values["runtime"].(map[string]any)
+	if !ok {
+		return state, errors.New("platform runtime values are missing")
+	}
+	runtimeValues["trustBundleEpoch"] = state.TrustBundleEpoch
+	runtimeValues["connectorIssuerGeneration"] = state.ConnectorIssuerGeneration
+	runtimeValues["telemetryIssuerGeneration"] = state.TelemetryIssuerGeneration
+	return state, nil
+}
+
+func positiveInt64(value string, fallback int64) int64 {
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil || parsed < 1 {
+		return fallback
+	}
+	return parsed
 }
 
 func foundationValues(cfg *InstallConfig, profiles ...NetworkProfile) map[string]any {
@@ -311,7 +408,7 @@ func dataValues(cfg *InstallConfig, secrets map[string]string, profiles ...Netwo
 	}
 }
 
-func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK string, profiles ...NetworkProfile) map[string]any {
+func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecret, idempotencyKey, cursorSigningKey, pendingActionKey, secretKEK, hostInstallerSHA256 string, profiles ...NetworkProfile) map[string]any {
 	network := NetworkProfile{}
 	if len(profiles) > 0 {
 		network = profiles[0]
@@ -338,10 +435,12 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 	runtimeValues := map[string]any{
 		"postgresqlPassword": credentials["postgresql-password"], "redisPassword": credentials["redis-password"],
 		"idempotencyEncryptionKey": idempotencyKey, "cursorSigningKey": cursorSigningKey,
-		"pendingActionEncryptionKey": pendingActionKey,
-		"connectorEnrollmentURL":     connectorEnrollmentURL,
-		"connectorGatewayAddress":    connectorGatewayAddress,
-		"objectStoreUrl":             "http://argus-minio:9000", "objectStoreBucket": "argus-remote-recordings",
+		"pendingActionEncryptionKey":       pendingActionKey,
+		"connectorEnrollmentURL":           connectorEnrollmentURL,
+		"connectorGatewayAddress":          connectorGatewayAddress,
+		"connectorEnrollmentForwardTarget": enterpriseHost + ":443",
+		"connectorGatewayForwardTarget":    fmt.Sprintf("argus-connector-gateway.%s.svc:9443", cfg.Spec.Namespaces.System),
+		"objectStoreUrl":                   "http://argus-minio:9000", "objectStoreBucket": "argus-remote-recordings",
 		"remoteOrigin":         remoteOrigin,
 		"objectStoreAccessKey": credentials["minio-root-user"], "objectStoreSecretKey": credentials["minio-root-password"],
 		"telemetryClickhouseMigrationPassword": credentials["telemetry-clickhouse-migration-password"],
@@ -360,10 +459,15 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 		"otelcolWindowsAmd64Uri": cfg.Spec.Telemetry.WindowsAMD64URI, "otelcolWindowsAmd64Sha256": cfg.Spec.Telemetry.WindowsAMD64SHA256,
 		"otelcolWindowsAmd64Signature": cfg.Spec.Telemetry.WindowsAMD64Signature, "otelcolWindowsAmd64ByteSize": cfg.Spec.Telemetry.WindowsAMD64ByteSize,
 		"otelcolSigningKeyId": cfg.Spec.Telemetry.SigningKeyID, "otelcolSigningPublicKey": cfg.Spec.Telemetry.SigningPublicKey,
-		"otelcolKubernetesImage":            cfg.collectorKubernetesImage(),
-		"otelcolArtifactCABundleSecretName": cfg.collectorArtifactCA(),
-		"otelcolArtifactTLSMode":            cfg.Spec.Telemetry.ArtifactTLSMode,
-		"allowedOrigins":                    allowedOrigins, "secureCookies": true,
+		"otelcolKubernetesImage":               cfg.collectorKubernetesImage(),
+		"otelcolArtifactCABundleConfigMapName": cfg.collectorArtifactCA(),
+		"globalIssuerName":                     cfg.globalIssuerName(),
+		"globalIssuerGroup":                    cfg.Spec.PKI.IssuerRef.Group,
+		"trustBundleConfigMapName":             cfg.trustBundleName(),
+		"trustBundleEpoch":                     1,
+		"hostInstallerSha256":                  hostInstallerSHA256,
+		"connectorKubernetesImage":             cfg.Image("argus-backend"),
+		"allowedOrigins":                       allowedOrigins, "secureCookies": true,
 		"keyWrappingMode": "local_test", "breakGlassEnabled": false, "platformMfaRequired": cfg.Spec.Security.PlatformMFARequired, "databaseRolesEnabled": false,
 
 		"directDeniedCidrs": protectedPrefixes(network),
@@ -386,15 +490,23 @@ func platformValues(cfg *InstallConfig, credentials map[string]string, setupSecr
 	} else {
 		runtimeValues["secretKEKKeyring"] = map[string]any{"current_version": 1, "keys": map[string]any{"1": secretKEK}}
 	}
-	return map[string]any{
+	values := map[string]any{
 		"releaseId": cfg.Spec.ReleaseID, "profile": cfg.Spec.Profile, "namespaces": namespacesValues(cfg), "replicas": 1, "setupTokenSecretName": setupSecret,
 		"images":           map[string]any{"backend": cfg.Image("argus-backend"), "web": cfg.Image("argus-web"), "pullPolicy": cfg.Spec.Images.PullPolicy, "postgresql": "postgres:18.6-alpine"},
 		"hosts":            map[string]any{"enterprise": enterpriseHost, "platform": platformHost, "cards": cardsHost, "connector": connectorHost, "artifact": artifactHost},
 		"ingressClassName": cfg.Spec.Exposure.IngressClassName,
-		"tls":              buildTLSValues(cfg),
+		"pki":              buildPKIValues(cfg),
 		"runtime":          runtimeValues,
 		"network":          networkValues(network),
 	}
+	if cfg.Spec.Profile == "production" {
+		values["production"] = map[string]any{"directExecutor": map[string]any{
+			"telemetryTunnelLimit": cfg.Spec.DirectExecutor.TelemetryTunnelLimit,
+			"controlTunnelLimit":   cfg.Spec.DirectExecutor.ControlTunnelLimit,
+			"tunnelBytesPerSecond": cfg.Spec.DirectExecutor.TunnelBytesPerSecond,
+		}}
+	}
+	return values
 }
 
 // parentDomain strips the leading service label from a three-or-more-label
@@ -416,23 +528,22 @@ func parentDomain(host string) string {
 	return strings.Join(labels[1:], ".")
 }
 
-func buildTLSValues(cfg *InstallConfig) map[string]any {
+func buildPKIValues(cfg *InstallConfig) map[string]any {
 	values := map[string]any{
-		"enabled": true,
-		"mode":    string(cfg.Spec.Exposure.TLS.Mode),
+		"mode":             string(cfg.Spec.PKI.Mode),
+		"bootstrapTLSMode": cfg.Spec.PKI.BootstrapTLSMode,
+		"issuerName":       cfg.globalIssuerName(),
+		"issuerKind":       "ClusterIssuer",
+		"issuerGroup":      cfg.Spec.PKI.IssuerRef.Group,
+		"bundleName":       cfg.trustBundleName(),
+		"rootSecretName":   cfg.Spec.ReleaseID + "-root-ca",
+		"trustSourceKind":  "ConfigMap",
+		"trustSourceName":  cfg.trustSourceName(),
+		"trustSourceKey":   "ca.crt",
 	}
-
-	switch cfg.Spec.Exposure.TLS.Mode {
-	case TLSModeCertManagerSelfSigned:
-		values["issuerName"] = "argus-ingress-selfsigned"
-		values["issuerKind"] = "ClusterIssuer"
-	case TLSModeCertManagerIssuer:
-		values["issuerName"] = cfg.Spec.Exposure.TLS.IssuerRef.Name
-		values["issuerKind"] = cfg.Spec.Exposure.TLS.IssuerRef.Kind
-	case TLSModeUserProvided:
-		values["secretName"] = cfg.Spec.Exposure.TLS.SecretName
+	if cfg.Spec.PKI.Mode == PKIModeManaged {
+		values["issuerGroup"] = "cert-manager.io"
 	}
-
 	return values
 }
 
@@ -480,20 +591,210 @@ func ensureCertManager(ctx context.Context, clients *kubeClients, helm helmManag
 	return waitForDeployment(ctx, clients, "cert-manager", "cert-manager", 10*time.Minute)
 }
 
+func ensureTrustManager(ctx context.Context, clients *kubeClients, helm helmManager) error {
+	if _, err := clients.typed.Discovery().ServerResourcesForGroupVersion("trust.cert-manager.io/v1alpha1"); err == nil {
+		deployment, getErr := clients.typed.AppsV1().Deployments("cert-manager").Get(ctx, "trust-manager", metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("trust-manager API exists but controller deployment cannot be inspected: %w", getErr)
+		}
+		if version := deploymentVersion(deployment, "trust-manager"); !certManagerVersionCompatible(version, trustManagerVersion) {
+			return fmt.Errorf("existing trust-manager version %q is incompatible with locked version %s", version, trustManagerVersion)
+		}
+		return nil
+	}
+	chart, err := helm.loadRemoteChart(ctx, "trust-manager-v"+trustManagerVersion, trustManagerURL)
+	if err != nil {
+		return err
+	}
+	values := map[string]any{
+		"defaultPackage": map[string]any{"enabled": false},
+		"secretTargets":  map[string]any{"enabled": false},
+		"app":            map[string]any{"trust": map[string]any{"namespace": "cert-manager"}},
+	}
+	if err := helm.installOrUpgrade(ctx, "trust-manager", "cert-manager", chart, values); err != nil {
+		return err
+	}
+	return waitForDeployment(ctx, clients, "cert-manager", "trust-manager", 10*time.Minute)
+}
+
+func ensurePKITrustSource(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
+	var bundle []byte
+	var err error
+	if cfg.Spec.PKI.Mode == PKIModeManaged {
+		if err = ensureManagedRootCA(ctx, clients, cfg); err != nil {
+			return err
+		}
+		root, getErr := clients.typed.CoreV1().Secrets("cert-manager").Get(ctx, cfg.Spec.ReleaseID+"-root-ca", metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("read managed root CA public certificate: %w", getErr)
+		}
+		bundle = root.Data[corev1.TLSCertKey]
+	} else {
+		bundle, err = cfg.CABundlePEM()
+		if err != nil {
+			return err
+		}
+	}
+	return persistPKITrustSource(ctx, clients, cfg, bundle)
+}
+
+func persistPKITrustSource(ctx context.Context, clients *kubeClients, cfg *InstallConfig, bundle []byte, epochs ...int64) error {
+	canonical, err := canonicalCABundle(bundle)
+	if err != nil {
+		return fmt.Errorf("validate public PKI trust source: %w", err)
+	}
+	bundle = canonical
+	digest := sha256.Sum256(bundle)
+	configMaps := clients.typed.CoreV1().ConfigMaps("cert-manager")
+	current, getErr := configMaps.Get(ctx, cfg.trustSourceName(), metav1.GetOptions{})
+	if getErr != nil {
+		current = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: cfg.trustSourceName()}, Data: map[string]string{}}
+	}
+	current.Labels = map[string]string{
+		"app.kubernetes.io/part-of": "argus",
+		"argus.io/release-id":       cfg.Spec.ReleaseID,
+	}
+	if current.Annotations == nil {
+		current.Annotations = map[string]string{}
+	}
+	current.Annotations["argus.io/trust-bundle-sha256"] = fmt.Sprintf("%x", digest[:])
+	if len(epochs) != 0 && epochs[0] > 0 {
+		current.Annotations["argus.io/trust-bundle-epoch"] = strconv.FormatInt(epochs[0], 10)
+	} else if positiveInt64(current.Annotations["argus.io/trust-bundle-epoch"], 0) == 0 {
+		current.Annotations["argus.io/trust-bundle-epoch"] = "1"
+	}
+	current.Data = map[string]string{"ca.crt": string(bundle)}
+	if current.ResourceVersion == "" {
+		_, err = configMaps.Create(ctx, current, metav1.CreateOptions{})
+	} else {
+		_, err = configMaps.Update(ctx, current, metav1.UpdateOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("persist public PKI trust source: %w", err)
+	}
+	return nil
+}
+
+func ensureManagedRootCA(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
+	secrets := clients.typed.CoreV1().Secrets("cert-manager")
+	name := cfg.Spec.ReleaseID + "-root-ca"
+	current, err := secrets.Get(ctx, name, metav1.GetOptions{})
+	if err == nil {
+		return validateManagedRootCA(current, cfg.Spec.ReleaseID)
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("inspect managed root CA Secret: %w", err)
+	}
+	secret, err := newManagedRootCASecret(cfg.Spec.ReleaseID, name, 1, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	created, err := secrets.Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("create managed root CA Secret: %w", err)
+	}
+	return validateManagedRootCA(created, cfg.Spec.ReleaseID)
+}
+
+func newManagedRootCASecret(releaseID, name string, epoch int64, now time.Time) (*corev1.Secret, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("generate managed root CA key: %w", err)
+	}
+	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serial, err := rand.Int(rand.Reader, serialLimit)
+	if err != nil {
+		return nil, fmt.Errorf("generate managed root CA serial: %w", err)
+	}
+	publicKey, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("marshal managed root CA public key: %w", err)
+	}
+	subjectKeyID := sha256.Sum256(publicKey)
+	template := &x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: fmt.Sprintf("%s Argus Root CA epoch %d", releaseID, epoch), Organization: []string{"Argus"}},
+		NotBefore:             now.Add(-5 * time.Minute),
+		NotAfter:              now.AddDate(10, 0, 0),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		MaxPathLen:            1,
+		SubjectKeyId:          subjectKeyID[:],
+		AuthorityKeyId:        subjectKeyID[:],
+	}
+	certificateDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		return nil, fmt.Errorf("create managed root CA certificate: %w", err)
+	}
+	privateKeyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("marshal managed root CA private key: %w", err)
+	}
+	certificatePEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateDER})
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyDER})
+	fingerprint := sha256.Sum256(certificateDER)
+	immutable := true
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"app.kubernetes.io/part-of": "argus",
+				"argus.io/release-id":       releaseID,
+				"argus.io/pki-role":         "managed-root",
+			},
+			Annotations: map[string]string{
+				"argus.io/ca-sha256": fmt.Sprintf("%x", fingerprint[:]),
+				"argus.io/pki-epoch": fmt.Sprintf("%d", epoch),
+			},
+		},
+		Type:      corev1.SecretTypeTLS,
+		Data:      map[string][]byte{corev1.TLSCertKey: certificatePEM, corev1.TLSPrivateKeyKey: privateKeyPEM, "ca.crt": certificatePEM},
+		Immutable: &immutable,
+	}
+	return secret, nil
+}
+
+func validateManagedRootCA(secret *corev1.Secret, releaseID string) error {
+	if secret == nil || secret.Labels["argus.io/release-id"] != releaseID || secret.Labels["argus.io/pki-role"] != "managed-root" ||
+		secret.Immutable == nil || !*secret.Immutable || secret.Type != corev1.SecretTypeTLS {
+		return fmt.Errorf("managed root CA Secret is not an immutable Argus root owned by release %s", releaseID)
+	}
+	pair, err := tls.X509KeyPair(secret.Data[corev1.TLSCertKey], secret.Data[corev1.TLSPrivateKeyKey])
+	if err != nil || len(pair.Certificate) != 1 {
+		return fmt.Errorf("managed root CA key pair is invalid")
+	}
+	certificate, err := x509.ParseCertificate(pair.Certificate[0])
+	key, keyOK := pair.PrivateKey.(*ecdsa.PrivateKey)
+	if err != nil || !keyOK || key.Curve != elliptic.P256() || !certificate.IsCA || !certificate.BasicConstraintsValid ||
+		certificate.KeyUsage&x509.KeyUsageCertSign == 0 || time.Now().Before(certificate.NotBefore) || !time.Now().Before(certificate.NotAfter) ||
+		certificate.CheckSignatureFrom(certificate) != nil {
+		return fmt.Errorf("managed root CA certificate constraints are invalid")
+	}
+	if string(secret.Data["ca.crt"]) != string(secret.Data[corev1.TLSCertKey]) {
+		return fmt.Errorf("managed root CA public bundle is inconsistent")
+	}
+	return nil
+}
+
 func certManagerDeploymentVersion(deployment *appsv1.Deployment) string {
+	return deploymentVersion(deployment, "cert-manager")
+}
+
+func deploymentVersion(deployment *appsv1.Deployment, chartName string) string {
 	if deployment == nil {
 		return ""
 	}
 	for _, key := range []string{"app.kubernetes.io/version", "helm.sh/chart"} {
 		if value := deployment.Labels[key]; value != "" {
 			if key == "helm.sh/chart" {
-				value = strings.TrimPrefix(value, "cert-manager-")
+				value = strings.TrimPrefix(value, chartName+"-")
 			}
 			return strings.TrimPrefix(value, "v")
 		}
 	}
 	for _, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name != "cert-manager-controller" && container.Name != "cert-manager" {
+		if !strings.Contains(container.Name, chartName) && container.Name != "cert-manager-controller" {
 			continue
 		}
 		if index := strings.LastIndex(container.Image, ":"); index >= 0 && index+1 < len(container.Image) {

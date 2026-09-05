@@ -1,8 +1,22 @@
+{{- $telemetryTunnelLimit := .Values.runtime.telemetryTunnelLimit -}}
+{{- $controlTunnelLimit := .Values.runtime.controlTunnelLimit -}}
+{{- $tunnelBytesPerSecond := .Values.runtime.tunnelBytesPerSecond -}}
+{{- if eq .Values.profile "production" -}}
+{{- $telemetryTunnelLimit = .Values.production.directExecutor.telemetryTunnelLimit -}}
+{{- $controlTunnelLimit = .Values.production.directExecutor.controlTunnelLimit -}}
+{{- $tunnelBytesPerSecond = .Values.production.directExecutor.tunnelBytesPerSecond -}}
+{{- if or (le (int $telemetryTunnelLimit) 0) (le (int $controlTunnelLimit) 0) (le (int64 $tunnelBytesPerSecond) 0) -}}
+{{- fail "production.directExecutor telemetryTunnelLimit, controlTunnelLimit, and tunnelBytesPerSecond must be positive" -}}
+{{- end -}}
+{{- end -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: argus-runtime-config
   namespace: {{ .Values.namespaces.system }}
+  labels:
+    app.kubernetes.io/part-of: argus
+    argus.io/release-id: {{ .Values.releaseId | quote }}
 data:
   ARGUS_ALLOWED_ORIGINS: {{ join "," .Values.runtime.allowedOrigins | quote }}
   ARGUS_SECURE_COOKIES: {{ .Values.runtime.secureCookies | quote }}
@@ -14,8 +28,10 @@ data:
   ARGUS_CLICKHOUSE_HOST: argus-clickhouse-client.{{ .Values.namespaces.observability }}.svc
   ARGUS_CONNECTOR_ENROLLMENT_URL: {{ .Values.runtime.connectorEnrollmentURL | quote }}
   ARGUS_CONNECTOR_GATEWAY_ADDRESS: {{ .Values.runtime.connectorGatewayAddress | quote }}
+  ARGUS_CONNECTOR_ENROLLMENT_FORWARD_TARGET: {{ required "runtime.connectorEnrollmentForwardTarget is required" .Values.runtime.connectorEnrollmentForwardTarget | quote }}
+  ARGUS_CONNECTOR_GATEWAY_FORWARD_TARGET: {{ required "runtime.connectorGatewayForwardTarget is required" .Values.runtime.connectorGatewayForwardTarget | quote }}
   ARGUS_SYSTEM_NAMESPACE: {{ .Values.namespaces.system | quote }}
-  ARGUS_CONNECTOR_ISSUER_NAME: {{ .Values.runtime.connectorIssuerName | quote }}
+  ARGUS_CONNECTOR_ISSUER_NAME: {{ .Values.runtime.globalIssuerName | quote }}
   ARGUS_CONNECTOR_ISSUER_GENERATION: {{ .Values.runtime.connectorIssuerGeneration | quote }}
   ARGUS_DEPLOYMENT_PROFILE: {{ .Values.profile | quote }}
   ARGUS_KEY_WRAPPING_MODE: {{ .Values.runtime.keyWrappingMode | quote }}
@@ -28,7 +44,10 @@ data:
   ARGUS_DIRECT_DENIED_CIDRS: {{ join "," .Values.runtime.directDeniedCidrs | quote }}
   ARGUS_DIRECT_EXECUTOR_ENDPOINT: {{ default (printf "argus-direct-executor.%s.svc:9444" .Values.namespaces.system) .Values.runtime.directExecutorEndpoint | quote }}
   ARGUS_DIRECT_EXECUTOR_SERVER_NAME: {{ default (printf "argus-direct-executor.%s.svc" .Values.namespaces.system) .Values.runtime.directExecutorServerName | quote }}
-  ARGUS_DIRECT_EXECUTOR_CLIENT_NAMES: argus-server,argus-connector-gateway
+  ARGUS_DIRECT_EXECUTOR_CLIENT_URIS: "spiffe://argus.io/services/server/client,spiffe://argus.io/services/worker/client,spiffe://argus.io/services/connector-gateway/direct-executor-client"
+  ARGUS_TELEMETRY_TUNNEL_LIMIT: {{ $telemetryTunnelLimit | int | quote }}
+  ARGUS_CONTROL_TUNNEL_LIMIT: {{ $controlTunnelLimit | int | quote }}
+  ARGUS_TUNNEL_BYTES_PER_SECOND: {{ $tunnelBytesPerSecond | int64 | quote }}
   ARGUS_CARD_PRESENTATION_TTL: {{ .Values.runtime.cardPresentationTtl | quote }}
   ARGUS_CARD_VALIDATION_TTL: {{ .Values.runtime.cardValidationTtl | quote }}
   ARGUS_CARD_RUNTIME_VERSION: {{ .Values.runtime.cardRuntimeVersion | quote }}
@@ -38,17 +57,22 @@ data:
   ARGUS_REMOTE_HOST_LIMIT: {{ .Values.runtime.remoteHostLimit | int | quote }}
   ARGUS_REMOTE_ENTERPRISE_LIMIT: {{ .Values.runtime.remoteEnterpriseLimit | int | quote }}
   ARGUS_REMOTE_PEER_SERVER_NAME: argus-connector-gateway
+  ARGUS_REMOTE_PEER_CLIENT_URI: spiffe://argus.io/services/connector-gateway/peer-client
   ARGUS_REMOTE_PEER_HEADLESS_SUFFIX: {{ printf "argus-connector-gateway-headless.%s.svc" .Values.namespaces.system | quote }}
   ARGUS_REMOTE_PEER_PORT: "9446"
+  ARGUS_REMOTE_PEER_CLIENT_CERT_PATH: /var/run/secrets/argus/connector-gateway-peer-client/tls.crt
+  ARGUS_REMOTE_PEER_CLIENT_KEY_PATH: /var/run/secrets/argus/connector-gateway-peer-client/tls.key
   ARGUS_OBJECT_STORE_URL: {{ required "runtime.objectStoreUrl is required" .Values.runtime.objectStoreUrl | quote }}
   ARGUS_OBJECT_STORE_BUCKET: {{ required "runtime.objectStoreBucket is required" .Values.runtime.objectStoreBucket | quote }}
   ARGUS_DIRECT_EXECUTOR_RECIPIENT_ID: argus-direct-executor
   ARGUS_TELEMETRY_QUERY_ENDPOINT: {{ printf "argus-telemetry-query.%s.svc:9447" .Values.namespaces.observability | quote }}
   ARGUS_TELEMETRY_SERVER_NAME: {{ printf "argus-telemetry-query.%s.svc" .Values.namespaces.observability | quote }}
-  ARGUS_TELEMETRY_ISSUER_NAME: {{ .Values.runtime.telemetryIssuerName | quote }}
+  ARGUS_TELEMETRY_ISSUER_NAME: {{ .Values.runtime.globalIssuerName | quote }}
   ARGUS_TELEMETRY_ISSUER_GENERATION: {{ .Values.runtime.telemetryIssuerGeneration | quote }}
   ARGUS_TELEMETRY_INGEST_GRPC_ENDPOINT: {{ .Values.runtime.telemetryIngestGrpcEndpoint | quote }}
   ARGUS_TELEMETRY_INGEST_HTTP_ENDPOINT: {{ .Values.runtime.telemetryIngestHttpEndpoint | quote }}
+  ARGUS_TELEMETRY_INGEST_FORWARD_ENDPOINT: {{ default (printf "argus-telemetry-ingest.%s.svc:4317" .Values.namespaces.observability) .Values.runtime.telemetryIngestForwardEndpoint | quote }}
+  ARGUS_TELEMETRY_IDENTITY_FORWARD_ENDPOINT: {{ default (printf "argus-telemetry-ingest.%s.svc:4318" .Values.namespaces.observability) .Values.runtime.telemetryIdentityForwardEndpoint | quote }}
   ARGUS_TELEMETRY_ENROLLMENT_ENDPOINT: {{ .Values.runtime.telemetryEnrollmentEndpoint | quote }}
   ARGUS_TELEMETRY_TOOL_CATALOG_ENABLED: {{ .Values.runtime.telemetryToolCatalogEnabled | quote }}
   ARGUS_TELEMETRY_CERTIFICATE_REQUEST_NAMESPACE: {{ .Values.namespaces.observability | quote }}
@@ -59,10 +83,15 @@ data:
   ARGUS_OTELCOL_SIGNING_PUBLIC_KEYS: "{}"
   ARGUS_OTELCOL_KUBERNETES_IMAGE: ""
   {{- end }}
-  ARGUS_OTELCOL_ARTIFACT_CA_PATH: {{ if .Values.runtime.otelcolArtifactCABundleSecretName }}"/var/run/secrets/argus/otelcol-artifact-ca/ca.crt"{{ else }}""{{ end }}
-  # verify(默认)| insecure:insecure 仅跳过产物下载的传输层证书校验,
-  # sha256+ed25519 签名校验不受影响;用于本地自签 TLS 的流畅体验。
-  ARGUS_OTELCOL_ARTIFACT_TLS_MODE: {{ .Values.runtime.otelcolArtifactTLSMode | quote }}
+  ARGUS_TRUST_BUNDLE_PATH: /var/run/secrets/argus/trust/ca.crt
+  ARGUS_TRUST_BUNDLE_EPOCH: {{ .Values.runtime.trustBundleEpoch | quote }}
+  ARGUS_BOOTSTRAP_TLS_MODE: {{ required "pki.bootstrapTLSMode is required" .Values.pki.bootstrapTLSMode | quote }}
+  ARGUS_HOST_INSTALLER_SHA256: {{ required "runtime.hostInstallerSha256 is required" .Values.runtime.hostInstallerSha256 | quote }}
+  ARGUS_CONNECTOR_KUBERNETES_IMAGE: {{ required "runtime.connectorKubernetesImage is required" .Values.runtime.connectorKubernetesImage | quote }}
+  ARGUS_OTELCOL_ARTIFACT_CA_PATH: /var/run/secrets/argus/trust/ca.crt
+  # Preview/confirm readiness probes keep the public catalog path but use the
+  # cluster-internal object-store origin, avoiding ingress hairpin dependencies.
+  ARGUS_ARTIFACT_PROBE_BASE_URL: "http://argus-minio:9000"
 ---
 apiVersion: v1
 kind: Secret

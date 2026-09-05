@@ -156,6 +156,54 @@ paths:
                 $ref: '#/components/schemas/ConnectionTest'
         default:
           $ref: '#/components/responses/Error'
+  /enterprise/hosts/{id}/actions/preview-enrollment-rotate:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/CsrfToken'
+    post:
+      operationId: previewHostEnrollmentRotate
+      summary: Freeze a new self-enrolled Host installation command.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourcePreviewDelete'
+      responses:
+        '201':
+          description: Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
+  /enterprise/hosts/{id}/actions/preview-uninstall-command:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/CsrfToken'
+    post:
+      operationId: previewHostUninstallCommand
+      summary: Freeze a self-enrolled Host uninstall command.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourcePreviewDelete'
+      responses:
+        '201':
+          description: Dangerous Pending Action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pending-action-public.schema'
+        default:
+          $ref: '#/components/responses/Error'
 components:
   securitySchemes:
     sessionCookie:
@@ -180,6 +228,7 @@ components:
         - resource_version
         - connection_status
         - status
+        - onboarding
         - created_at
         - updated_at
       properties:
@@ -199,12 +248,14 @@ components:
           maxLength: 253
         address:
           type: string
-          minLength: 1
+          minLength: 0
           maxLength: 512
+          description: self_enrolled 主机在激活前为空,激活后为自报地址
         port:
           type: integer
-          minimum: 1
+          minimum: 0
           maximum: 65535
+          description: self_enrolled 主机在激活前为 0
         platform:
           type: string
           enum:
@@ -216,7 +267,7 @@ components:
             - amd64
             - arm64
           readOnly: true
-          description: 连接测试探测的目标架构(uname -m 归一化),Collector 安装按此选择分发产物;缺省按 amd64 处理
+          description: 连接测试探测的目标架构(uname -m 归一化),Linux 连接测试必须成功识别架构,Collector 安装按此选择签名产物
         connection_mode:
           $ref: '#/components/schemas/HostConnectionMode'
         bastion_scope_id:
@@ -274,6 +325,8 @@ components:
             - active
             - disabled
             - deleted
+        onboarding:
+          $ref: '#/components/schemas/OnboardingProjection'
         created_at:
           type: string
           format: date-time
@@ -298,15 +351,10 @@ components:
       additionalProperties: false
       required:
         - name
-        - address
-        - port
         - platform
         - connection_mode
-        - credential_id
-        - username
         - environment
         - labels
-        - connection_test_id
       properties:
         name:
           type: string
@@ -317,33 +365,45 @@ components:
           maxLength: 253
         address:
           type: string
-          minLength: 1
+          minLength: 0
           maxLength: 512
+          description: self_enrolled 模式不填写;其余模式必填(服务端按模式校验)
         port:
           type: integer
-          minimum: 1
+          minimum: 0
           maximum: 65535
+          description: self_enrolled 模式不填写;其余模式必填(服务端按模式校验)
         platform:
           type: string
           enum:
             - linux
             - windows
+          description: self_enrolled 第一版仅支持 linux
         connection_mode:
           type: string
           enum:
             - via_bastion
             - direct_ssh
             - direct_winrm
+            - self_enrolled
         bastion_scope_id:
           type: string
           format: uuid
         credential_id:
           type: string
           format: uuid
+          description: self_enrolled 模式不提供
         username:
           type: string
-          minLength: 1
+          minLength: 0
           maxLength: 256
+          description: self_enrolled 模式不提供
+        architecture:
+          type: string
+          enum:
+            - amd64
+            - arm64
+          description: self_enrolled 模式由用户按目标机器选择;其余模式由连接测试探测,不接受填写
         environment:
           $ref: '#/components/schemas/Environment'
         labels:
@@ -351,6 +411,7 @@ components:
         connection_test_id:
           type: string
           format: uuid
+          description: self_enrolled 模式免测试,不提供;其余模式必填(服务端按模式校验)
     HostPreviewUpdate:
       type: object
       additionalProperties: false
@@ -493,6 +554,7 @@ components:
         - via_bastion
         - direct_ssh
         - direct_winrm
+        - self_enrolled
     RequestId:
       type: string
       minLength: 16
@@ -559,6 +621,39 @@ components:
           - $ref: '#/components/schemas/SystemLabelKey'
       additionalProperties:
         $ref: '#/components/schemas/LabelValue'
+    OnboardingProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - updated_at
+      properties:
+        state:
+          type: string
+          enum:
+            - command_available
+            - command_consumed
+            - command_expired
+            - awaiting_approval
+            - installing
+            - install_failed
+            - registered
+        pending_action_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+        execution_id:
+          type: string
+          format: uuid
+        operation_id:
+          type: string
+          format: uuid
+        error_code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        updated_at:
+          type: string
+          format: date-time
     PartialMetadata:
       type: object
       additionalProperties: false
@@ -636,6 +731,7 @@ components:
       required:
         - schema_version
         - action_ref
+        - action_type
         - title
         - summary
         - risk
@@ -652,6 +748,10 @@ components:
         action_ref:
           type: string
           minLength: 1
+        action_type:
+          type: string
+          minLength: 3
+          maxLength: 128
         title:
           type: string
           minLength: 1

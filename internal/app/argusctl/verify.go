@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type VerifyCheck struct {
@@ -73,6 +77,11 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 		}
 		report.Checks = append(report.Checks, check)
 	}
+	trustBundlePath, trustBundleErr := materializeTrustBundle(ctx, clients, cfg)
+	if trustBundlePath != "" {
+		defer os.Remove(trustBundlePath)
+	}
+	add("pki/trust-bundle", trustBundleErr)
 
 	statusBuffer := &strings.Builder{}
 	statusApp := *a
@@ -104,20 +113,17 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 		add("health/"+deployment, a.podHealthProbe(ctx, cfg, clients, cfg.Spec.Namespaces.System, deployment, 8081))
 	}
 
-	ingressHosts := map[string]string{
-		"enterprise": cfg.Spec.Exposure.EnterpriseHost,
-		"platform":   cfg.Spec.Exposure.PlatformHost,
-		"cards":      "cards." + parentDomain(cfg.Spec.Exposure.EnterpriseHost),
-		"remote":     "remote." + parentDomain(cfg.Spec.Exposure.PlatformHost),
+	ingressHosts := webIngressHosts(cfg)
+	ingressAddress, ingressErr := ingressProbeAddress(ctx, clients, cfg)
+	add("ingress-ready", ingressErr)
+	if ingressErr == nil {
+		ingressAddress = selectIngressProbeAddress(ctx, cfg, ingressAddress)
 	}
-	add("ingress-ready", ingressAddressReady(ctx, clients, cfg))
-	if cfg.Spec.Exposure.TLS.Mode != TLSModeUserProvided {
-		add("ingress-certificates", ingressCertificatesReady(ctx, clients, cfg, ingressHosts))
-	}
+	add("ingress-certificates", ingressCertificatesReady(ctx, clients, cfg, ingressHosts))
 	add("connector-lb", connectorLoadBalancerReady(ctx, clients, cfg))
-	add("https-endpoint/enterprise", a.httpsProbe(ctx, cfg, ingressHosts["enterprise"]))
-	add("https-endpoint/platform", a.httpsProbe(ctx, cfg, ingressHosts["platform"]))
-	add("cors-origin", a.corsOriginProbe(ctx, cfg, ingressHosts["platform"]))
+	add("https-endpoint/enterprise", a.httpsProbe(ctx, cfg, cfg.Spec.Exposure.EnterpriseHost, ingressAddress, trustBundlePath))
+	add("https-endpoint/platform", a.httpsProbe(ctx, cfg, cfg.Spec.Exposure.PlatformHost, ingressAddress, trustBundlePath))
+	add("cors-origin", a.corsOriginProbe(ctx, cfg, cfg.Spec.Exposure.PlatformHost, ingressAddress, trustBundlePath))
 
 	postgresSQL := `set -eu; export PGPASSWORD="$POSTGRES_PASSWORD"; psql -U argus -d argus -v ON_ERROR_STOP=1 -Atc "BEGIN; CREATE TEMP TABLE argus_installation_checks(id text PRIMARY KEY, value text); INSERT INTO argus_installation_checks(id,value) VALUES ('argus-e2e','postgres-ok'); SELECT value FROM argus_installation_checks WHERE id='argus-e2e'; COMMIT;" | grep postgres-ok`
 	add("postgresql-write-read", a.execBySelector(ctx, cfg, clients, cfg.Spec.Namespaces.System, "app.kubernetes.io/name=argus-postgresql", "postgresql", postgresSQL))
@@ -129,25 +135,12 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 	add("opensandbox-lifecycle", a.openSandboxSmoke(ctx, cfg, clients))
 
 	for _, image := range []string{"argus-backend", "argus-web", "minio"} {
-		imageReference := cfg.Image(image)
-		if cfg.Spec.Images.Mode == "local-registry" {
-			imageReference = localRegistryReference(cfg, image)
-		}
-		inspect, inspectErr := a.runner.quiet(ctx, "docker", "manifest", "inspect", "--insecure", imageReference)
+		digest, inspectErr := a.imageManifestDigest(ctx, cfg, image)
 		if inspectErr != nil {
 			report.Images[image] = "unavailable: " + inspectErr.Error()
 			continue
 		}
-		var manifest struct {
-			Config struct {
-				Digest string `json:"digest"`
-			} `json:"config"`
-		}
-		if json.Unmarshal([]byte(inspect), &manifest) == nil && manifest.Config.Digest != "" {
-			report.Images[image] = manifest.Config.Digest
-		} else {
-			report.Images[image] = "manifest-present"
-		}
+		report.Images[image] = digest
 	}
 	sort.Slice(report.Checks, func(i, j int) bool { return report.Checks[i].Name < report.Checks[j].Name })
 	if err := writeOutput(a.stdout, output, report, func(w io.Writer) {
@@ -165,39 +158,224 @@ func (a *App) verify(ctx context.Context, cfg *InstallConfig, output, artifactPa
 	return nil
 }
 
-func ingressAddressReady(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
+func (a *App) imageManifestDigest(ctx context.Context, cfg *InstallConfig, image string) (string, error) {
+	if cfg.Spec.Images.Mode == "local-registry" {
+		return localRegistryManifestDigest(ctx, cfg, image)
+	}
+	inspect, err := a.runner.quiet(ctx, "docker", "manifest", "inspect", cfg.Image(image))
+	if err != nil {
+		return "", err
+	}
+	var manifest struct {
+		Config struct {
+			Digest string `json:"digest"`
+		} `json:"config"`
+	}
+	if json.Unmarshal([]byte(inspect), &manifest) == nil && manifest.Config.Digest != "" {
+		return manifest.Config.Digest, nil
+	}
+	return "manifest-present", nil
+}
+
+func localRegistryManifestDigest(ctx context.Context, cfg *InstallConfig, image string) (string, error) {
+	_, port, err := net.SplitHostPort(cfg.Spec.Images.Registry)
+	if err != nil {
+		return "", fmt.Errorf("parse local registry address: %w", err)
+	}
+	reference := strings.TrimPrefix(localRegistryReference(cfg, image), "localhost:"+port+"/")
+	repository, tag, found := strings.Cut(reference, ":")
+	if !found || repository == "" || tag == "" || strings.Contains(repository, "..") || strings.ContainsAny(tag, "/\\") {
+		return "", fmt.Errorf("invalid local registry image reference %q", reference)
+	}
+	endpoint := "http://127.0.0.1:" + port + "/v2/" + repository + "/manifests/" + url.PathEscape(tag)
+	request, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("Accept", "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("inspect local registry manifest: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("local registry manifest returned %s", response.Status)
+	}
+	digest := strings.TrimSpace(response.Header.Get("Docker-Content-Digest"))
+	if digest == "" {
+		return "manifest-present", nil
+	}
+	return digest, nil
+}
+
+func ingressProbeAddress(ctx context.Context, clients *kubeClients, cfg *InstallConfig) (string, error) {
 	ingress, err := clients.typed.NetworkingV1().Ingresses(cfg.Spec.Namespaces.System).Get(ctx, "argus-web", metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("read Ingress argus-web: %w", err)
+		return "", fmt.Errorf("read Ingress argus-web: %w", err)
 	}
-	if len(ingress.Status.LoadBalancer.Ingress) == 0 {
-		return fmt.Errorf("Ingress argus-web has no load-balancer address yet; the ingress controller may still be allocating one")
+	for _, entry := range ingress.Status.LoadBalancer.Ingress {
+		if address := strings.TrimSpace(entry.IP); address != "" {
+			return address, nil
+		}
+		if address := strings.TrimSpace(entry.Hostname); address != "" {
+			return address, nil
+		}
+	}
+	return "", fmt.Errorf("Ingress argus-web has no load-balancer address yet; the ingress controller may still be allocating one")
+}
+
+func webIngressHosts(cfg *InstallConfig) []string {
+	artifactHost := strings.TrimSpace(cfg.Spec.Exposure.ArtifactHost)
+	if artifactHost == "" {
+		artifactHost = "artifacts." + parentDomain(cfg.Spec.Exposure.EnterpriseHost)
+	}
+	return []string{
+		cfg.Spec.Exposure.EnterpriseHost,
+		cfg.Spec.Exposure.PlatformHost,
+		"cards." + parentDomain(cfg.Spec.Exposure.EnterpriseHost),
+		artifactHost,
+	}
+}
+
+func ingressCertificatesReady(ctx context.Context, clients *kubeClients, cfg *InstallConfig, hosts []string) error {
+	names := []string{"enterprise", "platform", "cards", "artifact"}
+	if len(hosts) != len(names) {
+		return fmt.Errorf("unexpected ingress host set")
+	}
+	for index, name := range names {
+		certificateName := "argus-" + name
+		object, err := clients.dynamic.Resource(pkiCertificateGVR).Namespace(cfg.Spec.Namespaces.System).Get(ctx, certificateName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("read Certificate %s: %w", certificateName, err)
+		}
+		if err := validateIngressCertificateForCurrentPKI(ctx, clients, cfg, object, certificateName, "argus-"+name+"-tls", hosts[index]); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func ingressCertificatesReady(ctx context.Context, clients *kubeClients, cfg *InstallConfig, hosts map[string]string) error {
-	certificateGVR := schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates"}
-	for key, host := range hosts {
-		object, err := clients.dynamic.Resource(certificateGVR).Namespace(cfg.Spec.Namespaces.System).Get(ctx, "argus-web-"+key, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("read Certificate argus-web-%s: %w", key, err)
-		}
-		ready := false
-		if conditions, found, _ := unstructuredNestedSlice(object.Object, "status", "conditions"); found {
-			for _, raw := range conditions {
-				condition, _ := raw.(map[string]any)
-				if condition["type"] == "Ready" && condition["status"] == "True" {
-					ready = true
-					break
-				}
-			}
-		}
-		if !ready {
-			return fmt.Errorf("certificate for %s (%s) is not Ready", host, key)
-		}
+func validateIngressCertificateForCurrentPKI(ctx context.Context, clients *kubeClients, cfg *InstallConfig, object *unstructured.Unstructured, name, expectedSecret, expectedHost string) error {
+	expectedIssuer := cfg.globalIssuerName()
+	issuerName, found, err := unstructured.NestedString(object.Object, "spec", "issuerRef", "name")
+	if err != nil || !found {
+		return fmt.Errorf("Certificate %s has no valid spec.issuerRef.name", name)
+	}
+	if issuerName == expectedIssuer {
+		return validateIngressCertificate(object.Object, name, expectedSecret, expectedHost, expectedIssuer)
+	}
+	epoch, ok := rotationEpochFromFormerIssuer(cfg.Spec.ReleaseID, issuerName)
+	if !ok {
+		return fmt.Errorf("Certificate %s does not reference global ClusterIssuer %s or a managed former Issuer", name, expectedIssuer)
+	}
+	if err = validateIngressCertificate(object.Object, name, expectedSecret, expectedHost, issuerName); err != nil {
+		return err
+	}
+	former, err := clients.dynamic.Resource(pkiIssuerGVR).Get(ctx, issuerName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("read former ClusterIssuer %s: %w", issuerName, err)
+	}
+	if former.GetLabels()["argus.io/release-id"] != cfg.Spec.ReleaseID || former.GetLabels()[pkiRoleLabel] != pkiFormerIssuerRole ||
+		former.GetAnnotations()[pkiEpochAnnotation] != strconv.FormatInt(epoch, 10) || !issuerReady(former) {
+		return fmt.Errorf("former ClusterIssuer %s is not a Ready resource owned by rotation epoch %d", issuerName, epoch)
+	}
+	stagedName := stagedServerCertificateName(name, epoch)
+	staged, err := clients.dynamic.Resource(pkiCertificateGVR).Namespace(cfg.Spec.Namespaces.System).Get(ctx, stagedName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("read staged Certificate %s for active former leaf: %w", stagedName, err)
+	}
+	if err = validateStagedIngressCertificateMetadata(staged, cfg.Spec.ReleaseID, epoch, name, expectedSecret, expectedIssuer); err != nil {
+		return err
+	}
+	return validateIngressCertificate(staged.Object, stagedName, stagedName, expectedHost, expectedIssuer)
+}
+
+func rotationEpochFromFormerIssuer(releaseID, issuerName string) (int64, bool) {
+	prefix := releaseID + "-ca-former-"
+	if !strings.HasPrefix(issuerName, prefix) {
+		return 0, false
+	}
+	epoch, err := strconv.ParseInt(strings.TrimPrefix(issuerName, prefix), 10, 64)
+	return epoch, err == nil && epoch > 0
+}
+
+func validateStagedIngressCertificateMetadata(staged *unstructured.Unstructured, releaseID string, epoch int64, sourceName, sourceSecret, targetIssuer string) error {
+	if staged == nil || staged.GetLabels()["argus.io/release-id"] != releaseID || staged.GetLabels()[pkiRoleLabel] != pkiStagedServerRole ||
+		staged.GetAnnotations()[pkiEpochAnnotation] != strconv.FormatInt(epoch, 10) ||
+		staged.GetAnnotations()["argus.io/pki-direction"] != "forward" ||
+		staged.GetAnnotations()[pkiSourceCertificate] != sourceName ||
+		staged.GetAnnotations()[pkiSourceSecret] != sourceSecret ||
+		staged.GetAnnotations()[pkiTargetIssuer] != targetIssuer {
+		return fmt.Errorf("staged Certificate %s does not exactly describe forward rotation epoch %d for %s", staged.GetName(), epoch, sourceName)
 	}
 	return nil
+}
+
+func validateIngressCertificate(object map[string]any, name, expectedSecret, expectedHost, expectedIssuer string) error {
+	secretName, found, err := unstructured.NestedString(object, "spec", "secretName")
+	if err != nil || !found {
+		return fmt.Errorf("Certificate %s has no valid spec.secretName", name)
+	}
+	if secretName != expectedSecret {
+		return fmt.Errorf("Certificate %s writes secret %q (expected %s)", name, secretName, expectedSecret)
+	}
+	dnsNames, found, err := unstructured.NestedStringSlice(object, "spec", "dnsNames")
+	if err != nil || !found || len(dnsNames) != 1 || dnsNames[0] != expectedHost {
+		return fmt.Errorf("Certificate %s must cover only %s", name, expectedHost)
+	}
+	issuerName, found, err := unstructured.NestedString(object, "spec", "issuerRef", "name")
+	if err != nil || !found || issuerName != expectedIssuer {
+		return fmt.Errorf("Certificate %s does not reference global ClusterIssuer %s", name, expectedIssuer)
+	}
+	issuerKind, _, _ := unstructured.NestedString(object, "spec", "issuerRef", "kind")
+	if issuerKind != "ClusterIssuer" {
+		return fmt.Errorf("Certificate %s issuer kind is not ClusterIssuer", name)
+	}
+	usages, found, err := unstructured.NestedStringSlice(object, "spec", "usages")
+	if err != nil || !found || len(usages) != 1 || usages[0] != "server auth" {
+		return fmt.Errorf("Certificate %s must have only server auth usage", name)
+	}
+	ready := false
+	if conditions, conditionsFound, conditionsErr := unstructuredNestedSlice(object, "status", "conditions"); conditionsErr == nil && conditionsFound {
+		for _, raw := range conditions {
+			condition, _ := raw.(map[string]any)
+			if condition["type"] == "Ready" && condition["status"] == "True" {
+				ready = true
+				break
+			}
+		}
+	}
+	if !ready {
+		return fmt.Errorf("Certificate %s is not Ready", name)
+	}
+	return nil
+}
+
+func materializeTrustBundle(ctx context.Context, clients *kubeClients, cfg *InstallConfig) (string, error) {
+	bundle, err := clients.typed.CoreV1().ConfigMaps(cfg.Spec.Namespaces.System).Get(ctx, cfg.trustBundleName(), metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("read Trust Bundle ConfigMap: %w", err)
+	}
+	value, err := canonicalCABundle([]byte(bundle.Data["ca.crt"]))
+	if err != nil {
+		return "", fmt.Errorf("validate Trust Bundle: %w", err)
+	}
+	file, err := os.CreateTemp("", "argus-trust-*.pem")
+	if err != nil {
+		return "", fmt.Errorf("create temporary Trust Bundle: %w", err)
+	}
+	path := file.Name()
+	if _, err = file.Write(value); err == nil {
+		err = file.Close()
+	} else {
+		_ = file.Close()
+	}
+	if err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("write temporary Trust Bundle: %w", err)
+	}
+	return path, nil
 }
 
 func connectorLoadBalancerReady(ctx context.Context, clients *kubeClients, cfg *InstallConfig) error {
@@ -211,8 +389,28 @@ func connectorLoadBalancerReady(ctx context.Context, clients *kubeClients, cfg *
 	return nil
 }
 
-func (a *App) httpsProbe(ctx context.Context, cfg *InstallConfig, host string) error {
-	status, err := a.curlStatus(ctx, "https://"+host+"/healthz", "")
+func selectIngressProbeAddress(ctx context.Context, cfg *InstallConfig, loadBalancerAddress string) string {
+	// Local-registry installations run against a local development cluster.
+	// Docker Desktop publishes LoadBalancer port 443 on localhost, while host
+	// proxy/TUN software may reset direct connections to its bridge address.
+	if cfg.Spec.Images.Mode == "local-registry" && tcpAddressReachable(ctx, "127.0.0.1:443") {
+		return "127.0.0.1"
+	}
+	return loadBalancerAddress
+}
+
+func tcpAddressReachable(ctx context.Context, address string) bool {
+	dialer := net.Dialer{Timeout: 3 * time.Second}
+	connection, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return false
+	}
+	_ = connection.Close()
+	return true
+}
+
+func (a *App) httpsProbe(ctx context.Context, cfg *InstallConfig, host, ingressAddress, caPath string) error {
+	status, err := a.curlStatus(ctx, "https://"+host+"/healthz", "", ingressAddress, caPath)
 	if err != nil {
 		return err
 	}
@@ -225,8 +423,8 @@ func (a *App) httpsProbe(ctx context.Context, cfg *InstallConfig, host string) e
 // corsOriginProbe exercises the exact browser-origin path that produced
 // "origin not allowed" regressions: an allowed Origin must pass and a forged
 // Origin must be rejected by the backend CORS middleware.
-func (a *App) corsOriginProbe(ctx context.Context, cfg *InstallConfig, platformHost string) error {
-	status, err := a.curlStatus(ctx, "https://"+platformHost+"/api/v1/setup/status", "https://"+platformHost)
+func (a *App) corsOriginProbe(ctx context.Context, cfg *InstallConfig, platformHost, ingressAddress, caPath string) error {
+	status, err := a.curlStatus(ctx, "https://"+platformHost+"/api/v1/setup/status", "https://"+platformHost, ingressAddress, caPath)
 	if err != nil {
 		return err
 	}
@@ -236,7 +434,7 @@ func (a *App) corsOriginProbe(ctx context.Context, cfg *InstallConfig, platformH
 	if status != "200" && status != "401" {
 		return fmt.Errorf("setup status with allowed Origin returned HTTP %s", status)
 	}
-	status, err = a.curlStatus(ctx, "https://"+platformHost+"/api/v1/setup/status", "https://evil.example.net")
+	status, err = a.curlStatus(ctx, "https://"+platformHost+"/api/v1/setup/status", "https://evil.example.net", ingressAddress, caPath)
 	if err != nil {
 		return err
 	}
@@ -246,19 +444,58 @@ func (a *App) corsOriginProbe(ctx context.Context, cfg *InstallConfig, platformH
 	return nil
 }
 
-func (a *App) curlStatus(ctx context.Context, url, origin string) (string, error) {
-	args := []string{"-ksS", "--max-time", "20", "-o", "/dev/null", "-w", "%{http_code}"}
+func curlStatusArgs(rawURL, origin, ingressAddress, caPath string) ([]string, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return nil, fmt.Errorf("probe URL must be absolute HTTPS: %q", rawURL)
+	}
+	port := parsed.Port()
+	if port == "" {
+		port = "443"
+	}
+	if strings.TrimSpace(caPath) == "" {
+		return nil, fmt.Errorf("probe CA bundle path is required")
+	}
+	args := []string{"-sS", "--cacert", caPath, "--noproxy", "*", "--connect-timeout", "5", "--max-time", "20", "-o", "/dev/null", "-w", "%{http_code}"}
+	if ingressAddress != "" {
+		connectHost := ingressAddress
+		if strings.Contains(connectHost, ":") && !strings.HasPrefix(connectHost, "[") {
+			connectHost = "[" + connectHost + "]"
+		}
+		args = append(args, "--connect-to", fmt.Sprintf("%s:%s:%s:%s", parsed.Hostname(), port, connectHost, port))
+	}
 	if origin != "" {
 		args = append(args, "-H", "Origin: "+origin)
 	}
-	args = append(args, url)
-	output, err := a.runner.quiet(ctx, "curl", args...)
+	return append(args, rawURL), nil
+}
+
+func (a *App) curlStatus(ctx context.Context, rawURL, origin, ingressAddress, caPath string) (string, error) {
+	args, err := curlStatusArgs(rawURL, origin, ingressAddress, caPath)
 	if err != nil {
-		return "", fmt.Errorf("probe %s with curl: %w", url, err)
+		return "", err
+	}
+	var output string
+	for attempt := 0; attempt < 3; attempt++ {
+		output, err = a.runner.quiet(ctx, "curl", args...)
+		if err == nil {
+			break
+		}
+		if attempt < 2 {
+			delay := time.Duration(1<<attempt) * 250 * time.Millisecond
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("probe %s with curl after 3 attempts: %w", rawURL, err)
 	}
 	status := strings.TrimSpace(output)
 	if len(status) != 3 {
-		return "", fmt.Errorf("probe %s returned unexpected curl output %q", url, output)
+		return "", fmt.Errorf("probe %s returned unexpected curl output %q", rawURL, output)
 	}
 	return status, nil
 }

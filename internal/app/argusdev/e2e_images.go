@@ -48,7 +48,7 @@ func (a *App) prepareE2EImages(ctx context.Context, env *E2EEnvironment) error {
 	env.State.FixtureImages["minio"] = clusterPrefix + "minio:" + env.ImageTag
 	buildLabel := "io.argus.e2e.run=" + env.ImageTag
 	backendArgs := []string{"buildx", "build", "--platform", env.ImagePlatform, "--file", "deploy/docker/backend.Dockerfile", "--tag", localPrefix + "argus-backend:" + env.ImageTag, "--label", buildLabel, "--push"}
-	if suiteHas(env.Options.Suite, "m4") || suiteHas(env.Options.Suite, "m5") || suiteHas(env.Options.Suite, "m7") || env.Options.Suite == "m10-query" {
+	if suiteHas(env.Options.Suite, "m4") || suiteHas(env.Options.Suite, "m5") || suiteHas(env.Options.Suite, "m7") || env.Options.Suite == "m10-query" || env.Options.Suite == "p4" {
 		backendArgs = append(backendArgs, "--build-arg", "GO_BUILD_TAGS=m4e2e")
 	}
 	backendArgs = append(backendArgs, ".")
@@ -84,18 +84,22 @@ func (a *App) prepareE2EImages(ctx context.Context, env *E2EEnvironment) error {
 		}
 	}
 	if features.Artifact {
-		env.State.FixtureImages["otelcol"] = clusterPrefix + "argus-otelcol:" + env.ImageTag
-		if err := a.retryE2EImageBuild(ctx, "E2E OpenTelemetry Collector image", func(buildCtx context.Context) error {
-			return a.runner.Run(buildCtx, nil, "docker", "buildx", "build", "--platform", "linux/arm64", "--file", "deploy/docker/otelcol.Dockerfile",
-				"--tag", localPrefix+"argus-otelcol:"+env.ImageTag, "--label", buildLabel, "--push", ".")
-		}); err != nil {
-			return err
+		if env.CollectorArtifacts != nil {
+			env.State.FixtureImages["otelcol"] = clusterPrefix + "argus-otelcol:" + env.ImageTag
+			if err := a.retryE2EImageBuild(ctx, "E2E OpenTelemetry Collector image", func(buildCtx context.Context) error {
+				return a.runner.Run(buildCtx, nil, "docker", "buildx", "build", "--platform", env.ImagePlatform, "--file", "deploy/docker/otelcol.Dockerfile",
+					"--tag", localPrefix+"argus-otelcol:"+env.ImageTag, "--label", buildLabel, "--push", ".")
+			}); err != nil {
+				return err
+			}
 		}
 		if err := a.buildFixtureImage(ctx, env, "artifact", "deploy/docker/e2e-artifact-server.Dockerfile", localPrefix, clusterPrefix); err != nil {
 			return err
 		}
-		if err := a.buildFixtureImage(ctx, env, "systemd", "deploy/docker/e2e-systemd-host.Dockerfile", localPrefix, clusterPrefix); err != nil {
-			return err
+		if features.Systemd {
+			if err := a.buildFixtureImage(ctx, env, "systemd", "deploy/docker/e2e-systemd-host.Dockerfile", localPrefix, clusterPrefix); err != nil {
+				return err
+			}
 		}
 	}
 	if err := a.invokeArgusctl(ctx, env, "images", "load", "--config", env.ConfigPath); err != nil {

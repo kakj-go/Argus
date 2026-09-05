@@ -5,21 +5,22 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"log/slog"
-	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 
 	directv1 "github.com/kakj-go/Argus/internal/gen/proto/argus/directexecutor/v1"
+	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
+	"github.com/kakj-go/Argus/internal/tlsmaterial"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 const maxRPCMessageBytes = 64 * 1024
@@ -30,12 +31,17 @@ type Dispatcher struct {
 }
 
 func NewDispatcher(endpoint, serverName, certificatePath, privateKeyPath, caPath string) (*Dispatcher, error) {
-	tlsConfig, err := loadClientTLS(certificatePath, privateKeyPath, caPath, serverName)
+	material, err := tlsmaterial.Load(tlsmaterial.Options{CertificatePath: certificatePath, PrivateKeyPath: privateKeyPath,
+		CABundlePath: caPath, Usage: x509.ExtKeyUsageClientAuth})
+	if err != nil {
+		return nil, err
+	}
+	tlsCredentials, err := tlsmaterial.ClientCredentials(material, serverName)
 	if err != nil {
 		return nil, err
 	}
 	connection, err := grpc.NewClient(strings.TrimPrefix(endpoint, "grpcs://"),
-		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+		grpc.WithTransportCredentials(tlsCredentials),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxRPCMessageBytes), grpc.MaxCallSendMsgSize(maxRPCMessageBytes)))
 	if err != nil {
 		return nil, err
@@ -122,54 +128,21 @@ func (server RPCServer) DispatchCollectorManagement(_ context.Context, request *
 	return &directv1.DispatchCollectorManagementResponse{Status: directv1.DispatchStatus_DISPATCH_STATUS_ACCEPTED}, nil
 }
 
-func LoadServerTLS(certificatePath, privateKeyPath, caPath string, authorizedClientNames []string) (*tls.Config, error) {
-	certificate, roots, err := loadTLSMaterial(certificatePath, privateKeyPath, caPath)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		Certificates: []tls.Certificate{certificate},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    roots,
-		VerifyConnection: func(state tls.ConnectionState) error {
-			if len(state.PeerCertificates) == 0 {
-				return errors.New("Direct Executor client certificate is missing")
-			}
-			return authorizeClientCertificate(state.PeerCertificates[0], authorizedClientNames)
-		},
-	}, nil
-}
-
-func authorizeClientCertificate(certificate *x509.Certificate, authorizedClientNames []string) error {
-	for _, name := range authorizedClientNames {
-		if name != "" && certificate.VerifyHostname(name) == nil {
-			return nil
+func LoadServerTLS(certificatePath, privateKeyPath, caPath string, store *postgres.Store, authorizedClientURIs []string) (*tls.Config, error) {
+	material, err := tlsmaterial.Load(tlsmaterial.Options{CertificatePath: certificatePath, PrivateKeyPath: privateKeyPath,
+		CABundlePath: caPath, Usage: x509.ExtKeyUsageServerAuth})
+	if err != nil || store == nil || len(authorizedClientURIs) == 0 {
+		if err == nil {
+			err = errors.New("Direct Executor service identity registry is not configured")
 		}
-	}
-	return fmt.Errorf("unauthorized Direct Executor client identity")
-}
-
-func loadClientTLS(certificatePath, privateKeyPath, caPath, serverName string) (*tls.Config, error) {
-	certificate, roots, err := loadTLSMaterial(certificatePath, privateKeyPath, caPath)
-	if err != nil {
 		return nil, err
 	}
-	return &tls.Config{MinVersion: tls.VersionTLS13, ServerName: serverName, RootCAs: roots, Certificates: []tls.Certificate{certificate}}, nil
-}
-
-func loadTLSMaterial(certificatePath, privateKeyPath, caPath string) (tls.Certificate, *x509.CertPool, error) {
-	certificate, err := tls.LoadX509KeyPair(certificatePath, privateKeyPath)
-	if err != nil {
-		return tls.Certificate{}, nil, err
-	}
-	bundle, err := os.ReadFile(caPath)
-	if err != nil {
-		return tls.Certificate{}, nil, err
-	}
-	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM(bundle) {
-		return tls.Certificate{}, nil, errors.New("Direct Executor CA bundle contains no certificates")
-	}
-	return certificate, roots, nil
+	return material.ServerConfig(tls.RequireAndVerifyClientCert, func(state tls.ConnectionState) error {
+		if len(state.PeerCertificates) == 0 {
+			return errors.New("Direct Executor client certificate is missing")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		return trustbundle.VerifyServiceCertificate(ctx, store.Queries, state.PeerCertificates[0], authorizedClientURIs)
+	})
 }

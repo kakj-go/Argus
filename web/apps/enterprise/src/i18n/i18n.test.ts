@@ -14,6 +14,7 @@ import { governanceEn, governanceZh } from "./governance";
 import { hostsEn, hostsZh } from "./hosts";
 import { kubernetesEn, kubernetesZh } from "./kubernetes";
 import { loginEn, loginZh } from "./login";
+import { pendingActionsEn, pendingActionsZh } from "./pending-actions";
 import { remoteAccessEn, remoteAccessZh } from "./remote-access";
 import { settingsEn, settingsZh } from "./settings";
 import { shellEn, shellZh } from "./shell";
@@ -41,6 +42,7 @@ const modules = [
   ["telemetry", telemetryZh, telemetryEn],
   ["settings", settingsZh, settingsEn],
   ["governance", governanceZh, governanceEn],
+  ["pending-actions", pendingActionsZh, pendingActionsEn],
 ] as const;
 
 describe("i18n resources", () => {
@@ -54,13 +56,21 @@ describe("i18n resources", () => {
     for (const resources of [settingsZh, settingsEn]) {
       const audit = resources.settings.audit;
       for (const code of AUDIT_ACTION_CODES) {
-        expect(audit.actions[auditCodeKey(code) as keyof typeof audit.actions]).toBeTruthy();
+        expect(
+          audit.actions[auditCodeKey(code) as keyof typeof audit.actions],
+        ).toBeTruthy();
       }
       for (const code of AUDIT_RESOURCE_TYPE_CODES) {
-        expect(audit.resourceTypes[auditCodeKey(code) as keyof typeof audit.resourceTypes]).toBeTruthy();
+        expect(
+          audit.resourceTypes[
+            auditCodeKey(code) as keyof typeof audit.resourceTypes
+          ],
+        ).toBeTruthy();
       }
       for (const code of AUDIT_ACTOR_TYPE_CODES) {
-        expect(audit.actorTypes[auditCodeKey(code) as keyof typeof audit.actorTypes]).toBeTruthy();
+        expect(
+          audit.actorTypes[auditCodeKey(code) as keyof typeof audit.actorTypes],
+        ).toBeTruthy();
       }
     }
   });

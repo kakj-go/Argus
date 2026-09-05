@@ -42,7 +42,9 @@ go run ./cmd/argusctl status --config deploy/.cache/evaluation-<run-id>.yaml --o
 go run ./cmd/argusctl verify --config deploy/.cache/evaluation-<run-id>.yaml --output json
 ```
 
-`images build` starts a run-owned local registry container. `images load` uses a privileged, run-labelled DaemonSet to import the exact images into the node containerd `k8s.io` namespace. Evaluation workloads use `imagePullPolicy: Never`.
+`images build` also cross-builds the Linux amd64/arm64 Connector distribution used by onboarding, then starts a run-owned local registry container. `images load` uses a privileged, run-labelled DaemonSet to import the exact images into the node containerd `k8s.io` namespace. Evaluation workloads use `imagePullPolicy: Never`.
+
+During `install`, `argusctl` verifies the configured Collector release files and Ed25519 root, publishes Collector/Connector objects plus their install scripts to the bundled MinIO Artifact Store, and registers the exact Connector manifest after PostgreSQL migration. This is part of the normal installation transaction; running `argus-dev ... publish-artifacts` is only a development utility and is not required to make the product wizards work. For secured release automation the matching Connector signing private key may be supplied as `ARGUS_OTELCOL_SIGNING_PRIVATE_KEY`; repository development uses `deploy/.keys/otelcol-signing-key.json`.
 
 For iterative local development after the first install, `make dev-upgrade` chains the light-weight update path in one step: `images build` → `images load` → rollout restart of every Argus deployment → wait for readiness. It skips the full `install` flow (Helm stages, secrets, migrations). The install config defaults to `deploy/.cache/argus-install-dev.yaml`; override with `DEV_CONFIG=...` (also `DEV_SYSTEM_NAMESPACE`, `DEV_OBSERVABILITY_NAMESPACE`, `KUBECTL` for another kube context).
 
@@ -51,9 +53,14 @@ Portals are exposed through the ingress with mandatory TLS; map the install-conf
 - Enterprise (terminal WSS is same-origin: `wss://argus.dev/v1/sessions`): `https://argus.dev`
 - Platform and first-time setup: `https://platform.argus.dev`
 - Card Runtime (internal): `https://cards.argus.dev`
+- Signed Connector/Collector downloads: `https://artifacts.argus.dev`
 - Connector mTLS: `grpcs://connector.argus.dev:9443` (dedicated LoadBalancer service)
 
-With `tls.mode: cert-manager-selfsigned`, trust the generated CA (available in secret `argus-web-tls`, key `ca.crt`; one multi-SAN certificate covers all three hosts) before first browser access.
+With `spec.pki.mode: managed`, trust the public CA from the versioned `argus-trust-bundle` before first browser access. Argus installers embed that Bundle for Connector/Collector use and do not modify the operating-system trust store. Browser trust is still an administrator-managed endpoint policy. Every origin and service has its own leaf certificate even though all leaves reference the same steady-state `ClusterIssuer`.
+
+Host and manual Connector onboarding default to a one-line command. `spec.pki.bootstrapTLSMode` selects how that command downloads its initial dynamic script: managed/self-signed profiles default to `insecure-first-fetch`; an externally trusted certificate should use `strict`. The relaxed mode applies only to that first request and never activates as an automatic fallback. The downloaded script pins the versioned Argus Trust Bundle and strictly validates every later HTTPS request and installer digest. Because the first response can be replaced on an untrusted network, use `strict` whenever the target already trusts the serving certificate chain.
+
+Inspect or rotate the Bundle with `argusctl pki status|rotate|extend|abort`; use `argusctl pki repair-command` only for a node that missed the complete overlap window. See [PKI and TLS design](../docs/18-pki-and-tls.md).
 
 首次安装成功时，`argusctl install` 会在最终摘要中只显示一次包含 Setup Token Fragment 的 Platform 初始化链接。初始化者直接打开该链接，无需手工输入 Token；Platform 会立即从地址栏移除 Fragment，Token 只在当前页面内存中保留。链接遗失或过期时，在系统仍未初始化的前提下运行：
 

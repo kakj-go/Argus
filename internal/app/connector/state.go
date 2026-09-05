@@ -26,6 +26,9 @@ type identityState struct {
 	GatewayEndpoint      string    `json:"gateway_endpoint"`
 	CertificateExpiresAt time.Time `json:"certificate_expires_at"`
 	Capabilities         []string  `json:"capabilities"`
+	TrustBundleEpoch     int64     `json:"trust_bundle_epoch"`
+	TrustBundleSHA256    string    `json:"trust_bundle_sha256"`
+	TrustCAFingerprints  []string  `json:"trust_ca_fingerprints"`
 }
 
 type commandRecord struct {
@@ -39,7 +42,10 @@ type commandRecord struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-type localStore struct{ directory string }
+type localStore struct {
+	directory string
+	mirror    func(localStore) error
+}
 
 func (store localStore) ensure() error {
 	if store.directory == "" {
@@ -58,10 +64,33 @@ func (store localStore) loadIdentity() (identityState, error) {
 		return value, err
 	}
 	err = json.Unmarshal(encoded, &value)
-	if err != nil || value.ConnectorID == "" || value.InstanceID == "" || value.GatewayEndpoint == "" || len(value.Capabilities) == 0 {
+	if err != nil || value.ConnectorID == "" || value.InstanceID == "" || value.GatewayEndpoint == "" || len(value.Capabilities) == 0 ||
+		value.TrustBundleEpoch < 1 || len(value.TrustBundleSHA256) != 64 || len(value.TrustCAFingerprints) == 0 {
 		return identityState{}, errors.New("connector identity metadata is invalid")
 	}
 	return value, nil
+}
+
+func (store localStore) saveTrustBundle(value identityState, caBundle []byte) error {
+	if err := store.ensure(); err != nil {
+		return err
+	}
+	if len(caBundle) == 0 {
+		return errors.New("connector Trust Bundle is empty")
+	}
+	// Persist trust first. A crash between these atomic writes only causes the
+	// next handshake to report the old epoch and request the same Bundle again.
+	if err := atomicPrivateWrite(filepath.Join(store.directory, caFile), caBundle); err != nil {
+		return err
+	}
+	encoded, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := atomicPrivateWrite(filepath.Join(store.directory, identityFile), encoded); err != nil {
+		return err
+	}
+	return store.syncMirror()
 }
 
 func (store localStore) saveIdentity(value identityState, privateKey, certificate, caBundle []byte) error {
@@ -82,7 +111,14 @@ func (store localStore) saveIdentity(value identityState, privateKey, certificat
 			return err
 		}
 	}
-	return nil
+	return store.syncMirror()
+}
+
+func (store localStore) syncMirror() error {
+	if store.mirror == nil {
+		return nil
+	}
+	return store.mirror(store)
 }
 
 func (store localStore) identityMaterial() (certificate, privateKey, caBundle []byte, err error) {

@@ -278,12 +278,16 @@ components:
     ActionOneTimeResult:
       type: object
       additionalProperties: false
-      required: [schema_version, execution_id, result_kind, enrollment, expires_at]
+      required: [schema_version, execution_id, result_kind, instruction_sets, expires_at]
       properties:
-        schema_version: {type: string, const: argus.action_one_time_result/v1}
+        schema_version: {type: string, const: argus.action_one_time_result/v3}
         execution_id: {type: string, format: uuid}
-        result_kind: {type: string, enum: [connector_enrollment]}
-        enrollment: {$ref: './m3.yaml#/components/schemas/EnrollmentResult'}
+        result_kind: {type: string, enum: [host_install_command, host_uninstall_command, connector_install_command]}
+        instruction_sets:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: {$ref: ./common.yaml#/components/schemas/InstallInstructionSet}
         expires_at: {type: string, format: date-time}
     SandboxBackend:
       type: object

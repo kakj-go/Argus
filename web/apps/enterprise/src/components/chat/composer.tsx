@@ -207,7 +207,7 @@ export function ChatComposer({
                 <FilePlus2 size={12} />/
                 {t("chat.composer.createInteractiveCard")}
                 <button
-                  aria-label="remove command"
+                  aria-label={t("chat.composer.removeCommand")}
                   onClick={() => setMockIntent(undefined)}
                   type="button"
                 >

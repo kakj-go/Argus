@@ -23,7 +23,6 @@ import type {
 import {
   Alert,
   Button,
-  CodeBlock,
   Field,
   FormDrawer,
   Input,
@@ -32,6 +31,7 @@ import {
 } from "@argus/ui";
 import { PendingActionCard } from "./pending-action-card";
 import { labelsToText, parseLabels } from "../hosts/host-utils";
+import { InstallInstructionPanel } from "../hosts/install-instruction-panel";
 
 type ClusterConnectionMode = KubernetesCluster["connection_mode"];
 
@@ -54,6 +54,7 @@ type ClusterFormValues = {
   bastionScopeId: string;
   environment: Environment;
   kubeconfig: string;
+  connectorImagePullSecrets: string;
   labelsText: string;
 };
 
@@ -106,14 +107,37 @@ export function ClusterFormDrawer({
           kubeconfig: z
             .string()
             .max(clusterConstraints.kubeconfig.maxLength ?? 1048576),
+          connectorImagePullSecrets: z.string(),
           labelsText: z.string(),
         })
         .superRefine((values, context) => {
-          if (values.connectionMode === "via_bastion" && !values.bastionScopeId) {
+          if (
+            values.connectionMode === "via_bastion" &&
+            !values.bastionScopeId
+          ) {
             context.addIssue({
               code: "custom",
               message: t("kubernetes.form.required"),
               path: ["bastionScopeId"],
+            });
+          }
+          const imagePullSecrets = parseImagePullSecrets(
+            values.connectorImagePullSecrets,
+          );
+          if (
+            values.connectionMode === "in_cluster" &&
+            (imagePullSecrets.length > 16 ||
+              new Set(imagePullSecrets).size !== imagePullSecrets.length ||
+              imagePullSecrets.some(
+                (name) =>
+                  name.length > 253 ||
+                  !/^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/.test(name),
+              ))
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: t("kubernetes.form.imagePullSecretsInvalid"),
+              path: ["connectorImagePullSecrets"],
             });
           }
           if (
@@ -147,6 +171,7 @@ export function ClusterFormDrawer({
       bastionScopeId: "",
       environment: "production",
       kubeconfig: "",
+      connectorImagePullSecrets: "",
       labelsText: "",
     },
   });
@@ -235,6 +260,14 @@ export function ClusterFormDrawer({
         environment: values.environment,
         labels: parseLabels(values.labelsText),
         connection_test_id: connectionTest?.id,
+        ...(values.connectionMode === "in_cluster" &&
+        parseImagePullSecrets(values.connectorImagePullSecrets).length
+          ? {
+              connector_image_pull_secrets: parseImagePullSecrets(
+                values.connectorImagePullSecrets,
+              ),
+            }
+          : {}),
       };
       return api.kubernetes.previewCreateResource(input);
     },
@@ -272,6 +305,7 @@ export function ClusterFormDrawer({
       bastionScopeId: editing?.bastion_scope_id ?? "",
       environment: editing?.environment ?? "production",
       kubeconfig: "",
+      connectorImagePullSecrets: "",
       labelsText: labelsToText(editing?.labels ?? {}),
     });
     setPendingAction(null);
@@ -304,10 +338,7 @@ export function ClusterFormDrawer({
             title={t("kubernetes.form.enrollmentTitle")}
             tone="warning"
           />
-          <CodeBlock
-            code={enrollment.enrollment.install_command ?? ""}
-            language="bash"
-          />
+          <InstallInstructionPanel result={enrollment} />
           <p className="argus-muted">
             {t("kubernetes.form.enrollmentExpires", {
               time: new Date(enrollment.expires_at).toLocaleString(),
@@ -343,7 +374,11 @@ export function ClusterFormDrawer({
               tone="danger"
             />
           )}
-          <Field requirement="required" error={errors.name?.message} label={t("kubernetes.form.name")}>
+          <Field
+            requirement="required"
+            error={errors.name?.message}
+            label={t("kubernetes.form.name")}
+          >
             <Input
               {...register("name")}
               autoFocus
@@ -351,7 +386,11 @@ export function ClusterFormDrawer({
               placeholder={t("kubernetes.form.namePlaceholder")}
             />
           </Field>
-          <Field requirement="required" error={errors.apiServer?.message} label={t("kubernetes.form.apiServer")}>
+          <Field
+            requirement="required"
+            error={errors.apiServer?.message}
+            label={t("kubernetes.form.apiServer")}
+          >
             <Input
               {...register("apiServer")}
               disabled={editing !== null}
@@ -363,14 +402,21 @@ export function ClusterFormDrawer({
             requirement="required"
             label={t("kubernetes.form.connectionMode")}
           >
-            <Controller control={control} name="connectionMode" render={({ field }) => (
-              <Select
-                disabled={editing !== null}
-                onValueChange={field.onChange}
-                options={CONNECTION_MODES.map((mode) => ({ value: mode, label: t(`kubernetes.mode.${mode}`) }))}
-                value={field.value}
-              />
-            )} />
+            <Controller
+              control={control}
+              name="connectionMode"
+              render={({ field }) => (
+                <Select
+                  disabled={editing !== null}
+                  onValueChange={field.onChange}
+                  options={CONNECTION_MODES.map((mode) => ({
+                    value: mode,
+                    label: t(`kubernetes.mode.${mode}`),
+                  }))}
+                  value={field.value}
+                />
+              )}
+            />
           </Field>
           {connectionMode === "via_bastion" && (
             <Field
@@ -378,37 +424,65 @@ export function ClusterFormDrawer({
               error={errors.bastionScopeId?.message}
               label={t("kubernetes.form.bastionScope")}
             >
-              <Controller control={control} name="bastionScopeId" render={({ field }) => (
-                <Select
-                  disabled={editing !== null}
-                  onValueChange={field.onChange}
-                  options={[{ value: "", label: "—" }, ...(scopesQuery.data?.items ?? []).map((scope) => ({ value: scope.id, label: scope.name }))]}
-                  value={field.value}
-                />
-              )} />
+              <Controller
+                control={control}
+                name="bastionScopeId"
+                render={({ field }) => (
+                  <Select
+                    disabled={editing !== null}
+                    onValueChange={field.onChange}
+                    options={[
+                      { value: "", label: "—" },
+                      ...(scopesQuery.data?.items ?? []).map((scope) => ({
+                        value: scope.id,
+                        label: scope.name,
+                      })),
+                    ]}
+                    value={field.value}
+                  />
+                )}
+              />
+            </Field>
+          )}
+          {connectionMode === "in_cluster" && !editing && (
+            <Field
+              requirement="optional"
+              error={errors.connectorImagePullSecrets?.message}
+              hint={t("kubernetes.form.imagePullSecretsHint")}
+              label={t("kubernetes.form.imagePullSecrets")}
+            >
+              <Input
+                {...register("connectorImagePullSecrets")}
+                className="argus-mono"
+                placeholder={t("kubernetes.form.imagePullSecretsPlaceholder")}
+              />
             </Field>
           )}
           <Field
             requirement="required"
             label={t("kubernetes.form.environment")}
           >
-            <Controller control={control} name="environment" render={({ field }) => (
-              <Select
-                onValueChange={field.onChange}
-                options={ENVIRONMENTS.map((item) => ({ value: item, label: t(`kubernetes.environment.${item}`) }))}
-                value={field.value}
-              />
-            )} />
+            <Controller
+              control={control}
+              name="environment"
+              render={({ field }) => (
+                <Select
+                  onValueChange={field.onChange}
+                  options={ENVIRONMENTS.map((item) => ({
+                    value: item,
+                    label: t(`kubernetes.environment.${item}`),
+                  }))}
+                  value={field.value}
+                />
+              )}
+            />
           </Field>
           <Field
             requirement="optional"
             hint={t("kubernetes.form.labelsHint")}
             label={t("kubernetes.form.labels")}
           >
-            <Textarea
-              {...register("labelsText")}
-              rows={3}
-            />
+            <Textarea {...register("labelsText")} rows={3} />
           </Field>
           <Field
             requirement={
@@ -435,4 +509,11 @@ export function ClusterFormDrawer({
       )}
     </FormDrawer>
   );
+}
+
+function parseImagePullSecrets(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

@@ -8,12 +8,16 @@ paths:
   /enterprise/bastion-scopes/actions/preview-create: {$ref: ../argus.yaml#/paths/~1enterprise~1bastion-scopes~1actions~1preview-create}
   "/enterprise/bastion-scopes/{id}/actions/preview-update": {$ref: "../argus.yaml#/paths/~1enterprise~1bastion-scopes~1{id}~1actions~1preview-update"}
   "/enterprise/bastion-scopes/{id}/actions/preview-delete": {$ref: "../argus.yaml#/paths/~1enterprise~1bastion-scopes~1{id}~1actions~1preview-delete"}
-  "/enterprise/bastion-scopes/{id}/actions/preview-replacement": {$ref: "../argus.yaml#/paths/~1enterprise~1bastion-scopes~1{id}~1actions~1preview-replacement"}
+  "/enterprise/bastion-scopes/{id}/actions/preview-enrollment-rotate": {$ref: "../argus.yaml#/paths/~1enterprise~1bastion-scopes~1{id}~1actions~1preview-enrollment-rotate"}
+  "/enterprise/bastion-scopes/{id}/actions/preview-connector-replacement": {$ref: "../argus.yaml#/paths/~1enterprise~1bastion-scopes~1{id}~1actions~1preview-connector-replacement"}
+  "/enterprise/connector-install-operations/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1connector-install-operations~1{id}"}
+  "/enterprise/connector-install-operations/{id}/actions/preview-retry": {$ref: "../argus.yaml#/paths/~1enterprise~1connector-install-operations~1{id}~1actions~1preview-retry"}
   /enterprise/connectors: {$ref: ../argus.yaml#/paths/~1enterprise~1connectors}
   "/enterprise/connectors/{id}": {$ref: "../argus.yaml#/paths/~1enterprise~1connectors~1{id}"}
   "/enterprise/connectors/{id}/rotate-certificate": {$ref: "../argus.yaml#/paths/~1enterprise~1connectors~1{id}~1rotate-certificate"}
   "/enterprise/connectors/{id}/actions/preview-uninstall": {$ref: "../argus.yaml#/paths/~1enterprise~1connectors~1{id}~1actions~1preview-uninstall"}
   /connectors/enroll: {$ref: ../argus.yaml#/paths/~1connectors~1enroll}
+  /connectors/bootstrap-script: {$ref: ../argus.yaml#/paths/~1connectors~1bootstrap-script}
 components:
   securitySchemes:
     sessionCookie: {$ref: ../argus.yaml#/components/securitySchemes/sessionCookie}
@@ -22,7 +26,9 @@ components:
     BastionScope: {$ref: ../components/m3.yaml#/components/schemas/BastionScope}
     BastionScopePage: {$ref: ../components/m3.yaml#/components/schemas/BastionScopePage}
     BastionPreviewCreate: {$ref: ../components/m3.yaml#/components/schemas/BastionPreviewCreate}
+    ConnectorInstallOperation: {$ref: ../components/m3.yaml#/components/schemas/ConnectorInstallOperation}
     Connector: {$ref: ../components/m3.yaml#/components/schemas/Connector}
     ConnectorPage: {$ref: ../components/m3.yaml#/components/schemas/ConnectorPage}
     ConnectorEnrollRequest: {$ref: ../components/m3.yaml#/components/schemas/ConnectorEnrollRequest}
     ConnectorEnrollResult: {$ref: ../components/m3.yaml#/components/schemas/ConnectorEnrollResult}
+    InstallInstructionSet: {$ref: ../components/common.yaml#/components/schemas/InstallInstructionSet}

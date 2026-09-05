@@ -17,26 +17,43 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	connectorcore "github.com/kakj-go/Argus/internal/connector"
+	"github.com/kakj-go/Argus/internal/tlsmaterial"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 type enrollOptions struct {
 	Server, ConnectorID, Token, Role, Name, DataDirectory string
+	CAFile, InstanceID                                    string
+	Capabilities                                          []string
 }
 
 type enrollResult struct {
-	ConnectorID          string    `json:"connector_id"`
-	Role                 string    `json:"role"`
-	CertificatePEM       string    `json:"certificate_pem"`
-	CABundlePEM          string    `json:"ca_bundle_pem"`
-	GatewayEndpoint      string    `json:"gateway_endpoint"`
-	CertificateExpiresAt time.Time `json:"certificate_expires_at"`
-	Result               string    `json:"result"`
+	ConnectorID          string            `json:"connector_id"`
+	Role                 string            `json:"role"`
+	CertificatePEM       string            `json:"certificate_pem"`
+	TrustBundle          enrollTrustBundle `json:"trust_bundle"`
+	GatewayEndpoint      string            `json:"gateway_endpoint"`
+	CertificateExpiresAt time.Time         `json:"certificate_expires_at"`
+	Result               string            `json:"result"`
+}
+
+type enrollTrustBundle struct {
+	Epoch                 int64     `json:"epoch"`
+	State                 string    `json:"state"`
+	BundlePEM             string    `json:"bundle_pem"`
+	BundleSHA256          string    `json:"bundle_sha256"`
+	CurrentCAFingerprints []string  `json:"current_ca_fingerprints"`
+	NextCAFingerprints    []string  `json:"next_ca_fingerprints"`
+	StartedAt             time.Time `json:"started_at"`
+	RetireAt              time.Time `json:"retire_at"`
 }
 
 func enroll(ctx context.Context, options enrollOptions) (enrollResult, error) {
@@ -48,8 +65,19 @@ func enroll(ctx context.Context, options enrollOptions) (enrollResult, error) {
 	if err != nil {
 		return enrollResult{}, err
 	}
-	capabilities := roleCapabilities(options.Role)
-	payload := map[string]any{"csr_pem": identity.CSRPEM, "device_fingerprint": deviceFingerprint(), "instance_id": instanceID(),
+	capabilities := append([]string(nil), options.Capabilities...)
+	if len(capabilities) == 0 {
+		capabilities = roleCapabilities(options.Role)
+	}
+	localInstanceID := options.InstanceID
+	if localInstanceID == "" {
+		localInstanceID = instanceID()
+	}
+	architecture := connectorArchitecture()
+	if architecture == "" {
+		return enrollResult{}, errors.New("Connector architecture is unsupported")
+	}
+	payload := map[string]any{"csr_pem": identity.CSRPEM, "device_fingerprint": deviceFingerprint(), "instance_id": localInstanceID, "architecture": architecture,
 		"name": options.Name, "software_version": softwareVersion, "capabilities": capabilities}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -66,21 +94,26 @@ func enroll(ctx context.Context, options enrollOptions) (enrollResult, error) {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Argus-Enrollment-Token", options.Token)
 	request.Header.Set("Idempotency-Key", uuid.NewString())
-	pool := x509.NewCertPool()
-	customCA := false
-	if caFile := os.Getenv("ARGUS_CONNECTOR_CA_FILE"); caFile != "" {
-		caPEM, readErr := os.ReadFile(caFile)
-		if readErr != nil || !pool.AppendCertsFromPEM(caPEM) {
-			return enrollResult{}, errors.New("ARGUS_CONNECTOR_CA_FILE does not contain a valid CA bundle")
-		}
-		customCA = true
+	caFile := options.CAFile
+	if caFile == "" {
+		caFile = os.Getenv("ARGUS_CONNECTOR_CA_FILE")
 	}
-	client := &http.Client{Timeout: 45 * time.Second}
+	if caFile == "" {
+		return enrollResult{}, errors.New("Connector CA file is required")
+	}
+	tlsMaterial, err := tlsmaterial.Load(tlsmaterial.Options{CABundlePath: caFile})
+	if err != nil {
+		return enrollResult{}, fmt.Errorf("load Connector enrollment Trust Bundle: %w", err)
+	}
+	base := (*http.Transport)(nil)
 	if dialAddress := os.Getenv("ARGUS_CONNECTOR_ENROLL_ADDRESS"); dialAddress != "" {
-		client.Transport = pinnedAddressTransport(endpoint, dialAddress, pool)
-	} else if customCA {
-		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}
+		base = pinnedAddressTransport(dialAddress)
 	}
+	transport, err := tlsmaterial.NewHTTPTransport(tlsMaterial, base)
+	if err != nil {
+		return enrollResult{}, err
+	}
+	client := &http.Client{Timeout: 45 * time.Second, Transport: transport}
 	response, err := client.Do(request)
 	if err != nil {
 		return enrollResult{}, err
@@ -95,22 +128,50 @@ func enroll(ctx context.Context, options enrollOptions) (enrollResult, error) {
 	}
 	var result enrollResult
 	if err := json.Unmarshal(body, &result); err != nil || result.ConnectorID != id.String() || result.Role != options.Role ||
-		result.CertificatePEM == "" || result.CABundlePEM == "" || result.GatewayEndpoint == "" {
+		result.CertificatePEM == "" || result.TrustBundle.BundlePEM == "" || result.GatewayEndpoint == "" {
 		return enrollResult{}, errors.New("Connector enrollment returned incomplete identity material")
+	}
+	bundle, err := validateEnrollmentTrustBundle(result.TrustBundle)
+	if err != nil {
+		return enrollResult{}, err
 	}
 	keyPEM, err := connectorcore.MarshalPrivateKey(identity.PrivateKey)
 	if err != nil {
 		return enrollResult{}, err
 	}
-	if err := validateIssuedIdentity(id, keyPEM, []byte(result.CertificatePEM), []byte(result.CABundlePEM)); err != nil {
+	if err := validateIssuedIdentity(id, keyPEM, []byte(result.CertificatePEM), bundle.Material.PEM); err != nil {
 		return enrollResult{}, err
 	}
-	state := identityState{ConnectorID: id.String(), Role: result.Role, InstanceID: instanceID(), Name: options.Name,
-		GatewayEndpoint: result.GatewayEndpoint, CertificateExpiresAt: result.CertificateExpiresAt, Capabilities: capabilities}
-	if err := (localStore{directory: options.DataDirectory}).saveIdentity(state, keyPEM, []byte(result.CertificatePEM), []byte(result.CABundlePEM)); err != nil {
+	state := identityState{ConnectorID: id.String(), Role: result.Role, InstanceID: localInstanceID, Name: options.Name,
+		GatewayEndpoint: result.GatewayEndpoint, CertificateExpiresAt: result.CertificateExpiresAt, Capabilities: capabilities,
+		TrustBundleEpoch: bundle.Epoch, TrustBundleSHA256: bundle.Material.SHA256, TrustCAFingerprints: bundle.Material.Fingerprints}
+	if err := (localStore{directory: options.DataDirectory}).saveIdentity(state, keyPEM, []byte(result.CertificatePEM), bundle.Material.PEM); err != nil {
 		return enrollResult{}, err
 	}
 	return result, nil
+}
+
+func validateEnrollmentTrustBundle(value enrollTrustBundle) (trustbundle.Bundle, error) {
+	if value.Epoch < 1 || value.StartedAt.IsZero() || value.State == trustbundle.StateFailed ||
+		(value.State != trustbundle.StateStable && value.State != trustbundle.StatePreparing && value.State != trustbundle.StateOverlapping && value.State != trustbundle.StateRetiring) {
+		return trustbundle.Bundle{}, errors.New("Connector enrollment Trust Bundle metadata is invalid")
+	}
+	if (value.State == trustbundle.StateOverlapping || value.State == trustbundle.StateRetiring) && value.RetireAt.IsZero() {
+		return trustbundle.Bundle{}, errors.New("Connector enrollment Trust Bundle retirement deadline is invalid")
+	}
+	material, err := trustbundle.Parse([]byte(value.BundlePEM), time.Now().UTC())
+	if err != nil {
+		return trustbundle.Bundle{}, err
+	}
+	bundle := trustbundle.Bundle{Epoch: value.Epoch, State: value.State, Material: material,
+		CurrentCAFingerprints: value.CurrentCAFingerprints, NextCAFingerprints: value.NextCAFingerprints,
+		StartedAt: value.StartedAt, RetireAt: value.RetireAt}
+	all := append(append([]string{}, value.CurrentCAFingerprints...), value.NextCAFingerprints...)
+	if len(value.CurrentCAFingerprints) == 0 || !bundle.Matches(trustbundle.Acknowledgement{Epoch: value.Epoch,
+		SHA256: value.BundleSHA256, Fingerprints: all}) {
+		return trustbundle.Bundle{}, errors.New("Connector enrollment Trust Bundle digest or fingerprints are invalid")
+	}
+	return bundle, nil
 }
 
 func enrollmentEndpoint(value string) (string, error) {
@@ -141,6 +202,15 @@ func instanceID() string {
 		value = hostname()
 	}
 	return value
+}
+
+func connectorArchitecture() string {
+	switch runtime.GOARCH {
+	case "amd64", "arm64":
+		return runtime.GOARCH
+	default:
+		return ""
+	}
 }
 
 func deviceFingerprint() string {
@@ -189,18 +259,45 @@ func validateIssuedIdentity(connectorID uuid.UUID, keyPEM, certificatePEM, caPEM
 	return err
 }
 
-// pinnedAddressTransport dials a fixed address while keeping the URL hostname
-// as TLS ServerName; used by E2E to reach the ingress without DNS changes.
-func pinnedAddressTransport(rawURL, dialAddress string, pool *x509.CertPool) *http.Transport {
-	hostname := rawURL
-	if parsed, err := url.Parse(rawURL); err == nil {
-		hostname = parsed.Hostname()
-	}
+// pinnedAddressTransport only overrides the TCP target. The request URL stays
+// on the original Argus hostname, so tlsmaterial preserves Host/SNI checks.
+func pinnedAddressTransport(dialAddress string) *http.Transport {
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	return &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return dialer.DialContext(ctx, network, dialAddress)
 		},
-		TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: hostname},
 	}
+}
+
+func probeGateway(ctx context.Context, store localStore) error {
+	identity, err := store.loadIdentity()
+	if err != nil {
+		return err
+	}
+	endpoint := strings.TrimSpace(identity.GatewayEndpoint)
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme != "grpcs" || parsed.Hostname() == "" {
+		return errors.New("Connector probe gateway endpoint is invalid")
+	}
+	address := parsed.Host
+	if parsed.Port() == "" {
+		address = net.JoinHostPort(parsed.Hostname(), "443")
+	}
+	material, err := tlsmaterial.Load(tlsmaterial.Options{CertificatePath: filepath.Join(store.directory, certFile),
+		PrivateKeyPath: filepath.Join(store.directory, keyFile), CABundlePath: filepath.Join(store.directory, caFile),
+		Usage: x509.ExtKeyUsageClientAuth})
+	if err != nil {
+		return err
+	}
+	configuration, err := material.ClientConfig(parsed.Hostname())
+	if err != nil {
+		return err
+	}
+	dialer := tls.Dialer{NetDialer: &net.Dialer{Timeout: 10 * time.Second}, Config: configuration}
+	connection, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return fmt.Errorf("Connector gateway TLS probe failed: %w", err)
+	}
+	return connection.Close()
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
@@ -110,6 +111,9 @@ func (service Service) kubernetesConnectionPlan(ctx context.Context, q *db.Queri
 }
 
 func (service Service) PreviewCreateKubernetesCluster(ctx context.Context, subject Subject, enterpriseID uuid.UUID, input KubernetesInput, idempotencyKey string) (db.PendingAction, error) {
+	if err := validateConnectorImagePullSecrets(input.ConnectionMode, input.ConnectorImagePullSecrets); err != nil {
+		return db.PendingAction{}, err
+	}
 	result := ConnectionTestResult{}
 	if input.ConnectionMode != "in_cluster" {
 		_, checked, err := service.requireKubernetesConnectionTest(ctx, service.Store.Queries, enterpriseID, input)
@@ -164,7 +168,7 @@ func (service Service) PreviewUpdateKubernetesCluster(ctx context.Context, subje
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "kubernetes.update", Title: "Update Kubernetes cluster",
 		Summary: "Apply validated Kubernetes cluster changes", Risk: "write", ResourceType: "kubernetes_cluster", ResourceID: uuid.NullUUID{UUID: clusterID, Valid: true},
 		ExpectedResourceVersion: pgtype.Int8{Int64: input.ExpectedVersion, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
-		Preview: map[string]any{"cluster_id": clusterID},
+		Preview: map[string]any{"cluster_id": clusterID, "name": current.Name},
 		Diff:    []map[string]string{{"kind": "change", "text": "Update Kubernetes cluster " + current.Name}}, ImmutablePlan: plan,
 		ResourceScopeSnapshot: snapshot, CommitHandler: "argus.kubernetes.update.commit"}, idempotencyKey)
 }
@@ -215,7 +219,7 @@ func (service Service) PreviewDeleteKubernetesCluster(ctx context.Context, subje
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "kubernetes.delete", Title: "Delete Kubernetes cluster",
 		Summary: "Logically delete Kubernetes cluster " + current.Name, Risk: "dangerous", ResourceType: "kubernetes_cluster", ResourceID: uuid.NullUUID{UUID: clusterID, Valid: true},
 		ExpectedResourceVersion: pgtype.Int8{Int64: expectedVersion, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
-		Preview: map[string]any{"cluster_id": clusterID},
+		Preview: map[string]any{"cluster_id": clusterID, "name": current.Name},
 		Diff:    []map[string]string{{"kind": "remove", "text": "Delete Kubernetes cluster " + current.Name}}, ImmutablePlan: plan,
 		ResourceScopeSnapshot: snapshot, CommitHandler: "argus.kubernetes.delete.commit"}, idempotencyKey)
 }
@@ -279,13 +283,31 @@ func (service Service) commitKubernetes(ctx context.Context, q *db.Queries, acto
 		if service.ClusterEnrollment == nil {
 			return ActionCommitResult{}, ErrActionInvalidated
 		}
-		enrollment, err := service.ClusterEnrollment.CreateKubernetesEnrollment(ctx, q, actorID, enterpriseID, cluster.ID)
+		enrollment, err := service.ClusterEnrollment.CreateKubernetesEnrollment(ctx, q, actorID, enterpriseID, cluster.ID, plan.Input.ConnectorImagePullSecrets)
 		if err != nil {
 			return ActionCommitResult{}, err
 		}
-		result.Enrollment = &enrollment
+		result.OneTimeCommand = &OneTimeCommandResult{InstructionSets: enrollment.InstructionSets, ExpiresAt: enrollment.ExpiresAt}
+		result.OneTimeResultKind = "connector_install_command"
 	}
 	return result, nil
+}
+
+func validateConnectorImagePullSecrets(connectionMode string, values []string) error {
+	if connectionMode != "in_cluster" && len(values) != 0 || len(values) > 16 {
+		return ErrInvalidConnectionMode
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if len(validation.IsDNS1123Subdomain(value)) != 0 {
+			return ErrInvalidConnectionMode
+		}
+		if _, exists := seen[value]; exists {
+			return ErrInvalidConnectionMode
+		}
+		seen[value] = struct{}{}
+	}
+	return nil
 }
 
 func (service Service) KubernetesNamespaceAllowed(ctx context.Context, subject Subject, enterpriseID, clusterID uuid.UUID, namespace string) error {

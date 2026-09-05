@@ -257,13 +257,45 @@ export function createMockApiClient(options: MockOptions = {}): MockApiClient {
     },
     executions: {
       async list() {
-        return { items: [] as Execution[], nextCursor: null, hasMore: false };
+        await pause();
+        return { items: [...db.executions], nextCursor: null, hasMore: false };
       },
-      async get(): Promise<Execution> {
-        throw new Error("mock execution lookup is unavailable");
+      async get(executionId): Promise<Execution> {
+        await pause();
+        return mustFind(db.executions, (entry) => entry.execution_id === executionId, "execution");
       },
-      async claimOneTimeResult() {
-        throw new Error("mock one-time result lookup is unavailable");
+      async claimOneTimeResult(executionId) {
+        await pause();
+        const execution = mustFind(db.executions, (entry) => entry.execution_id === executionId, "execution");
+        const result = db.oneTimeResults[executionId];
+        if (execution.one_time_result_state !== "available" || !result) {
+          throw new Error("ONE_TIME_RESULT_ALREADY_CONSUMED");
+        }
+        if (Date.parse(result.expires_at) <= Date.now()) {
+          db.executions = db.executions.map((entry) =>
+            entry.execution_id === executionId
+              ? { ...entry, one_time_result_state: "expired", updated_at: nowIso() }
+              : entry,
+          );
+          delete db.oneTimeResults[executionId];
+          save();
+          throw new Error("ONE_TIME_RESULT_EXPIRED");
+        }
+        db.executions = db.executions.map((entry) =>
+          entry.execution_id === executionId
+            ? { ...entry, one_time_result_state: "consumed", updated_at: nowIso() }
+            : entry,
+        );
+        if (execution.resource_ref?.resource_type === "host") {
+          const host = db.hosts.find((entry) => entry.id === execution.resource_ref?.resource_id);
+          if (host) host.onboardingState = "command_consumed";
+        } else if (execution.resource_ref?.resource_type === "bastion_scope") {
+          const scope = db.bastionScopes.find((entry) => entry.id === execution.resource_ref?.resource_id);
+          if (scope) scope.onboardingState = "command_consumed";
+        }
+        delete db.oneTimeResults[executionId];
+        save();
+        return result;
       },
     },
     hosts: createHostsDomain(ctx),

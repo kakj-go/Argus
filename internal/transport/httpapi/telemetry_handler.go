@@ -18,6 +18,7 @@ import (
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 	"github.com/kakj-go/Argus/internal/telemetry/queryengine"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 type TelemetryHandler struct {
@@ -30,19 +31,32 @@ type TelemetryHandler struct {
 
 func (handler TelemetryHandler) EnrollTelemetryCollector(ctx context.Context, request telemetryapi.EnrollTelemetryCollectorRequestObject) (telemetryapi.EnrollTelemetryCollectorResponseObject, error) {
 	metadata, ok := RequestFromContext(ctx)
-	if !ok || request.Body == nil || request.Body.CsrPem == nil || metadata.Request.Header.Get("Authorization") != "" || metadata.Request.Header.Get("Cookie") != "" {
+	if !ok || request.Body == nil || request.Body.ClientCsrPem == nil || request.Body.ServerCsrPem == nil || metadata.Request.Header.Get("Authorization") != "" || metadata.Request.Header.Get("Cookie") != "" {
 		return telemetryapi.EnrollTelemetryCollectordefaultJSONResponse{Body: telemetryError(ctx, telemetryservice.ErrEnrollmentInvalid), StatusCode: http.StatusUnauthorized}, nil
 	}
-	result, err := handler.CollectorIdentity.Enroll(ctx, request.Params.XArgusTelemetryEnrollmentToken, uuid.UUID(request.Body.CollectorId).String(), *request.Body.CsrPem)
+	result, err := handler.CollectorIdentity.Enroll(ctx, request.Params.XArgusTelemetryEnrollmentToken, uuid.UUID(request.Body.CollectorId).String(),
+		*request.Body.ClientCsrPem, *request.Body.ServerCsrPem)
 	if err != nil {
 		return telemetryapi.EnrollTelemetryCollectordefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
 	}
-	certificate := result.CertificatePEM
+	clientCertificate := result.ClientCertificatePEM
+	serverCertificate := result.ServerCertificatePEM
 	grpcEndpoint, httpEndpoint := handler.IngestGRPCEndpoint, handler.IngestHTTPEndpoint
 	return telemetryapi.EnrollTelemetryCollector201JSONResponse{
-		CollectorId: openapi_types.UUID(result.CollectorID), CertificatePem: &certificate, CaBundlePem: result.CABundlePEM,
+		CollectorId: openapi_types.UUID(result.CollectorID), ClientCertificatePem: &clientCertificate,
+		ServerCertificatePem: &serverCertificate, TrustBundle: toTelemetryTrustBundle(result.TrustBundle),
 		IngestGrpcEndpoint: &grpcEndpoint, IngestHttpEndpoint: &httpEndpoint, CertificateExpiresAt: result.ExpiresAt,
 	}, nil
+}
+
+func toTelemetryTrustBundle(value trustbundle.Bundle) telemetryapi.TrustBundleSnapshot {
+	result := telemetryapi.TrustBundleSnapshot{Epoch: value.Epoch, State: telemetryapi.TrustBundleSnapshotState(value.State),
+		BundlePem: string(value.Material.PEM), BundleSha256: value.Material.SHA256,
+		CurrentCaFingerprints: value.CurrentCAFingerprints, NextCaFingerprints: value.NextCAFingerprints, StartedAt: value.StartedAt}
+	if !value.RetireAt.IsZero() {
+		result.RetireAt = &value.RetireAt
+	}
+	return result
 }
 
 func (handler TelemetryHandler) ListCollectorDistributions(ctx context.Context, _ telemetryapi.ListCollectorDistributionsRequestObject) (telemetryapi.ListCollectorDistributionsResponseObject, error) {
@@ -250,7 +264,7 @@ func (handler TelemetryHandler) CreateTelemetryRouteTest(ctx context.Context, re
 	if request.Body.GatewayCollectorId != nil {
 		gateway = uuid.NullUUID{UUID: uuid.UUID(*request.Body.GatewayCollectorId), Valid: true}
 	}
-	item, err := handler.Service.CreateRouteTest(ctx, actor, uuid.UUID(request.Body.CollectorId), string(request.Body.RouteKind), gateway)
+	item, err := handler.Service.CreateRouteTest(ctx, actor, uuid.UUID(request.Body.CollectorId), string(request.Body.RouteKind), string(request.Body.Transport), gateway)
 	if err != nil {
 		return telemetryapi.CreateTelemetryRouteTestdefaultJSONResponse{Body: telemetryError(ctx, err), StatusCode: telemetryStatus(err)}, nil
 	}
@@ -485,6 +499,14 @@ func (handler TelemetryHandler) previewCollector(ctx context.Context, actor tele
 	if body == nil {
 		return db.PendingAction{}, telemetryservice.ErrQueryInvalid
 	}
+	input, err := collectorPreviewInputFromAPI(*body)
+	if err != nil {
+		return db.PendingAction{}, err
+	}
+	return handler.Service.PreviewCollectorAction(ctx, actor, resourceType, resourceID, action, input, key)
+}
+
+func collectorPreviewInputFromAPI(body telemetryapi.CollectorPreview) (telemetryservice.CollectorPreviewInput, error) {
 	gateway := uuid.NullUUID{}
 	if body.GatewayCollectorId != nil {
 		gateway = uuid.NullUUID{UUID: uuid.UUID(*body.GatewayCollectorId), Valid: true}
@@ -497,9 +519,22 @@ func (handler TelemetryHandler) previewCollector(ctx context.Context, actor tele
 	if body.KubernetesImage != nil {
 		kubernetesImage = *body.KubernetesImage
 	}
-	return handler.Service.PreviewCollectorAction(ctx, actor, resourceType, resourceID, action, telemetryservice.CollectorPreviewInput{
-		DistributionVersionID: uuid.UUID(body.DistributionVersionId), ProfileIDs: fromOpenAPIUUIDs(body.ProfileIds), RouteKind: string(body.RouteKind), GatewayCollectorID: gateway, ExpectedVersion: expected,
-		KubernetesImage: kubernetesImage}, key)
+	imagePullSecrets := []string(nil)
+	if body.ImagePullSecrets != nil {
+		imagePullSecrets = slices.Clone(*body.ImagePullSecrets)
+	}
+	loopbackPort := int32(0)
+	if body.LoopbackPort != nil {
+		if *body.LoopbackPort < 1 || *body.LoopbackPort >= 65535 {
+			return telemetryservice.CollectorPreviewInput{}, telemetryservice.ErrQueryInvalid
+		}
+		loopbackPort = int32(*body.LoopbackPort)
+	}
+	return telemetryservice.CollectorPreviewInput{
+		DistributionVersionID: uuid.UUID(body.DistributionVersionId), ProfileIDs: fromOpenAPIUUIDs(body.ProfileIds),
+		RouteKind: string(body.RouteKind), Transport: string(body.Transport), LoopbackPort: loopbackPort,
+		GatewayCollectorID: gateway, ExpectedVersion: expected, KubernetesImage: kubernetesImage, ImagePullSecrets: imagePullSecrets,
+	}, nil
 }
 
 func telemetryStatus(err error) int {
@@ -560,6 +595,12 @@ func telemetryError(ctx context.Context, err error) telemetryapi.ApiError {
 		code = "COLLECTOR_DISTRIBUTION_VALIDATION_PENDING"
 	case errors.Is(err, telemetryservice.ErrQueryInvalid):
 		code = "TELEMETRY_QUERY_INVALID"
+	case errors.Is(err, telemetryservice.ErrRouteTransportInvalid):
+		code = "COLLECTOR_ROUTE_TRANSPORT_INVALID"
+	case errors.Is(err, telemetryservice.ErrTunnelQuotaExceeded):
+		code = "TUNNEL_QUOTA_EXCEEDED"
+	case errors.Is(err, telemetryservice.ErrSelfEnrolledOperationUnsupported):
+		code = "HOST_OPERATION_UNSUPPORTED_FOR_SELF_ENROLLED"
 	case errors.Is(err, telemetryservice.ErrQueryParse):
 		code = "QUERY_PARSE_ERROR"
 	case errors.Is(err, telemetryservice.ErrQueryType):

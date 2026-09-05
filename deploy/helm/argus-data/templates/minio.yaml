@@ -87,6 +87,7 @@ metadata:
     app.kubernetes.io/part-of: argus
 spec:
   backoffLimit: 6
+  ttlSecondsAfterFinished: 300
   template:
     metadata:
       labels:
@@ -109,6 +110,8 @@ spec:
               # 完整性由 ed25519 签名 + sha256 校验保证,不依赖传输认证)。
               mc mb --ignore-existing argus/argus-collector-artifacts
               mc anonymous set download argus/argus-collector-artifacts
+              mc mb --ignore-existing argus/argus-connector-artifacts
+              mc anonymous set download argus/argus-connector-artifacts
           env:
             - name: MINIO_ROOT_USER
               valueFrom:

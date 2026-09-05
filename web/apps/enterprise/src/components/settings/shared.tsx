@@ -2,11 +2,17 @@ import { useTranslation } from "react-i18next";
 import { CheckItem } from "@argus/ui";
 
 /** 设置页共用的本地时间格式。 */
-export function formatDateTime(iso?: string): string {
+export function formatDateTime(iso?: string, locale?: string): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString();
+  const resolvedLocale =
+    locale ??
+    (typeof document !== "undefined" &&
+    document.documentElement.lang === "en-US"
+      ? "en-US"
+      : "zh-CN");
+  return date.toLocaleString(resolvedLocale);
 }
 
 /** docs/02 §4 的企业域权限点目录，按资源分组用于角色编辑矩阵。 */

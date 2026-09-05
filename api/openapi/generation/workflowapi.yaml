@@ -22,3 +22,4 @@ components:
     PendingActionCommandResult: {$ref: ../components/m4.yaml#/components/schemas/PendingActionCommandResult}
     ExecutionPage: {$ref: ../components/m4.yaml#/components/schemas/ExecutionPage}
     ActionOneTimeResult: {$ref: ../components/m4.yaml#/components/schemas/ActionOneTimeResult}
+    InstallInstructionSet: {$ref: ../components/common.yaml#/components/schemas/InstallInstructionSet}

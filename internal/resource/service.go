@@ -25,8 +25,12 @@ var (
 	ErrConnectionTestNeeded  = errors.New("successful connection test required")
 	ErrInvalidConnectionMode = errors.New("invalid connection mode")
 	ErrWinRMTLSRequired      = errors.New("WINRM_TLS_REQUIRED")
-	ErrVersionConflict       = errors.New("resource version conflict")
-	ErrKubernetesUnavailable = errors.New("kubernetes reader unavailable")
+	// ErrSelfEnrollUnsupported: self_enrolled 第一版仅支持 linux amd64/arm64。
+	ErrSelfEnrollUnsupported = errors.New("HOST_SELF_ENROLL_UNSUPPORTED_PLATFORM")
+	// ErrSelfEnrollConflictingInput: self_enrolled 主机不接受地址/凭据/堡垒机等入站连接字段。
+	ErrSelfEnrollConflictingInput = errors.New("invalid connection mode")
+	ErrVersionConflict            = errors.New("resource version conflict")
+	ErrKubernetesUnavailable      = errors.New("kubernetes reader unavailable")
 )
 
 type CommandEnqueuer interface {
@@ -48,8 +52,18 @@ type ActionExtension interface {
 	CommitAction(context.Context, *db.Queries, db.PendingAction, json.RawMessage) (ActionCommitResult, error)
 }
 
+// SelfEnrolledHostOnboardingExtension lets the telemetry domain freeze and
+// commit the default Collector install together with host.create. Keeping this
+// as an optional capability avoids putting Collector catalog rules in the
+// resource domain while preserving a single transactional create action.
+type SelfEnrolledHostOnboardingExtension interface {
+	PrepareSelfEnrolledHostOnboarding(context.Context, *db.Queries, uuid.UUID, uuid.UUID, string) (json.RawMessage, error)
+	RevalidateSelfEnrolledHostOnboarding(context.Context, *db.Queries, uuid.UUID, json.RawMessage) error
+	CommitSelfEnrolledHostOnboarding(context.Context, *db.Queries, db.PendingAction, db.Host, json.RawMessage) (ActionCommitResult, error)
+}
+
 type KubernetesEnrollmentCreator interface {
-	CreateKubernetesEnrollment(context.Context, *db.Queries, string, uuid.UUID, uuid.UUID) (EnrollmentResult, error)
+	CreateKubernetesEnrollment(context.Context, *db.Queries, string, uuid.UUID, uuid.UUID, []string) (EnrollmentResult, error)
 }
 
 type KubernetesQuery struct {
@@ -106,6 +120,7 @@ func (service Service) prepareAction(ctx context.Context, subject Subject, enter
 
 type HostInput struct {
 	Name, Hostname, Address, Platform, ConnectionMode, Environment, Username string
+	Architecture                                                             string
 	Port                                                                     int32
 	BastionScopeID, CredentialID, ConnectionTestID                           uuid.NullUUID
 	Labels                                                                   map[string]string
@@ -117,6 +132,7 @@ type KubernetesInput struct {
 	BastionScopeID, CredentialID, ConnectionTestID                 uuid.NullUUID
 	Labels                                                         map[string]string
 	ExpectedVersion                                                int64
+	ConnectorImagePullSecrets                                      []string
 }
 
 type connectionPlan struct {
@@ -140,16 +156,17 @@ type ConnectionTestResult struct {
 	HostKeyFingerprint string              `json:"host_key_fingerprint,omitempty"`
 	RemoteVersion      string              `json:"remote_version,omitempty"`
 	// Architecture 为 uname -m 归一化后的目标架构(amd64/arm64),
-	// Collector 安装计划据此选择分发产物;探测失败为空。
+	// Collector 安装计划据此选择分发产物;Linux 探测失败时连接测试失败。
 	Architecture string `json:"architecture,omitempty"`
 }
 
 type hostActionPlan struct {
-	Operation string    `json:"operation"`
-	HostID    uuid.UUID `json:"host_id"`
-	Input     HostInput `json:"input"`
-	PinnedKey string    `json:"pinned_host_key,omitempty"`
-	Arch      string    `json:"architecture,omitempty"`
+	Operation      string          `json:"operation"`
+	HostID         uuid.UUID       `json:"host_id"`
+	Input          HostInput       `json:"input"`
+	PinnedKey      string          `json:"pinned_host_key,omitempty"`
+	Arch           string          `json:"architecture,omitempty"`
+	OnboardingPlan json.RawMessage `json:"onboarding_plan,omitempty"`
 }
 
 type kubernetesActionPlan struct {
@@ -295,21 +312,62 @@ func (service Service) CompleteConnectionTest(ctx context.Context, enterpriseID,
 }
 
 func (service Service) PreviewCreateHost(ctx context.Context, subject Subject, enterpriseID uuid.UUID, input HostInput, idempotencyKey string) (db.PendingAction, error) {
-	test, result, err := service.requireHostConnectionTest(ctx, service.Store.Queries, enterpriseID, input)
-	if err != nil {
-		return db.PendingAction{}, err
+	arch, pinnedKey := "", ""
+	if input.ConnectionMode == "self_enrolled" {
+		if err := validateSelfEnrolledInput(input); err != nil {
+			return db.PendingAction{}, err
+		}
+		arch = input.Architecture
+	} else {
+		test, result, err := service.requireHostConnectionTest(ctx, service.Store.Queries, enterpriseID, input)
+		if err != nil {
+			return db.PendingAction{}, err
+		}
+		_ = test
+		arch = result.Architecture
+		pinnedKey = result.HostKeyFingerprint
 	}
-	_, _, err = NormalizeUserLabels(input.Labels)
-	if err != nil {
+	if _, _, err := NormalizeUserLabels(input.Labels); err != nil {
 		return db.PendingAction{}, err
 	}
 	hostID := newResourceID()
 	snapshot := NewResourceAuthorizationSnapshot("host", hostID)
-	plan := hostActionPlan{Operation: "create", HostID: hostID, Input: input, PinnedKey: result.HostKeyFingerprint, Arch: result.Architecture}
+	plan := hostActionPlan{Operation: "create", HostID: hostID, Input: input, PinnedKey: pinnedKey, Arch: arch}
+	connectionStatus := "online"
+	if input.ConnectionMode == "self_enrolled" {
+		onboarding, ok := service.Extension.(SelfEnrolledHostOnboardingExtension)
+		if !ok {
+			return db.PendingAction{}, ErrActionUnavailable
+		}
+		frozen, err := onboarding.PrepareSelfEnrolledHostOnboarding(
+			ctx, service.Store.Queries, enterpriseID, hostID, "linux_"+arch,
+		)
+		if err != nil {
+			return db.PendingAction{}, err
+		}
+		plan.OnboardingPlan = frozen
+		connectionStatus = "onboarding"
+	}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.create", Title: "Create host", Summary: "Create a validated host resource",
 		Risk: "write", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, AuthorizationVersion: subject.AuthorizationVersion,
-		Preview: map[string]any{"host_id": hostID, "name": input.Name, "connection_test_id": test.ID},
+		Preview: map[string]any{"host_id": hostID, "name": input.Name, "connection_mode": input.ConnectionMode, "connection_status": connectionStatus},
 		Diff:    []map[string]string{{"kind": "add", "text": "Create host " + input.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: snapshot, CommitHandler: "argus.host.create.commit"}, idempotencyKey)
+}
+
+// validateSelfEnrolledInput 校验「只出不进」主机的输入:linux 限定架构,
+// 且不接受任何入站连接字段(地址/端口/凭据/账号/堡垒机)与连接测试引用。
+func validateSelfEnrolledInput(input HostInput) error {
+	if input.Platform != "linux" {
+		return ErrSelfEnrollUnsupported
+	}
+	if input.Architecture != "amd64" && input.Architecture != "arm64" {
+		return ErrSelfEnrollUnsupported
+	}
+	if input.Address != "" || input.Port != 0 || input.Hostname != "" || input.Username != "" ||
+		input.BastionScopeID.Valid || input.CredentialID.Valid || input.ConnectionTestID.Valid {
+		return ErrSelfEnrollConflictingInput
+	}
+	return nil
 }
 
 func (service Service) PreviewUpdateHost(ctx context.Context, subject Subject, enterpriseID, hostID uuid.UUID, input HostInput, idempotencyKey string) (db.PendingAction, error) {
@@ -339,7 +397,7 @@ func (service Service) PreviewUpdateHost(ctx context.Context, subject Subject, e
 	plan := hostActionPlan{Operation: "update", HostID: hostID, Input: input, PinnedKey: result.HostKeyFingerprint, Arch: result.Architecture}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.update", Title: "Update host", Summary: "Apply validated host changes",
 		Risk: "write", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, ExpectedResourceVersion: pgtype.Int8{Int64: input.ExpectedVersion, Valid: true},
-		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID},
+		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID, "name": current.Name},
 		Diff: []map[string]string{{"kind": "change", "text": "Update host " + current.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: snapshot, CommitHandler: "argus.host.update.commit"}, idempotencyKey)
 }
 
@@ -352,7 +410,7 @@ func (service Service) PreviewDeleteHost(ctx context.Context, subject Subject, e
 	plan := hostActionPlan{Operation: "delete", HostID: hostID, Input: HostInput{ExpectedVersion: expectedVersion}}
 	return service.prepareAction(ctx, subject, enterpriseID, PrepareActionInput{ActionType: "host.delete", Title: "Delete host", Summary: "Logically delete host " + current.Name,
 		Risk: "dangerous", ResourceType: "host", ResourceID: uuid.NullUUID{UUID: hostID, Valid: true}, ExpectedResourceVersion: pgtype.Int8{Int64: expectedVersion, Valid: true},
-		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID},
+		AuthorizationVersion: subject.AuthorizationVersion, Preview: map[string]any{"host_id": hostID, "name": current.Name},
 		Diff: []map[string]string{{"kind": "remove", "text": "Delete host " + current.Name}}, ImmutablePlan: plan, ResourceScopeSnapshot: snapshot, CommitHandler: "argus.host.delete.commit"}, idempotencyKey)
 }
 
@@ -379,7 +437,7 @@ func (service Service) ExecutePendingAction(ctx context.Context, q *db.Queries, 
 }
 
 func (service Service) revalidateAction(ctx context.Context, q *db.Queries, action db.PendingAction, raw json.RawMessage) ([]byte, error) {
-	if strings.HasPrefix(action.ActionType, "telemetry.") && service.Extension != nil {
+	if (strings.HasPrefix(action.ActionType, "telemetry.") || action.ActionType == "host.enrollment.rotate" || action.ActionType == "host.uninstall.command") && service.Extension != nil {
 		return service.Extension.RevalidateAction(ctx, q, action, raw)
 	}
 	switch action.ResourceType {
@@ -387,6 +445,20 @@ func (service Service) revalidateAction(ctx context.Context, q *db.Queries, acti
 		var plan hostActionPlan
 		if err := json.Unmarshal(raw, &plan); err != nil {
 			return nil, err
+		}
+		if plan.Operation == "create" && plan.Input.ConnectionMode == "self_enrolled" {
+			onboarding, ok := service.Extension.(SelfEnrolledHostOnboardingExtension)
+			if !ok || len(plan.OnboardingPlan) == 0 || onboarding.RevalidateSelfEnrolledHostOnboarding(
+				ctx, q, action.EnterpriseID, plan.OnboardingPlan,
+			) != nil {
+				return nil, ErrActionInvalidated
+			}
+		}
+		if plan.Operation == "create" && plan.Input.ConnectionMode != "self_enrolled" {
+			_, result, err := service.requireHostConnectionTest(ctx, q, action.EnterpriseID, plan.Input)
+			if err != nil || !hostConnectionEvidenceMatches(plan, result) {
+				return nil, ErrActionInvalidated
+			}
 		}
 		var current db.Host
 		if plan.Operation != "create" {
@@ -429,8 +501,12 @@ func (service Service) revalidateAction(ctx context.Context, q *db.Queries, acti
 	}
 }
 
+func hostConnectionEvidenceMatches(plan hostActionPlan, result ConnectionTestResult) bool {
+	return plan.PinnedKey == result.HostKeyFingerprint && plan.Arch == result.Architecture
+}
+
 func (service Service) commitAction(ctx context.Context, q *db.Queries, action db.PendingAction, raw json.RawMessage) (ActionCommitResult, error) {
-	if strings.HasPrefix(action.ActionType, "telemetry.") && service.Extension != nil {
+	if (strings.HasPrefix(action.ActionType, "telemetry.") || action.ActionType == "host.enrollment.rotate" || action.ActionType == "host.uninstall.command") && service.Extension != nil {
 		return service.Extension.CommitAction(ctx, q, action, raw)
 	}
 	if action.ResourceType == "host" {
@@ -438,7 +514,7 @@ func (service Service) commitAction(ctx context.Context, q *db.Queries, action d
 		if err := json.Unmarshal(raw, &plan); err != nil {
 			return ActionCommitResult{}, err
 		}
-		return service.commitHost(ctx, q, action.CreatorSubjectID.String(), action.CreatorSubjectType, action.EnterpriseID, plan)
+		return service.commitHost(ctx, q, action, plan)
 	}
 	if action.ResourceType == "kubernetes_cluster" {
 		var plan kubernetesActionPlan
@@ -453,7 +529,8 @@ func (service Service) commitAction(ctx context.Context, q *db.Queries, action d
 	return ActionCommitResult{}, ErrActionInvalidated
 }
 
-func (service Service) commitHost(ctx context.Context, q *db.Queries, actorID, actorType string, enterpriseID uuid.UUID, plan hostActionPlan) (ActionCommitResult, error) {
+func (service Service) commitHost(ctx context.Context, q *db.Queries, action db.PendingAction, plan hostActionPlan) (ActionCommitResult, error) {
+	actorID, actorType, enterpriseID := action.CreatorSubjectID.String(), action.CreatorSubjectType, action.EnterpriseID
 	var host db.Host
 	var err error
 	switch plan.Operation {
@@ -461,6 +538,32 @@ func (service Service) commitHost(ctx context.Context, q *db.Queries, actorID, a
 		labels, hash, normalizeErr := NormalizeStoredLabels(plan.Input.Labels)
 		if normalizeErr != nil {
 			return ActionCommitResult{}, normalizeErr
+		}
+		if plan.Input.ConnectionMode == "self_enrolled" {
+			// 自助注册主机:无地址/凭据/托管账号,等待 bootstrap 激活后回填自报地址。
+			host, err = q.CreateSelfEnrolledHost(ctx, db.CreateSelfEnrolledHostParams{ID: plan.HostID, EnterpriseID: enterpriseID, Name: plan.Input.Name,
+				Platform: plan.Input.Platform, Architecture: text(plan.Arch), Environment: plan.Input.Environment, Labels: labels, LabelsHash: hash})
+			if err != nil {
+				return ActionCommitResult{}, err
+			}
+			creator, parseErr := uuid.Parse(actorID)
+			if parseErr == nil {
+				if _, err = q.AddDataAuthorizationGrant(ctx, db.AddDataAuthorizationGrantParams{ID: newResourceID(), EnterpriseID: enterpriseID,
+					SubjectType: explicitGrantSubjectType(actorType), SubjectID: creator, ResourceType: "host", ResourceID: host.ID, CreatedBy: uuid.NullUUID{UUID: creator, Valid: true}}); err != nil {
+					return ActionCommitResult{}, err
+				}
+			}
+			onboarding, ok := service.Extension.(SelfEnrolledHostOnboardingExtension)
+			if !ok || len(plan.OnboardingPlan) == 0 {
+				return ActionCommitResult{}, ErrActionUnavailable
+			}
+			result, onboardingErr := onboarding.CommitSelfEnrolledHostOnboarding(ctx, q, action, host, plan.OnboardingPlan)
+			if onboardingErr != nil {
+				return ActionCommitResult{}, onboardingErr
+			}
+			result.ResourceType, result.ResourceID, result.ResourceVersion = "host", host.ID, host.ResourceVersion
+			result.Summary = "Self-enrolled host created; install command issued"
+			return result, nil
 		}
 		host, err = q.CreateHost(ctx, db.CreateHostParams{ID: plan.HostID, EnterpriseID: enterpriseID, Name: plan.Input.Name, Hostname: plan.Input.Hostname,
 			Address: plan.Input.Address, Port: plan.Input.Port, Platform: plan.Input.Platform, Architecture: text(plan.Arch), ConnectionMode: plan.Input.ConnectionMode,
@@ -503,6 +606,11 @@ func (service Service) commitHost(ctx context.Context, q *db.Queries, actorID, a
 		host, err = q.UpdateHost(ctx, params)
 	case "delete":
 		host, err = q.DeleteHost(ctx, db.DeleteHostParams{ID: plan.HostID, EnterpriseID: enterpriseID, ResourceVersion: plan.Input.ExpectedVersion})
+		if err == nil {
+			// 删除主机同时作废其全部未消费的自助安装令牌,防止已删除资源被重新激活。
+			_, _ = q.RevokeActiveHostEnrollmentTokens(ctx, db.RevokeActiveHostEnrollmentTokensParams{
+				EnterpriseID: enterpriseID, PreallocatedHostID: plan.HostID})
+		}
 	default:
 		return ActionCommitResult{}, ErrActionInvalidated
 	}
@@ -555,7 +663,8 @@ func (service Service) requireConnectionTest(ctx context.Context, q *db.Queries,
 
 func (service Service) requireHostConnectionTest(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, input HostInput) (db.ConnectionTest, ConnectionTestResult, error) {
 	test, plan, result, err := service.requireConnectionTest(ctx, q, enterpriseID, input.ConnectionTestID, "host")
-	if err != nil || !hostConnectionPlanMatches(plan, input) {
+	if err != nil || !hostConnectionPlanMatches(plan, input) ||
+		(input.Platform == "linux" && result.Architecture != "amd64" && result.Architecture != "arm64") {
 		return db.ConnectionTest{}, ConnectionTestResult{}, ErrConnectionTestNeeded
 	}
 	return test, result, nil
@@ -563,7 +672,8 @@ func (service Service) requireHostConnectionTest(ctx context.Context, q *db.Quer
 
 func (service Service) requireHostUpdateConnectionTest(ctx context.Context, q *db.Queries, enterpriseID uuid.UUID, current db.Host, input HostInput) (db.ConnectionTest, ConnectionTestResult, error) {
 	test, plan, result, err := service.requireConnectionTest(ctx, q, enterpriseID, input.ConnectionTestID, "host")
-	if err != nil || !hostUpdateConnectionPlanMatches(plan, current, input) {
+	if err != nil || !hostUpdateConnectionPlanMatches(plan, current, input) ||
+		(current.Platform == "linux" && result.Architecture != "amd64" && result.Architecture != "arm64") {
 		return db.ConnectionTest{}, ConnectionTestResult{}, ErrConnectionTestNeeded
 	}
 	return test, result, nil

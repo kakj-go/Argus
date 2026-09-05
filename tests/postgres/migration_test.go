@@ -65,12 +65,76 @@ func TestMigrations(t *testing.T) {
 	assertRemoteAccessGovernanceHasNoPhysicalDelete(t, database)
 	assertExplicitDataAuthorizationTable(t, database)
 	assertRoleBindingSubjectRoleUnique(t, database)
+	assertBastionRootLifecycle(t, database)
 
 	if err := arguspostgres.RunMigrations(ctx, databaseURL, directory, arguspostgres.MigrationDown); err != nil {
 		t.Fatalf("down: %v", err)
 	}
 	if err := arguspostgres.RunMigrations(ctx, databaseURL, directory, arguspostgres.MigrationUp); err != nil {
 		t.Fatalf("up after down: %v", err)
+	}
+}
+
+func assertBastionRootLifecycle(t *testing.T, database *sql.DB) {
+	t.Helper()
+	tx, err := database.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	var enterpriseID string
+	if err = tx.QueryRow(`
+		INSERT INTO enterprises (id, name, code, timezone)
+		VALUES (gen_random_uuid(), 'Bastion lifecycle test', 'bastion-lifecycle-test', 'UTC')
+		RETURNING id::text
+	`).Scan(&enterpriseID); err != nil {
+		t.Fatal(err)
+	}
+	createScope := func() string {
+		t.Helper()
+		var scopeID string
+		if scanErr := tx.QueryRow(`
+			INSERT INTO bastion_scopes (id, enterprise_id, name, environment, labels_hash, onboarding_mode)
+			VALUES (gen_random_uuid(), $1::uuid, 'Reusable bastion', 'production', decode(repeat('00', 32), 'hex'), 'command')
+			RETURNING id::text
+		`, enterpriseID).Scan(&scopeID); scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		return scopeID
+	}
+	createRoot := func(scopeID, name string) string {
+		t.Helper()
+		var hostID string
+		if scanErr := tx.QueryRow(`
+			INSERT INTO hosts (id, enterprise_id, name, address, port, platform, connection_mode, bastion_scope_id, environment, labels_hash)
+			VALUES (gen_random_uuid(), $1::uuid, $2, 'connector://pending', 1, 'linux', 'connector_local', $3::uuid, 'production', decode(repeat('00', 32), 'hex'))
+			RETURNING id::text
+		`, enterpriseID, name, scopeID).Scan(&hostID); scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		return hostID
+	}
+
+	firstScopeID := createScope()
+	firstHostID := createRoot(firstScopeID, "Reusable bastion")
+	if _, err = tx.Exec(`UPDATE bastion_scopes SET connector_host_id=$1::uuid WHERE id=$2::uuid`, firstHostID, firstScopeID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(`UPDATE hosts SET status='deleted', deleted_at=now() WHERE id=$1::uuid`, firstHostID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(`UPDATE bastion_scopes SET status='deleted', deleted_at=now() WHERE id=$1::uuid`, firstScopeID); err != nil {
+		t.Fatal(err)
+	}
+
+	secondScopeID := createScope()
+	createRoot(secondScopeID, "Reusable bastion")
+	if _, err = tx.Exec(`
+		INSERT INTO hosts (id, enterprise_id, name, address, port, platform, connection_mode, bastion_scope_id, environment, labels_hash)
+		VALUES (gen_random_uuid(), $1::uuid, 'Second live root', 'connector://duplicate', 1, 'linux', 'connector_local', $2::uuid, 'production', decode(repeat('00', 32), 'hex'))
+	`, enterpriseID, secondScopeID); err == nil {
+		t.Fatal("a scope accepted a second live connector_local root host")
 	}
 }
 

@@ -144,7 +144,10 @@ export function BackendsTab() {
       {testResult && (
         <Alert
           description={`${testResult.result.checks
-            .map((check) => `${check.name}: ${check.status}`)
+            .map(
+              (check) =>
+                `${check.name}: ${t(`sandbox.backends.test.status.${check.status}`)}`,
+            )
             .join(
               " · ",
             )} — ${t("sandbox.backends.test.latency", { ms: testResult.result.latencyMs })}`}

@@ -64,6 +64,16 @@ func TestConnectorUninstallReconcileStaysResultUnknown(t *testing.T) {
 	}
 }
 
+func TestHostProbeProjectionPreservesTargetArchitecture(t *testing.T) {
+	result := hostProbeConnectionTestResult(&connectorv1.HostConnectionProbeResult{
+		ResolvedIps: []string{"10.20.30.40"}, HostKeyFingerprint: "SHA256:test",
+		RemoteVersion: "SSH-2.0-test", LatencyMillis: 17, Architecture: "arm64",
+	})
+	if result.Architecture != "arm64" || result.LatencyMS != 17 || result.HostKeyFingerprint != "SHA256:test" {
+		t.Fatalf("Connector Host probe projection lost frozen fields: %+v", result)
+	}
+}
+
 func TestCollectorManagementFailureDoesNotRequireSuccessProjection(t *testing.T) {
 	collectorID := uuid.NewString()
 	payload, _ := json.Marshal(map[string]any{"collector_id": collectorID, "operation": "install", "desired_revision": 1, "config_sha256": "hash"})
@@ -96,8 +106,33 @@ func TestCollectorManagementSuccessAcceptsStoredTypedProjection(t *testing.T) {
 	if json.Valid(stored) == false || string(stored) == "{}" {
 		t.Fatalf("stored Collector projection is invalid: %s", stored)
 	}
-	if _, _, err = validateCollectorManagementOutcome(payload, "succeeded", stored); err != nil {
+	request, _, err := validateCollectorManagementOutcome(payload, "succeeded", stored)
+	if err != nil {
 		t.Fatalf("stored Collector success projection was rejected: %v; projection=%s", err, stored)
+	}
+	if request.Transport != "" {
+		t.Fatalf("unexpected default route transport %q", request.Transport)
+	}
+}
+
+func TestCollectorManagementOutcomePreservesTunnelTransport(t *testing.T) {
+	collectorID := uuid.NewString()
+	payload, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(&connectorv1.CollectorManagementCommand{
+		CollectorId: collectorID, Operation: "install", DesiredRevision: 2,
+		ConfigSha256: "abc123", Transport: "executor_tunnel",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(&connectorv1.CollectorManagementResult{
+		CollectorId: collectorID, EffectiveRevision: 2, AppliedConfigSha256: "abc123", Status: "converged",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, _, err := validateCollectorManagementOutcome(payload, "succeeded", result)
+	if err != nil || request.Transport != "executor_tunnel" {
+		t.Fatalf("transport projection = %q, err=%v", request.Transport, err)
 	}
 }
 

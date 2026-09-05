@@ -1,45 +1,8 @@
 {{- $system := .Values.namespaces.system -}}
 {{- $observability := .Values.namespaces.observability -}}
-{{- $issuer := .Values.runtime.telemetryIssuerName -}}
+{{- $issuer := .Values.pki.issuerName -}}
 {{- if .Values.runtime.telemetryToolCatalogEnabled }}
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: {{ .Values.releaseId }}-telemetry-selfsigned
-  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
-spec:
-  selfSigned: {}
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: {{ .Values.releaseId }}-telemetry-root-ca
-  namespace: {{ .Values.runtime.certManagerNamespace }}
-  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
-spec:
-  isCA: true
-  commonName: {{ .Values.releaseId }}-telemetry-root-ca
-  secretName: {{ .Values.releaseId }}-telemetry-root-ca
-  secretTemplate:
-    labels:
-      app.kubernetes.io/part-of: argus
-      argus.io/release-id: {{ .Values.releaseId | quote }}
-  duration: 87600h
-  renewBefore: 8760h
-  privateKey: {algorithm: ECDSA, size: 256}
-  issuerRef: {name: {{ .Values.releaseId }}-telemetry-selfsigned, kind: ClusterIssuer}
----
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: {{ $issuer }}
-  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
-spec:
-  ca:
-    secretName: {{ .Values.releaseId }}-telemetry-root-ca
----
 {{- if .Values.runtime.telemetryExternalIngestHost }}
----
 # 外部 Collector 的注册/上报入口:TCP 直通到 ingest,保留其 mTLS 体系。
 apiVersion: v1
 kind: Service
@@ -59,38 +22,73 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: argus-telemetry-server
+  name: argus-telemetry-ingest-server
   namespace: {{ $observability }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
 spec:
-  secretName: argus-telemetry-server-tls
-  duration: 24h
-  renewBefore: 8h
+  secretName: argus-telemetry-ingest-server-tls
+  duration: 2160h
+  renewBefore: 360h
   dnsNames:
     - argus-telemetry-ingest
     - argus-telemetry-ingest.{{ $observability }}.svc
-    - argus-telemetry-query
-    - argus-telemetry-query.{{ $observability }}.svc
     {{- with .Values.runtime.telemetryExternalIngestHost }}
-    # 外部主机/集群的 Collector 经公网 LB 直连(同一张证书,TLS 由 ingest 自持)。
     - {{ . }}
     {{- end }}
-  privateKey: {algorithm: ECDSA, size: 256}
-  usages: [server auth, client auth]
-  issuerRef: {name: {{ $issuer }}, kind: ClusterIssuer}
+  uris: [spiffe://argus.io/services/telemetry-ingest/server]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
+  usages: [server auth]
+  issuerRef: {name: {{ $issuer }}, kind: ClusterIssuer, group: {{ .Values.pki.issuerGroup }}}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-telemetry-query-server
+  namespace: {{ $observability }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
+spec:
+  secretName: argus-telemetry-query-server-tls
+  duration: 2160h
+  renewBefore: 360h
+  dnsNames:
+    - argus-telemetry-query
+    - argus-telemetry-query.{{ $observability }}.svc
+  uris: [spiffe://argus.io/services/telemetry-query/server]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
+  usages: [server auth]
+  issuerRef: {name: {{ $issuer }}, kind: ClusterIssuer, group: {{ .Values.pki.issuerGroup }}}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: argus-server-telemetry-client
   namespace: {{ $system }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }}}
 spec:
   secretName: argus-server-telemetry-client-tls
   duration: 24h
   renewBefore: 8h
   dnsNames: [argus-server]
-  privateKey: {algorithm: ECDSA, size: 256}
+  uris: [spiffe://argus.io/services/server/telemetry-client]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
   usages: [client auth]
-  issuerRef: {name: {{ $issuer }}, kind: ClusterIssuer}
+  issuerRef: {name: {{ $issuer }}, kind: ClusterIssuer, group: {{ .Values.pki.issuerGroup }}}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argus-worker-telemetry-client
+  namespace: {{ $system }}
+  labels: {app.kubernetes.io/part-of: argus, argus.io/release-id: {{ .Values.releaseId | quote }} }
+spec:
+  secretName: argus-worker-telemetry-client-tls
+  duration: 24h
+  renewBefore: 8h
+  dnsNames: [argus-worker]
+  uris: [spiffe://argus.io/services/worker/telemetry-client]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
+  usages: [client auth]
+  issuerRef: {name: {{ $issuer }}, kind: ClusterIssuer, group: {{ .Values.pki.issuerGroup }}}
 ---
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaUser
@@ -139,6 +137,7 @@ metadata:
   namespace: {{ $observability }}
 type: Opaque
 stringData:
+  bootstrap-encryption-key: {{ required "runtime.pendingActionEncryptionKey is required" .Values.runtime.pendingActionEncryptionKey | quote }}
   {{- if .Values.runtime.databaseRolesEnabled }}
   ingest-database-url: {{ printf "postgres://argus_telemetry_ingest:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryIngestDatabasePassword is required" .Values.runtime.telemetryIngestDatabasePassword) $system | quote }}
   writer-database-url: {{ printf "postgres://argus_telemetry_writer:%s@argus-postgresql.%s.svc:5432/argus?sslmode=disable" (required "runtime.telemetryWriterDatabasePassword is required" .Values.runtime.telemetryWriterDatabasePassword) $system | quote }}
@@ -150,6 +149,7 @@ stringData:
   {{- end }}
 ---
 {{- range $mode := list "ingest" "writer" "query" }}
+{{- $serverSecret := printf "argus-telemetry-%s-server-tls" $mode }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -161,12 +161,12 @@ kind: Deployment
 metadata:
   name: argus-telemetry-{{ $mode }}
   namespace: {{ $observability }}
-  labels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}, app.kubernetes.io/part-of: argus}
+  labels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}, app.kubernetes.io/part-of: argus, argus.io/release-id: {{ $.Values.releaseId | quote }}}
 spec:
   replicas: {{ if eq $.Values.profile "production" }}{{ $.Values.production.minReplicas }}{{ else }}1{{ end }}
   selector: {matchLabels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}}}
   template:
-    metadata: {labels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}, app.kubernetes.io/part-of: argus}}
+    metadata: {labels: {app.kubernetes.io/name: argus-telemetry-{{ $mode }}, app.kubernetes.io/part-of: argus, argus.io/release-id: {{ $.Values.releaseId | quote }}}}
     spec:
       serviceAccountName: argus-telemetry-{{ $mode }}
       terminationGracePeriodSeconds: 30
@@ -196,8 +196,14 @@ spec:
             - {name: ARGUS_REDIS_URL, value: {{ printf "redis://:%s@argus-redis.%s.svc:6379/0" (required "runtime.redisPassword is required" $.Values.runtime.redisPassword) $system | quote }}}
             {{- end }}
             {{- if eq $mode "ingest" }}
+            - name: ARGUS_PENDING_ACTION_ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: argus-telemetry-runtime, key: bootstrap-encryption-key}}
+            {{- if $.Values.runtime.otelcolSigningPublicKey }}
+            - name: ARGUS_OTELCOL_SIGNING_PUBLIC_KEYS
+              value: {{ dict $.Values.runtime.otelcolSigningKeyId $.Values.runtime.otelcolSigningPublicKey | toJson | quote }}
+            {{- end }}
             - {name: ARGUS_TELEMETRY_CERTIFICATE_REQUEST_NAMESPACE, value: {{ $observability | quote }}}
-            - {name: ARGUS_TELEMETRY_ISSUER_NAME, value: {{ $.Values.runtime.telemetryIssuerName | quote }}}
+            - {name: ARGUS_TELEMETRY_ISSUER_NAME, value: {{ $issuer | quote }}}
             - {name: ARGUS_TELEMETRY_ISSUER_GENERATION, value: {{ $.Values.runtime.telemetryIssuerGeneration | quote }}}
             - {name: ARGUS_TELEMETRY_INGEST_GRPC_ENDPOINT, value: {{ $.Values.runtime.telemetryIngestGrpcEndpoint | quote }}}
             - {name: ARGUS_TELEMETRY_INGEST_HTTP_ENDPOINT, value: {{ $.Values.runtime.telemetryIngestHttpEndpoint | quote }}}
@@ -220,7 +226,12 @@ spec:
             {{- if or (eq $mode "ingest") (eq $mode "query") }}
             - {name: ARGUS_TELEMETRY_TLS_CERT_PATH, value: /var/run/secrets/argus/telemetry-server/tls.crt}
             - {name: ARGUS_TELEMETRY_TLS_KEY_PATH, value: /var/run/secrets/argus/telemetry-server/tls.key}
-            - {name: ARGUS_TELEMETRY_CLIENT_CA_PATH, value: /var/run/secrets/argus/telemetry-server/ca.crt}
+            - {name: ARGUS_TELEMETRY_CLIENT_CA_PATH, value: /var/run/secrets/argus/trust/ca.crt}
+            - {name: ARGUS_TRUST_BUNDLE_PATH, value: /var/run/secrets/argus/trust/ca.crt}
+            - {name: ARGUS_TRUST_BUNDLE_EPOCH, value: {{ $.Values.runtime.trustBundleEpoch | quote }} }
+            {{- if eq $mode "query" }}
+            - {name: ARGUS_TELEMETRY_AUTHORIZED_CLIENT_URIS, value: "spiffe://argus.io/services/server/telemetry-client,spiffe://argus.io/services/worker/telemetry-client"}
+            {{- end }}
             {{- end }}
           ports:
             - {name: health, containerPort: 8081}
@@ -236,10 +247,12 @@ spec:
           {{- if or (eq $mode "ingest") (eq $mode "query") }}
           volumeMounts:
             - {name: telemetry-server, mountPath: /var/run/secrets/argus/telemetry-server, readOnly: true}
+            - {name: argus-trust, mountPath: /var/run/secrets/argus/trust, readOnly: true}
           {{- end }}
       {{- if or (eq $mode "ingest") (eq $mode "query") }}
       volumes:
-        - {name: telemetry-server, secret: {secretName: argus-telemetry-server-tls}}
+        - {name: telemetry-server, secret: {secretName: {{ $serverSecret }}}}
+        - {name: argus-trust, configMap: {name: {{ $.Values.runtime.trustBundleConfigMapName }}}}
       {{- end }}
 ---
 {{- end }}
@@ -370,18 +383,18 @@ spec:
             - {name: ARGUS_OTELCOL_LINUX_ARM64_URI, value: {{ required "runtime.otelcolLinuxArm64Uri is required" .Values.runtime.otelcolLinuxArm64Uri | quote }}}
             - {name: ARGUS_OTELCOL_LINUX_ARM64_SHA256, value: {{ required "runtime.otelcolLinuxArm64Sha256 is required" .Values.runtime.otelcolLinuxArm64Sha256 | quote }}}
             - {name: ARGUS_OTELCOL_LINUX_ARM64_SIGNATURE, value: {{ required "runtime.otelcolLinuxArm64Signature is required" .Values.runtime.otelcolLinuxArm64Signature | quote }}}
-            - {name: ARGUS_OTELCOL_LINUX_ARM64_BYTE_SIZE, value: {{ required "runtime.otelcolLinuxArm64ByteSize is required" .Values.runtime.otelcolLinuxArm64ByteSize | quote }}}
+            - {name: ARGUS_OTELCOL_LINUX_ARM64_BYTE_SIZE, value: {{ required "runtime.otelcolLinuxArm64ByteSize is required" .Values.runtime.otelcolLinuxArm64ByteSize | int64 | quote }}}
             {{- if .Values.runtime.otelcolLinuxAmd64Uri }}
             - {name: ARGUS_OTELCOL_LINUX_AMD64_URI, value: {{ .Values.runtime.otelcolLinuxAmd64Uri | quote }}}
             - {name: ARGUS_OTELCOL_LINUX_AMD64_SHA256, value: {{ required "runtime.otelcolLinuxAmd64Sha256 is required when Linux amd64 artifact is configured" .Values.runtime.otelcolLinuxAmd64Sha256 | quote }}}
             - {name: ARGUS_OTELCOL_LINUX_AMD64_SIGNATURE, value: {{ required "runtime.otelcolLinuxAmd64Signature is required when Linux amd64 artifact is configured" .Values.runtime.otelcolLinuxAmd64Signature | quote }}}
-            - {name: ARGUS_OTELCOL_LINUX_AMD64_BYTE_SIZE, value: {{ required "runtime.otelcolLinuxAmd64ByteSize is required when Linux amd64 artifact is configured" .Values.runtime.otelcolLinuxAmd64ByteSize | quote }}}
+            - {name: ARGUS_OTELCOL_LINUX_AMD64_BYTE_SIZE, value: {{ required "runtime.otelcolLinuxAmd64ByteSize is required when Linux amd64 artifact is configured" .Values.runtime.otelcolLinuxAmd64ByteSize | int64 | quote }}}
             {{- end }}
             {{- if .Values.runtime.otelcolWindowsAmd64Uri }}
             - {name: ARGUS_OTELCOL_WINDOWS_AMD64_URI, value: {{ .Values.runtime.otelcolWindowsAmd64Uri | quote }}}
             - {name: ARGUS_OTELCOL_WINDOWS_AMD64_SHA256, value: {{ required "runtime.otelcolWindowsAmd64Sha256 is required when Windows artifact is configured" .Values.runtime.otelcolWindowsAmd64Sha256 | quote }}}
             - {name: ARGUS_OTELCOL_WINDOWS_AMD64_SIGNATURE, value: {{ required "runtime.otelcolWindowsAmd64Signature is required when Windows artifact is configured" .Values.runtime.otelcolWindowsAmd64Signature | quote }}}
-            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_BYTE_SIZE, value: {{ required "runtime.otelcolWindowsAmd64ByteSize is required when Windows artifact is configured" .Values.runtime.otelcolWindowsAmd64ByteSize | quote }}}
+            - {name: ARGUS_OTELCOL_WINDOWS_AMD64_BYTE_SIZE, value: {{ required "runtime.otelcolWindowsAmd64ByteSize is required when Windows artifact is configured" .Values.runtime.otelcolWindowsAmd64ByteSize | int64 | quote }}}
             {{- end }}
             - {name: ARGUS_OTELCOL_SIGNING_KEY_ID, value: {{ required "runtime.otelcolSigningKeyId is required" .Values.runtime.otelcolSigningKeyId | quote }}}
             - {name: ARGUS_OTELCOL_SIGNING_PUBLIC_KEY, value: {{ required "runtime.otelcolSigningPublicKey is required" .Values.runtime.otelcolSigningPublicKey | quote }}}

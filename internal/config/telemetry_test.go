@@ -13,6 +13,8 @@ func TestTelemetryValidateModeDependencies(t *testing.T) {
 				Mode: ModeQueryForTest, DatabaseURL: "postgres://argus", ClickHouseAddress: "clickhouse:9000", ClickHouseUsername: "query", ClickHousePassword: "secret",
 				ClickHouseSchemaUsername: "schema", ClickHouseSchemaPassword: "schema-secret",
 				RedisURL: "redis://redis", QueryConcurrency: 4, QueryAddress: ":9447", TLSCertPath: "tls.crt", TLSKeyPath: "tls.key", ClientCAPath: "ca.crt",
+				AuthorizedClientURIs: []string{"spiffe://argus.io/services/server/telemetry-client"},
+				TrustBundlePath:      "ca.crt", TrustBundleEpoch: 1,
 			},
 		},
 		{
@@ -29,6 +31,7 @@ func TestTelemetryValidateModeDependencies(t *testing.T) {
 				RedisURL: "redis://redis", IngestGRPCAddress: ":4317", IngestHTTPAddress: ":4318", TLSCertPath: "tls.crt", TLSKeyPath: "tls.key", ClientCAPath: "ca.crt",
 				CertificateRequestNamespace: "observability", IssuerName: "telemetry-ca", IssuerGeneration: 1,
 				IngestGRPCEndpoint: "grpcs://ingest:4317", IngestHTTPEndpoint: "https://ingest:4318",
+				PendingActionKey: make([]byte, 32), TrustBundlePath: "ca.crt", TrustBundleEpoch: 1,
 			},
 		},
 	}
@@ -52,6 +55,7 @@ func TestTelemetryQueryRequiresDedicatedSchemaCredentials(t *testing.T) {
 	config := Telemetry{
 		Mode: ModeQueryForTest, DatabaseURL: "postgres://argus", ClickHouseAddress: "clickhouse:9000", ClickHouseUsername: "query", ClickHousePassword: "secret",
 		RedisURL: "redis://redis", QueryConcurrency: 4, QueryAddress: ":9447", TLSCertPath: "tls.crt", TLSKeyPath: "tls.key", ClientCAPath: "ca.crt",
+		AuthorizedClientURIs: []string{"spiffe://argus.io/services/server/telemetry-client"},
 	}
 	if err := config.Validate(); err == nil {
 		t.Fatal("query configuration without dedicated schema credentials was accepted")

@@ -44,6 +44,22 @@ func TestHostConnectionPlanBindsEverySecurityRelevantInput(t *testing.T) {
 	}
 }
 
+func TestHostPendingPlanBindsConnectionTestEvidence(t *testing.T) {
+	plan := hostActionPlan{PinnedKey: "SHA256:expected", Arch: "arm64"}
+	if !hostConnectionEvidenceMatches(plan, ConnectionTestResult{HostKeyFingerprint: "SHA256:expected", Architecture: "arm64"}) {
+		t.Fatal("matching Host key and architecture evidence was rejected")
+	}
+	for _, result := range []ConnectionTestResult{
+		{HostKeyFingerprint: "", Architecture: "arm64"},
+		{HostKeyFingerprint: "SHA256:changed", Architecture: "arm64"},
+		{HostKeyFingerprint: "SHA256:expected", Architecture: "amd64"},
+	} {
+		if hostConnectionEvidenceMatches(plan, result) {
+			t.Fatalf("changed connection evidence was accepted: %+v", result)
+		}
+	}
+}
+
 func TestHostNetworkPathChangeRequiresFreshConnectionTest(t *testing.T) {
 	scopeA := uuid.MustParse("018f47e2-9a4c-7b31-8acd-02a2475e8d30")
 	scopeB := uuid.MustParse("018f47e2-9a4c-7b31-8acd-02a2475e8d31")

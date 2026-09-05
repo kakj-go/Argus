@@ -260,7 +260,11 @@ func (handler CardHandler) InvokeCardActionBinding(ctx context.Context, request 
 	confirmation := invocation.Confirmation
 	result := cardapi.CardBindingInvokeResult{Status: cardapi.CardBindingInvokeResultStatus(confirmation.PendingAction.Status), PendingAction: pointer(convertPending[cardapi.PendingActionPublicSchema](confirmation.PendingAction))}
 	if confirmation.Execution != nil {
-		result.Execution = pointer(fromJSON[cardapi.Execution](toActionExecution(*confirmation.Execution, confirmation.PendingAction)))
+		view, viewErr := handler.Workflow.GetExecutionView(ctx, p.EnterpriseIDValue(), confirmation.Execution.ID)
+		if viewErr != nil {
+			return cardapi.InvokeCardActionBindingdefaultJSONResponse{Body: cardError(ctx, viewErr), StatusCode: cardStatus(viewErr)}, nil
+		}
+		result.Execution = pointer(fromJSON[cardapi.Execution](toActionExecution(view)))
 	}
 	if confirmation.ApprovalRequest != nil {
 		view, viewErr := handler.Workflow.GetApprovalView(ctx, p.EnterpriseIDValue(), confirmation.ApprovalRequest.ID)

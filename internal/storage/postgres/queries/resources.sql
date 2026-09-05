@@ -2,6 +2,32 @@
 INSERT INTO hosts (id, enterprise_id, name, hostname, address, port, platform, architecture, connection_mode, bastion_scope_id, environment, labels, labels_hash, connection_status, pinned_host_key)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *;
 
+-- name: CreateSelfEnrolledHost :one
+-- PlanV4 场景⑤:无入站路径、无凭据、无 ConnectionTest;activation 前地址未知。
+INSERT INTO hosts (id, enterprise_id, name, hostname, address, port, platform, architecture, connection_mode, bastion_scope_id, environment, labels, labels_hash, connection_status, pinned_host_key)
+VALUES ($1,$2,$3,'','',0,$4,$5,'self_enrolled',NULL,$6,$7,$8,'onboarding','') RETURNING *;
+
+-- name: ActivateSelfEnrolledHost :one
+-- 首次 enrollment 成功:回填自报 hostname/address,转 online 并刷新 last_seen。
+UPDATE hosts SET
+  hostname = CASE WHEN sqlc.arg('hostname')::text <> '' THEN sqlc.arg('hostname') ELSE hostname END,
+  address = CASE WHEN sqlc.arg('address')::text <> '' THEN sqlc.arg('address') ELSE address END,
+  architecture = CASE WHEN sqlc.arg('architecture')::text <> '' THEN sqlc.arg('architecture') ELSE architecture END,
+  connection_status = 'online', last_seen_at = now(),
+  resource_version = resource_version + 1, updated_at = now()
+WHERE id = sqlc.arg('id') AND enterprise_id = sqlc.arg('enterprise_id') AND connection_mode = 'self_enrolled' AND status <> 'deleted'
+RETURNING *;
+
+-- name: MarkHostSeen :execrows
+UPDATE hosts SET last_seen_at = now(), updated_at = updated_at
+WHERE id = $1 AND enterprise_id = $2 AND status <> 'deleted';
+
+-- name: SetBastionRootHostArchitecture :execrows
+-- Connector enrollment is authoritative for command-mode roots; B/C must
+-- report the same architecture already frozen by their Connection Test.
+UPDATE hosts SET architecture = $3, resource_version = resource_version + 1, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND connection_mode = 'connector_local' AND status <> 'deleted';
+
 -- name: GetHost :one
 SELECT * FROM hosts WHERE id = $1 AND enterprise_id = $2 AND status <> 'deleted';
 

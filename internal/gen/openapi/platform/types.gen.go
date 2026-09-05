@@ -89,6 +89,99 @@ func (e Locale) Valid() bool {
 	}
 }
 
+// Defines values for PKIBundleStatusDirection.
+const (
+	Forward  PKIBundleStatusDirection = "forward"
+	Rollback PKIBundleStatusDirection = "rollback"
+)
+
+// Valid indicates whether the value is a known member of the PKIBundleStatusDirection enum.
+func (e PKIBundleStatusDirection) Valid() bool {
+	switch e {
+	case Forward:
+		return true
+	case Rollback:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PKIBundleStatusState.
+const (
+	PKIBundleStatusStateFailed      PKIBundleStatusState = "failed"
+	PKIBundleStatusStateOverlapping PKIBundleStatusState = "overlapping"
+	PKIBundleStatusStatePreparing   PKIBundleStatusState = "preparing"
+	PKIBundleStatusStateRetiring    PKIBundleStatusState = "retiring"
+	PKIBundleStatusStateStable      PKIBundleStatusState = "stable"
+)
+
+// Valid indicates whether the value is a known member of the PKIBundleStatusState enum.
+func (e PKIBundleStatusState) Valid() bool {
+	switch e {
+	case PKIBundleStatusStateFailed:
+		return true
+	case PKIBundleStatusStateOverlapping:
+		return true
+	case PKIBundleStatusStatePreparing:
+		return true
+	case PKIBundleStatusStateRetiring:
+		return true
+	case PKIBundleStatusStateStable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PKINodeStatusKind.
+const (
+	Collector           PKINodeStatusKind = "collector"
+	Connector           PKINodeStatusKind = "connector"
+	ControlPlane        PKINodeStatusKind = "control_plane"
+	KubernetesConnector PKINodeStatusKind = "kubernetes_connector"
+)
+
+// Valid indicates whether the value is a known member of the PKINodeStatusKind enum.
+func (e PKINodeStatusKind) Valid() bool {
+	switch e {
+	case Collector:
+		return true
+	case Connector:
+		return true
+	case ControlPlane:
+		return true
+	case KubernetesConnector:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PKINodeStatusStatus.
+const (
+	PKINodeStatusStatusAcked        PKINodeStatusStatus = "acked"
+	PKINodeStatusStatusFailed       PKINodeStatusStatus = "failed"
+	PKINodeStatusStatusPending      PKINodeStatusStatus = "pending"
+	PKINodeStatusStatusTrustExpired PKINodeStatusStatus = "trust_expired"
+)
+
+// Valid indicates whether the value is a known member of the PKINodeStatusStatus enum.
+func (e PKINodeStatusStatus) Valid() bool {
+	switch e {
+	case PKINodeStatusStatusAcked:
+		return true
+	case PKINodeStatusStatusFailed:
+		return true
+	case PKINodeStatusStatusPending:
+		return true
+	case PKINodeStatusStatusTrustExpired:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PartialMetadataReasons.
 const (
 	AuthorizationFiltered PartialMetadataReasons = "authorization_filtered"
@@ -238,6 +331,58 @@ type IdempotencyKey = string
 
 // Locale defines model for Locale.
 type Locale string
+
+// PKIBundleStatus defines model for PKIBundleStatus.
+type PKIBundleStatus struct {
+	BundleSha256          string                   `json:"bundle_sha256"`
+	CurrentCaFingerprints []string                 `json:"current_ca_fingerprints"`
+	Direction             PKIBundleStatusDirection `json:"direction"`
+	Epoch                 int64                    `json:"epoch"`
+	LastError             *string                  `json:"last_error,omitempty"`
+	NextCaFingerprints    []string                 `json:"next_ca_fingerprints"`
+	RetireAt              *time.Time               `json:"retire_at,omitempty"`
+	StartedAt             time.Time                `json:"started_at"`
+	State                 PKIBundleStatusState     `json:"state"`
+}
+
+// PKIBundleStatusDirection defines model for PKIBundleStatus.Direction.
+type PKIBundleStatusDirection string
+
+// PKIBundleStatusState defines model for PKIBundleStatus.State.
+type PKIBundleStatusState string
+
+// PKINodeStatus defines model for PKINodeStatus.
+type PKINodeStatus struct {
+	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
+
+	// BlocksCutover True only for a currently active node whose missing ACK blocks entry into overlap.
+	BlocksCutover  bool                `json:"blocks_cutover"`
+	BundleSha256   *string             `json:"bundle_sha256,omitempty"`
+	CaFingerprints *[]string           `json:"ca_fingerprints,omitempty"`
+	EnterpriseId   *openapi_types.UUID `json:"enterprise_id,omitempty"`
+	Epoch          int64               `json:"epoch"`
+	Error          *string             `json:"error,omitempty"`
+	Id             string              `json:"id"`
+	Kind           PKINodeStatusKind   `json:"kind"`
+	Status         PKINodeStatusStatus `json:"status"`
+	UpdatedAt      time.Time           `json:"updated_at"`
+}
+
+// PKINodeStatusKind defines model for PKINodeStatus.Kind.
+type PKINodeStatusKind string
+
+// PKINodeStatusStatus defines model for PKINodeStatus.Status.
+type PKINodeStatusStatus string
+
+// PKIStatus defines model for PKIStatus.
+type PKIStatus struct {
+	AcknowledgedNodes int               `json:"acknowledged_nodes"`
+	Bundles           []PKIBundleStatus `json:"bundles"`
+	FailedNodes       int               `json:"failed_nodes"`
+	Nodes             []PKINodeStatus   `json:"nodes"`
+	PendingNodes      int               `json:"pending_nodes"`
+	TrustExpiredNodes int               `json:"trust_expired_nodes"`
+}
 
 // PartialMetadata defines model for PartialMetadata.
 type PartialMetadata struct {

@@ -1,25 +1,17 @@
 package configbundle
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/json"
-	"encoding/pem"
-	"math/big"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestRenderProducesRunnableTargetsWithoutSecrets(t *testing.T) {
 	value, err := Render(RenderInput{CollectorID: "018f08d2-7d43-7a54-a8fb-f2f3f2f0d111", ResourceID: "018f08d2-7d43-7a54-a8fb-f2f3f2f0d222",
-		ResourceType: "host", Role: "direct", RouteKind: "direct_argus", ProfileKeys: []string{"host-basic", "otlp-receiver"},
+		ResourceType: "host", Role: "direct", RouteKind: "direct_argus", Transport: "direct", ProfileKeys: []string{"host-basic", "otlp-receiver"},
 		EnrollmentEndpoint: "https://api.example.com/api/v1/telemetry/collectors/enroll",
-		IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317", IngestHTTPEndpoint: "https://telemetry.example.com:4318", ServerCAPEM: testCA(t)})
+		IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317", IngestHTTPEndpoint: "https://telemetry.example.com:4318"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,25 +32,103 @@ func TestRenderProducesRunnableTargetsWithoutSecrets(t *testing.T) {
 	}
 }
 
+func TestRenderRejectsMissingTransport(t *testing.T) {
+	_, err := Render(RenderInput{
+		CollectorID: "collector", ResourceID: "resource", ResourceType: "host", Role: "direct",
+		RouteKind: "direct_argus", ProfileKeys: []string{"host-basic"},
+		EnrollmentEndpoint: "https://api.example.com/enroll", IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317",
+		IngestHTTPEndpoint: "https://telemetry.example.com:4318",
+	})
+	if err == nil || !strings.Contains(err.Error(), "transport") {
+		t.Fatalf("missing transport accepted: %v", err)
+	}
+}
+
 func TestRenderRejectsCleartextEndpoints(t *testing.T) {
 	_, err := Render(RenderInput{CollectorID: "collector", ResourceID: "resource", ResourceType: "host", Role: "direct",
-		RouteKind: "direct_argus", ProfileKeys: []string{"host-basic"}, EnrollmentEndpoint: "http://api.example.com/enroll",
-		IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317", IngestHTTPEndpoint: "https://telemetry.example.com:4318", ServerCAPEM: testCA(t)})
+		RouteKind: "direct_argus", Transport: "direct", ProfileKeys: []string{"host-basic"}, EnrollmentEndpoint: "http://api.example.com/enroll",
+		IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317", IngestHTTPEndpoint: "https://telemetry.example.com:4318"})
 	if err == nil {
 		t.Fatal("cleartext enrollment must be rejected")
 	}
 }
 
+func TestRenderUsesLoopbackEnrollmentDialAddressWithoutChangingTLSIdentity(t *testing.T) {
+	input := RenderInput{CollectorID: "018f08d2-7d43-7a54-a8fb-f2f3f2f0d111", ResourceID: "018f08d2-7d43-7a54-a8fb-f2f3f2f0d222",
+		ResourceType: "host", Role: "edge_gateway", RouteKind: "direct_argus", Transport: "executor_tunnel", TunnelLoopbackPort: 14317,
+		ProfileKeys: []string{"host-basic", "otlp-receiver"}, EnrollmentEndpoint: "https://telemetry.argus.example:4318/v1/identity/enroll",
+		EnrollmentDialAddress: "127.0.0.1:14318", IngestGRPCEndpoint: "grpcs://telemetry.argus.example:4317",
+		IngestHTTPEndpoint: "https://telemetry.argus.example:4318"}
+	value, err := Render(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := decodeTarget(t, value, "host")
+	receivers := nestedMap(t, host, "receivers")
+	if _, exists := receivers["otlp"]; exists {
+		t.Fatal("edge gateway rendered an unauthenticated OTLP receiver alongside its mTLS downstream receiver")
+	}
+	if _, exists := receivers["otlp/downstream"]; !exists {
+		t.Fatal("edge gateway mTLS downstream receiver is missing")
+	}
+	identity := nestedMap(t, host, "extensions", "argus_identity")
+	assertString(t, identity, "enrollment_endpoint", input.EnrollmentEndpoint)
+	assertString(t, identity, "dial_address", input.EnrollmentDialAddress)
+	exporter := nestedMap(t, host, "exporters", "otlp/argus")
+	assertString(t, exporter, "endpoint", "127.0.0.1:14317")
+	assertString(t, nestedMap(t, exporter, "tls"), "server_name_override", "telemetry.argus.example")
+}
+
+func TestRenderRejectsNonLoopbackEnrollmentDialAddress(t *testing.T) {
+	_, err := Render(RenderInput{CollectorID: "collector", ResourceID: "resource", ResourceType: "host", Role: "direct",
+		RouteKind: "direct_argus", Transport: "direct", ProfileKeys: []string{"host-basic"}, EnrollmentEndpoint: "https://api.example.com/enroll",
+		EnrollmentDialAddress: "10.0.0.8:8443", IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317",
+		IngestHTTPEndpoint: "https://telemetry.example.com:4318"})
+	if err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("non-loopback enrollment dial address accepted: %v", err)
+	}
+}
+
+func TestRenderBastionTunnelUsesLoopbackAndGatewayTLSIdentityWithoutPhysicalEndpoint(t *testing.T) {
+	input := RenderInput{CollectorID: "018f08d2-7d43-7a54-a8fb-f2f3f2f0d111", ResourceID: "018f08d2-7d43-7a54-a8fb-f2f3f2f0d222",
+		ResourceType: "host", Role: "leaf", RouteKind: "bastion_gateway", Transport: "bastion_tunnel", TunnelLoopbackPort: 14318,
+		GatewayServerName: "collector-018f08d2-7d43-7a54-a8fb-f2f3f2f0d999.argus.telemetry",
+		ProfileKeys:       []string{"host-basic"}, EnrollmentEndpoint: "https://telemetry.argus.example:4318/v1/identity/enroll",
+		EnrollmentDialAddress: "127.0.0.1:14319", IngestGRPCEndpoint: "grpcs://telemetry.argus.example:4317",
+		IngestHTTPEndpoint: "https://telemetry.argus.example:4318"}
+	value, err := Render(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := decodeTarget(t, value, "host")
+	exporter := nestedMap(t, host, "exporters", "otlp/argus")
+	assertString(t, exporter, "endpoint", "127.0.0.1:14318")
+	assertString(t, nestedMap(t, exporter, "tls"), "server_name_override", input.GatewayServerName)
+}
+
+func TestRenderDirectBastionRouteRequiresPhysicalGatewayEndpoint(t *testing.T) {
+	_, err := Render(RenderInput{CollectorID: "collector", ResourceID: "resource", ResourceType: "host", Role: "leaf",
+		RouteKind: "bastion_gateway", Transport: "direct", GatewayServerName: "collector-gateway.argus.telemetry",
+		ProfileKeys: []string{"host-basic"}, EnrollmentEndpoint: "https://api.example.com/enroll",
+		IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317", IngestHTTPEndpoint: "https://telemetry.example.com:4318"})
+	if err == nil || !strings.Contains(err.Error(), "Gateway OTLP endpoint") {
+		t.Fatalf("direct Bastion route accepted without a physical Gateway endpoint: %v", err)
+	}
+}
+
 func TestRenderKubernetesConfigUsesMutualTLSAndIsolatesGatewayIdentity(t *testing.T) {
 	value, err := Render(RenderInput{CollectorID: "018f08d2-7d43-7a54-a8fb-f2f3f2f0d111", ResourceID: "018f08d2-7d43-7a54-a8fb-f2f3f2f0d222",
-		ResourceType: "kubernetes_cluster", Role: "kubernetes", RouteKind: "direct_argus",
+		ResourceType: "kubernetes_cluster", Role: "kubernetes", RouteKind: "direct_argus", Transport: "direct",
 		ProfileKeys:        []string{"k8s-node-container", "k8s-cluster", "k8s-otlp-gateway"},
 		EnrollmentEndpoint: "https://api.example.com/api/v1/telemetry/collectors/enroll",
-		IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317", IngestHTTPEndpoint: "https://telemetry.example.com:4318", ServerCAPEM: testCA(t)})
+		IngestGRPCEndpoint: "grpcs://telemetry.example.com:4317", IngestHTTPEndpoint: "https://telemetry.example.com:4318"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	agent := decodeTarget(t, value, "kubernetes_agent")
+	agentIdentity := nestedMap(t, agent, "extensions", "argus_identity")
+	assertString(t, agentIdentity, "bootstrap_identity_directory", "/var/run/argus-bootstrap/identity")
+	assertString(t, agentIdentity, "enrollment_token_file", "/var/lib/argus-otelcol/identity/enrollment-token")
 	agentTLS := nestedMap(t, agent, "exporters", "otlp/gateway", "tls")
 	assertString(t, agentTLS, "ca_file", "/var/lib/argus-otelcol/identity/ca.pem")
 	assertString(t, agentTLS, "cert_file", "/var/lib/argus-otelcol/identity/client.pem")
@@ -70,11 +140,14 @@ func TestRenderKubernetesConfigUsesMutualTLSAndIsolatesGatewayIdentity(t *testin
 	}
 
 	gateway := decodeTarget(t, value, "kubernetes_gateway")
+	gatewayIdentity := nestedMap(t, gateway, "extensions", "argus_identity")
+	assertString(t, gatewayIdentity, "bootstrap_identity_directory", "/var/run/argus-bootstrap/identity")
+	assertString(t, gatewayIdentity, "enrollment_token_file", "/var/lib/argus-otelcol/identity/enrollment-token")
 	grpc := nestedMap(t, gateway, "receivers", "otlp/downstream", "protocols", "grpc")
 	receiverTLS := nestedMap(t, grpc, "tls")
 	assertString(t, receiverTLS, "client_ca_file", "/var/lib/argus-otelcol/identity/ca.pem")
-	assertString(t, receiverTLS, "cert_file", "/var/lib/argus-otelcol/identity/client.pem")
-	assertString(t, receiverTLS, "key_file", "/var/lib/argus-otelcol/identity/client-key.pem")
+	assertString(t, receiverTLS, "cert_file", "/var/lib/argus-otelcol/identity/server.pem")
+	assertString(t, receiverTLS, "key_file", "/var/lib/argus-otelcol/identity/server-key.pem")
 	assertString(t, nestedMap(t, grpc, "auth"), "authenticator", "argus_identity")
 
 	pipelines := nestedMap(t, gateway, "service", "pipelines")
@@ -149,22 +222,6 @@ func assertString(t *testing.T, value map[string]any, key, expected string) {
 	if actual, ok := value[key].(string); !ok || actual != expected {
 		t.Fatalf("configuration key %s = %#v, want %q", key, value[key], expected)
 	}
-}
-
-func testCA(t *testing.T) string {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "test-ca"},
-		NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
-	raw, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: raw}))
 }
 
 func contains(value, substring string) bool {

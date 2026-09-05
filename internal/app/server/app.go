@@ -11,6 +11,7 @@ import (
 
 	"github.com/kakj-go/Argus/internal/action"
 	"github.com/kakj-go/Argus/internal/agent"
+	"github.com/kakj-go/Argus/internal/artifactcheck"
 	"github.com/kakj-go/Argus/internal/authorization"
 	cardservice "github.com/kakj-go/Argus/internal/card"
 	"github.com/kakj-go/Argus/internal/config"
@@ -18,6 +19,7 @@ import (
 	"github.com/kakj-go/Argus/internal/conversation"
 	"github.com/kakj-go/Argus/internal/directexecutor"
 	"github.com/kakj-go/Argus/internal/identity"
+	"github.com/kakj-go/Argus/internal/installinstruction"
 	"github.com/kakj-go/Argus/internal/keywrap"
 	"github.com/kakj-go/Argus/internal/kubernetesreader"
 	"github.com/kakj-go/Argus/internal/mcp"
@@ -34,6 +36,7 @@ import (
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
 	telemetryservice "github.com/kakj-go/Argus/internal/telemetry"
 	"github.com/kakj-go/Argus/internal/transport/httpapi"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -69,6 +72,18 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 	defer postgresStore.Close()
+	bundles := trustbundle.Service{Store: postgresStore, MountedPath: a.config.TrustBundlePath, InitialEpoch: a.config.TrustBundleEpoch}
+	activeBundle, err := bundles.EnsureInitial(ctx)
+	if err != nil {
+		return err
+	}
+	bundleNodeID := trustbundle.ProcessNodeID("server")
+	if err := bundles.AcknowledgeMounted(ctx, bundleNodeID); err != nil {
+		return err
+	}
+	go bundles.RunMountedAcknowledger(ctx, bundleNodeID, 5*time.Second, func(err error) {
+		a.logger.Warn("Trust Bundle acknowledgement failed", "error", err)
+	})
 	directDispatcher, err := directexecutor.NewDispatcher(a.config.DirectExecutorEndpoint, a.config.DirectExecutorServerName,
 		a.config.DirectExecutorTLSCert, a.config.DirectExecutorTLSKey, a.config.DirectExecutorCABundle)
 	if err != nil {
@@ -100,7 +115,7 @@ func (a *App) Run(ctx context.Context) error {
 		Token: platform.SetupTokenProvider{TokenPath: a.config.SetupTokenPath, ExpiresPath: a.config.SetupTokenExpiresPath},
 	}
 	m8Handler := httpapi.M8Handler{Auth: setupHandler}
-	platformHandler := httpapi.PlatformHandler{Auth: setupHandler, Enterprise: platform.EnterpriseService{Store: postgresStore, Idempotency: idempotency}, Cursor: cursorSigner}
+	platformHandler := httpapi.PlatformHandler{Auth: setupHandler, Enterprise: platform.EnterpriseService{Store: postgresStore, Idempotency: idempotency}, Cursor: cursorSigner, TrustBundles: bundles}
 	machineService := identity.MachineService{Store: postgresStore, Idempotency: idempotency}
 	enterpriseIdentityHandler := httpapi.EnterpriseIdentityHandler{Auth: setupHandler, Service: identity.EnterpriseService{Store: postgresStore, Idempotency: idempotency}, Machine: machineService, Cursor: cursorSigner}
 	enterpriseAuthorizationHandler := httpapi.EnterpriseAuthorizationHandler{Identity: enterpriseIdentityHandler, Service: authorization.Service{Store: postgresStore, Idempotency: idempotency}, Cursor: cursorSigner}
@@ -108,17 +123,37 @@ func (a *App) Run(ctx context.Context) error {
 	auditHandler := httpapi.AuditHandler{Auth: setupHandler, Enterprise: enterpriseIdentityHandler, Store: postgresStore, Cursor: cursorSigner}
 	secretDomain := secretservice.Service{Store: postgresStore, Idempotency: idempotency, Keyring: secretKeyring}
 	actionDomain := resource.PendingActionService{Store: postgresStore, Idempotency: idempotency, Key: a.config.PendingActionKey}
+	artifactChecker, err := artifactcheck.NewHTTPChecker(a.config.OtelcolArtifactCABundle, a.config.ArtifactProbeBaseURL)
+	if err != nil {
+		return err
+	}
 	connectorDomain := connectorservice.Service{Store: postgresStore, Redis: redisClient, GatewayEndpoint: a.config.ConnectorGatewayAddress,
-		EnrollmentURL: a.config.ConnectorEnrollmentURL,
-		Credentials:   secretDomain,
+		EnrollmentURL:   a.config.ConnectorEnrollmentURL,
+		Artifacts:       artifactChecker,
+		Credentials:     secretDomain,
+		TrustBundlePath: a.config.TrustBundlePath, TrustBundleEpoch: a.config.TrustBundleEpoch,
+		TrustBundles:     bundles,
+		BootstrapTLSMode: installinstruction.DownloadTLSMode(a.config.BootstrapTLSMode),
+		KubernetesImage:  a.config.ConnectorKubernetesImage,
 		Issuer: connectorservice.CertManagerIssuer{Client: kubernetesClient, Namespace: a.config.SystemNamespace,
-			IssuerName: a.config.ConnectorIssuerName, IssuerGeneration: a.config.ConnectorIssuerGeneration}}
-	bastionDomain := connectorservice.BastionService{Store: postgresStore, Actions: actionDomain, Enrollment: connectorDomain}
+			IssuerName: a.config.ConnectorIssuerName, IssuerKind: "ClusterIssuer", IssuerGeneration: int32(activeBundle.Epoch)}}
+	bastionDomain, err := connectorservice.NewBastionService(postgresStore, actionDomain, connectorDomain,
+		a.config.PendingActionKey, a.config.ConnectorEnrollForwardTarget, a.config.ConnectorGatewayForwardTarget)
+	if err != nil {
+		return err
+	}
 	var actionExtension resource.ActionExtension = bastionDomain
+	selfEnroll := (*telemetryservice.SelfEnrollService)(nil)
 	if a.config.TelemetryEnabled {
+		identityService := telemetryservice.IdentityService{Store: postgresStore, TrustBundles: bundles}
+		selfEnroll = &telemetryservice.SelfEnrollService{Store: postgresStore, Actions: actionDomain, Identity: identityService,
+			EnrollmentEndpoint: a.config.TelemetryEnrollment, IngestGRPCEndpoint: a.config.TelemetryIngestGRPC,
+			IngestHTTPEndpoint: a.config.TelemetryIngestHTTP, BootstrapSecretKey: a.config.PendingActionKey, Artifacts: artifactChecker,
+			TrustBundles: bundles, TrustBundlePath: a.config.TrustBundlePath, TrustBundleEpoch: a.config.TrustBundleEpoch,
+			BootstrapTLSMode: installinstruction.DownloadTLSMode(a.config.BootstrapTLSMode), InstallerSHA256: a.config.HostInstallerSHA256}
 		actionExtension = telemetryservice.ActionExtension{Next: bastionDomain, Credentials: secretDomain,
 			EnrollmentEndpoint: a.config.TelemetryEnrollment, IngestGRPCEndpoint: a.config.TelemetryIngestGRPC,
-			IngestHTTPEndpoint: a.config.TelemetryIngestHTTP, ServerCABundlePath: a.config.TelemetryCABundle}
+			IngestHTTPEndpoint: a.config.TelemetryIngestHTTP, TrustBundles: bundles, SelfEnroll: selfEnroll}
 	}
 	resourceDomain := resource.Service{Store: postgresStore, Actions: actionDomain, Access: resource.AccessService{},
 		Direct: resource.DirectTargetValidator{DeniedCIDRs: deniedCIDRs}, Commands: connectorDomain, DirectCommands: directDispatcher, Extension: actionExtension,
@@ -128,7 +163,7 @@ func (a *App) Run(ctx context.Context) error {
 	workflowDomain := action.Service{Store: postgresStore, Idempotency: idempotency, Resources: resourceDomain,
 		OneTimeResultKey: a.config.PendingActionKey}
 	secretHandler := httpapi.SecretHandler{Identity: enterpriseIdentityHandler, Service: secretDomain}
-	hostHandler := httpapi.HostHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain, Queries: postgresStore.Queries}
+	hostHandler := httpapi.HostHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain, Queries: postgresStore.Queries, Onboarding: selfEnroll}
 	kubernetesHandler := httpapi.KubernetesHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
 	connectionHandler := httpapi.ConnectionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain}
 	actionHandler := httpapi.ResourceActionHandler{Identity: enterpriseIdentityHandler, Service: resourceDomain, Workflow: workflowDomain, Cursor: cursorSigner}
@@ -148,7 +183,7 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	cardHandler := httpapi.CardHandler{Identity: enterpriseIdentityHandler, Service: cardDomain, Workflow: workflowDomain}
 	sandboxHandler := httpapi.SandboxHandler{Auth: setupHandler, Service: sandbox.Service{Store: postgresStore, Keyring: secretKeyring}}
-	connectorHandler := httpapi.ConnectorHandler{Identity: enterpriseIdentityHandler, Service: connectorDomain, Bastion: bastionDomain}
+	connectorHandler := httpapi.ConnectorHandler{Identity: enterpriseIdentityHandler, Service: connectorDomain, Bastion: bastionDomain, Queries: postgresStore.Queries}
 	remoteWebsocketURL, err := websocketURL(a.config.RemoteOrigin)
 	if err != nil {
 		return err
@@ -172,10 +207,14 @@ func (a *App) Run(ctx context.Context) error {
 		platformHandler.Enterprise.Telemetry = telemetryQuery
 		telemetryDomain := telemetryservice.Service{Store: postgresStore, Access: resource.AccessService{}, Actions: actionDomain,
 			Query: telemetryQuery, Engine: telemetryQuery, OtelcolKubernetesImage: a.config.OtelcolKubernetesImage}
-		telemetryIdentity := telemetryservice.IdentityService{Store: postgresStore, Issuer: connectorservice.CertManagerIssuer{
+		telemetryIdentity := telemetryservice.IdentityService{Store: postgresStore, TrustBundles: bundles, Issuer: connectorservice.CertManagerIssuer{
 			Client: kubernetesClient, Namespace: a.config.SystemNamespace, IssuerName: a.config.TelemetryIssuerName, IssuerKind: "ClusterIssuer",
-			RequestPrefix: "argus-telemetry-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: a.config.TelemetryIssuerGeneration,
-			Usages: []string{"client auth", "server auth"},
+			RequestPrefix: "argus-telemetry-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: int32(activeBundle.Epoch),
+			Usages: []string{"client auth"},
+		}, ServerIssuer: connectorservice.CertManagerIssuer{
+			Client: kubernetesClient, Namespace: a.config.SystemNamespace, IssuerName: a.config.TelemetryIssuerName, IssuerKind: "ClusterIssuer",
+			RequestPrefix: "argus-telemetry-server-", SubjectLabel: "argus.io/telemetry-collector-id", IssuerGeneration: int32(activeBundle.Epoch),
+			Usages: []string{"server auth"},
 		}}
 		if err := (telemetryservice.Tools{Service: telemetryDomain}).Register(toolRegistry); err != nil {
 			return err

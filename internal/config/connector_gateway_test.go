@@ -9,6 +9,8 @@ func TestConnectorGatewayRequiresCertificateIssuer(t *testing.T) {
 		SecretKEKPath: "keyring.json", SystemNamespace: "argus-system", IssuerName: "argus-connector-ca", IssuerGeneration: 1,
 		RemoteWSSAddress: ":9445", RemoteRPCAddress: ":9446", RemoteOrigin: "https://remote.example.com",
 		RemotePeerServerName: "argus-connector-gateway", RemotePeerHeadlessSuffix: "argus-connector-gateway-headless.argus-system.svc", RemotePeerPort: "9446",
+		RemotePeerClientURI:         "spiffe://argus.io/services/connector-gateway/peer-client",
+		RemotePeerClientCertificate: "peer-client.crt", RemotePeerClientPrivateKey: "peer-client.key",
 		RemoteAllowedOrigins: []string{"https://enterprise.example.com"}, DirectExecutorEndpoint: "argus-direct-executor:9444",
 		DirectExecutorServerName: "argus-direct-executor", DirectExecutorTLSCert: "client.crt", DirectExecutorTLSKey: "client.key",
 		DirectExecutorCABundle: "direct-ca.crt", DirectExecutorRecipientID: "argus-direct-executor",
@@ -16,6 +18,7 @@ func TestConnectorGatewayRequiresCertificateIssuer(t *testing.T) {
 		RemoteUserLimit: 3, RemoteHostLimit: 5, RemoteTenantLimit: 50,
 		TelemetryEnrollmentEndpoint: "https://api.example.com/api/v1/telemetry/collectors/enroll",
 		TelemetryIngestGRPCEndpoint: "grpcs://otlp.example.com:4317", TelemetryIngestHTTPEndpoint: "https://otlp-http.example.com:4318",
+		TrustBundlePath: "trust.pem", TrustBundleEpoch: 1,
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid Connector Gateway configuration failed: %v", err)

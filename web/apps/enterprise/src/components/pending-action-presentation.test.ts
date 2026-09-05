@@ -1,36 +1,47 @@
 import { describe, expect, it } from "vitest";
 import type { PendingActionPublic } from "@argus/api-client";
-import { presentPendingAction } from "./pending-action-presentation";
+import { commonEn, commonZh } from "../i18n/common";
+import { governanceEn, governanceZh } from "../i18n/governance";
+import { pendingActionsEn, pendingActionsZh } from "../i18n/pending-actions";
+import {
+  PENDING_ACTION_TYPES,
+  presentPendingAction,
+  presentPendingActionPreview,
+} from "./pending-action-presentation";
 
-const zh = (key: string, options?: Record<string, unknown>) => {
-  const values: Record<string, string> = {
-    "common.unknown": "未知",
-    "governance.approvals.risk.write": "写入",
-    "hosts.preview.createTitle": `新增主机 ${String(options?.name ?? "")}`,
-    "hosts.preview.createSummary": "创建已验证的主机资源",
-    "hosts.preview.createResourceDiff": `+ 主机资源 ${String(options?.name ?? "")}`,
-    "hosts.preview.collectorDiff": "+ OTLP 收集器",
-    "kubernetes.pendingAction.createTitle": `新增 Kubernetes 集群 ${String(options?.name ?? "")}`,
-    "kubernetes.pendingAction.createSummary": "创建已验证的 Kubernetes 集群资源",
-    "kubernetes.pendingAction.createResourceDiff": `~ Kubernetes 集群资源 ${String(options?.name ?? "")}`,
+function translator(...resources: unknown[]) {
+  const merged = Object.assign({}, ...resources) as Record<string, unknown>;
+  return (key: string, options?: Record<string, unknown>) => {
+    const value = key.split(".").reduce<unknown>((current, segment) => {
+      if (typeof current !== "object" || current === null) return undefined;
+      return (current as Record<string, unknown>)[segment];
+    }, merged);
+    if (typeof value !== "string") return key;
+    return value.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+      String(options?.[name] ?? ""),
+    );
   };
-  return values[key] ?? key;
-};
+}
 
-function action(preview: Record<string, unknown>, title: string): PendingActionPublic {
+const zh = translator(commonZh, governanceZh, pendingActionsZh);
+const en = translator(commonEn, governanceEn, pendingActionsEn);
+
+function action(
+  actionType: string,
+  preview: Record<string, unknown> = { name: "web-01" },
+  status: PendingActionPublic["status"] = "awaiting_confirmation",
+): PendingActionPublic {
   return {
     action_ref: "pa-test",
+    action_type: actionType,
     schema_version: "argus.pending_action/v1",
-    title,
-    summary: "Create a validated host resource",
+    title: "RAW TITLE",
+    summary: "RAW SUMMARY",
     risk: "write",
     preview,
-    diff: [
-      { kind: "add", text: "+ resource" },
-      { kind: "add", text: "+ collector" },
-    ],
+    diff: [{ kind: "change", text: "RAW DIFF" }],
     expires_at: new Date(Date.now() + 60_000).toISOString(),
-    status: "awaiting_confirmation",
+    status,
     available_actions: ["confirm", "cancel"],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -38,23 +49,54 @@ function action(preview: Record<string, unknown>, title: string): PendingActionP
 }
 
 describe("pending action presentation", () => {
-  it("localizes host creation preview fields", () => {
+  it.each([zh, en])(
+    "localizes every known action type without raw text",
+    (t) => {
+      for (const actionType of PENDING_ACTION_TYPES) {
+        const presented = presentPendingAction(action(actionType), t);
+        expect(presented.known, actionType).toBe(true);
+        expect(`${presented.title} ${presented.summary}`).not.toContain("RAW");
+        expect(presented.diff.map((line) => line.text).join(" ")).not.toContain(
+          "RAW",
+        );
+        expect(presented.title, actionType).not.toContain("pendingActions.");
+      }
+    },
+  );
+
+  it("localizes the bastion confirmation shown in the reported screenshot", () => {
     const presented = presentPendingAction(
-      action({ name: "web-01", address: "10.0.0.1", port: 22 }, "Create host web-01"),
+      action("bastion_scope.create", { name: "测试" }),
       zh,
     );
-    expect(presented.title).toBe("新增主机 web-01");
-    expect(presented.summary).toBe("创建已验证的主机资源");
-    expect(presented.riskLabel).toBe("写入");
-    expect(presented.diff.map((line) => line.text)).toEqual(["+ 主机资源 web-01", "+ OTLP 收集器"]);
+    expect(presented.title).toBe("添加堡垒机 测试");
+    expect(presented.summary).toBe("创建稳定的 Bastion Scope 和一次性注册信息");
+    expect(presented.diff[0]?.text).toBe("创建堡垒机 测试");
   });
 
-  it("localizes Kubernetes creation preview fields", () => {
-    const presented = presentPendingAction(
-      action({ name: "prod-east", api_server: "https://10.0.0.1:6443" }, "接入集群 prod-east"),
-      zh,
+  it("fails closed for an unknown action type", () => {
+    const presented = presentPendingAction(action("unknown.action"), zh);
+    expect(presented.known).toBe(false);
+    expect(presented.title).toBe("待确认操作");
+    expect(presented.summary).not.toContain("RAW");
+    expect(presented.diff[0]?.text).not.toContain("RAW");
+  });
+
+  it("filters internal ids and localizes enum values in approval previews", () => {
+    const fields = presentPendingActionPreview(
+      action("bastion.connector.replace", {
+        scope_id: "internal-id",
+        name: "上海堡垒机",
+        install_mode: "direct_install",
+      }),
+      en,
     );
-    expect(presented.title).toBe("新增 Kubernetes 集群 prod-east");
-    expect(presented.summary).toBe("创建已验证的 Kubernetes 集群资源");
+    expect(fields).toEqual([
+      { label: "Name", value: "上海堡垒机" },
+      {
+        label: "Installation mode",
+        value: "Platform-managed SSH installation",
+      },
+    ]);
   });
 });

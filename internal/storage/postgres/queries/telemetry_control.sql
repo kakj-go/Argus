@@ -46,13 +46,18 @@ INSERT INTO collector_config_revisions (
   id, collector_id, revision, profile_ids, rendered_config, config_hash, status
 ) VALUES ($1,$2,$3,$4,$5,$6,'prepared') RETURNING *;
 
+-- name: GetCollectorConfigRevision :one
+SELECT * FROM collector_config_revisions WHERE collector_id = $1 AND revision = $2;
+
 -- name: UpsertTelemetryRoute :one
 INSERT INTO telemetry_routes (
-  id, enterprise_id, collector_id, kind, gateway_collector_id, status
-) VALUES ($1,$2,$3,$4,$5,'pending')
+  id, enterprise_id, collector_id, kind, gateway_collector_id, transport, loopback_port, status
+) VALUES ($1,$2,$3,$4,$5,$6,$7,'pending')
 ON CONFLICT (collector_id) DO UPDATE SET
   kind = EXCLUDED.kind,
   gateway_collector_id = EXCLUDED.gateway_collector_id,
+  transport = EXCLUDED.transport,
+  loopback_port = EXCLUDED.loopback_port,
   status = 'pending',
   version = telemetry_routes.version + 1,
   updated_at = now()
@@ -62,13 +67,13 @@ RETURNING *;
 INSERT INTO telemetry_collector_operations (
   id, enterprise_id, collector_id, pending_action_id, operation, executor_kind,
   plan, plan_hash, expires_at
-) VALUES ($1,$2,$3,$4,$5,'direct',$6,$7,$8)
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 RETURNING *;
 
 -- name: ClaimTelemetryCollectorOperations :many
 WITH claimed AS (
   SELECT id FROM telemetry_collector_operations
-  WHERE status = 'queued' AND expires_at > now()
+  WHERE status = 'queued' AND executor_kind = 'direct' AND expires_at > now()
   ORDER BY created_at, id
   LIMIT $1
   FOR UPDATE SKIP LOCKED
@@ -83,7 +88,7 @@ RETURNING operation.*;
 UPDATE telemetry_collector_operations SET
   status = 'running', lease_owner = $2, fence = fence + 1,
   lease_expires_at = now() + interval '2 minutes', attempts = attempts + 1, updated_at = now()
-WHERE id = $1 AND status = 'queued' AND expires_at > now()
+WHERE id = $1 AND status = 'queued' AND executor_kind = 'direct' AND expires_at > now()
 RETURNING *;
 
 -- name: GetTelemetryCollectorOperation :one
@@ -98,7 +103,10 @@ LIMIT 1;
 -- name: FinishTelemetryCollectorOperation :one
 UPDATE telemetry_collector_operations SET status = $4, result_hash = $5, error_code = $6,
   lease_owner = NULL, lease_expires_at = NULL, completed_at = now(), updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND fence = $3 AND status IN ('running','result_unknown')
+WHERE id = $1 AND enterprise_id = $2 AND fence = $3 AND (
+  status IN ('running','result_unknown') OR
+  (executor_kind = 'bootstrap' AND status = 'queued' AND fence = 0)
+)
 RETURNING *;
 
 -- name: RecoverTelemetryCollectorOperations :execrows
@@ -218,8 +226,8 @@ UPDATE telemetry_certificates SET revoked_at = now(), revoke_reason = $2
 WHERE collector_id = $1 AND revoked_at IS NULL;
 
 -- name: CreateTelemetryEnrollmentToken :one
-INSERT INTO telemetry_enrollment_tokens (id, collector_id, token_hash, expires_at)
-VALUES ($1,$2,$3,$4) RETURNING *;
+INSERT INTO telemetry_enrollment_tokens (id, collector_id, token_hash, expires_at, host_enrollment_token_id)
+VALUES ($1,$2,$3,$4,sqlc.narg('host_enrollment_token_id')) RETURNING *;
 
 -- name: GetTelemetryEnrollmentTokenForUpdate :one
 SELECT * FROM telemetry_enrollment_tokens WHERE token_hash = $1 FOR UPDATE;
@@ -232,17 +240,18 @@ RETURNING *;
 -- name: CreateTelemetryCertificate :one
 INSERT INTO telemetry_certificates (
   id, collector_id, serial_number, uri_san, csr_hash, certificate_hash,
-  certificate_request_name, issuer_generation, not_before, not_after
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *;
+  certificate_request_name, issuer_generation, not_before, not_after, certificate_usage
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *;
 
 -- name: GetValidTelemetryCertificateBySerial :one
 SELECT * FROM telemetry_certificates
-WHERE collector_id = $1 AND serial_number = $2 AND revoked_at IS NULL AND not_after > now();
+WHERE collector_id = $1 AND serial_number = $2 AND certificate_usage = 'clientAuth'
+  AND revoked_at IS NULL AND not_after > now();
 
 -- name: LimitTelemetryCertificateOverlap :exec
 UPDATE telemetry_certificates
 SET not_after = LEAST(not_after, now() + interval '15 minutes')
-WHERE collector_id = $1 AND revoked_at IS NULL AND serial_number <> $2;
+WHERE collector_id = $1 AND revoked_at IS NULL AND serial_number NOT IN ($2, $3);
 
 -- name: ListTelemetryRoutes :many
 SELECT * FROM telemetry_routes WHERE enterprise_id = $1 ORDER BY updated_at DESC, id;
@@ -321,7 +330,7 @@ UPDATE telemetry_dlq_records SET status = 'failed' WHERE id = $1 AND status = 'r
 SELECT ci.*, tc.serial_number, tc.uri_san, tc.not_after
 FROM telemetry_certificates tc
 JOIN collector_instances ci ON ci.id = tc.collector_id
-WHERE tc.serial_number = $1 AND tc.revoked_at IS NULL AND tc.not_before <= now() AND tc.not_after > now()
+WHERE tc.serial_number = $1 AND tc.certificate_usage = 'clientAuth' AND tc.revoked_at IS NULL AND tc.not_before <= now() AND tc.not_after > now()
   AND ci.status NOT IN ('uninstalled','uninstalling');
 
 -- name: GetTelemetryCollectorIdentity :one

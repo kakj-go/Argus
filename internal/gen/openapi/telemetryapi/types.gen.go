@@ -97,25 +97,25 @@ func (e CollectorPlatform) Valid() bool {
 
 // Defines values for CollectorRole.
 const (
-	Daemonset         CollectorRole = "daemonset"
-	Direct            CollectorRole = "direct"
-	EdgeGateway       CollectorRole = "edge_gateway"
-	KubernetesGateway CollectorRole = "kubernetes_gateway"
-	Leaf              CollectorRole = "leaf"
+	CollectorRoleDaemonset         CollectorRole = "daemonset"
+	CollectorRoleDirect            CollectorRole = "direct"
+	CollectorRoleEdgeGateway       CollectorRole = "edge_gateway"
+	CollectorRoleKubernetesGateway CollectorRole = "kubernetes_gateway"
+	CollectorRoleLeaf              CollectorRole = "leaf"
 )
 
 // Valid indicates whether the value is a known member of the CollectorRole enum.
 func (e CollectorRole) Valid() bool {
 	switch e {
-	case Daemonset:
+	case CollectorRoleDaemonset:
 		return true
-	case Direct:
+	case CollectorRoleDirect:
 		return true
-	case EdgeGateway:
+	case CollectorRoleEdgeGateway:
 		return true
-	case KubernetesGateway:
+	case CollectorRoleKubernetesGateway:
 		return true
-	case Leaf:
+	case CollectorRoleLeaf:
 		return true
 	default:
 		return false
@@ -413,6 +413,36 @@ func (e TelemetryRouteStatus) Valid() bool {
 	}
 }
 
+// Defines values for TelemetryRouteTunnelStatus.
+const (
+	TelemetryRouteTunnelStatusDegraded     TelemetryRouteTunnelStatus = "degraded"
+	TelemetryRouteTunnelStatusDesired      TelemetryRouteTunnelStatus = "desired"
+	TelemetryRouteTunnelStatusDown         TelemetryRouteTunnelStatus = "down"
+	TelemetryRouteTunnelStatusEstablished  TelemetryRouteTunnelStatus = "established"
+	TelemetryRouteTunnelStatusEstablishing TelemetryRouteTunnelStatus = "establishing"
+	TelemetryRouteTunnelStatusRemoved      TelemetryRouteTunnelStatus = "removed"
+)
+
+// Valid indicates whether the value is a known member of the TelemetryRouteTunnelStatus enum.
+func (e TelemetryRouteTunnelStatus) Valid() bool {
+	switch e {
+	case TelemetryRouteTunnelStatusDegraded:
+		return true
+	case TelemetryRouteTunnelStatusDesired:
+		return true
+	case TelemetryRouteTunnelStatusDown:
+		return true
+	case TelemetryRouteTunnelStatusEstablished:
+		return true
+	case TelemetryRouteTunnelStatusEstablishing:
+		return true
+	case TelemetryRouteTunnelStatusRemoved:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TelemetryRouteKind.
 const (
 	BastionGateway TelemetryRouteKind = "bastion_gateway"
@@ -425,6 +455,27 @@ func (e TelemetryRouteKind) Valid() bool {
 	case BastionGateway:
 		return true
 	case DirectArgus:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TelemetryRouteTransport.
+const (
+	TelemetryRouteTransportBastionTunnel  TelemetryRouteTransport = "bastion_tunnel"
+	TelemetryRouteTransportDirect         TelemetryRouteTransport = "direct"
+	TelemetryRouteTransportExecutorTunnel TelemetryRouteTransport = "executor_tunnel"
+)
+
+// Valid indicates whether the value is a known member of the TelemetryRouteTransport enum.
+func (e TelemetryRouteTransport) Valid() bool {
+	switch e {
+	case TelemetryRouteTransportBastionTunnel:
+		return true
+	case TelemetryRouteTransportDirect:
+		return true
+	case TelemetryRouteTransportExecutorTunnel:
 		return true
 	default:
 		return false
@@ -446,6 +497,33 @@ func (e TelemetrySignal) Valid() bool {
 	case Metrics:
 		return true
 	case Traces:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TrustBundleSnapshotState.
+const (
+	TrustBundleSnapshotStateFailed      TrustBundleSnapshotState = "failed"
+	TrustBundleSnapshotStateOverlapping TrustBundleSnapshotState = "overlapping"
+	TrustBundleSnapshotStatePreparing   TrustBundleSnapshotState = "preparing"
+	TrustBundleSnapshotStateRetiring    TrustBundleSnapshotState = "retiring"
+	TrustBundleSnapshotStateStable      TrustBundleSnapshotState = "stable"
+)
+
+// Valid indicates whether the value is a known member of the TrustBundleSnapshotState enum.
+func (e TrustBundleSnapshotState) Valid() bool {
+	switch e {
+	case TrustBundleSnapshotStateFailed:
+		return true
+	case TrustBundleSnapshotStateOverlapping:
+		return true
+	case TrustBundleSnapshotStatePreparing:
+		return true
+	case TrustBundleSnapshotStateRetiring:
+		return true
+	case TrustBundleSnapshotStateStable:
 		return true
 	default:
 		return false
@@ -544,12 +622,13 @@ type CollectorArtifact struct {
 
 // CollectorCertificateResult defines model for CollectorCertificateResult.
 type CollectorCertificateResult struct {
-	CaBundlePem          string             `json:"ca_bundle_pem"`
-	CertificateExpiresAt time.Time          `json:"certificate_expires_at"`
-	CertificatePem       *string            `json:"certificate_pem,omitempty"`
-	CollectorId          openapi_types.UUID `json:"collector_id"`
-	IngestGrpcEndpoint   *string            `json:"ingest_grpc_endpoint,omitempty"`
-	IngestHttpEndpoint   *string            `json:"ingest_http_endpoint,omitempty"`
+	CertificateExpiresAt time.Time           `json:"certificate_expires_at"`
+	ClientCertificatePem *string             `json:"client_certificate_pem,omitempty"`
+	CollectorId          openapi_types.UUID  `json:"collector_id"`
+	IngestGrpcEndpoint   *string             `json:"ingest_grpc_endpoint,omitempty"`
+	IngestHttpEndpoint   *string             `json:"ingest_http_endpoint,omitempty"`
+	ServerCertificatePem *string             `json:"server_certificate_pem,omitempty"`
+	TrustBundle          TrustBundleSnapshot `json:"trust_bundle"`
 }
 
 // CollectorConfigRevision defines model for CollectorConfigRevision.
@@ -583,8 +662,9 @@ type CollectorDistributionVersion struct {
 
 // CollectorEnrollmentRequest defines model for CollectorEnrollmentRequest.
 type CollectorEnrollmentRequest struct {
-	CollectorId openapi_types.UUID `json:"collector_id"`
-	CsrPem      *string            `json:"csr_pem,omitempty"`
+	ClientCsrPem *string            `json:"client_csr_pem,omitempty"`
+	CollectorId  openapi_types.UUID `json:"collector_id"`
+	ServerCsrPem *string            `json:"server_csr_pem,omitempty"`
 }
 
 // CollectorInstance defines model for CollectorInstance.
@@ -627,10 +707,19 @@ type CollectorPreview struct {
 	ExpectedVersion       *int64              `json:"expected_version,omitempty"`
 	GatewayCollectorId    *openapi_types.UUID `json:"gateway_collector_id,omitempty"`
 
+	// ImagePullSecrets 目标集群中已存在的 imagePullSecret 名称;Argus 不创建或读取仓库凭据
+	ImagePullSecrets *[]string `json:"image_pull_secrets,omitempty"`
+
 	// KubernetesImage 集群内网镜像全量地址(含 tag/digest);仅 kubernetes_cluster 资源可填,留空使用服务端默认镜像
-	KubernetesImage *string              `json:"kubernetes_image,omitempty"`
-	ProfileIds      []openapi_types.UUID `json:"profile_ids"`
-	RouteKind       TelemetryRouteKind   `json:"route_kind"`
+	KubernetesImage *string `json:"kubernetes_image,omitempty"`
+
+	// LoopbackPort 隧道形态的 OTLP 回环端口;缺省 4317,相邻端口保留给身份注册与轮换
+	LoopbackPort *int                 `json:"loopback_port,omitempty"`
+	ProfileIds   []openapi_types.UUID `json:"profile_ids"`
+	RouteKind    TelemetryRouteKind   `json:"route_kind"`
+
+	// Transport 遥测字节的物理路径,与路由 kind 正交;隧道形态见 PlanV4
+	Transport TelemetryRouteTransport `json:"transport"`
 }
 
 // CollectorRole defines model for CollectorRole.
@@ -783,6 +872,9 @@ type RouteTestCreate struct {
 	CollectorId        openapi_types.UUID  `json:"collector_id"`
 	GatewayCollectorId *openapi_types.UUID `json:"gateway_collector_id,omitempty"`
 	RouteKind          TelemetryRouteKind  `json:"route_kind"`
+
+	// Transport 遥测字节的物理路径,与路由 kind 正交;隧道形态见 PlanV4
+	Transport TelemetryRouteTransport `json:"transport"`
 }
 
 // RouteTestResult defines model for RouteTestResult.
@@ -879,23 +971,40 @@ type TelemetryRetentionPolicy struct {
 
 // TelemetryRoute defines model for TelemetryRoute.
 type TelemetryRoute struct {
-	CollectorId        openapi_types.UUID   `json:"collector_id"`
-	CreatedAt          time.Time            `json:"created_at"`
-	EnterpriseId       *openapi_types.UUID  `json:"enterprise_id,omitempty"`
-	GatewayCollectorId *openapi_types.UUID  `json:"gateway_collector_id,omitempty"`
-	Id                 openapi_types.UUID   `json:"id"`
-	Kind               TelemetryRouteKind   `json:"kind"`
-	LastTestedAt       *time.Time           `json:"last_tested_at,omitempty"`
-	Status             TelemetryRouteStatus `json:"status"`
-	UpdatedAt          time.Time            `json:"updated_at"`
-	Version            int64                `json:"version"`
+	CollectorId        openapi_types.UUID  `json:"collector_id"`
+	CreatedAt          time.Time           `json:"created_at"`
+	EnterpriseId       *openapi_types.UUID `json:"enterprise_id,omitempty"`
+	GatewayCollectorId *openapi_types.UUID `json:"gateway_collector_id,omitempty"`
+	Id                 openapi_types.UUID  `json:"id"`
+	Kind               TelemetryRouteKind  `json:"kind"`
+	LastTestedAt       *time.Time          `json:"last_tested_at,omitempty"`
+
+	// LoopbackPort 隧道形态下 Collector OTLP 出口的本机回环端口;相邻端口保留给身份注册与轮换;direct 形态为空
+	LoopbackPort *int                 `json:"loopback_port,omitempty"`
+	Status       TelemetryRouteStatus `json:"status"`
+
+	// Transport 遥测字节的物理路径,与路由 kind 正交;隧道形态见 PlanV4
+	Transport               TelemetryRouteTransport `json:"transport"`
+	TunnelLastDropReason    *string                 `json:"tunnel_last_drop_reason,omitempty"`
+	TunnelLastEstablishedAt *time.Time              `json:"tunnel_last_established_at,omitempty"`
+
+	// TunnelStatus 隧道运行状态;direct 形态为空。隧道断开不等于 Collector 故障
+	TunnelStatus *TelemetryRouteTunnelStatus `json:"tunnel_status,omitempty"`
+	UpdatedAt    time.Time                   `json:"updated_at"`
+	Version      int64                       `json:"version"`
 }
 
 // TelemetryRouteStatus defines model for TelemetryRoute.Status.
 type TelemetryRouteStatus string
 
+// TelemetryRouteTunnelStatus 隧道运行状态;direct 形态为空。隧道断开不等于 Collector 故障
+type TelemetryRouteTunnelStatus string
+
 // TelemetryRouteKind defines model for TelemetryRouteKind.
 type TelemetryRouteKind string
+
+// TelemetryRouteTransport 遥测字节的物理路径,与路由 kind 正交;隧道形态见 PlanV4
+type TelemetryRouteTransport string
 
 // TelemetrySignal defines model for TelemetrySignal.
 type TelemetrySignal string
@@ -911,10 +1020,26 @@ type TelemetryUsage struct {
 	Spans                 int64     `json:"spans"`
 }
 
+// TrustBundleSnapshot defines model for TrustBundleSnapshot.
+type TrustBundleSnapshot struct {
+	BundlePem             string                   `json:"bundle_pem"`
+	BundleSha256          string                   `json:"bundle_sha256"`
+	CurrentCaFingerprints []string                 `json:"current_ca_fingerprints"`
+	Epoch                 int64                    `json:"epoch"`
+	NextCaFingerprints    []string                 `json:"next_ca_fingerprints"`
+	RetireAt              *time.Time               `json:"retire_at,omitempty"`
+	StartedAt             time.Time                `json:"started_at"`
+	State                 TrustBundleSnapshotState `json:"state"`
+}
+
+// TrustBundleSnapshotState defines model for TrustBundleSnapshot.State.
+type TrustBundleSnapshotState string
+
 // PendingActionPublicSchema defines model for pending-action-public.schema.
 type PendingActionPublicSchema struct {
-	ActionRef string `json:"action_ref"`
-	Approval  *struct {
+	ActionRef  string `json:"action_ref"`
+	ActionType string `json:"action_type"`
+	Approval   *struct {
 		ApprovedCount    int     `json:"approved_count"`
 		MinimumApprovers int     `json:"minimum_approvers"`
 		PolicyRef        *string `json:"policy_ref,omitempty"`

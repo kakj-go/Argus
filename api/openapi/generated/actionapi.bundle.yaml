@@ -243,6 +243,7 @@ components:
       required:
         - schema_version
         - action_ref
+        - action_type
         - title
         - summary
         - risk
@@ -259,6 +260,10 @@ components:
         action_ref:
           type: string
           minLength: 1
+        action_type:
+          type: string
+          minLength: 3
+          maxLength: 128
         title:
           type: string
           minLength: 1
@@ -502,6 +507,7 @@ components:
         - execution_id
         - action_ref
         - status
+        - one_time_result_state
         - created_at
         - updated_at
       properties:
@@ -519,9 +525,40 @@ components:
             - cancelled
         result_ref:
           type: string
-        one_time_result_available:
-          type: boolean
+        one_time_result_state:
+          enum:
+            - unavailable
+            - available
+            - consumed
+            - expired
           readOnly: true
+        resource_ref:
+          type: object
+          additionalProperties: false
+          required:
+            - resource_type
+            - resource_id
+            - version
+          properties:
+            resource_type:
+              type: string
+            resource_id:
+              type: string
+            version:
+              type: integer
+              minimum: 1
+        operation_ref:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+            - id
+          properties:
+            kind:
+              const: connector_install
+            id:
+              type: string
+              format: uuid
         error_code:
           type: string
           pattern: ^[A-Z][A-Z0-9_]*$

@@ -505,6 +505,7 @@ export interface components {
             /** @constant */
             schema_version: "argus.pending_action/v1";
             action_ref: string;
+            action_type: string;
             title: string;
             summary: string;
             /** @enum {unknown} */
@@ -575,7 +576,19 @@ export interface components {
             /** @enum {unknown} */
             status: "pending" | "running" | "succeeded" | "failed" | "result_unknown" | "cancelled";
             result_ref?: string;
-            readonly one_time_result_available?: boolean;
+            /** @enum {unknown} */
+            readonly one_time_result_state: "unavailable" | "available" | "consumed" | "expired";
+            resource_ref?: {
+                resource_type: string;
+                resource_id: string;
+                version: number;
+            };
+            operation_ref?: {
+                /** @constant */
+                kind: "connector_install";
+                /** Format: uuid */
+                id: string;
+            };
             error_code?: string;
             /** Format: date-time */
             created_at: string;

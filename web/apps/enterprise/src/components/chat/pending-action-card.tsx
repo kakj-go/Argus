@@ -10,6 +10,7 @@ import {
   Skeleton,
   type PreviewCommitStatus,
 } from "@argus/ui";
+import { presentPendingAction } from "../pending-action-presentation";
 
 function toPreviewStatus(action: PendingActionPublic): PreviewCommitStatus {
   switch (action.status) {
@@ -79,6 +80,7 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
     typeof action.preview === "object" && action.preview !== null
       ? (action.preview as Record<string, unknown>)
       : {};
+  const presented = presentPendingAction(action, t);
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ["approvals", actionRef] });
@@ -116,7 +118,7 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
     }
   };
 
-  const affectedName = String(preview["name"] ?? action.title);
+  const affectedName = presented.affectedName;
   const affectedDetail = [preview["address"], preview["environment"]]
     .filter(Boolean)
     .join(" · ");
@@ -124,7 +126,7 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
   const resultMessage =
     status === "success" ? (
       <span>
-        {action.result_summary ?? t("chat.result.success")}
+        {presented.resultSummary ?? t("chat.result.success")}
         {action.execution_ref && (
           <a className="argus-chat-action__task-link" href="/tasks">
             {t("chat.action.viewTask")}
@@ -133,7 +135,7 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
         )}
       </span>
     ) : status === "failed" ? (
-      (failedMessage ?? action.result_summary ?? t("chat.result.failed"))
+      (failedMessage ?? presented.resultSummary ?? t("chat.result.failed"))
     ) : undefined;
 
   return (
@@ -146,14 +148,14 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
         affected={[
           {
             name: affectedName,
-            detail: affectedDetail || action.summary,
+            detail: affectedDetail || presented.summary,
           },
         ]}
         confirming={busy}
         confirmLabel={
           awaitingApproval ? t("chat.action.awaitingApproval") : undefined
         }
-        diff={action.diff.map((line) => ({
+        diff={presented.diff.map((line) => ({
           type:
             line.kind === "add"
               ? "add"
@@ -169,9 +171,9 @@ export function PendingActionCard({ card }: { card: CardInstance }) {
         risk={action.risk}
         riskLabel={t(`chat.action.risk.${action.risk}`)}
         status={status}
-        title={action.title}
+        title={presented.title}
       >
-        <p className="argus-chat-action__summary">{action.summary}</p>
+        <p className="argus-chat-action__summary">{presented.summary}</p>
       </PreviewCommitCard>
     </div>
   );

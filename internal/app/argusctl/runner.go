@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -15,7 +16,15 @@ type commandRunner struct {
 }
 
 func (r commandRunner) run(ctx context.Context, stdin io.Reader, name string, args ...string) (string, error) {
+	return r.runEnv(ctx, nil, stdin, name, args...)
+}
+
+func (r commandRunner) runEnv(ctx context.Context, environment map[string]string, stdin io.Reader, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = os.Environ()
+	for key, value := range environment {
+		cmd.Env = append(cmd.Env, key+"="+value)
+	}
 	cmd.Stdin = stdin
 	var captured bytes.Buffer
 	cmd.Stdout = io.MultiWriter(r.stdout, &captured)

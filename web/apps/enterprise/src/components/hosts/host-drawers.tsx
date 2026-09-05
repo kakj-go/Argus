@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
@@ -10,9 +10,10 @@ import {
   formatApiError,
   formatErrorCode,
   useApi,
+  type BastionConnectorReplacementPreview,
   type BastionScope,
-  type ConfirmActionResult,
-  type Connector,
+  type ActionOneTimeResult,
+  type ConnectorInstallOperation,
   type Environment,
   type Host,
   type PendingActionPublic,
@@ -20,20 +21,24 @@ import {
 import {
   Alert,
   Button,
-  CodeBlock,
   Field,
   FormDrawer,
   Input,
   Select,
   Textarea,
 } from "@argus/ui";
-import { formatDateTime, labelsToText, parseLabels } from "./host-utils";
+import { labelsToText, parseLabels } from "./host-utils";
 import { PendingActionConfirm } from "./pending-action-confirm";
+import { InstallInstructionPanel } from "./install-instruction-panel";
+import {
+  connectorInstallEventStatusLabel,
+  connectorInstallStageLabel,
+} from "./connector-install-presentation";
 
 const ENVIRONMENTS: Environment[] = ["development", "staging", "production"];
 type EditableHostConnectionMode = Exclude<
   Host["connection_mode"],
-  "connector_local"
+  "connector_local" | "self_enrolled"
 >;
 const HOST_CONNECTION_MODES: EditableHostConnectionMode[] = [
   "via_bastion",
@@ -88,7 +93,11 @@ function BastionFields({
   const { t } = useTranslation();
   return (
     <>
-      <Field requirement="required" error={errors?.name} label={t("hosts.bastionForm.name")}>
+      <Field
+        requirement="required"
+        error={errors?.name}
+        label={t("hosts.bastionForm.name")}
+      >
         <Input
           autoFocus={autoFocus}
           maxLength={bastionConstraints.name.maxLength}
@@ -122,163 +131,13 @@ function BastionFields({
   );
 }
 
-/** 添加堡垒机：创建 pending Bastion Scope + 一次性注册令牌。 */
-export function AddBastionDrawer({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: () => void;
-}) {
-  const { t } = useTranslation();
-  const api = useApi();
-  const [submitting, setSubmitting] = useState(false);
-  const [pendingAction, setPendingAction] =
-    useState<PendingActionPublic | null>(null);
-  const [enrollment, setEnrollment] =
-    useState<ConfirmActionResult["one_time_result"]>();
-  const schema = useMemo(
-    () =>
-      z.object({
-        name: z
-          .string()
-          .trim()
-          .min(1, t("hosts.bastionForm.name"))
-          .max(bastionConstraints.name.maxLength ?? 128),
-        environment: z.enum(["development", "staging", "production"]),
-        labelsText: z.string(),
-      }),
-    [t],
-  );
-  const {
-    reset,
-    setError,
-    setValue,
-    watch,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<BastionFormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      name: "",
-      environment: "production",
-      labelsText: "",
-    },
-  });
-  const name = watch("name");
-  const environment = watch("environment");
-  const labelsText = watch("labelsText");
-
-  const close = (next: boolean) => {
-    if (!next) {
-      reset();
-      setPendingAction(null);
-      setEnrollment(undefined);
-    }
-    onOpenChange(next);
-  };
-
-  const submit = async (values: BastionFormValues) => {
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      setPendingAction(
-        await api.connectors.previewCreateBastionScope({
-          name: values.name,
-          environment: values.environment,
-          labels: parseLabels(values.labelsText),
-        }),
-      );
-    } catch (error) {
-      const message = formatApiError(
-        error,
-        t("hosts.bastionForm.commandGenerateFailed"),
-        (requestId) => t("common.requestReference", { requestId }),
-      );
-      if (apiErrorField(error) === "name") {
-        setError("name", { message, type: "server" }, { shouldFocus: true });
-      } else {
-        setError("root", { message, type: "server" });
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <FormDrawer
-      description={t("hosts.bastionForm.description")}
-      loading={submitting}
-      onOpenChange={close}
-      onSubmit={handleSubmit((values) => void submit(values))}
-      open={open}
-      submitLabel={t("hosts.bastionForm.submit")}
-      title={t("hosts.bastionForm.title")}
-    >
-      {pendingAction ? (
-        <PendingActionConfirm
-          action={pendingAction}
-          claimOneTimeResult
-          onCancel={() => setPendingAction(null)}
-          onDone={(result) => {
-            setPendingAction(null);
-            setEnrollment(result.one_time_result);
-            onCreated();
-          }}
-        />
-      ) : enrollment ? (
-        <div className="argus-bastion-command__code">
-          <Alert
-            description={t("hosts.bastionForm.commandWarning")}
-            title={t("hosts.bastionForm.commandWarningTitle")}
-            tone="warning"
-          />
-          <CodeBlock
-            code={enrollment.enrollment.install_command ?? ""}
-            language="bash"
-          />
-          <span>{formatDateTime(enrollment.expires_at)}</span>
-        </div>
-      ) : (
-        <>
-          {errors.root?.message && (
-            <Alert
-              description={errors.root.message}
-              title={t("hosts.bastionForm.title")}
-              tone="danger"
-            />
-          )}
-          <BastionFields
-            autoFocus
-            environment={environment}
-            errors={{ name: errors.name?.message }}
-            name={name}
-            onEnvironmentChange={(value) =>
-              setValue("environment", value, { shouldValidate: true })
-            }
-            onNameChange={(value) =>
-              setValue("name", value, { shouldValidate: true })
-            }
-            onLabelsTextChange={(value) => setValue("labelsText", value)}
-            labelsText={labelsText}
-          />
-        </>
-      )}
-    </FormDrawer>
-  );
-}
-
-/** 编辑稳定的 Bastion Scope，并按需生成一次性的安装/更新命令。 */
+/** Edit Bastion metadata and expose active-Connector replacement as maintenance. */
 export function EditBastionDrawer({
   scope,
-  connectorStatus,
   onOpenChange,
   onSaved,
 }: {
   scope: BastionScope | null;
-  connectorStatus?: Connector["status"];
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
@@ -289,11 +148,29 @@ export function EditBastionDrawer({
   const [generationError, setGenerationError] = useState("");
   const [pendingAction, setPendingAction] =
     useState<PendingActionPublic | null>(null);
-  const [installCommand, setInstallCommand] = useState<string | null>(null);
-  const canInstall =
-    scope?.status === "pending" ||
-    scope?.status === "uninstalled" ||
-    connectorStatus === "offline";
+  const [actionKind, setActionKind] = useState<"update" | "replace" | null>(
+    null,
+  );
+  const [installInstructions, setInstallInstructions] =
+    useState<ActionOneTimeResult | null>(null);
+  const [replacementAddress, setReplacementAddress] = useState("");
+  const [replacementPort, setReplacementPort] = useState("22");
+  const [replacementUsername, setReplacementUsername] = useState("");
+  const [replacementCredentialID, setReplacementCredentialID] = useState("");
+  const [replacementOperation, setReplacementOperation] =
+    useState<ConnectorInstallOperation | null>(null);
+  const initializedScopeID = useRef<string | null>(null);
+  const submitIntent = useRef<"update" | "replace">("update");
+  const canReplace = Boolean(scope?.active_connector_id);
+  const directReplacement = Boolean(
+    scope && scope.onboarding_mode !== "command",
+  );
+  const replacementCredentials = useQuery({
+    queryKey: ["credentials"],
+    queryFn: () => api.secrets.listCredentials(),
+    enabled: Boolean(scope && directReplacement),
+    select: (items) => items.filter((item) => item.protocol === "ssh"),
+  });
   const schema = useMemo(
     () =>
       z.object({
@@ -327,7 +204,14 @@ export function EditBastionDrawer({
   const labelsText = watch("labelsText");
 
   useEffect(() => {
-    if (!scope) return;
+    if (!scope) {
+      initializedScopeID.current = null;
+      return;
+    }
+    // A list refetch may replace the Scope object while the drawer is open.
+    // Preserve a claimed command and durable operation until this Scope closes.
+    if (initializedScopeID.current === scope.id) return;
+    initializedScopeID.current = scope.id;
     reset({
       name: scope.name,
       environment: scope.environment,
@@ -335,13 +219,52 @@ export function EditBastionDrawer({
     });
     setGenerationError("");
     setPendingAction(null);
-    setInstallCommand(null);
+    setActionKind(null);
+    setInstallInstructions(null);
+    setReplacementAddress("");
+    setReplacementPort("22");
+    setReplacementUsername("");
+    setReplacementCredentialID("");
+    setReplacementOperation(null);
   }, [reset, scope]);
+
+  useEffect(() => {
+    if (
+      !replacementOperation ||
+      ["succeeded", "failed", "expired", "cancelled"].includes(
+        replacementOperation.status,
+      )
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const next = await api.connectors.getInstallOperation(
+          replacementOperation.id,
+        );
+        if (!cancelled) {
+          setReplacementOperation(next);
+          if (next.status === "succeeded") {
+            onSaved();
+            onOpenChange(false);
+          }
+        }
+      } catch {
+        // The server owns this timeline; keep the last durable projection and retry.
+      }
+    }, 800);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [api.connectors, onOpenChange, onSaved, replacementOperation]);
 
   const submit = async (values: BastionFormValues) => {
     if (!scope || submitting) return;
     setSubmitting(true);
     try {
+      setActionKind("update");
       setPendingAction(
         await api.connectors.previewUpdateBastionScope(scope.id, {
           name: values.name,
@@ -371,13 +294,60 @@ export function EditBastionDrawer({
     setGenerating(true);
     setGenerationError("");
     try {
+      const replacement: BastionConnectorReplacementPreview = {
+        expected_version: scope.resource_version ?? 1,
+      };
+      if (directReplacement) {
+        const port = Number(replacementPort);
+        if (
+          !replacementAddress.trim() ||
+          !Number.isInteger(port) ||
+          port < 1 ||
+          port > 65535 ||
+          !replacementUsername.trim() ||
+          !replacementCredentialID
+        ) {
+          setGenerationError(
+            t("hosts.bastionForm.replacementConnectionRequired"),
+          );
+          return;
+        }
+        let test = await api.hosts.createConnectionTest({
+          address: replacementAddress.trim(),
+          port,
+          platform: "linux",
+          connection_mode: "direct_ssh",
+          credential_id: replacementCredentialID,
+          username: replacementUsername.trim(),
+        });
+        for (
+          let attempt = 0;
+          attempt < 60 && ["queued", "running"].includes(test.status);
+          attempt += 1
+        ) {
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+          test = await api.hosts.getConnectionTest(test.id);
+        }
+        if (test.status !== "succeeded") {
+          setGenerationError(
+            formatErrorCode(test.error_code, t("hosts.bastionForm.testFailed")),
+          );
+          return;
+        }
+        Object.assign(replacement, {
+          address: replacementAddress.trim(),
+          port,
+          username: replacementUsername.trim(),
+          credential_id: replacementCredentialID,
+          connection_test_id: test.id,
+        });
+      }
+      setActionKind("replace");
       setPendingAction(
-        await api.connectors.previewReplaceBastionConnector(
-          scope.id,
-          scope.resource_version ?? 1,
-        ),
+        await api.connectors.previewConnectorReplacement(scope.id, replacement),
       );
     } catch (error) {
+      setActionKind(null);
       setGenerationError(
         formatApiError(
           error,
@@ -390,12 +360,27 @@ export function EditBastionDrawer({
     }
   };
 
+  const submitDrawer = handleSubmit(
+    (values) => {
+      const intent = submitIntent.current;
+      submitIntent.current = "update";
+      if (intent === "replace") {
+        void generateCommand();
+        return;
+      }
+      void submit(values);
+    },
+    () => {
+      submitIntent.current = "update";
+    },
+  );
+
   return (
     <FormDrawer
       description={t("hosts.bastionForm.editDescription")}
       loading={submitting}
       onOpenChange={onOpenChange}
-      onSubmit={handleSubmit((values) => void submit(values))}
+      onSubmit={submitDrawer}
       open={scope !== null}
       submitLabel={t("hosts.bastionForm.save")}
       title={t("hosts.bastionForm.editTitle", { name: scope?.name ?? "" })}
@@ -404,16 +389,29 @@ export function EditBastionDrawer({
       {pendingAction ? (
         <PendingActionConfirm
           action={pendingAction}
-          claimOneTimeResult
-          onCancel={() => setPendingAction(null)}
+          claimOneTimeResult={
+            actionKind === "replace" && scope?.onboarding_mode === "command"
+          }
+          onCancel={() => {
+            setPendingAction(null);
+            setActionKind(null);
+          }}
           onDone={(result) => {
             setPendingAction(null);
-            onSaved();
-            if (result.one_time_result?.enrollment.install_command) {
-              setInstallCommand(
-                result.one_time_result.enrollment.install_command,
-              );
+            if (actionKind === "replace" && result.one_time_result) {
+              setInstallInstructions(result.one_time_result);
+              onSaved();
+            } else if (
+              actionKind === "replace" &&
+              result.execution?.operation_ref?.id
+            ) {
+              void api.connectors
+                .getInstallOperation(result.execution.operation_ref.id)
+                .then(setReplacementOperation);
+              setActionKind(null);
             } else {
+              setActionKind(null);
+              onSaved();
               onOpenChange(false);
             }
           }}
@@ -443,48 +441,126 @@ export function EditBastionDrawer({
             labelsText={labelsText}
           />
 
-          <section className="argus-bastion-command">
-            <div className="argus-bastion-command__head">
-              <div>
-                <h3>{t("hosts.bastionForm.commandTitle")}</h3>
-                <p>{t("hosts.bastionForm.commandDescription")}</p>
-              </div>
-              {canInstall && (
+          {canReplace && (
+            <section className="argus-bastion-command">
+              <div className="argus-bastion-command__head">
+                <div>
+                  <h3>{t("hosts.bastionForm.replacementTitle")}</h3>
+                  <p>
+                    {scope?.onboarding_mode === "command"
+                      ? t("hosts.bastionForm.replacementCommandDescription")
+                      : t("hosts.bastionForm.replacementOperationDescription")}
+                  </p>
+                </div>
                 <Button
                   loading={generating}
-                  onClick={() => void generateCommand()}
-                  variant="secondary"
+                  onClick={() => {
+                    submitIntent.current = "replace";
+                  }}
+                  type="submit"
+                  variant="danger"
                 >
-                  {t("hosts.bastionForm.commandGenerate")}
+                  {t("hosts.bastionForm.replaceConnector")}
                 </Button>
+              </div>
+              {directReplacement && !replacementOperation && (
+                <div className="argus-form-grid">
+                  <Field
+                    requirement="required"
+                    label={t("hosts.wizard.address")}
+                  >
+                    <Input
+                      onChange={(event) =>
+                        setReplacementAddress(event.target.value)
+                      }
+                      placeholder={t("hosts.wizard.addressPlaceholder")}
+                      value={replacementAddress}
+                    />
+                  </Field>
+                  <Field requirement="required" label={t("hosts.wizard.port")}>
+                    <Input
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        setReplacementPort(event.target.value)
+                      }
+                      value={replacementPort}
+                    />
+                  </Field>
+                  <Field
+                    requirement="required"
+                    label={t("hosts.wizard.account")}
+                  >
+                    <Input
+                      onChange={(event) =>
+                        setReplacementUsername(event.target.value)
+                      }
+                      placeholder={t("hosts.wizard.accountPlaceholder")}
+                      value={replacementUsername}
+                    />
+                  </Field>
+                  <Field
+                    requirement="required"
+                    label={t("hosts.wizard.secret")}
+                  >
+                    <Select
+                      onValueChange={setReplacementCredentialID}
+                      options={(replacementCredentials.data ?? []).map(
+                        (credential) => ({
+                          value: credential.id,
+                          label: credential.name,
+                        }),
+                      )}
+                      placeholder={t("hosts.wizard.secretEmpty")}
+                      value={replacementCredentialID}
+                    />
+                  </Field>
+                </div>
               )}
-            </div>
-            {canInstall ? (
               <Alert
-                description={t("hosts.bastionForm.commandWarning")}
-                title={t("hosts.bastionForm.commandWarningTitle")}
+                description={t("hosts.bastionForm.replacementWarning")}
+                title={t("hosts.bastionForm.replacementWarningTitle")}
                 tone="warning"
               />
-            ) : (
-              <Alert
-                description={t("hosts.bastionForm.commandUnavailable")}
-                title={t("hosts.bastionForm.commandUnavailableTitle")}
-                tone="info"
-              />
-            )}
-            {generationError && (
-              <Alert
-                description={generationError}
-                title={t("hosts.bastionForm.commandGenerateFailed")}
-                tone="danger"
-              />
-            )}
-            {installCommand ? (
-              <div className="argus-bastion-command__code">
-                <CodeBlock code={installCommand} language="bash" />
-              </div>
-            ) : null}
-          </section>
+              {generationError && (
+                <Alert
+                  description={generationError}
+                  title={t("hosts.bastionForm.commandGenerateFailed")}
+                  tone="danger"
+                />
+              )}
+              {installInstructions && (
+                <div className="argus-bastion-command__code">
+                  <InstallInstructionPanel result={installInstructions} />
+                </div>
+              )}
+              {replacementOperation && (
+                <div className="argus-stack">
+                  <Alert
+                    description={t("hosts.bastionForm.installProgressHint")}
+                    title={`${t("hosts.bastionForm.installProgress")} · ${connectorInstallStageLabel(t, replacementOperation.stage)}`}
+                    tone={
+                      replacementOperation.status === "failed" ||
+                      replacementOperation.status === "expired"
+                        ? "danger"
+                        : "info"
+                    }
+                  />
+                  <ol className="argus-operation-timeline">
+                    {replacementOperation.events.map((event) => (
+                      <li key={event.id}>
+                        <strong>
+                          {connectorInstallStageLabel(t, event.stage)}
+                        </strong>
+                        <span>
+                          {connectorInstallEventStatusLabel(t, event.status)}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
     </FormDrawer>
@@ -622,7 +698,8 @@ export function EditHostDrawer({
       address: host.address,
       port: String(host.port),
       connectionMode:
-        host.connection_mode === "connector_local"
+        host.connection_mode === "connector_local" ||
+        host.connection_mode === "self_enrolled"
           ? "via_bastion"
           : host.connection_mode,
       bastionScopeId: host.bastion_scope_id ?? "",
@@ -677,11 +754,10 @@ export function EditHostDrawer({
         }
         if (connectionTest.status !== "succeeded") {
           setError("root", {
-            message:
-              formatErrorCode(
-                connectionTest.error_code,
-                t("hosts.hostForm.testFailed"),
-              ),
+            message: formatErrorCode(
+              connectionTest.error_code,
+              t("hosts.hostForm.testFailed"),
+            ),
             type: "server",
           });
           return;
@@ -758,13 +834,21 @@ export function EditHostDrawer({
               tone="danger"
             />
           )}
-          <Field requirement="required" error={errors.name?.message} label={t("hosts.wizard.name")}>
+          <Field
+            requirement="required"
+            error={errors.name?.message}
+            label={t("hosts.wizard.name")}
+          >
             <Input
               {...register("name")}
               maxLength={hostConstraints.name.maxLength}
             />
           </Field>
-          <Field requirement="required" error={errors.address?.message} label={t("hosts.wizard.address")}>
+          <Field
+            requirement="required"
+            error={errors.address?.message}
+            label={t("hosts.wizard.address")}
+          >
             <Input
               {...register("address")}
               disabled={host?.connection_mode === "connector_local"}
@@ -772,7 +856,11 @@ export function EditHostDrawer({
             />
           </Field>
           <div className="argus-form-row">
-            <Field requirement="required" error={errors.port?.message} label={t("hosts.wizard.port")}>
+            <Field
+              requirement="required"
+              error={errors.port?.message}
+              label={t("hosts.wizard.port")}
+            >
               <Input
                 {...register("port")}
                 disabled={host?.connection_mode === "connector_local"}
@@ -881,10 +969,7 @@ export function EditHostDrawer({
             hint={t("hosts.wizard.labelsHint")}
             label={t("hosts.wizard.labels")}
           >
-            <Textarea
-              {...register("labelsText")}
-              rows={3}
-            />
+            <Textarea {...register("labelsText")} rows={3} />
           </Field>
         </>
       )}

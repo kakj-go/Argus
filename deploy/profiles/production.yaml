@@ -22,14 +22,17 @@ spec:
     enterpriseHost: argus.example.com
     platformHost: platform.argus.example.com
     connectorHost: connector.argus.example.com
-    tls:
-      enabled: true
-      mode: cert-manager-issuer
-      issuerRef:
-        name: replace-with-cluster-issuer
-        kind: ClusterIssuer
+  pki:
+    mode: managed
+    bootstrapTLSMode: insecure-first-fetch
+    rotation:
+      overlap: 168h
   security:
     platformMfaRequired: false
+  directExecutor:
+    telemetryTunnelLimit: 64
+    controlTunnelLimit: 32
+    tunnelBytesPerSecond: 67108864
   openSandbox:
     runtimeClassName: ""
     allowSharedRuntime: false

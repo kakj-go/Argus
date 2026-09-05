@@ -76,9 +76,10 @@ export function collectorTone(status: CollectorStatus): Tone {
 /** 连接路径文案：Argus → 堡垒机 → 目标地址 / Direct Executor → 目标地址。 */
 export function connectionPathKey(
   host: Host,
-): "viaBastion" | "connectorLocal" | "direct" {
+): "viaBastion" | "connectorLocal" | "direct" | "selfEnrolled" {
   if (host.connection_mode === "via_bastion") return "viaBastion";
   if (host.connection_mode === "connector_local") return "connectorLocal";
+  if (host.connection_mode === "self_enrolled") return "selfEnrolled";
   return "direct";
 }
 
@@ -157,11 +158,17 @@ export function seededNumber(seed: string, min: number, max: number): number {
   return seededSeries(seed, 1, (min + max) / 2, (max - min) / 2)[0] ?? min;
 }
 
-export function formatDateTime(iso?: string): string {
+export function formatDateTime(iso?: string, locale?: string): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString();
+  const resolvedLocale =
+    locale ??
+    (typeof document !== "undefined" &&
+    document.documentElement.lang === "en-US"
+      ? "en-US"
+      : "zh-CN");
+  return date.toLocaleString(resolvedLocale);
 }
 
 /** 将 ISO 时间点格式化为 "3 天 2 小时" 风格的时长。 */

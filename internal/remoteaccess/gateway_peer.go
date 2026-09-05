@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,6 +23,8 @@ import (
 	"github.com/kakj-go/Argus/internal/storage/postgres"
 	"github.com/kakj-go/Argus/internal/storage/postgres/db"
 	redisstore "github.com/kakj-go/Argus/internal/storage/redis"
+	"github.com/kakj-go/Argus/internal/tlsmaterial"
+	"github.com/kakj-go/Argus/internal/trustbundle"
 )
 
 type ConnectorOwnerResolver struct {
@@ -127,7 +129,7 @@ func (session *routedBackendSession) Close(ctx context.Context, reason string) e
 }
 
 type GatewayPeerDialer struct {
-	TLSConfig      *tls.Config
+	TLSCredentials credentials.TransportCredentials
 	HeadlessSuffix string
 	Port           string
 	Resolver       GatewayPeerEndpointResolver
@@ -139,18 +141,23 @@ type GatewayPeerEndpointResolver interface {
 }
 
 func NewGatewayPeerDialer(certificatePath, privateKeyPath, caPath, serverName, headlessSuffix, port string) (*GatewayPeerDialer, error) {
-	configuration, err := loadPeerTLS(certificatePath, privateKeyPath, caPath, serverName, false)
+	material, err := tlsmaterial.Load(tlsmaterial.Options{CertificatePath: certificatePath, PrivateKeyPath: privateKeyPath,
+		CABundlePath: caPath, Usage: x509.ExtKeyUsageClientAuth})
+	if err != nil {
+		return nil, err
+	}
+	tlsCredentials, err := tlsmaterial.ClientCredentials(material, serverName)
 	if err != nil {
 		return nil, err
 	}
 	if headlessSuffix == "" || port == "" {
 		return nil, errors.New("Gateway peer DNS suffix and port are required")
 	}
-	return &GatewayPeerDialer{TLSConfig: configuration, HeadlessSuffix: strings.TrimPrefix(headlessSuffix, "."), Port: port}, nil
+	return &GatewayPeerDialer{TLSCredentials: tlsCredentials, HeadlessSuffix: strings.TrimPrefix(headlessSuffix, "."), Port: port}, nil
 }
 
 func (dialer *GatewayPeerDialer) Open(ctx context.Context, owner string, target ConnectionTarget, cols, rows int) (BackendSession, error) {
-	if dialer == nil || dialer.TLSConfig == nil || owner == "" || !validSize(cols, rows) {
+	if dialer == nil || dialer.TLSCredentials == nil || owner == "" || !validSize(cols, rows) {
 		return nil, ErrSessionUnavailable
 	}
 	endpoint := fmt.Sprintf("%s.%s:%s", owner, dialer.HeadlessSuffix, dialer.Port)
@@ -162,7 +169,7 @@ func (dialer *GatewayPeerDialer) Open(ctx context.Context, owner string, target 
 			return nil, err
 		}
 	}
-	connection, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(credentials.NewTLS(dialer.TLSConfig.Clone())),
+	connection, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(dialer.TLSCredentials.Clone()),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(MaxFrameBytes), grpc.MaxCallSendMsgSize(MaxFrameBytes)))
 	if err != nil {
 		return nil, err
@@ -423,37 +430,21 @@ func peerServerFrame(sequence uint64, frame BackendFrame) *remotev1.OpenRemoteAc
 	return response
 }
 
-func LoadGatewayPeerServerTLS(certificatePath, privateKeyPath, caPath, authorizedPeerName string) (*tls.Config, error) {
-	return loadPeerTLS(certificatePath, privateKeyPath, caPath, authorizedPeerName, true)
-}
-
-func loadPeerTLS(certificatePath, privateKeyPath, caPath, peerName string, server bool) (*tls.Config, error) {
-	certificate, err := tls.LoadX509KeyPair(certificatePath, privateKeyPath)
+func LoadGatewayPeerServerTLS(certificatePath, privateKeyPath, caPath string, queries *db.Queries, authorizedPeerURI string) (*tls.Config, error) {
+	material, err := tlsmaterial.Load(tlsmaterial.Options{CertificatePath: certificatePath, PrivateKeyPath: privateKeyPath,
+		CABundlePath: caPath, Usage: x509.ExtKeyUsageServerAuth})
 	if err != nil {
 		return nil, err
 	}
-	bundle, err := os.ReadFile(caPath)
-	if err != nil {
-		return nil, err
+	if queries == nil || authorizedPeerURI == "" {
+		return nil, errors.New("Gateway peer identity registry and URI are required")
 	}
-	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM(bundle) || peerName == "" {
-		return nil, errors.New("Gateway peer CA bundle and peer name are required")
-	}
-	configuration := &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{certificate}}
-	if !server {
-		configuration.RootCAs, configuration.ServerName = roots, peerName
-		return configuration, nil
-	}
-	configuration.ClientAuth, configuration.ClientCAs = tls.RequireAndVerifyClientCert, roots
-	configuration.VerifyConnection = func(state tls.ConnectionState) error {
+	return material.ServerConfig(tls.RequireAndVerifyClientCert, func(state tls.ConnectionState) error {
 		if len(state.PeerCertificates) == 0 {
 			return errors.New("Gateway peer certificate is missing")
 		}
-		if err := state.PeerCertificates[0].VerifyHostname(peerName); err != nil {
-			return fmt.Errorf("unauthorized Gateway peer: %w", err)
-		}
-		return nil
-	}
-	return configuration, nil
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		return trustbundle.VerifyServiceCertificate(ctx, queries, state.PeerCertificates[0], []string{authorizedPeerURI})
+	})
 }

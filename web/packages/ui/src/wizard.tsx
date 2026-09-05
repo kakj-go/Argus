@@ -12,6 +12,45 @@ export type WizardStep = {
   optional?: boolean;
 };
 
+export function WizardProgress({
+  steps,
+  current,
+  label,
+}: {
+  steps: WizardStep[];
+  current: number;
+  label?: string;
+}) {
+  const text = useUiText();
+  return (
+    <nav aria-label={label ?? text("向导进度", "Wizard progress")}>
+      <ol className="argus-wizard__steps">
+        {steps.map((item, index) => {
+          const status = index < current ? "done" : index === current ? "current" : "pending";
+          return (
+            <li
+              aria-current={status === "current" ? "step" : undefined}
+              className={cx("argus-wizard__step", `is-${status}`)}
+              key={item.id}
+            >
+              <span aria-hidden className="argus-wizard__marker">
+                {status === "done" ? <Check size={12} /> : index + 1}
+              </span>
+              <span className="argus-wizard__step-text">
+                <b>{item.title}</b>
+                {item.description && <small>{item.description}</small>}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <span aria-live="polite" className="argus-sr-only">
+        {text("当前步骤", "Current step")}: {steps[current]?.title}
+      </span>
+    </nav>
+  );
+}
+
 export function Wizard({
   steps,
   current,
@@ -54,34 +93,7 @@ export function Wizard({
 
   return (
     <div className={cx("argus-wizard", className)}>
-      <ol className="argus-wizard__steps">
-        {steps.map((item, index) => {
-          const status =
-            index < current
-              ? "done"
-              : index === current
-                ? "current"
-                : "pending";
-          return (
-            <li
-              className={cx("argus-wizard__step", `is-${status}`)}
-              key={item.id}
-            >
-              <span className="argus-wizard__marker">
-                {status === "done" ? (
-                  <Check aria-hidden size={12} />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <span className="argus-wizard__step-text">
-                <b>{item.title}</b>
-                {item.description && <small>{item.description}</small>}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
+      <WizardProgress current={current} steps={steps} />
 
       <div className="argus-wizard__content">{children}</div>
 

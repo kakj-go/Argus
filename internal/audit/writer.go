@@ -39,6 +39,10 @@ var allowedDetailKeys = map[string]bool{
 	"command_audit_mode": true, "clipboard_mode": true, "file_upload_mode": true,
 	"file_download_mode": true, "port_forward_mode": true, "session_share_mode": true,
 	"max_session_seconds": true, "idle_timeout_seconds": true, "retention_days": true,
+	"collector_id": true, "connector_id": true, "bastion_scope_id": true,
+	"tunnel_id": true, "epoch": true, "fence": true, "lease_owner": true,
+	"initiator": true, "drop_reason": true, "bytes_relayed": true,
+	"throttled_events": true, "connection_epoch": true, "operation_id": true,
 }
 
 type Entry struct {

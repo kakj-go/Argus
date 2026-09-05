@@ -1,8 +1,13 @@
-import type { CollectorInstance } from "../generated/contracts";
+import type {
+  ActionOneTimeResult,
+  CollectorInstance,
+  OnboardingProjection,
+} from "../generated/contracts";
 import type { Environment, ISODateString } from "../types/common";
 
 export type MockHostConnectionMode =
   | "connector_local"
+  | "self_enrolled"
   | "via_bastion"
   | "direct_ssh"
   | "direct_winrm";
@@ -22,7 +27,8 @@ export interface MockHost {
   credentialRef?: string;
   environment: Environment;
   labels: Record<string, string>;
-  connectionStatus: "online" | "offline" | "onboarding" | "degraded" | "unknown";
+  connectionStatus:
+    "online" | "offline" | "onboarding" | "degraded" | "unknown";
   collectorStatus: CollectorInstance["status"] | "not_installed";
   liveStatus?: "online" | "offline" | "key_changed";
   probeLatencyMs?: number;
@@ -31,6 +37,10 @@ export interface MockHost {
   createdAt: ISODateString;
   updatedAt: ISODateString;
   resourceVersion?: number;
+  onboardingState?: OnboardingProjection["state"];
+  onboardingExecutionId?: string;
+  onboardingOperationId?: string;
+  onboardingErrorCode?: string;
 }
 
 export interface MockConnector {
@@ -40,7 +50,7 @@ export interface MockConnector {
   hostId: string;
   bastionScopeId: string;
   version: string;
-  status: "online" | "offline" | "uninstalled";
+  status: "online" | "offline" | "uninstalled" | "revoked";
   capabilities: string[];
   connectionEpoch: number;
   certificateExpiresAt: ISODateString;
@@ -51,13 +61,22 @@ export interface MockConnector {
 }
 
 export type ConnectorEnrollmentPurpose =
-  | "initial_registration"
-  | "connector_replacement";
+  "initial_registration" | "connector_replacement";
 export type ConnectorEnrollmentStatus =
-  | "active"
-  | "consumed"
-  | "revoked"
-  | "expired";
+  "active" | "consumed" | "revoked" | "expired";
+
+export interface HostEnrollmentToken {
+  id: string;
+  enterpriseId: string;
+  hostId: string;
+  status: "active" | "consumed" | "revoked" | "expired";
+  token: string;
+  instructionSets: ActionOneTimeResult["instruction_sets"];
+  expiresAt: string;
+  remainingUses: number;
+  createdBy: string;
+  createdAt: string;
+}
 
 export interface ConnectorEnrollmentToken {
   id: string;
@@ -66,7 +85,7 @@ export interface ConnectorEnrollmentToken {
   purpose: ConnectorEnrollmentPurpose;
   status: ConnectorEnrollmentStatus;
   token: string;
-  installCommand: string;
+  instructionSets: ActionOneTimeResult["instruction_sets"];
   expiresAt: ISODateString;
   remainingUses: number;
   consumedAt?: ISODateString;
@@ -108,6 +127,18 @@ export interface MockBastionScope {
   createdAt: ISODateString;
   updatedAt: ISODateString;
   resourceVersion?: number;
+  onboardingMode?: "command" | "direct_install" | "direct_install_tunnel";
+  onboardingState?: OnboardingProjection["state"];
+  onboardingExecutionId?: string;
+  onboardingOperationId?: string;
+  onboardingErrorCode?: string;
+  controlTunnelStatus?:
+    | "desired"
+    | "establishing"
+    | "established"
+    | "degraded"
+    | "down"
+    | "removed";
 }
 
 export interface MockKubernetesCluster {

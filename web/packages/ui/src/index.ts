@@ -20,6 +20,7 @@ export * from "./page";
 export * from "./preview-commit";
 export * from "./primitives";
 export * from "./select";
+export * from "./scenario";
 export * from "./shell";
 export * from "./stat-card";
 export * from "./status-badge";

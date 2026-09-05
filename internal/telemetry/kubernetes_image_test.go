@@ -111,16 +111,20 @@ func TestHostCollectorPlatform(t *testing.T) {
 		platform string
 		arch     pgtype.Text
 		want     string
+		wantErr  bool
 	}{
-		{"windows host", "windows", pgtype.Text{}, "windows_amd64"},
-		{"linux arm64 detected", "linux", pgtype.Text{String: "arm64", Valid: true}, "linux_arm64"},
-		{"linux amd64 detected", "linux", pgtype.Text{String: "amd64", Valid: true}, "linux_amd64"},
-		{"linux unknown arch defaults amd64", "linux", pgtype.Text{}, "linux_amd64"},
-		{"linux invalid arch defaults amd64", "linux", pgtype.Text{String: "riscv64", Valid: true}, "linux_amd64"},
+		{"windows host", "windows", pgtype.Text{}, "windows_amd64", false},
+		{"linux arm64 detected", "linux", pgtype.Text{String: "arm64", Valid: true}, "linux_arm64", false},
+		{"linux amd64 detected", "linux", pgtype.Text{String: "amd64", Valid: true}, "linux_amd64", false},
+		{"linux unknown arch rejected", "linux", pgtype.Text{}, "", true},
+		{"linux invalid arch rejected", "linux", pgtype.Text{String: "riscv64", Valid: true}, "", true},
 	}
 	for _, item := range cases {
 		host := db.Host{Platform: item.platform, Architecture: item.arch}
-		if got := hostCollectorPlatform(host); got != item.want {
+		got, err := hostCollectorPlatform(host)
+		if (err != nil) != item.wantErr {
+			t.Errorf("%s: hostCollectorPlatform err = %v, wantErr %v", item.name, err, item.wantErr)
+		} else if got != item.want {
 			t.Errorf("%s: hostCollectorPlatform = %q, want %q", item.name, got, item.want)
 		}
 	}

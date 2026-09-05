@@ -30,6 +30,25 @@ const queryClient = new QueryClient({
   },
 });
 
+// Development-only acceptance hook. It exposes a detached snapshot so P4 E2E
+// can prove that one-time results never enter TanStack Query without allowing
+// tests to mutate the live cache. Production bundles remove this branch.
+if (import.meta.env.DEV) {
+  Object.defineProperty(window, "__ARGUS_DEV_QUERY_CACHE_SNAPSHOT__", {
+    configurable: true,
+    value: () =>
+      structuredClone(
+        queryClient
+          .getQueryCache()
+          .getAll()
+          .map((query) => ({
+            queryHash: query.queryHash,
+            data: query.state.data,
+          })),
+      ),
+  });
+}
+
 initializeTheme();
 
 setApiErrorTranslator((code, _messageKey, params) => {
@@ -88,11 +107,11 @@ async function bootstrap() {
 }
 
 void bootstrap().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
+  console.error(error);
   createRoot(document.getElementById("root")!).render(
     <main className="argus-auth-state" role="alert">
-      <h1>Client unavailable</h1>
-      <p>{message}</p>
+      <h1>{i18n.t("common.clientUnavailable")}</h1>
+      <p>{i18n.t("common.clientUnavailableDescription")}</p>
     </main>,
   );
 });

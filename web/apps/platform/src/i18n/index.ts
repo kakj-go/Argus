@@ -7,6 +7,7 @@ import { commonEn, commonZh } from "./common";
 import { dashboardEn, dashboardZh } from "./dashboard";
 import { enterprisesEn, enterprisesZh } from "./enterprises";
 import { loginEn, loginZh } from "./login";
+import { pkiEn, pkiZh } from "./pki";
 import { sandboxEn, sandboxZh } from "./sandbox";
 import { setupEn, setupZh } from "./setup";
 import { shellEn, shellZh } from "./shell";
@@ -22,6 +23,7 @@ const modulesZh = [
   shellZh,
   loginZh,
   dashboardZh,
+  pkiZh,
   enterprisesZh,
   adminsZh,
   sandboxZh,
@@ -35,6 +37,7 @@ const modulesEn = [
   shellEn,
   loginEn,
   dashboardEn,
+  pkiEn,
   enterprisesEn,
   adminsEn,
   sandboxEn,

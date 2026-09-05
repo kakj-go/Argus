@@ -51,6 +51,8 @@ paths:
     $ref: ./paths/m2.yaml#/platform_enterprise_admin_reset
   /platform/enterprise-admins/{id}/disable:
     $ref: ./paths/m2.yaml#/platform_enterprise_admin_disable
+  /platform/pki:
+    $ref: ./paths/m2.yaml#/platform_pki
   /enterprise/users:
     $ref: ./paths/m2.yaml#/enterprise_users
   /enterprise/users/{id}:
@@ -109,6 +111,18 @@ paths:
     $ref: ./paths/m3.yaml#/host_preview_delete
   /enterprise/hosts/connection-tests:
     $ref: ./paths/m3.yaml#/host_connection_tests
+  /enterprise/hosts/{id}/actions/preview-enrollment-rotate:
+    $ref: ./paths/m3.yaml#/host_enrollment_rotate
+  /enterprise/hosts/{id}/actions/preview-uninstall-command:
+    $ref: ./paths/m3.yaml#/host_uninstall_command
+  /host-install/{token}:
+    $ref: ./paths/m7.yaml#/host_install_bootstrap
+  /host-bootstrap-script:
+    $ref: ./paths/m7.yaml#/host_bootstrap_script
+  /host-uninstall/{token}:
+    $ref: ./paths/m7.yaml#/host_uninstall_bootstrap
+  /host-uninstall/{id}/complete:
+    $ref: ./paths/m7.yaml#/host_uninstall_complete
   /enterprise/connection-tests/{id}:
     $ref: ./paths/m3.yaml#/connection_test_item
   /enterprise/kubernetes-clusters:
@@ -145,8 +159,14 @@ paths:
     $ref: ./paths/m3.yaml#/bastion_preview_update
   /enterprise/bastion-scopes/{id}/actions/preview-delete:
     $ref: ./paths/m3.yaml#/bastion_preview_delete
-  /enterprise/bastion-scopes/{id}/actions/preview-replacement:
-    $ref: ./paths/m3.yaml#/bastion_replacement
+  /enterprise/bastion-scopes/{id}/actions/preview-enrollment-rotate:
+    $ref: ./paths/m3.yaml#/bastion_enrollment_rotate
+  /enterprise/bastion-scopes/{id}/actions/preview-connector-replacement:
+    $ref: ./paths/m3.yaml#/bastion_connector_replacement
+  /enterprise/connector-install-operations/{id}:
+    $ref: ./paths/m3.yaml#/connector_install_operation_item
+  /enterprise/connector-install-operations/{id}/actions/preview-retry:
+    $ref: ./paths/m3.yaml#/connector_install_operation_retry
   /enterprise/connectors:
     $ref: ./paths/m3.yaml#/connector_collection
   /enterprise/connectors/{id}:
@@ -157,6 +177,8 @@ paths:
     $ref: ./paths/m3.yaml#/connector_preview_uninstall
   /connectors/enroll:
     $ref: ./paths/m3.yaml#/connector_enroll
+  /connectors/bootstrap-script:
+    $ref: ./paths/m3.yaml#/connector_bootstrap_script
   /conversations:
     $ref: ./paths/m4.yaml#/conversation_collection
   /conversations/{conversation_id}:
@@ -635,6 +657,8 @@ components:
       $ref: ./components/m3.yaml#/components/schemas/ManagedAccount
     Host:
       $ref: ./components/m3.yaml#/components/schemas/Host
+    HostInstallBootstrap:
+      $ref: ./components/m7.yaml#/components/schemas/HostInstallBootstrap
     KubernetesCluster:
       $ref: ./components/m3.yaml#/components/schemas/KubernetesCluster
     ConnectionTest:

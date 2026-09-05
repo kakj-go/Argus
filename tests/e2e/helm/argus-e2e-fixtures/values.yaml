@@ -9,11 +9,14 @@ images:
   replayModel: ""
   winrsTarget: ""
   artifactServer: ""
+  systemdTarget: ""
 features:
   sshTarget: false
   replayModel: false
   winrsTarget: false
   artifactServer: false
+  p4Targets: false
+  p4StaticTargets: false
 tls:
   replay: {ca: "", certificate: "", privateKey: ""}
   winrs: {ca: "", certificate: "", privateKey: ""}

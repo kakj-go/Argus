@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	actionservice "github.com/kakj-go/Argus/internal/action"
 	workflowapi "github.com/kakj-go/Argus/internal/gen/openapi/workflowapi"
@@ -146,13 +147,26 @@ func (handler WorkflowHandler) ClaimExecutionOneTimeResult(ctx context.Context, 
 	if err != nil {
 		return workflowapi.ClaimExecutionOneTimeResultdefaultJSONResponse{Body: workflowError(ctx, err), StatusCode: workflowStatus(err)}, nil
 	}
-	command := value.Enrollment.InstallCommand
+	instructionSets := make([]workflowapi.InstallInstructionSet, 0, len(value.InstructionSets))
+	for _, instruction := range value.InstructionSets {
+		command := instruction.Command
+		projected := workflowapi.InstallInstructionSet{
+			Scope: workflowapi.InstallInstructionSetScope(instruction.Scope), Command: &command, ExpiresAt: instruction.ExpiresAt,
+			TrustBundleEpoch: instruction.TrustBundleEpoch, TrustBundleSha256: instruction.TrustBundleSHA256,
+			InstallerSha256: instruction.InstallerSHA256, CapabilityWarnings: append([]string{}, instruction.CapabilityWarnings...),
+		}
+		if instruction.DownloadTLSMode != "" {
+			mode := workflowapi.InstallInstructionSetDownloadTlsMode(instruction.DownloadTLSMode)
+			projected.DownloadTlsMode = &mode
+		}
+		instructionSets = append(instructionSets, projected)
+	}
 	return workflowapi.ClaimExecutionOneTimeResult200JSONResponse{
-		SchemaVersion: workflowapi.ArgusActionOneTimeResultv1,
-		ExecutionId:   value.ExecutionID,
-		ResultKind:    workflowapi.ConnectorEnrollment,
-		Enrollment:    workflowapi.EnrollmentResult{EnrollmentId: value.Enrollment.EnrollmentID, InstallCommand: &command, ExpiresAt: value.Enrollment.ExpiresAt},
-		ExpiresAt:     value.ExpiresAt,
+		SchemaVersion:   workflowapi.ArgusActionOneTimeResultv3,
+		ExecutionId:     value.ExecutionID,
+		ResultKind:      workflowapi.ActionOneTimeResultResultKind(value.ResultKind),
+		InstructionSets: instructionSets,
+		ExpiresAt:       value.ExpiresAt,
 	}, nil
 }
 
@@ -215,9 +229,22 @@ func toWorkflowApprovalView(value actionservice.ApprovalView) workflowapi.Approv
 }
 
 func toWorkflowExecution(value actionservice.ExecutionView) workflowapi.Execution {
-	available := value.OneTimeResultAvailable
 	result := workflowapi.Execution{ExecutionId: value.Execution.ID.String(), ActionRef: value.Action.ActionRef,
-		Status: value.Execution.Status, OneTimeResultAvailable: &available, CreatedAt: value.Execution.CreatedAt.Time, UpdatedAt: value.Execution.UpdatedAt.Time}
+		Status: value.Execution.Status, OneTimeResultState: value.OneTimeResultState,
+		CreatedAt: value.Execution.CreatedAt.Time, UpdatedAt: value.Execution.UpdatedAt.Time}
+	if value.Action.ResultResourceID.Valid && value.Action.ResultResourceType.Valid && value.Action.ResultResourceVersion.Valid {
+		result.ResourceRef = &struct {
+			ResourceId   string `json:"resource_id"`
+			ResourceType string `json:"resource_type"`
+			Version      int    `json:"version"`
+		}{ResourceId: value.Action.ResultResourceID.UUID.String(), ResourceType: value.Action.ResultResourceType.String, Version: int(value.Action.ResultResourceVersion.Int64)}
+	}
+	if value.Execution.ConnectorInstallOperationID.Valid {
+		result.OperationRef = &struct {
+			Id   openapi_types.UUID `json:"id"`
+			Kind interface{}        `json:"kind"`
+		}{Id: value.Execution.ConnectorInstallOperationID.UUID, Kind: "connector_install"}
+	}
 	if value.Execution.ResultRef.Valid {
 		result.ResultRef = &value.Execution.ResultRef.String
 	}

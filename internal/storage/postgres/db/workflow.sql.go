@@ -14,7 +14,7 @@ import (
 
 const claimExecution = `-- name: ClaimExecution :one
 UPDATE executions SET status = 'running', started_at = now(), updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND status = 'pending' RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id
+WHERE id = $1 AND enterprise_id = $2 AND status = 'pending' RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id, connector_install_operation_id
 `
 
 type ClaimExecutionParams struct {
@@ -41,6 +41,7 @@ func (q *Queries) ClaimExecution(ctx context.Context, arg ClaimExecutionParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TelemetryCollectorOperationID,
+		&i.ConnectorInstallOperationID,
 	)
 	return i, err
 }
@@ -360,7 +361,7 @@ func (q *Queries) CreateApprovalRequirementSnapshot(ctx context.Context, arg Cre
 
 const createExecution = `-- name: CreateExecution :one
 INSERT INTO executions (id, execution_ref, pending_action_id, enterprise_id, run_id, idempotency_key)
-VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id
+VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id, connector_install_operation_id
 `
 
 type CreateExecutionParams struct {
@@ -398,6 +399,7 @@ func (q *Queries) CreateExecution(ctx context.Context, arg CreateExecutionParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TelemetryCollectorOperationID,
+		&i.ConnectorInstallOperationID,
 	)
 	return i, err
 }
@@ -484,7 +486,7 @@ func (q *Queries) CreateUserConfirmation(ctx context.Context, arg CreateUserConf
 
 const finishExecution = `-- name: FinishExecution :one
 UPDATE executions SET status = $3, result_ref = $4, error_code = $5, completed_at = now(), updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND status IN ('pending','running','result_unknown') RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id
+WHERE id = $1 AND enterprise_id = $2 AND status IN ('pending','running','result_unknown') RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id, connector_install_operation_id
 `
 
 type FinishExecutionParams struct {
@@ -520,6 +522,7 @@ func (q *Queries) FinishExecution(ctx context.Context, arg FinishExecutionParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TelemetryCollectorOperationID,
+		&i.ConnectorInstallOperationID,
 	)
 	return i, err
 }
@@ -630,7 +633,7 @@ func (q *Queries) GetApprovalRequestForUpdate(ctx context.Context, arg GetApprov
 }
 
 const getExecution = `-- name: GetExecution :one
-SELECT id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id FROM executions WHERE id = $1 AND enterprise_id = $2
+SELECT id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id, connector_install_operation_id FROM executions WHERE id = $1 AND enterprise_id = $2
 `
 
 type GetExecutionParams struct {
@@ -657,12 +660,13 @@ func (q *Queries) GetExecution(ctx context.Context, arg GetExecutionParams) (Exe
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TelemetryCollectorOperationID,
+		&i.ConnectorInstallOperationID,
 	)
 	return i, err
 }
 
 const getExecutionByAction = `-- name: GetExecutionByAction :one
-SELECT execution.id, execution.execution_ref, execution.pending_action_id, execution.enterprise_id, execution.run_id, execution.status, execution.idempotency_key, execution.result_ref, execution.connector_command_id, execution.error_code, execution.started_at, execution.completed_at, execution.created_at, execution.updated_at, execution.telemetry_collector_operation_id FROM executions execution JOIN pending_actions action ON action.id = execution.pending_action_id
+SELECT execution.id, execution.execution_ref, execution.pending_action_id, execution.enterprise_id, execution.run_id, execution.status, execution.idempotency_key, execution.result_ref, execution.connector_command_id, execution.error_code, execution.started_at, execution.completed_at, execution.created_at, execution.updated_at, execution.telemetry_collector_operation_id, execution.connector_install_operation_id FROM executions execution JOIN pending_actions action ON action.id = execution.pending_action_id
 WHERE action.action_ref = $1 AND execution.enterprise_id = $2
 `
 
@@ -690,6 +694,7 @@ func (q *Queries) GetExecutionByAction(ctx context.Context, arg GetExecutionByAc
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TelemetryCollectorOperationID,
+		&i.ConnectorInstallOperationID,
 	)
 	return i, err
 }
@@ -721,6 +726,30 @@ func (q *Queries) GetExecutionOneTimeResultForUpdate(ctx context.Context, arg Ge
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getExecutionOneTimeResultState = `-- name: GetExecutionOneTimeResultState :one
+SELECT COALESCE((
+    SELECT CASE
+        WHEN consumed_at IS NOT NULL THEN 'consumed'
+        WHEN expires_at <= now() THEN 'expired'
+        ELSE 'available'
+    END
+    FROM execution_one_time_results
+    WHERE execution_id = $1 AND enterprise_id = $2
+), 'unavailable')::text
+`
+
+type GetExecutionOneTimeResultStateParams struct {
+	ExecutionID  uuid.UUID `json:"execution_id"`
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+}
+
+func (q *Queries) GetExecutionOneTimeResultState(ctx context.Context, arg GetExecutionOneTimeResultStateParams) (string, error) {
+	row := q.db.QueryRow(ctx, getExecutionOneTimeResultState, arg.ExecutionID, arg.EnterpriseID)
+	var column_1 string
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getPendingActionByID = `-- name: GetPendingActionByID :one
@@ -1057,7 +1086,7 @@ func (q *Queries) ListApprovalRequirements(ctx context.Context, arg ListApproval
 }
 
 const listExecutions = `-- name: ListExecutions :many
-SELECT id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id FROM executions WHERE enterprise_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2
+SELECT id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id, connector_install_operation_id FROM executions WHERE enterprise_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2
 `
 
 type ListExecutionsParams struct {
@@ -1090,6 +1119,7 @@ func (q *Queries) ListExecutions(ctx context.Context, arg ListExecutionsParams) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TelemetryCollectorOperationID,
+			&i.ConnectorInstallOperationID,
 		); err != nil {
 			return nil, err
 		}
@@ -1158,7 +1188,7 @@ func (q *Queries) ListMatchingApprovalPolicies(ctx context.Context, arg ListMatc
 }
 
 const listUncertainExecutions = `-- name: ListUncertainExecutions :many
-SELECT id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id FROM executions WHERE status = 'result_unknown'
+SELECT id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id, connector_install_operation_id FROM executions WHERE status = 'result_unknown'
 ORDER BY updated_at, id LIMIT $1
 `
 
@@ -1187,6 +1217,7 @@ func (q *Queries) ListUncertainExecutions(ctx context.Context, limit int32) ([]E
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TelemetryCollectorOperationID,
+			&i.ConnectorInstallOperationID,
 		); err != nil {
 			return nil, err
 		}
@@ -1198,10 +1229,46 @@ func (q *Queries) ListUncertainExecutions(ctx context.Context, limit int32) ([]E
 	return items, nil
 }
 
+const markExecutionConnectorInstallResultUnknown = `-- name: MarkExecutionConnectorInstallResultUnknown :one
+UPDATE executions SET status = 'result_unknown', connector_install_operation_id = $3,
+    error_code = NULL, updated_at = now()
+WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id, connector_install_operation_id
+`
+
+type MarkExecutionConnectorInstallResultUnknownParams struct {
+	ID                          uuid.UUID     `json:"id"`
+	EnterpriseID                uuid.UUID     `json:"enterprise_id"`
+	ConnectorInstallOperationID uuid.NullUUID `json:"connector_install_operation_id"`
+}
+
+func (q *Queries) MarkExecutionConnectorInstallResultUnknown(ctx context.Context, arg MarkExecutionConnectorInstallResultUnknownParams) (Execution, error) {
+	row := q.db.QueryRow(ctx, markExecutionConnectorInstallResultUnknown, arg.ID, arg.EnterpriseID, arg.ConnectorInstallOperationID)
+	var i Execution
+	err := row.Scan(
+		&i.ID,
+		&i.ExecutionRef,
+		&i.PendingActionID,
+		&i.EnterpriseID,
+		&i.RunID,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.ResultRef,
+		&i.ConnectorCommandID,
+		&i.ErrorCode,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelemetryCollectorOperationID,
+		&i.ConnectorInstallOperationID,
+	)
+	return i, err
+}
+
 const markExecutionResultUnknown = `-- name: MarkExecutionResultUnknown :one
 UPDATE executions SET status = 'result_unknown', connector_command_id = $3,
     error_code = 'EXECUTION_RESULT_UNKNOWN', updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id
+WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id, connector_install_operation_id
 `
 
 type MarkExecutionResultUnknownParams struct {
@@ -1229,6 +1296,7 @@ func (q *Queries) MarkExecutionResultUnknown(ctx context.Context, arg MarkExecut
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TelemetryCollectorOperationID,
+		&i.ConnectorInstallOperationID,
 	)
 	return i, err
 }
@@ -1236,7 +1304,7 @@ func (q *Queries) MarkExecutionResultUnknown(ctx context.Context, arg MarkExecut
 const markExecutionTelemetryResultUnknown = `-- name: MarkExecutionTelemetryResultUnknown :one
 UPDATE executions SET status = 'result_unknown', telemetry_collector_operation_id = $3,
     error_code = 'EXECUTION_RESULT_UNKNOWN', updated_at = now()
-WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id
+WHERE id = $1 AND enterprise_id = $2 AND status = 'running' RETURNING id, execution_ref, pending_action_id, enterprise_id, run_id, status, idempotency_key, result_ref, connector_command_id, error_code, started_at, completed_at, created_at, updated_at, telemetry_collector_operation_id, connector_install_operation_id
 `
 
 type MarkExecutionTelemetryResultUnknownParams struct {
@@ -1264,6 +1332,7 @@ func (q *Queries) MarkExecutionTelemetryResultUnknown(ctx context.Context, arg M
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.TelemetryCollectorOperationID,
+		&i.ConnectorInstallOperationID,
 	)
 	return i, err
 }

@@ -65,6 +65,7 @@ const serverImports = (body) => {
   const imports = [];
   if (body.includes("bytes.")) imports.push("bytes");
   if (body.includes("json.")) imports.push("encoding/json");
+  if (body.includes("fmt.")) imports.push("fmt");
   if (body.includes("http.")) imports.push("net/http");
   if (body.includes("openapi_types.")) imports.push('openapi_types "github.com/oapi-codegen/runtime/types"');
   return imports;
@@ -76,12 +77,19 @@ const responseMarker = /type List[A-Za-z0-9]+RequestObject struct \{/;
 const responseMatch = chiSource.match(responseMarker);
 const responseOffset = responseMatch ? responseMatch.index : -1;
 if (responseOffset >= 0 && chiSource.split("\n").length > 2000) {
+  // 拆分点之前可能仍遗留使用 bytes/json 的响应对象(如首个 List 操作之前
+  // 的 Get* 操作),因此 import 块必须按剩余内容重建,不能无条件剥离。
   const responseBody = chiSource.slice(responseOffset);
-  chiSource = `${chiSource
-    .slice(0, responseOffset)
-    .replace(/^\s*"bytes"\n/m, "")
-    .replace(/^\s*"encoding\/json"\n/m, "")
-    .trimEnd()}\n`;
+  const importEnd = chiSource.indexOf(")\n\n");
+  if (importEnd < 0) throw new Error(`imports not found in ${input}`);
+  const keptBody = chiSource.slice(importEnd + 3, responseOffset).trimEnd();
+  const keptImports = [];
+  if (keptBody.includes("bytes.")) keptImports.push("bytes");
+  if (keptBody.includes("json.")) keptImports.push("encoding/json");
+  keptImports.push("errors", "fmt", "net/http");
+  keptImports.push("github.com/go-chi/chi/v5", "github.com/oapi-codegen/runtime");
+  if (keptBody.includes("openapi_types.")) keptImports.push('openapi_types "github.com/oapi-codegen/runtime/types"');
+  chiSource = generatedHeader(keptImports, keptBody);
   const responsePath = input.replace(/server\.gen\.go$/, "responses.gen.go");
   const responseMarkers = [...responseBody.matchAll(/^type [A-Za-z0-9]+RequestObject struct \{/gm)];
   if (responseBody.split("\n").length > 1900 && responseMarkers.length > 1) {

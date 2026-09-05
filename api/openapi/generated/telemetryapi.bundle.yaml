@@ -669,12 +669,18 @@ components:
       additionalProperties: false
       required:
         - collector_id
-        - csr_pem
+        - client_csr_pem
+        - server_csr_pem
       properties:
         collector_id:
           type: string
           format: uuid
-        csr_pem:
+        client_csr_pem:
+          type: string
+          minLength: 128
+          maxLength: 16384
+          writeOnly: true
+        server_csr_pem:
           type: string
           minLength: 128
           maxLength: 16384
@@ -684,8 +690,9 @@ components:
       additionalProperties: false
       required:
         - collector_id
-        - certificate_pem
-        - ca_bundle_pem
+        - client_certificate_pem
+        - server_certificate_pem
+        - trust_bundle
         - ingest_grpc_endpoint
         - ingest_http_endpoint
         - certificate_expires_at
@@ -693,15 +700,18 @@ components:
         collector_id:
           type: string
           format: uuid
-        certificate_pem:
+        client_certificate_pem:
           type: string
           minLength: 128
           maxLength: 32768
           writeOnly: true
-        ca_bundle_pem:
+        server_certificate_pem:
           type: string
           minLength: 128
           maxLength: 32768
+          writeOnly: true
+        trust_bundle:
+          $ref: '#/components/schemas/TrustBundleSnapshot'
         ingest_grpc_endpoint:
           type: string
           format: uri
@@ -763,6 +773,7 @@ components:
         - enterprise_id
         - collector_id
         - kind
+        - transport
         - status
         - version
         - created_at
@@ -780,6 +791,32 @@ components:
           format: uuid
         kind:
           $ref: '#/components/schemas/TelemetryRouteKind'
+        transport:
+          $ref: '#/components/schemas/TelemetryRouteTransport'
+        loopback_port:
+          type: integer
+          minimum: 1
+          maximum: 65534
+          description: 隧道形态下 Collector OTLP 出口的本机回环端口;相邻端口保留给身份注册与轮换;direct 形态为空
+        tunnel_status:
+          type: string
+          enum:
+            - desired
+            - establishing
+            - established
+            - degraded
+            - down
+            - removed
+          readOnly: true
+          description: 隧道运行状态;direct 形态为空。隧道断开不等于 Collector 故障
+        tunnel_last_established_at:
+          type: string
+          format: date-time
+          readOnly: true
+        tunnel_last_drop_reason:
+          type: string
+          readOnly: true
+          maxLength: 256
         gateway_collector_id:
           type: string
           format: uuid
@@ -956,6 +993,7 @@ components:
         - distribution_version_id
         - profile_ids
         - route_kind
+        - transport
       properties:
         distribution_version_id:
           type: string
@@ -970,6 +1008,13 @@ components:
             format: uuid
         route_kind:
           $ref: '#/components/schemas/TelemetryRouteKind'
+        transport:
+          $ref: '#/components/schemas/TelemetryRouteTransport'
+        loopback_port:
+          type: integer
+          minimum: 1
+          maximum: 65534
+          description: 隧道形态的 OTLP 回环端口;缺省 4317,相邻端口保留给身份注册与轮换
         gateway_collector_id:
           type: string
           format: uuid
@@ -982,6 +1027,16 @@ components:
           maxLength: 512
           pattern: ^\S+:\S+$
           description: 集群内网镜像全量地址(含 tag/digest);仅 kubernetes_cluster 资源可填,留空使用服务端默认镜像
+        image_pull_secrets:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 253
+            pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+          description: 目标集群中已存在的 imagePullSecret 名称;Argus 不创建或读取仓库凭据
     TelemetryRetentionPolicy:
       type: object
       additionalProperties: false
@@ -1427,12 +1482,15 @@ components:
       required:
         - collector_id
         - route_kind
+        - transport
       properties:
         collector_id:
           type: string
           format: uuid
         route_kind:
           $ref: '#/components/schemas/TelemetryRouteKind'
+        transport:
+          $ref: '#/components/schemas/TelemetryRouteTransport'
         gateway_collector_id:
           type: string
           format: uuid
@@ -1504,6 +1562,56 @@ components:
         retryable:
           type: boolean
           default: false
+    TrustBundleSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - epoch
+        - state
+        - bundle_pem
+        - bundle_sha256
+        - current_ca_fingerprints
+        - next_ca_fingerprints
+        - started_at
+      properties:
+        epoch:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          type: string
+          enum:
+            - stable
+            - preparing
+            - overlapping
+            - retiring
+            - failed
+        bundle_pem:
+          type: string
+          minLength: 128
+          maxLength: 131072
+        bundle_sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        current_ca_fingerprints:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            pattern: ^[a-f0-9]{64}$
+        next_ca_fingerprints:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: ^[a-f0-9]{64}$
+        started_at:
+          type: string
+          format: date-time
+        retire_at:
+          type: string
+          format: date-time
     CollectorSupportStatus:
       type: string
       enum:
@@ -1580,6 +1688,13 @@ components:
       enum:
         - direct_argus
         - bastion_gateway
+    TelemetryRouteTransport:
+      type: string
+      enum:
+        - direct
+        - executor_tunnel
+        - bastion_tunnel
+      description: 遥测字节的物理路径,与路由 kind 正交;隧道形态见 PlanV4
     PartialMetadata:
       type: object
       additionalProperties: false
@@ -1650,6 +1765,7 @@ components:
       required:
         - schema_version
         - action_ref
+        - action_type
         - title
         - summary
         - risk
@@ -1666,6 +1782,10 @@ components:
         action_ref:
           type: string
           minLength: 1
+        action_type:
+          type: string
+          minLength: 3
+          maxLength: 128
         title:
           type: string
           minLength: 1

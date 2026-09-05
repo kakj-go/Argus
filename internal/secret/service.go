@@ -25,6 +25,11 @@ var (
 	ErrInvalidLease          = errors.New("invalid credential lease")
 )
 
+// MaxLeaseTTL bounds how long a decrypted credential may remain usable by a
+// runtime recipient. Callers with longer operations must renew their own
+// operation lease independently and request credentials only for this window.
+const MaxLeaseTTL = 5 * time.Minute
+
 type Service struct {
 	Store       *postgres.Store
 	Idempotency postgres.Idempotency
@@ -278,6 +283,14 @@ func (service Service) UpdateCredential(ctx context.Context, actorID string, ent
 		if err != nil || secret.Status != "active" || !protocolSupportsSecret(credential.Protocol, secret.Type) {
 			return ErrCredentialUnavailable
 		}
+		// Credential version is an authorization boundary for every runtime
+		// consumer. Revoke outstanding leases in this transaction so a tunnel
+		// heartbeat cannot renew authorization issued for the previous version.
+		if _, err = q.RevokeCredentialLeasesByCredential(ctx, db.RevokeCredentialLeasesByCredentialParams{
+			CredentialID: credential.ID, EnterpriseID: enterpriseID,
+		}); err != nil {
+			return err
+		}
 		result = credential
 		return appendAudit(ctx, q, actorID, enterpriseID, "credential.update", "credential", credential.ID, map[string]any{"status": credential.Status})
 	})
@@ -362,10 +375,35 @@ func (service Service) IssueLease(ctx context.Context, actorID string, enterpris
 	return result, err
 }
 
+// RenewLease extends an unexpired runtime authorization without decrypting the
+// credential again. Recipient identity and the frozen credential version guard
+// the update, so replacement or revocation fences the next heartbeat.
+func (service Service) RenewLease(
+	ctx context.Context,
+	enterpriseID, leaseID uuid.UUID,
+	recipientType, recipientID string,
+	credentialVersion int64,
+	ttl time.Duration,
+) (db.CredentialLease, error) {
+	if leaseID == uuid.Nil || enterpriseID == uuid.Nil || credentialVersion <= 0 || ttl <= 0 || ttl > MaxLeaseTTL ||
+		(recipientType != "connector" && recipientType != "direct_executor") || recipientID == "" {
+		return db.CredentialLease{}, ErrInvalidLease
+	}
+	lease, err := service.Store.Queries.RenewCredentialLease(ctx, db.RenewCredentialLeaseParams{
+		ID: leaseID, EnterpriseID: enterpriseID, RecipientType: recipientType, RecipientID: recipientID,
+		CredentialVersion: credentialVersion,
+		ExpiresAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(ttl), Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.CredentialLease{}, ErrInvalidLease
+	}
+	return lease, err
+}
+
 // PrepareLeaseWithQueries records a one-time lease without decrypting its Secret.
 // Callers use it when the recipient will redeem the lease over an authenticated channel.
 func (service Service) PrepareLeaseWithQueries(ctx context.Context, q *db.Queries, actorID string, enterpriseID uuid.UUID, request LeaseRequest) (db.CredentialLease, error) {
-	if request.TTL <= 0 || request.TTL > 5*time.Minute || request.OperationRef == "" || request.TargetResourceID == uuid.Nil ||
+	if request.TTL <= 0 || request.TTL > MaxLeaseTTL || request.OperationRef == "" || request.TargetResourceID == uuid.Nil ||
 		(request.RecipientType != "connector" && request.RecipientType != "direct_executor") || request.RecipientID == "" {
 		return db.CredentialLease{}, ErrInvalidLease
 	}

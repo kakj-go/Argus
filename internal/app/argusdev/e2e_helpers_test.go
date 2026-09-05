@@ -126,6 +126,48 @@ func TestCollectorArchives(t *testing.T) {
 	}
 }
 
+func TestCollectorArtifactInputFingerprintInvalidatesCachedArtifact(t *testing.T) {
+	root := t.TempDir()
+	write := func(relative, value string) {
+		t.Helper()
+		path := filepath.Join(root, relative)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("deploy/otelcol/builder-linux-arm64.yaml", "dist:\n  version: test\n")
+	write("internal/otelcol/argusidentity/factory.go", "package argusidentity\n")
+	write("internal/otelcol/argusgatewayidentity/processor.go", "package argusgatewayidentity\n")
+	app := App{root: root}
+	first, err := app.collectorArtifactInputFingerprint("linux-arm64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write("internal/otelcol/argusidentity/factory.go", "package argusidentity\n// changed\n")
+	second, err := app.collectorArtifactInputFingerprint("linux-arm64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("Collector source change did not invalidate the artifact input fingerprint")
+	}
+
+	artifact := filepath.Join(root, "build/otelcol/artifacts/collector.tar.gz")
+	binary := filepath.Join(root, "build/otelcol/dist/linux-arm64/argus-otelcol")
+	write("build/otelcol/artifacts/collector.tar.gz", "artifact")
+	write("build/otelcol/dist/linux-arm64/argus-otelcol", "binary")
+	write("build/otelcol/artifacts/collector.tar.gz.inputs.sha256", second+"\n")
+	if !collectorArtifactCurrent(artifact, binary, second) {
+		t.Fatal("matching Collector artifact fingerprint was not accepted")
+	}
+	if collectorArtifactCurrent(artifact, binary, first) {
+		t.Fatal("stale Collector artifact fingerprint was accepted")
+	}
+}
+
 func TestParseConnectorEnrollmentCommand(t *testing.T) {
 	command := "argus-connector enroll --connector-id connector-id --token token-value --server https://argus.example --role bastion"
 	got, err := parseConnectorEnrollmentCommand(command)
@@ -146,6 +188,18 @@ func TestParseConnectorEnrollmentCommand(t *testing.T) {
 		if _, err := parseConnectorEnrollmentCommand(invalid); err == nil {
 			t.Fatalf("invalid command was accepted: %q", invalid)
 		}
+	}
+}
+
+func TestParseConnectorCommandResultAcceptsSignedInstaller(t *testing.T) {
+	command := "curl -fsSL 'https://artifacts.example/install.sh' | sudo bash -s -- --manifest 'https://artifacts.example/manifest.json' --key-id 'release-key' --public-key 'public' --connector-id 'connector-id' --token 'token-value' --server 'https://argus.example' --role bastion"
+	got, err := parseConnectorCommandResult(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := connectorEnrollmentCommand{ConnectorID: "connector-id", Token: "token-value", Server: "https://argus.example", Role: "bastion"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parsed command = %#v, want %#v", got, want)
 	}
 }
 
@@ -419,6 +473,12 @@ func TestWriteE2EConfigUsesStructuredProfile(t *testing.T) {
 	images := nestedMap(spec, "images")
 	if spec["releaseId"] != env.ReleaseID || spec["kubeContext"] != env.Options.KubeContext || images["tag"] != env.ImageTag {
 		t.Fatalf("generated config = %#v", document)
+	}
+	exposure := nestedMap(spec, "exposure")
+	if exposure["enterpriseHost"] != "enterprise.argus-e2e-test.argus.test" ||
+		exposure["platformHost"] != "platform.argus-e2e-test.argus.test" ||
+		exposure["connectorHost"] != "connector.argus-e2e-test.argus.test" {
+		t.Fatalf("generated E2E exposure is not release-scoped: %#v", exposure)
 	}
 	if strings.Contains(string(data), "m4e2e") || strings.Contains(string(data), "ARGUS_E2E") {
 		t.Fatalf("generated install config exposed E2E-only fields: %s", data)

@@ -26,16 +26,11 @@ func executeCollectorManagement(ctx context.Context, payload *anypb.Any, credent
 	}
 	var err error
 	var artifactClient *http.Client
-	var clientErr error
-	if os.Getenv("ARGUS_OTELCOL_ARTIFACT_TLS_MODE") == "insecure" {
-		artifactClient, clientErr = collectormanager.NewArtifactHTTPClientInsecure()
-	} else {
-		artifactClient, clientErr = collectormanager.NewArtifactHTTPClient(os.Getenv("ARGUS_OTELCOL_ARTIFACT_CA_PATH"))
-	}
+	artifactClient, clientErr := collectormanager.NewArtifactHTTPClient(os.Getenv("ARGUS_OTELCOL_ARTIFACT_CA_PATH"))
 	if clientErr != nil {
 		return nil, clientErr
 	}
-	manager := collectormanager.Manager{Root: os.Getenv("ARGUS_COLLECTOR_STATE_DIR"), HTTPClient: artifactClient}
+	manager := collectormanager.Manager{Root: os.Getenv("ARGUS_COLLECTOR_STATE_DIR"), HTTPClient: artifactClient, ManageLocalService: true}
 	var result collectormanager.Result
 	var nodes []telemetrybinding.NodeEvidence
 	if command.GetResourceType() == "kubernetes_cluster" {
